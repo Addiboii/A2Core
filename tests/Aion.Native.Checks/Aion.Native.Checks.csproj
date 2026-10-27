@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType><TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable><TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup><ProjectReference Include="../../server/Aion.World/Aion.World.csproj" /></ItemGroup>
+  <ItemGroup><None Include="../fixtures/native-parity.json" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>
+</Project>

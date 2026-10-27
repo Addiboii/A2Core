@@ -1,0 +1,106 @@
+using CUE4Parse.UE4.Exceptions;
+using CUE4Parse.UE4.Readers;
+using CUE4Parse.Utils;
+using Newtonsoft.Json;
+using SubstreamSharp;
+
+namespace CUE4Parse.UE4.Criware.Readers;
+
+public struct Wave
+{
+    public int WaveId { get; set; }
+    public long Offset { get; set; }
+    public long Length { get; set; }
+}
+
+[JsonConverter(typeof(AwbReaderConverter))]
+public sealed class AwbReader : IDisposable
+{
+    private readonly BinaryReader _binaryReader;
+    private readonly long _offset;
+
+    private readonly byte _offsetSize;
+    private readonly ushort _waveIdAlignment;
+    private readonly int _totalSubsongs;
+    private readonly ushort _offsetAlignment;
+    private readonly ushort _subkey;
+
+    private readonly List<Wave> _waves;
+
+    public AwbReader(FArchive awbArchive) : this(CriWareAwbDecryption.Wrap(awbArchive, awbArchive.Name, awbArchive.Game), 0) { }
+    public AwbReader(Stream awbStream) : this(awbStream, 0) { }
+    public AwbReader(Stream awbStream, long positionOffset)
+    {
+        _binaryReader = new BinaryReader(awbStream);
+        _offset = positionOffset;
+
+        _binaryReader.BaseStream.Position = _offset;
+
+        if (!_binaryReader.ReadChars(4).SequenceEqual("AFS2"))
+            throw new ParserException("Incorrect AWB magic, it might be encrypted.");
+
+        _binaryReader.BaseStream.Position += 0x1;
+        _offsetSize = _binaryReader.ReadByte();
+        _waveIdAlignment = _binaryReader.ReadUInt16();
+        _totalSubsongs = _binaryReader.ReadInt32();
+        _offsetAlignment = _binaryReader.ReadUInt16();
+        _subkey = _binaryReader.ReadUInt16();
+
+        _waves = new List<Wave>(_totalSubsongs);
+
+        for (int subsong = 0; subsong < _totalSubsongs; subsong++)
+        {
+            long currentOffset = 0x10;
+
+            long waveIdOffset = currentOffset + subsong * _waveIdAlignment;
+
+            _binaryReader.BaseStream.Position = _offset + waveIdOffset;
+
+            int waveId = _binaryReader.ReadUInt16();
+
+            currentOffset += _totalSubsongs * _waveIdAlignment;
+
+            long subfileOffset = 0;
+            long subfileNext = 0;
+            long fileSize = _binaryReader.BaseStream.Length;
+
+            currentOffset += subsong * _offsetSize;
+
+            _binaryReader.BaseStream.Position = _offset + currentOffset;
+
+            switch (_offsetSize)
+            {
+                case 0x4:
+                    subfileOffset = _binaryReader.ReadUInt32();
+                    subfileNext = _binaryReader.ReadUInt32();
+                    break;
+                case 0x2:
+                    subfileOffset = _binaryReader.ReadUInt16();
+                    subfileNext = _binaryReader.ReadUInt16();
+                    break;
+                default:
+                    throw new ParserException($"Unsupported AWB offset size {_offsetSize}.");
+            }
+
+            subfileOffset = subfileOffset.Align(_offsetAlignment);
+            subfileNext = subfileNext < fileSize ? subfileNext.Align(_offsetAlignment) : subfileNext;
+            long subfileSize = subfileNext - subfileOffset;
+
+            _waves.Add(new Wave()
+            {
+                WaveId = waveId,
+                Offset = subfileOffset,
+                Length = subfileSize
+            });
+        }
+    }
+
+    public ushort Subkey => _subkey;
+
+    public List<Wave> Waves => _waves;
+
+    public Stream GetWaveSubfileStream(Wave wave)
+        => _binaryReader.BaseStream.Substream(_offset + wave.Offset, wave.Length);
+
+    public void Dispose() => _binaryReader.Dispose();
+}

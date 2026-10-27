@@ -1,0 +1,394 @@
+using System.Diagnostics.CodeAnalysis;
+using System.Runtime.CompilerServices;
+using System.Text;
+using CUE4Parse.UE4.Assets;
+using CUE4Parse.UE4.Assets.Exports;
+using CUE4Parse.UE4.Assets.Readers;
+using CUE4Parse.UE4.Exceptions;
+using CUE4Parse.UE4.IO.Objects;
+using CUE4Parse.UE4.Objects.Core.Misc;
+using CUE4Parse.UE4.Versions;
+using Newtonsoft.Json;
+using UExport = CUE4Parse.UE4.Assets.Exports.UObject;
+
+namespace CUE4Parse.UE4.Objects.UObject
+{
+    /// <summary>
+    /// Wrapper for index into a ULinker's ImportMap or ExportMap.
+    /// Values greater than zero indicate that this is an index into the ExportMap.  The
+    /// actual array index will be (FPackageIndex - 1).
+    ///
+    /// Values less than zero indicate that this is an index into the ImportMap. The actual
+    /// array index will be (-FPackageIndex - 1)
+    /// </summary>
+    [JsonConverter(typeof(FPackageIndexConverter))]
+    public class FPackageIndex : ILoadableObject, IEquatable<FPackageIndex>
+    {
+        /// <summary>
+        /// Values greater than zero indicate that this is an index into the ExportMap.  The
+        /// actual array index will be (FPackageIndex - 1).
+        ///
+        /// Values less than zero indicate that this is an index into the ImportMap. The actual
+        /// array index will be (-FPackageIndex - 1)
+        /// </summary>
+        public readonly int Index;
+
+        public readonly IPackage? Owner;
+
+        private WeakReference<ResolvedObject?>? _resolvedObject;
+        public ResolvedObject? ResolvedObject {
+            get {
+                var resolvedObject = _resolvedObject != null && _resolvedObject.TryGetTarget(out var target) ? target : null;
+                if (resolvedObject == null)
+                {
+                    if (Owner == null) return null;
+                    resolvedObject = Owner.ResolvePackageIndex(this);
+                    _resolvedObject = new(resolvedObject);
+                }
+                return resolvedObject;
+            }
+        }
+
+        public ResolvedObject? ResolvedObjectNoCache {
+            get {
+                if (Owner == null) return null;
+                var resolvedObject = _resolvedObject != null && _resolvedObject.TryGetTarget(out var target) ? target : null;
+                if (resolvedObject != null) return resolvedObject;
+                return Owner.ResolvePackageIndex(this);
+            }
+        }
+
+        public bool IsNull => Index == 0;
+        public bool IsExport => Index > 0;
+        public bool IsImport => Index < 0;
+
+        private string? _name;
+        public string Name => _name ??= ResolvedObject?.Name.Text ?? "None";
+
+        public FPackageIndex(FAssetArchive Ar, int index)
+        {
+            Index = index;
+            Owner = Ar.Owner;
+        }
+
+        public FPackageIndex(FAssetArchive Ar)
+        {
+            Index = Ar.Read<int>();
+            Owner = Ar.Owner;
+        }
+
+        public FPackageIndex(FKismetArchive Ar)
+        {
+            Index = Ar.Read<int>();
+            Owner = Ar.Owner;
+            Ar.Index += 4;
+        }
+
+        public FPackageIndex(IPackage owner, int index)
+        {
+            Index = index;
+            Owner = owner;
+        }
+
+        public FPackageIndex()
+        {
+            Index = 0;
+            Owner = null;
+        }
+
+        public override string ToString()
+        {
+            return ResolvedObject?.ToString() ?? Index.ToString();
+        }
+
+        protected internal void WriteJson(JsonWriter writer, JsonSerializer serializer)
+        {
+            if (this.TryLoad<UProperty>(out var property))
+            {
+                serializer.Serialize(writer, property);
+            }
+            else
+            {
+                serializer.Serialize(writer, this);
+            }
+        }
+
+        #region Loading Methods
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public Type? GetObjectType() => ResolvedObject?.GetObjectType();
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public UExport? Load() => ResolvedObject?.Load();
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public bool TryLoad([MaybeNullWhen(false)] out UExport export)
+        {
+            if (ResolvedObject != null)
+                return ResolvedObject.TryLoad(out export);
+
+            export = null;
+            return false;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public async Task<UExport?> LoadAsync()
+        {
+            if (ResolvedObject != null)
+                return await ResolvedObject.LoadAsync();
+            return null;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public async Task<UExport?> TryLoadAsync()
+        {
+            if (ResolvedObject != null)
+                return await ResolvedObject.TryLoadAsync();
+            return null;
+        }
+        #endregion
+
+        public bool Equals(FPackageIndex? other)
+        {
+            if (other is null) return false;
+            if (ReferenceEquals(this, other)) return true;
+            return Index == other.Index && Owner != null && Owner.Equals(other.Owner);
+        }
+
+        public override int GetHashCode()
+        {
+            return HashCode.Combine(Index, Owner);
+        }
+    }
+
+
+    /// <summary>
+    /// Base class for UObject resource types.  FObjectResources are used to store UObjects on disk
+    /// via FLinker's ImportMap (for resources contained in other packages) and ExportMap (for resources
+    /// contained within the same package)
+    /// </summary>
+    [JsonConverter(typeof(FObjectResourceConverter))]
+    public abstract class FObjectResource
+    {
+        public FName ObjectName;
+        public FPackageIndex? OuterIndex;
+
+        public override string ToString()
+        {
+            return ObjectName.Text;
+        }
+    }
+
+    public class FObjectExport : FObjectResource
+    {
+        public FPackageIndex ClassIndex;
+        public FPackageIndex SuperIndex;
+        public FPackageIndex TemplateIndex;
+        public uint ObjectFlags;
+        public long SerialSize;
+        public long SerialOffset;
+        public bool ForcedExport;
+        public bool NotForClient;
+        public bool NotForServer;
+        public FGuid PackageGuid;
+        public bool IsInheritedInstance;
+        public uint PackageFlags;
+        public bool NotAlwaysLoadedForEditorGame;
+        public bool IsAsset;
+        public bool GeneratePublicHash;
+        public int FirstExportDependency;
+        public int SerializationBeforeSerializationDependencies;
+        public int CreateBeforeSerializationDependencies;
+        public int SerializationBeforeCreateDependencies;
+        public int CreateBeforeCreateDependencies;
+        public long ScriptSerializationStartOffset;
+        public long ScriptSerializationEndOffset;
+        public ulong? PublicExportHash;
+
+        public string ClassName;
+
+#pragma warning disable 8618
+        public FObjectExport()
+#pragma warning restore 8618
+        { }
+
+        public FObjectExport(FAssetArchive Ar)
+        {
+            ClassIndex = new FPackageIndex(Ar);
+            SuperIndex = new FPackageIndex(Ar);
+            TemplateIndex = Ar.Ver >= EUnrealEngineObjectUE4Version.TemplateIndex_IN_COOKED_EXPORTS ? new FPackageIndex(Ar) : new FPackageIndex();
+            OuterIndex = Ar.Ver >= EUnrealEngineObjectUE3Version.Release50 ? new FPackageIndex(Ar) : new FPackageIndex();
+            ObjectName = Ar.ReadFName();
+            if (Ar.Ver >= EUnrealEngineObjectUE3Version.AddedArcheType && Ar.Ver < EUnrealEngineObjectUE4Version.REMOVE_ARCHETYPE_INDEX_FROM_LINKER_TABLES)
+            {
+                new FPackageIndex(Ar); // Archetype
+            }
+
+            if (Ar.Ver >= EUnrealEngineObjectUE3Version.Use64BitFlag && Ar.Game < GAME_UE4_0)
+            {
+                Ar.Position += sizeof(ulong); // ulong - ObjectFlagsLegacy
+            }
+            else
+            {
+                ObjectFlags = Ar.Read<uint>();
+            }
+
+            if (Ar.Ver < EUnrealEngineObjectUE4Version.e64BIT_EXPORTMAP_SERIALSIZES)
+            {
+                SerialSize = Ar.Read<int>();
+
+                if (Ar.Game == GAME_RocketLeague && (int)Ar.LicenseeVer > 22)
+                {
+                    SerialOffset = Ar.Read<long>();
+                }
+                else if (SerialSize > 0 || Ar.Ver >= EUnrealEngineObjectUE3Version.MOVED_EXPORTIMPORTMAPS_ADDED_TOTALHEADERSIZE)
+                {
+                    SerialOffset = Ar.Read<int>();
+                }
+            }
+            else
+            {
+                SerialSize = Ar.Read<long>();
+                SerialOffset = Ar.Read<long>();
+            }
+
+            if (Ar.Game >= GAME_UE4_0)
+            {
+                ForcedExport = Ar.ReadBoolean();
+                NotForClient = Ar.ReadBoolean();
+                NotForServer = Ar.ReadBoolean();
+            }
+
+            if (Ar.Ver >= EUnrealEngineObjectUE3Version.AddedComponentMapToExports && Ar.Ver < EUnrealEngineObjectUE3Version.REMOVED_COMPONENT_MAP)
+            {
+                Ar.ReadMap(Ar.ReadFName, () => new FPackageIndex(Ar)); // LegacyComponentMap
+            }
+
+            if (Ar.Ver >= EUnrealEngineObjectUE3Version.FOBJECTEXPORT_EXPORTFLAGS && Ar.Game < GAME_UE4_0)
+            {
+                Ar.Read<int>(); // ExportFlags
+            }
+
+            if (Ar.Ver >= EUnrealEngineObjectUE3Version.LINKERFREE_PACKAGEMAP)
+            {
+                if (Ar.Ver < EUnrealEngineObjectUE4Version.REMOVE_NET_INDEX)
+                {
+                    Ar.ReadArray<int>(); // NetObjectCount
+                }
+
+                PackageGuid = Ar.Ver < EUnrealEngineObjectUE5Version.REMOVE_OBJECT_EXPORT_PACKAGE_GUID ? Ar.Read<FGuid>() : default;
+                IsInheritedInstance = Ar.Ver >= EUnrealEngineObjectUE5Version.TRACK_OBJECT_EXPORT_IS_INHERITED && Ar.ReadBoolean();
+
+                if (Ar.Ver >= EUnrealEngineObjectUE3Version.AddedPackageFlags)
+                {
+                    PackageFlags = Ar.Read<uint>();
+                }
+            }
+            NotAlwaysLoadedForEditorGame = Ar.Ver >= EUnrealEngineObjectUE4Version.LOAD_FOR_EDITOR_GAME && Ar.ReadBoolean();
+            IsAsset = Ar.Ver >= EUnrealEngineObjectUE4Version.COOKED_ASSETS_IN_EDITOR_SUPPORT && Ar.ReadBoolean();
+            GeneratePublicHash = Ar.Ver >= EUnrealEngineObjectUE5Version.OPTIONAL_RESOURCES && Ar.ReadBoolean();
+
+            if (Ar.Ver >= EUnrealEngineObjectUE4Version.PRELOAD_DEPENDENCIES_IN_COOKED_EXPORTS)
+            {
+                FirstExportDependency = Ar.Read<int>();
+                SerializationBeforeSerializationDependencies = Ar.Read<int>();
+                CreateBeforeSerializationDependencies = Ar.Read<int>();
+                SerializationBeforeCreateDependencies = Ar.Read<int>();
+                CreateBeforeCreateDependencies = Ar.Read<int>();
+            }
+            else
+            {
+                FirstExportDependency = -1;
+                SerializationBeforeSerializationDependencies = 0;
+                CreateBeforeSerializationDependencies = 0;
+                SerializationBeforeCreateDependencies = 0;
+                CreateBeforeCreateDependencies = 0;
+            }
+
+            if (!Ar.HasUnversionedProperties && Ar.Ver >= EUnrealEngineObjectUE5Version.SCRIPT_SERIALIZATION_OFFSET)
+            {
+                ScriptSerializationStartOffset = Ar.Read<long>();
+                ScriptSerializationEndOffset = Ar.Read<long>();
+            }
+            else
+            {
+                ScriptSerializationStartOffset = 0;
+                ScriptSerializationEndOffset = 0;
+            }
+
+            ClassName = ClassIndex.Name;
+        }
+
+        public override string ToString()
+        {
+            return $"{ObjectName.Text} ({ClassIndex.Name})";
+        }
+
+        public ulong GetPublicExportHash()
+        {
+            if (PublicExportHash.HasValue) return PublicExportHash.Value;
+
+            if ((ObjectFlags & (uint)EObjectFlags.RF_Public) == 0)
+            {
+                PublicExportHash = 0;
+            }
+            else
+            {
+                if (OuterIndex is null || OuterIndex.IsNull)
+                {
+                    PublicExportHash = FPackageId.FromName(ObjectName.Text).id;
+                }
+                else
+                {
+                    var sb = new StringBuilder(128);
+                    OuterIndex?.ResolvedObject?.GetPathName(false, sb);
+                    if (sb.Length > 0)
+                        sb.Append('/');
+                    sb.Append(ObjectName.Text);
+                    PublicExportHash = FPackageId.FromName(sb.ToString()).id;
+                }
+            }
+
+            return PublicExportHash.Value;
+        }
+
+        // TODO: Implement global import index calculation
+        public FPackageObjectIndex GetGlobalImportIndex()
+        {
+            return new(0u);
+        }
+    }
+
+    /// <summary>
+    /// UObject resource type for objects that are referenced by this package, but contained
+    /// within another package.
+    /// </summary>
+    public class FObjectImport : FObjectResource
+    {
+        public readonly FName ClassPackage;
+        public FName ClassName;
+        public FName PackageName;
+        public bool ImportOptional;
+
+#pragma warning disable 8618
+        public FObjectImport()
+#pragma warning restore 8618
+        { }
+
+        public FObjectImport(FAssetArchive Ar)
+        {
+            ClassPackage = Ar.ReadFName();
+            ClassName = Ar.ReadFName();
+            OuterIndex = new FPackageIndex(Ar);
+            ObjectName = Ar.ReadFName();
+
+            if (Ar.Game >=  GAME_UE5_8 || Ar.Ver >= EUnrealEngineObjectUE4Version.NON_OUTER_PACKAGE_IMPORT && !Ar.IsFilterEditorOnly)
+            {
+                PackageName = Ar.ReadFName();
+            }
+
+            if (Ar.Game == GAME_RacingMaster) Ar.Position += 1;
+
+            ImportOptional = Ar.Ver >= EUnrealEngineObjectUE5Version.OPTIONAL_RESOURCES && Ar.ReadBoolean();
+        }
+    }
+}

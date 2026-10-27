@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Aion · Wardrobe preview</title>
+<style>
+:root{color-scheme:dark;font:15px system-ui;--bg:#10151e;--panel:#182130;--line:#303e51;--muted:#aebbd0;--accent:#88ceff;background:var(--bg);color:#e4eaf2}
+body{margin:0;height:100vh;display:grid;grid-template-rows:auto 1fr}
+header{display:flex;gap:18px;align-items:baseline;flex-wrap:wrap;padding:14px 20px;border-bottom:1px solid var(--line)}
+header h1{margin:0;font-size:20px}header a{color:var(--accent)}header p{margin:0;color:var(--muted);font-size:13px}
+main{display:grid;grid-template-columns:minmax(300px,420px) 1fr minmax(240px,300px);min-height:0}
+section,aside{background:var(--panel);display:flex;flex-direction:column;min-height:0}
+input,select,button{font:inherit;background:#202b3b;color:inherit;border:1px solid #53637c;border-radius:6px;padding:7px 9px}
+button{cursor:pointer}button:hover{background:#34485e}button[aria-pressed=true]{background:#2d5878;border-color:var(--accent)}
+.filters{display:flex;flex-wrap:wrap;gap:8px;padding:12px;border-bottom:1px solid var(--line)}.filters input{flex:1;min-width:140px}
+#count{padding:6px 12px;color:var(--muted);font-size:13px;margin:0}
+#list{overflow:auto;flex:1;display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:6px;padding:8px 12px;align-content:start}
+.tile{display:flex;flex-direction:column;align-items:center;gap:4px;padding:6px 4px;border:1px solid transparent;border-radius:8px;background:none;font-size:11px;line-height:1.2;text-align:center}
+.tile.selected{border-color:var(--accent);background:#22344a}.tile span{overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.icon{width:56px;height:56px;border-radius:8px;background:#0c1018;border:2px solid #3a475a;object-fit:contain;flex:none}
+.icon.none{display:grid;place-items:center;color:#5d6b80;font-size:10px}
+.g-Common{border-color:#8a96a6}.g-Rare{border-color:#4caf6a}.g-Legend{border-color:#3f8ef0}.g-Unique{border-color:#e2b23c}.g-Epic{border-color:#e07a2f}.g-Special,.g-Mythic{border-color:#c461e8}
+#more{margin:8px 12px 12px}
+#stage{position:relative;min-height:0;background:radial-gradient(circle at 50% 35%,#2a3446,#0b0f16 75%)}
+#stage canvas{display:block;width:100%;height:100%}
+#status{position:absolute;left:12px;bottom:10px;margin:0;color:var(--muted);font-size:13px;pointer-events:none}
+.gender{position:absolute;top:12px;left:12px;display:flex;gap:6px}
+aside{padding:14px;gap:12px;overflow:auto}aside h2{font-size:15px;margin:4px 0}
+.slot{display:grid;grid-template-columns:44px 1fr auto;gap:8px;align-items:center;font-size:13px}
+.slot .icon{width:40px;height:40px}.slot small{display:block;color:var(--muted)}.slot button{padding:3px 8px;font-size:12px}
+#detail p{margin:4px 0;color:var(--muted);font-size:13px}#detail h3{margin:6px 0 2px}#detail a{color:var(--accent)}
+label.check{display:flex;gap:6px;align-items:center;font-size:13px;color:var(--muted)}
+#error{color:#ff9c9c}
+@media(max-width:1000px){body{height:auto}main{grid-template-columns:1fr}#stage{height:70vh}#list{max-height:60vh}}
+</style>
+<header><h1>Wardrobe preview</h1><a href="/">Item catalogue</a>
+<p>Extracted AION2 meshes playing the game's lobby idle, with approximate materials. In-game dyes, shaders, cloth physics and equip rules are not reproduced.</p></header>
+<main>
+<section aria-label="Items">
+ <form class="filters" id="filters">
+  <input id="query" type="search" placeholder="Search name or ID" aria-label="Search">
+  <select id="slot" aria-label="Slot"><option value="wearable">Wearable</option><option value="">All items</option></select>
+  <select id="category" aria-label="Category"><option value="">All categories</option></select>
+  <select id="grade" aria-label="Grade"><option value="">All grades</option></select>
+ </form>
+ <p id="count" aria-live="polite">Loading…</p>
+ <div id="list" role="list"></div>
+ <button id="more" hidden>Show more</button>
+</section>
+<div id="stage">
+ <div class="gender" role="group" aria-label="Character"><button data-gender="GF" aria-pressed="true">Female</button><button data-gender="GM" aria-pressed="false">Male</button></div>
+ <p id="status"></p>
+</div>
+<aside>
+ <div id="detail"><p>Select an item to preview it. Wearable armor, weapons, necklaces and earrings are shown on the character.</p></div>
+ <p id="error" role="alert"></p>
+ <h2>Equipped</h2><div id="slots"></div>
+ <label class="check">Pose <select id="pose" aria-label="Pose"><option value="animate">Lobby idle (animated)</option><option value="still">Lobby idle (still)</option><option value="bind">Bind pose</option></select></label>
+ <label class="check"><input type="checkbox" id="hairUnderHelmet"> Show hair under helmet</label>
+ <label class="check"><input type="color" id="hairColor" aria-label="Hair colour"> Hair colour</label>
+ <button id="clear">Remove all</button>
+</aside>
+</main>
+<script type="module">
+import {FILES, SLOTS, SLOT_LABEL, createViewer, json, wearable} from '/wardrobe-viewer.js';
+
+const $ = id => document.getElementById(id);
+let data, viewer, shown = 0, filtered = [], selectedId = null;
+
+// ---------- UI ----------
+function el(tag, props = {}, ...children) { const e = Object.assign(document.createElement(tag), props); e.append(...children); return e; }
+function iconFor(item, size) {
+  if (!item?.icon) return el('div', {className: 'icon none', textContent: 'no icon'});
+  return el('img', {className: `icon g-${item.grade}`, src: FILES + item.icon, alt: '', loading: 'lazy', width: size, height: size});
+}
+
+function applyFilters() {
+  const q = $('query').value.trim().toLowerCase(), slot = $('slot').value, category = $('category').value, grade = $('grade').value;
+  filtered = data.items.filter(i => (!slot || wearable(i)) && (!category || i.category === category) && (!grade || i.grade === grade)
+    && (!q || i.name.toLowerCase().includes(q) || String(i.id).includes(q)));
+  shown = 0; $('list').replaceChildren(); showMore();
+}
+function showMore() {
+  const next = filtered.slice(shown, shown + 240);
+  $('list').append(...next.map(item => {
+    const tile = el('button', {className: 'tile' + (item.id === selectedId ? ' selected' : ''), title: `${item.name} · ${item.category} · ${item.grade}`},
+      iconFor(item, 56), el('span', {textContent: item.name}));
+    tile.setAttribute('role', 'listitem'); tile.dataset.id = item.id;
+    tile.onclick = () => select(item);
+    return tile;
+  }));
+  shown += next.length;
+  $('count').textContent = `${filtered.length.toLocaleString()} items`;
+  $('more').hidden = shown >= filtered.length;
+}
+
+function select(item) {
+  selectedId = item.id;
+  document.querySelectorAll('.tile.selected').forEach(t => t.classList.remove('selected'));
+  document.querySelector(`.tile[data-id="${item.id}"]`)?.classList.add('selected');
+  const slotName = SLOT_LABEL[item.slot] || item.slot;
+  const preview = viewer.canWear(item) ? `Shown in the ${slotName} slot.`
+    : item.slot ? `No extracted ${viewer.gender === 'GF' ? 'female' : 'male'} mesh for this item.` : 'Not a visible equipment item.';
+  $('detail').replaceChildren(iconFor(item, 64), el('h3', {textContent: item.name}),
+    el('p', {textContent: `${item.category} · ${item.grade} · item level ${item.level ?? '?'} · race ${item.race}`}),
+    el('p', {textContent: `ID ${item.id} · ${preview}`}),
+    ...(item.icon_variant ? [el('p', {textContent: 'Icon taken from a similarly named texture; the exact table icon is not in this client build.'})] : []),
+    el('p', {}, el('a', {href: '/?' + new URLSearchParams({q: item.id}), textContent: 'Open in catalogue'})));
+  $('error').textContent = '';
+  viewer.equip(item);
+}
+
+// The URL hash records the look (#gender=GF&items=1,2) so it can be bookmarked or shared.
+function saveLook() {
+  const equipped = viewer.equipped;
+  const ids = SLOTS.filter(s => equipped[s]).map(s => equipped[s].id);
+  history.replaceState(null, '', '#' + new URLSearchParams({gender: viewer.gender, items: ids.join(',')}));
+}
+function restoredLook() {
+  const look = new URLSearchParams(location.hash.slice(1));
+  const byId = new Map(data.items.map(i => [i.id, i]));
+  return [look.get('gender') === 'GM' ? 'GM' : 'GF', (look.get('items') || '').split(',').map(id => byId.get(Number(id))).filter(Boolean)];
+}
+
+function renderSlots() {
+  saveLook();
+  const equipped = viewer.equipped;
+  document.querySelectorAll('[data-gender]').forEach(b => b.setAttribute('aria-pressed', b.dataset.gender === viewer.gender));
+  const hair = viewer.hairColor(); if (hair) $('hairColor').value = hair;
+  $('slots').replaceChildren(...SLOTS.map(slot => {
+    const item = equipped[slot];
+    const remove = el('button', {textContent: 'Remove', hidden: !item, onclick: () => viewer.unequip(slot)});
+    const missing = item && !viewer.canWear(item) ? ' (no mesh for this character)' : '';
+    return el('div', {className: 'slot'}, item ? iconFor(item, 40) : el('div', {className: 'icon none'}),
+      el('div', {}, el('small', {textContent: SLOT_LABEL[slot] || slot}), (item ? item.name : 'Empty') + missing), remove);
+  }));
+}
+
+for (const button of document.querySelectorAll('[data-gender]')) button.onclick = () => viewer.setGender(button.dataset.gender);
+$('filters').oninput = applyFilters; $('filters').onsubmit = e => e.preventDefault();
+$('more').onclick = showMore;
+$('hairUnderHelmet').onchange = () => viewer.setHairUnderHelmet($('hairUnderHelmet').checked);
+$('pose').onchange = () => viewer.setPoseMode($('pose').value);
+$('hairColor').oninput = () => viewer.setHairColor($('hairColor').value);
+$('clear').onclick = () => viewer.clear();
+
+json('/wardrobe/data').then(d => {
+  data = d;
+  const options = (id, values) => $(id).append(...[...new Set(values)].sort().map(v => el('option', {value: v, textContent: v})));
+  options('category', data.items.map(i => i.category));
+  options('grade', data.items.map(i => i.grade).filter(Boolean));
+  viewer = createViewer($('stage'), data, {onStatus: text => { $('status').textContent = text; },
+    onError: text => { $('error').textContent = text; }, onChange: renderSlots});
+  applyFilters();
+  viewer.setLook(...restoredLook());
+}).catch(e => { $('count').textContent = ''; $('error').textContent = `Wardrobe data unavailable (${e.message}). Run: python tools/wardrobe.py index`; });
+</script></html>

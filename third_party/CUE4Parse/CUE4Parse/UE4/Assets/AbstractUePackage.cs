@@ -1,0 +1,268 @@
+using System.Diagnostics.CodeAnalysis;
+using System.Runtime.CompilerServices;
+using System.Text;
+using CUE4Parse.FileProvider;
+using CUE4Parse.MappingsProvider;
+using CUE4Parse.UE4.Assets.Exports;
+using CUE4Parse.UE4.Assets.Readers;
+using CUE4Parse.UE4.Exceptions;
+using CUE4Parse.UE4.Objects.UObject;
+using Newtonsoft.Json;
+
+namespace CUE4Parse.UE4.Assets;
+
+[JsonConverter(typeof(PackageConverter))]
+public abstract class AbstractUePackage : UObject, IPackage
+{
+
+    public IFileProvider? Provider { get; }
+    public TypeMappings? Mappings => Provider?.MappingsForGame;
+
+    public abstract FPackageFileSummary Summary { get; }
+    public abstract FNameEntrySerialized[] NameMap { get; }
+    public abstract int ImportMapLength { get; }
+    public abstract int ExportMapLength { get; }
+
+    public Lazy<UObject>[] ExportsLazy { get; protected init; }
+    public bool IsFullyLoaded { get; protected init; }
+    public bool CanDeserialize
+    {
+        get
+        {
+            if (HasFlags(EPackageFlags.PKG_UnversionedProperties) && Mappings is null)
+                throw new MappingException("Package has unversioned properties but mapping file is missing, can't serialize");
+            return true;
+        }
+    }
+
+    protected AbstractUePackage(string name, IFileProvider? provider)
+    {
+        Name = name;
+        Provider = provider;
+        Flags |= EObjectFlags.RF_WasLoaded;
+    }
+
+    /// <summary>
+    /// TODO: make this protected and use <see cref="LoadableObjectExtensions.IsA{T}"/> to type check instead
+    /// </summary>
+    public UObject ConstructObject(ResolvedObject? struc, IPackage? owner = null, EObjectFlags flags = EObjectFlags.RF_NoFlags)
+    {
+        UObject? obj = null;
+        var mappings = owner?.Mappings;
+        var current = struc?.Object?.Value as UStruct;
+
+        while (current != null) // Traverse up until a known one is found
+        {
+            if (current is UClass scriptClass)
+            {
+                // We know this is a class defined in code at this point
+                obj = scriptClass.ConstructObject(flags);
+                if (obj != null)
+                    break;
+            }
+
+            var previous = current;
+            current = current.SuperStruct?.Load<UStruct>();
+
+            if (current is null && mappings is not null && mappings.Types.TryGetValue(previous.Name, out var structMappings))
+            {
+                // added guard for infinite loop
+                if (string.IsNullOrEmpty(structMappings.SuperType) || previous.Name == structMappings.SuperType) break;
+                current = new UScriptClass(structMappings.SuperType);
+            }
+        }
+
+        obj ??= new UObject();
+        obj.Class = struc;
+        obj.Flags |= EObjectFlags.RF_WasLoaded;
+        return obj;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    protected void DeserializeObject(UObject obj, FAssetArchive Ar, long serialSize)
+    {
+        var serialOffset = Ar.Position;
+        var validPos = serialOffset + serialSize;
+        try
+        {
+            if (serialSize == 0) return; // Empty Export
+            obj.Deserialize(Ar, validPos);
+#if DEBUG
+            var remaining = validPos - Ar.Position;
+            switch (remaining)
+            {
+                case > 0:
+                    Log.Warning("Did not read {0} correctly, {1} bytes remaining ({2}%)", obj.ExportType, remaining,
+                        Math.Round((decimal)remaining / validPos * 100, 2));
+                    break;
+                case < 0:
+                    Log.Warning("Did not read {0} correctly, {1} bytes exceeded", obj.ExportType, Math.Abs(remaining));
+                    break;
+                default:
+                    break;
+            }
+#endif
+        }
+        catch (Exception e)
+        {
+            if (Globals.FatalObjectSerializationErrors)
+            {
+                throw new ParserException($"Could not read {obj.ExportType} named {obj.Name} correctly", e);
+            }
+            Log.Error(e, "Could not read {0} named {1} correctly", obj.ExportType, obj.Name);
+        }
+    }
+
+    public override bool IsNameStableForNetworking() => true;   // For now, assume all packages have stable net names
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool HasFlags(EPackageFlags flags) => Summary.PackageFlags.HasFlag(flags);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public abstract int GetExportIndex(string name, StringComparison comparisonType = StringComparison.Ordinal);
+
+    public abstract ResolvedObject? ResolvePackageIndex(FPackageIndex? index);
+
+    public override string ToString() => Name;
+}
+
+[JsonConverter(typeof(ResolvedObjectConverter))]
+public abstract class ResolvedObject(IPackage package, int exportIndex = -1) : ILoadableObject
+{
+    public readonly IPackage Package = package;
+
+    public int ExportIndex { get; } = exportIndex;
+    public abstract FName Name { get; }
+    public virtual ResolvedObject? Outer => null;
+    public virtual ResolvedObject? Class => null;
+    public virtual ResolvedObject? Super => null;
+    public virtual Lazy<UObject>? Object => ExportIndex >= 0 && ExportIndex < Package.ExportsLazy.Length
+        ? Package.ExportsLazy[ExportIndex]
+        : null;
+
+    // same walk as ConstructObject (class, supers, then mappings)
+    public Type? GetObjectType()
+    {
+        var cls = Class;
+        var name = cls?.Name.Text;
+        while (!string.IsNullOrEmpty(name))
+        {
+            if (ObjectTypeRegistry.Get(name) is { } type) return type;
+
+            cls = cls?.Super;
+            if (cls != null)
+            {
+                name = cls.Name.Text;
+                continue;
+            }
+
+            if (Package.Mappings?.Types.TryGetValue(name, out var struc) != true || struc.SuperType == name) break;
+            name = struc.SuperType;
+        }
+
+        return Class != null ? typeof(UObject) : null;
+    }
+
+    public string GetFullName(bool includeOuterMostName = true, bool includeClassPackage = false)
+    {
+        var result = new StringBuilder(128);
+        GetFullName(includeOuterMostName, result, includeClassPackage);
+        return result.ToString();
+    }
+
+    public void GetFullName(bool includeOuterMostName, StringBuilder resultString, bool includeClassPackage = false)
+    {
+        resultString.Append(includeClassPackage ? Class?.GetPathName() : Class?.Name);
+        resultString.Append('\'');
+        GetPathName(includeOuterMostName, resultString);
+        resultString.Append('\'');
+    }
+
+    public string GetPathName(bool includeOuterMostName = true)
+    {
+        var result = new StringBuilder();
+        GetPathName(includeOuterMostName, result);
+        return result.ToString();
+    }
+
+    public void GetPathName(bool includeOuterMostName, StringBuilder resultString)
+    {
+        var objOuter = Outer;
+        if (objOuter != null)
+        {
+            var objOuterOuter = objOuter.Outer;
+            if (objOuterOuter != null || includeOuterMostName)
+            {
+                objOuter.GetPathName(includeOuterMostName, resultString);
+                resultString.Append(objOuterOuter is { Outer: null } ? ':' : '.');
+            }
+        }
+
+        resultString.Append(Name);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public UObject? Load() => Object?.Value;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool TryLoad([MaybeNullWhen(false)] out UObject export)
+    {
+        try
+        {
+            export = Object?.Value;
+        }
+        catch (Exception e)
+        {
+            Log.Error(e, "Could not load {0} named {1} correctly", Class?.Name, Name);
+            export = null;
+        }
+        return export != null;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public Task<UObject?> LoadAsync() => Task.FromResult(Object?.Value);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public Task<UObject?> TryLoadAsync()
+    {
+        try
+        {
+            return Task.FromResult(Object?.Value);
+        }
+        catch (Exception e)
+        {
+            Log.Error(e, "Could not load {0} named {1} correctly", Class?.Name, Name);
+            return Task.FromResult<UObject?>(null);
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool Equals(ResolvedObject? other)
+        => other != null && ExportIndex == other.ExportIndex && Name == other.Name && Package == other.Package;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public override bool Equals(object? obj) => obj is ResolvedObject other && Equals(other);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public override int GetHashCode()
+    {
+        return HashCode.Combine(ExportIndex, Name.GetHashCode(), Package.GetHashCode());
+    }
+
+    public override string ToString() => GetFullName();
+}
+
+public class ResolvedLoadedObject(UObject uobject) : ResolvedObject(uobject.Owner)
+{
+    public override FName Name => new(uobject.Name);
+    public override ResolvedObject? Outer => uobject.Outer;
+    public override ResolvedObject? Class => uobject.Class;
+    public override ResolvedObject? Super => uobject.Super;
+    public override Lazy<UObject> Object => new(() => uobject);
+}
+
+public class ResolvedPackageObject(IPackage package) : ResolvedObject(package)
+{
+    public override FName Name => new(Package.Name);
+    public override Lazy<UObject> Object => new(() => (AbstractUePackage) Package);
+}

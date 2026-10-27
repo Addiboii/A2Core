@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Aion.Infrastructure/Aion.Infrastructure.csproj" />
+    <ProjectReference Include="../Aion.Protocol/Aion.Protocol.csproj" />
+    <ProjectReference Include="../Aion.World/Aion.World.csproj" />
+  </ItemGroup>
+  <!-- The account page and staff dashboard (React, web/) build into wwwroot when their sources
+       change. Needs Node.js and npm; AION_SKIP_WEB=1 skips it (pages then stay as last built). -->
+  <ItemGroup>
+    <WebSource Include="../../web/src/**/*;../../web/*.html;../../web/package-lock.json;../../web/vite.config.ts;../../web/tsconfig.json" />
+  </ItemGroup>
+  <Target Name="BuildWebPages" BeforeTargets="BeforeBuild" Inputs="@(WebSource)" Outputs="wwwroot/admin.html;wwwroot/index.html"
+          Condition="'$(AION_SKIP_WEB)' != '1' And Exists('../../web/package.json')">
+    <Exec Command="npm ci --no-audit --no-fund" WorkingDirectory="../../web" Condition="!Exists('../../web/node_modules')" />
+    <Exec Command="npm run build" WorkingDirectory="../../web" />
+  </Target>
+</Project>

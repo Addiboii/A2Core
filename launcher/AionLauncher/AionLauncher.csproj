@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The player launcher (Windows). Publish as one exe:
+       dotnet publish launcher/AionLauncher -c Release -r win-x64 -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- icon.ico and emblem.png come from the "AH" emblem artwork (see README). -->
+    <ApplicationIcon>icon.ico</ApplicationIcon>
+    <AssemblyName>A2Core Launcher</AssemblyName>
+    <Product>A2Core Launcher</Product>
+    <AssemblyTitle>A2Core Launcher</AssemblyTitle>
+    <Description>A2Core Launcher: sets up the game and plays on the A2Core Launcher server.</Description>
+    <Version>0.4.1</Version>
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Aion.Launcher.Core/Aion.Launcher.Core.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="emblem.png" LogicalName="emblem.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="QRCoder" Version="1.8.0" />
+  </ItemGroup>
+</Project>

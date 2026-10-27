@@ -1,0 +1,19 @@
+# The server's own PostgreSQL cluster (tools/postgres_dev.py setup; 127.0.0.1:55432, no Unix socket).
+# install.sh fills in @PG_BIN@ with the distribution's server binaries.
+[Unit]
+Description=AION2 server database
+After=network.target
+
+[Service]
+Type=notify
+User=aion
+Group=aion
+ExecStart=@PG_BIN@/postgres -D /var/lib/aion/postgres/data
+ExecReload=/bin/kill -HUP $MAINPID
+KillMode=mixed
+KillSignal=SIGINT
+TimeoutSec=120
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

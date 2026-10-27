@@ -1,0 +1,38 @@
+using CUE4Parse.UE4.Assets.Exports.StaticMesh;
+using CUE4Parse.UE4.Readers;
+using CUE4Parse.UE4.Versions;
+
+namespace CUE4Parse.UE4.Assets.Exports.SkeletalMesh;
+
+public class FMultisizeIndexContainer() : FRawIndexBuffer
+{
+    public FMultisizeIndexContainer(FArchive Ar) : this()
+    {
+        var dataSize = 0x02;
+        if (Ar.Ver > EUnrealEngineObjectUE3Version.DWORD_SKELETAL_MESH_INDICES)
+        {
+            if (Ar.Ver < EUnrealEngineObjectUE4Version.KEEP_SKEL_MESH_INDEX_DATA)
+            {
+                Ar.Position += sizeof(int); // bOldNeedsCPUAccess
+            }
+
+            dataSize = Ar.Read<byte>();
+        }
+
+        if (Ar.Game == GAME_OutlastTrials) Ar.Position += 4;
+
+        if (dataSize == 0x02)
+        {
+            SetIndices(Ar.ReadBulkArray<ushort>());
+        }
+        else
+        {
+            SetIndices(Ar.ReadBulkArray<uint>());
+        }
+    }
+
+    public FMultisizeIndexContainer(uint[] indices) : this()
+    {
+        SetIndices(indices);
+    }
+}

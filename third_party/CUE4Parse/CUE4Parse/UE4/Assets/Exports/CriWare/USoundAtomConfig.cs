@@ -1,0 +1,37 @@
+using CUE4Parse.UE4.Assets.Objects;
+using CUE4Parse.UE4.Assets.Readers;
+using CUE4Parse.UE4.Criware.Readers;
+using CUE4Parse.UE4.Readers;
+using Newtonsoft.Json;
+
+namespace CUE4Parse.UE4.Assets.Exports.Criware;
+
+public class UAtomConfig : USoundAtomConfig;
+
+public class USoundAtomConfig : UObject
+{
+    public AcbReader? AcbReader;
+
+    public override void Deserialize(FAssetArchive Ar, long validPos)
+    {
+        base.Deserialize(Ar, validPos);
+
+        var bulkData = new FByteBulkData(Ar);
+        if (bulkData.Data == null)
+            return;
+
+        using var bulkAr = new FByteArchive("AcbReader", bulkData.Data);
+        AcbReader = new AcbReader(bulkAr);
+    }
+
+    protected internal override void WriteJson(JsonWriter writer, JsonSerializer serializer)
+    {
+        base.WriteJson(writer, serializer);
+
+        if (AcbReader == null)
+            return;
+
+        writer.WritePropertyName(nameof(AcbReader.AtomCueSheetData));
+        serializer.Serialize(writer, AcbReader.AtomCueSheetData);
+    }
+}

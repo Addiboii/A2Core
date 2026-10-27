@@ -1,0 +1,197 @@
+using CUE4Parse.GameTypes.SuicideSquad.Objects;
+using CUE4Parse.UE4.Objects.Core.Math;
+using CUE4Parse.UE4.Readers;
+using CUE4Parse.UE4.Versions;
+using Newtonsoft.Json;
+
+namespace CUE4Parse.UE4.Objects.Meshes;
+
+[JsonConverter(typeof(FPositionVertexBufferConverter))]
+public class FPositionVertexBuffer
+{
+    [JsonIgnore] public FVector[] Verts { get; protected set; }
+    public int Stride { get; protected set; }
+    public int NumVertices { get; protected set; }
+
+    public FPositionVertexBuffer()
+    {
+        Verts = [];
+    }
+
+    public FPositionVertexBuffer(FArchive Ar)
+    {
+        if (Ar.Game is GAME_Undawn or GAME_RacingMaster)
+        {
+            bool bUseFullPrecisionPositions = Ar.Game == GAME_Undawn && Ar.ReadBoolean();
+            Stride = Ar.Read<int>();
+            NumVertices = Ar.Read<int>();
+            bUseFullPrecisionPositions = Ar.Game == GAME_RacingMaster && Stride == 12;
+            Verts = bUseFullPrecisionPositions ? Ar.ReadBulkArray<FVector>() : Ar.ReadBulkArray<FVector>(() => Ar.Read<FVector3UnsignedShort>());
+            return;
+        }
+
+        if (Ar.Game is GAME_HonorofKingsWorld)
+        {
+            var size = Ar.Read<int>();
+            if (size == 32)
+            {
+                NumVertices = Ar.Read<int>();
+                var pos = Ar.Read<FVector>();
+                var extent = Ar.Read<FVector>();
+                Stride = Ar.Read<int>();
+                Ar.Position -= 4;
+                Verts = Ar.ReadBulkArray(() => (FVector) Ar.Read<FVector3UnsignedShortScale>());
+                for (int i = 0; i < Verts.Length; i++)
+                {
+                    Verts[i] = Verts[i] * extent / 65536 + pos;
+                }
+            }
+            else if (size == 12)
+            {
+                Stride = size;
+                NumVertices = Ar.Read<int>();
+                Verts = Ar.ReadBulkArray<FVector>();
+            }
+
+            return;
+        }
+
+        if (Ar.Game is GAME_Farlight84)
+        {
+            bool bUseHalfPrecisionPositions = Ar.ReadBoolean();
+            Stride = Ar.Read<int>();
+            NumVertices = Ar.Read<int>();
+            if (bUseHalfPrecisionPositions)
+            {
+                var vectors = Ar.ReadArray<FVector>(2);
+                Verts = Ar.ReadBulkArray<FVector>(() => Ar.Read<FVector3UnsignedShort>());
+            }
+            else
+            {
+                Verts = Ar.ReadBulkArray<FVector>();
+            }
+
+            return;
+        }
+
+        if (Ar.Game is GAME_SuicideSquad)
+        {
+            Stride = Ar.Read<int>();
+            NumVertices = Ar.Read<int>();
+            Ar.Position += 1;
+
+            var vectors = Ar.ReadArray<FVector>(2);
+            //second vector is extent - origin
+            if (Stride == 12)
+            {
+                Verts = Ar.ReadBulkArray<FVector>();
+            }
+            else
+            {
+                var vertsHalf = Ar.ReadBulkArray<FVectorShort>();
+                Verts = new FVector[vertsHalf.Length];
+                for (int i = 0; i < vertsHalf.Length; i++)
+                {
+                    Verts[i] = vertsHalf[i] / vectors[0] - vectors[1];
+                }
+            }
+
+            return;
+        }
+
+        Stride = Ar.Read<int>();
+        NumVertices = Ar.Read<int>();
+
+        if (Ar.Game is GAME_TamasShadowveil) Ar.Position += 4;
+
+        if (Ar.Game is GAME_Valorant_PRE_11_2 or GAME_NeedForSpeedMobile || (Ar.Game is GAME_ArenaBreakoutInfinite or GAME_ArenaBreakoutMobile && Stride == 8))
+        {
+            bool bUseFullPrecisionPositions = Ar.Game is not GAME_ArenaBreakoutInfinite and not GAME_ArenaBreakoutMobile && Ar.ReadBoolean();
+            var bounds = new FBoxSphereBounds(Ar);
+            if (!bUseFullPrecisionPositions)
+            {
+                switch (Stride)
+                {
+                    case 8:
+                    {
+                        var vertsHalf = Ar.ReadBulkArray<FVector3SignedShortScale>();
+                        Verts = new FVector[vertsHalf.Length];
+                        for (var i = 0; i < vertsHalf.Length; i++)
+                            Verts[i] = vertsHalf[i] * bounds.BoxExtent + bounds.Origin;
+                        break;
+                    }
+                    case 12:
+                        Verts = Ar.ReadBulkArray<FVector>();
+                        break;
+                    default:
+                        throw new ArgumentOutOfRangeException($"Unknown stride {Stride} for FPositionVertexBuffer");
+                }
+                return;
+            }
+        }
+        if (Ar.Game is GAME_Gothic1Remake or GAME_DestroyAllHumans2Reprobed && Stride == 8)
+        {
+            var vertsHalf = Ar.ReadBulkArray<FHalfVector4>();
+            Verts = new FVector[vertsHalf.Length];
+            for (int i = 0; i < vertsHalf.Length; i++)
+                Verts[i] = vertsHalf[i];
+            return;
+        }
+        if (Ar.Game is GAME_Splitgate2 or GAME_Empulse)
+        {
+            Ar.Position += 1;
+            Verts = Stride == 8 ? Ar.ReadBulkArray<FVector>(() => Ar.Read<FHalfVector4>()) : Ar.ReadBulkArray<FVector>();
+            return;
+        }
+        if (Ar.Game is GAME_DaysGone)
+        {
+            Verts = Stride switch
+            {
+                4 => Ar.ReadBulkArray(() => (FVector) Ar.Read<FVector3Packed32>()),
+                8 => Ar.ReadBulkArray(() => (FVector) Ar.Read<FVector3UnsignedShortScale>()),
+                12 => Ar.ReadBulkArray<FVector>(),
+                _ => throw new ArgumentOutOfRangeException($"Unknown stride {Stride} for FPositionVertexBuffer")
+            };
+            return;
+        }
+        if (Ar.Game is GAME_RocoKingdomWorld)
+        {
+            Verts = Stride switch
+            {
+                8 => Ar.ReadBulkArray(() => (FVector) Ar.Read<FVector3SignedShortScale>()),
+                12 => Ar.ReadBulkArray<FVector>(),
+                _ => throw new ArgumentOutOfRangeException($"Unknown stride {Stride} for FPositionVertexBuffer")
+            };
+            return;
+        }
+        if (Ar.Game == GAME_FateTrigger)
+        {
+            var box = Ar.Read<byte>();
+            Verts = Ar.ReadBulkArray<FVector>();
+            if (box != 0)
+            {
+                Ar.Position += 24; // Box
+                Ar.SkipBulkArrayData();
+            }
+            return;
+        }
+        if (Ar.Game is GAME_WorldofJadeDynasty)
+        {
+            Stride = (int)(Stride ^ 0xdbb1054f);
+            NumVertices >>= 9;
+        }
+        if (Ar.Game == GAME_Gollum) Ar.Position += 25;
+        if (Ar.Game is GAME_GearsofWarEDay && NumVertices == 0) return;
+
+        if (Ar.Game == GAME_LifeIsStrange && (int)Ar.LicenseeVer >= 18)
+        {
+            Ar.Position += sizeof(int) * 2; // int, bool
+        }
+        if (Ar.Game == GAME_LifeIsStrange && (int)Ar.LicenseeVer >= 20)
+        {
+            Ar.Position += sizeof(float) * 6; // FVector, FVector
+        }
+
+        Verts = Ar.ReadBulkArray<FVector>();
+    }
+}

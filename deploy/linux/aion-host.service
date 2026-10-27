@@ -1,0 +1,29 @@
+# The AION2 server host: account site, platform bootstrap, login, game, chat and the NCGuard sink.
+# Configuration: /etc/aion/aion.env (tools/server_env.py, written by install.sh).
+[Unit]
+Description=AION2 server
+Requires=aion-postgres.service
+After=aion-postgres.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=aion
+Group=aion
+WorkingDirectory=/opt/aion/host
+EnvironmentFile=/etc/aion/aion.env
+ExecStart=/usr/bin/dotnet /opt/aion/host/Aion.Host.dll
+Restart=on-failure
+RestartSec=5
+# The NCGuard sink listens on 443.
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/aion
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

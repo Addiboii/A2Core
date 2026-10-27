@@ -1,0 +1,56 @@
+using System.Text;
+using CUE4Parse.UE4.Readers;
+using CUE4Parse.UE4.Versions;
+using CUE4Parse.UE4.Writers;
+
+namespace CUE4Parse.UE4.Lua.Archives;
+
+public class FLua53Archive(string name, byte[] data, VersionContainer? versions = null) : FByteArchive(name, data, versions)
+{
+    public virtual string ReadLuaString() => Encoding.UTF8.GetString(ReadLuaStringBytes());
+
+    public virtual byte[] ReadLuaStringBytes()
+    {
+        byte sizeByte = Read<byte>();
+        if (sizeByte == 0)
+            return [];
+
+        int size = sizeByte == 0xFF ? Read<int>() : sizeByte;
+        int length = size - 1;
+        if (length == 0)
+            return [];
+
+        return ReadBytes(length);
+    }
+}
+
+public class FLua53ArchiveWriter : FArchiveWriter
+{
+    public virtual void WriteLuaString(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            Write((byte) 0);
+            return;
+        }
+
+        WriteLuaStringBytes(Encoding.UTF8.GetBytes(value));
+    }
+
+    public virtual void WriteLuaStringBytes(ReadOnlySpan<byte> buffer)
+    {
+        var size = buffer.Length + 1;
+
+        if (size < 0xFF)
+        {
+            Write((byte) size);
+        }
+        else
+        {
+            Write((byte) 0xFF);
+            Write(size);
+        }
+
+        Write(buffer);
+    }
+}

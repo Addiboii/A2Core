@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>CUE4Parse_Conversion</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+	<Description>CUE4Parse Conversion</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="AssetRipper.TextureDecoder" />
+    <PackageReference Include="SharpGLTF.Core" />
+    <PackageReference Include="SharpGLTF.Toolkit" />
+    <PackageReference Include="SixLabors.ImageSharp" />
+    <PackageReference Include="SkiaSharp" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\CUE4Parse\CUE4Parse.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Resources" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Remove="Resources\Detex.dll" />
+    <EmbeddedResource Include="Resources\Detex.dll" />
+    <None Remove="Resources\tegra_swizzle_x64.dll" />
+    <EmbeddedResource Include="Resources\tegra_swizzle_x64.dll" />
+    <None Remove="Resources\crunch.dll" />
+    <EmbeddedResource Include="Resources\crunch.dll" />
+  </ItemGroup>
+
+</Project>

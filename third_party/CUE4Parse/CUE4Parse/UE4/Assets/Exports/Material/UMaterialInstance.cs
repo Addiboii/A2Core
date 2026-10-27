@@ -1,0 +1,183 @@
+using CUE4Parse.GameTypes.Tencent.RocoKingdomWorld.Assets.Objects;
+using CUE4Parse.UE4.Assets.Exports.Material.Parameters;
+using CUE4Parse.UE4.Assets.Objects;
+using CUE4Parse.UE4.Assets.Objects.Properties;
+using CUE4Parse.UE4.Assets.Objects.Unversioned;
+using CUE4Parse.UE4.Assets.Readers;
+using CUE4Parse.UE4.Assets.Utils;
+using CUE4Parse.UE4.Objects.Core.Misc;
+using CUE4Parse.UE4.Objects.UObject;
+using CUE4Parse.UE4.Readers;
+using CUE4Parse.UE4.Versions;
+using Newtonsoft.Json;
+
+namespace CUE4Parse.UE4.Assets.Exports.Material;
+
+public class UMaterialInstanceDynamic : UMaterialInstance;
+public class UMaterialInstanceTimeVarying : UMaterialInstance;
+
+public class UMaterialInstance : UMaterialInterface
+{
+    private bool bHasNonUPropertyStaticParameters = false;
+    public FPackageIndex? Parent { get; private set; }
+    public bool bHasStaticPermutationResource;
+    public FMaterialInstanceBasePropertyOverrides? BasePropertyOverrides;
+    public FStaticParameterSet? StaticParameters;
+    public FStructFallback? CachedData;
+
+    public override void Deserialize(FAssetArchive Ar, long validPos)
+    {
+        if (Ar.Game == GAME_WorldofJadeDynasty) Ar.Position += 24;
+        base.Deserialize(Ar, validPos);
+        Parent = GetOrDefault<FPackageIndex?>(nameof(Parent));
+        bHasStaticPermutationResource = GetOrDefault<bool>("bHasStaticPermutationResource");
+        BasePropertyOverrides = GetOrDefault<FMaterialInstanceBasePropertyOverrides>(nameof(BasePropertyOverrides));
+        StaticParameters = GetOrDefault(nameof(StaticParameters), GetOrDefault<FStaticParameterSet>("StaticParametersRuntime"));
+
+        var bSavedCachedData = FUE5MainStreamObjectVersion.Get(Ar) >= FUE5MainStreamObjectVersion.Type.MaterialSavedCachedData && Ar.ReadBoolean();
+        if (bSavedCachedData)
+        {
+            CachedData = new FStructFallback(Ar, "MaterialInstanceCachedData");
+        }
+
+        if (bHasStaticPermutationResource)
+        {
+            if (Ar.Ver >= EUnrealEngineObjectUE4Version.PURGED_FMATERIAL_COMPILE_OUTPUTS)
+            {
+                if (FRenderingObjectVersion.Get(Ar) < FRenderingObjectVersion.Type.MaterialAttributeLayerParameters)
+                {
+                    StaticParameters = new FStaticParameterSet(Ar);
+                    bHasNonUPropertyStaticParameters = true;
+                }
+
+                if (Ar is { Game: >= GAME_UE4_25, Owner.Provider.ReadShaderMaps: true })
+                {
+                    var saved = Ar.Position;
+                    if (Ar.Game is GAME_DeadIsland2)
+                    {
+                        CustomGameData = new FSHAHash(Ar);
+                        return;
+                    }
+                    try
+                    {
+                        DeserializeInlineShaderMaps(Ar, LoadedMaterialResources);
+                    }
+                    catch (Exception e)
+                    {
+                        Log.Error(e, "Failed to deserialize inline shader maps.");
+                        Ar.Position = saved;
+                    }
+                }
+                else
+                {
+                    Ar.Position = validPos;
+                }
+            }
+            else
+            {
+                /*
+                var QualityMask = 1;
+                if (Ar.Ver >= EUnrealEngineObjectUE3Version.ADDED_MATERIAL_QUALITY_LEVEL)
+                {
+                    QualityMask = Ar.Read<int>();
+                }
+
+                for (int QualityIndex = 0; QualityIndex < (Ar.Ver > EUnrealEngineObjectUE3Version.FLASH_MERGE_TO_MAIN && Ar.Game < GAME_UE4_0 ? 2 : 1); QualityIndex++)
+                {
+                    if (Ar.Ver >= EUnrealEngineObjectUE3Version.ADDED_MATERIAL_QUALITY_LEVEL && (QualityMask & (1 << QualityIndex)) == 0)
+                    {
+                        continue;
+                    }
+                }
+
+                //new FMaterialShaderMapId(Ar); // if PKG_ContainsInlinedShaders and specific ue3
+                */
+            }
+        }
+
+        if (Ar.Game is GAME_DeadByDaylight && Ar.Position < validPos && Ar is { Owner.Provider.ReadShaderMaps: true })
+            CustomGameData = Ar.ReadArray(() => new FStructFallback(Ar, "BHVRVariantConfigurator", FRawHeader.FullRead, ReadType.RAW));
+        if (Ar.Game == GAME_Valorant && !bHasStaticPermutationResource)
+            Ar.Position += 8; // 0.0f and 1.0f, for all
+        if (Ar.Game is GAME_RocoKingdomWorld && bHasStaticPermutationResource)
+        {
+            // Additional DynamicSwitchParameters
+            CustomGameData = Ar.ReadArray(() => new FRKWStaticSwitchParameter(Ar));
+            Ar.Position += 4;
+        }
+    }
+
+    public override void GetParams(CMaterialParams2 parameters, EMaterialDepth depth)
+    {
+        base.GetParams(parameters, depth);
+
+        if (StaticParameters != null)
+            foreach (var switchParameter in StaticParameters.StaticSwitchParameters)
+                parameters.Switches[switchParameter.Name] = switchParameter.Value;
+
+        if (BasePropertyOverrides != null)
+        {
+            parameters.BlendMode = BasePropertyOverrides.BlendMode;
+            parameters.ShadingModel = BasePropertyOverrides.ShadingModel;
+        }
+    }
+
+    protected internal override void WriteJson(JsonWriter writer, JsonSerializer serializer)
+    {
+        base.WriteJson(writer, serializer);
+
+        if (CachedData != null)
+        {
+            writer.WritePropertyName("CachedData");
+            serializer.Serialize(writer, CachedData);
+        }
+
+        //fix StaticParameters not showing in the json on versions such as 4.16
+        if (StaticParameters != null && bHasNonUPropertyStaticParameters)
+        {
+            writer.WritePropertyName("StaticParameters");
+            serializer.Serialize(writer, StaticParameters);
+        }
+    }
+}
+
+[StructFallback]
+public class FStaticParameterSet
+{
+    public FStaticSwitchParameter[] StaticSwitchParameters;
+    public FStaticComponentMaskParameter[] StaticComponentMaskParameters;
+    public FNormalParameter[]? NormalParameters;
+    public FStaticTerrainLayerWeightParameter[]? TerrainLayerWeightParameters;
+    public FStaticMaterialLayersParameter[]? MaterialLayersParameters;
+
+    public FStaticParameterSet(FArchive Ar)
+    {
+        if (Ar.Game < GAME_UE4_0)
+        {
+            Ar.Read<FGuid>(); // BaseMaterialId
+        }
+        StaticSwitchParameters = Ar.ReadArray(() => new FStaticSwitchParameter(Ar));
+        StaticComponentMaskParameters = Ar.ReadArray(() => new FStaticComponentMaskParameter(Ar));
+        if (Ar.Ver >= EUnrealEngineObjectUE3Version.ADD_NORMAL_PARAMETERS && Ar.Game < GAME_UE4_0)
+        {
+            NormalParameters = Ar.ReadArray(() => new FNormalParameter(Ar));
+        }
+        if (Ar.Ver >= EUnrealEngineObjectUE3Version.ADD_TERRAINLAYERWEIGHT_PARAMETERS)
+        {
+            TerrainLayerWeightParameters = Ar.ReadArray(() => new FStaticTerrainLayerWeightParameter(Ar));
+        }
+
+        if (FReleaseObjectVersion.Get(Ar) >= FReleaseObjectVersion.Type.MaterialLayersParameterSerializationRefactor)
+        {
+            MaterialLayersParameters = Ar.ReadArray(() => new FStaticMaterialLayersParameter(Ar));
+        }
+    }
+
+    public FStaticParameterSet(FStructFallback fallback)
+    {
+        StaticSwitchParameters = fallback.GetOrDefault(nameof(StaticSwitchParameters), Array.Empty<FStaticSwitchParameter>());
+        StaticComponentMaskParameters = fallback.GetOrDefault(nameof(StaticComponentMaskParameters), Array.Empty<FStaticComponentMaskParameter>());
+        TerrainLayerWeightParameters = fallback.GetOrDefault(nameof(TerrainLayerWeightParameters), Array.Empty<FStaticTerrainLayerWeightParameter>());
+        MaterialLayersParameters = fallback.GetOrDefault(nameof(MaterialLayersParameters), Array.Empty<FStaticMaterialLayersParameter>());
+    }
+}

@@ -1,0 +1,19 @@
+﻿using CUE4Parse.UE4.Objects.UObject;
+
+namespace CUE4Parse.UE4.Assets.Exports.Material
+{
+    public abstract class UUnrealMaterial : UObject
+    {
+        public virtual bool IsTextureCube { get; } = false;
+
+        public abstract void GetParams(CMaterialParams parameters);
+        public abstract void GetParams(CMaterialParams2 parameters, EMaterialDepth depth);
+
+        public virtual void AppendReferencedTextures(IList<FPackageIndex> outTextures, bool onlyRendered)
+        {
+            var parameters = new CMaterialParams();
+            GetParams(parameters);
+            parameters.AppendAllTextures(outTextures);
+        }
+    }
+}

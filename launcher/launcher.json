@@ -1,0 +1,7 @@
+{
+  "name": "A2Core Launcher",
+  "accountUrl": "https://your-server.example:8780",
+  "serverAddress": "203.0.113.5",
+  "bootstrapPort": 8087,
+  "savedDirSuffix": "A2CorePrivate"
+}

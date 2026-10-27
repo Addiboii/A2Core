@@ -1,0 +1,43 @@
+using CUE4Parse.UE4.Assets.Readers;
+using CUE4Parse.UE4.Objects.UObject;
+using CUE4Parse.UE4.Versions;
+
+namespace CUE4Parse.UE4.Objects.Niagara;
+
+public class FNiagaraDataInterfaceGeneratedFunction
+{
+    /** Name of the function as defined by the data interface. */
+    public FName DefinitionName;
+
+    /** Name of the instance. Derived from the definition name but made unique for this DI instance and specifier values. */
+    public string InstanceName;
+
+    /** Specifier values for this instance. */
+    public (FName, FName)[] Specifiers;
+
+    public FNiagaraVariableCommonReference[] VariadicInputs;
+    public FNiagaraVariableCommonReference[] VariadicOutputs;
+    public ushort MiscUsageBitMask;
+
+    public FNiagaraDataInterfaceGeneratedFunction(FAssetArchive Ar)
+    {
+        DefinitionName = Ar.ReadFName();
+        InstanceName = Ar.ReadFString();
+        Specifiers = Ar.ReadArray(() => (Ar.ReadFName(), Ar.ReadFName()));
+
+        if (FNiagaraCustomVersion.Get(Ar) >= FNiagaraCustomVersion.Type.AddVariadicParametersToGPUFunctionInfo || Ar.Game is GAME_DuetNightAbyss or GAME_HonorofKingsWorld)
+        {
+            VariadicInputs = Ar.ReadArray(() => new FNiagaraVariableCommonReference(Ar));
+            VariadicOutputs = Ar.ReadArray(() => new FNiagaraVariableCommonReference(Ar));
+        }
+
+        if (FNiagaraCustomVersion.Get(Ar) >= FNiagaraCustomVersion.Type.SerializeUsageBitMaskToGPUFunctionInfo)
+            MiscUsageBitMask = Ar.Read<ushort>();
+    }
+}
+
+public class FNiagaraVariableCommonReference(FAssetArchive Ar) : IUStruct
+{
+    public FName Name = Ar.ReadFName();
+    public FPackageIndex UnderlyingType = new FPackageIndex(Ar);
+}

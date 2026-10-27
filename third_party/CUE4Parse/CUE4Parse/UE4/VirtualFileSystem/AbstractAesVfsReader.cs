@@ -1,0 +1,138 @@
+using System.Runtime.CompilerServices;
+using CUE4Parse.Compression;
+using CUE4Parse.Encryption.Aes;
+using CUE4Parse.UE4.Exceptions;
+using CUE4Parse.UE4.Objects.Core.Misc;
+using CUE4Parse.UE4.Readers;
+using CUE4Parse.UE4.Versions;
+
+namespace CUE4Parse.UE4.VirtualFileSystem;
+
+public abstract partial class AbstractAesVfsReader : AbstractVfsReader, IAesVfsReader
+{
+    public abstract long Length { get; set; }
+    public IAesVfsReader.CustomEncryptionDelegate? CustomEncryption { get; set; }
+    public FAesKey? AesKey { get; set; }
+    public CompressionMethod[] CompressionMethods { get; set; }
+
+    public abstract FGuid EncryptionKeyGuid { get; }
+    public abstract bool IsEncrypted { get; }
+
+    public int EncryptedFileCount { get; protected set; }
+    public bool bDecrypted { get; protected set; }
+
+    protected AbstractAesVfsReader(string path, VersionContainer versions) : base(path, versions)
+    {
+        // yes
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool TestAesKey(FAesKey key) => !IsEncrypted || TestAesKey(MountPointCheckBytes(), key);
+
+    public abstract byte[] MountPointCheckBytes();
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    protected bool TestAesKey(byte[] bytes, FAesKey key)
+    {
+        byte[] result;
+        if (CustomEncryption != null)
+        {
+            var backupKey = AesKey;
+            AesKey = key;
+            try { result = CustomEncryption(bytes, 0, bytes.Length, true, this); }
+            finally { AesKey = backupKey; }
+        }
+        else
+        {
+            result = DecryptBytes(bytes, 0, bytes.Length, key, true);
+        }
+
+        return IsValidIndex(result);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    protected byte[] Decrypt(byte[] bytes, int beginOffset, int count, FAesKey? key,
+        bool bypassMountPointCheck = false, bool isIndex = false)
+    {
+        EnsureValidAesKey(key, bypassMountPointCheck);
+        return DecryptBytes(bytes, beginOffset, count, key!, isIndex);
+    }
+
+    protected void EnsureValidAesKey(FAesKey? key, bool bypassMountPointCheck = false)
+    {
+        if (bDecrypted)
+            return;
+        if (key != null && (TestAesKey(key) || bypassMountPointCheck))
+        {
+            bDecrypted = true;
+            return;
+        }
+        throw new InvalidAesKeyException("Reading encrypted data requires a valid aes key");
+    }
+
+    protected virtual byte[] DecryptBytes(byte[] bytes, int beginOffset, int count, FAesKey key, bool isIndex)
+    {
+        if (beginOffset == 0 && count == bytes.Length)
+        {
+            bytes.DecryptInPlace(key);
+            return bytes;
+        }
+
+        return bytes.Decrypt(beginOffset, count, key);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    protected byte[] DecryptIfEncrypted(byte[] bytes) => DecryptIfEncrypted(bytes, IsEncrypted);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    protected byte[] DecryptIfEncrypted(byte[] bytes, int beginOffset, int count) =>
+        DecryptIfEncrypted(bytes, beginOffset, count, IsEncrypted);
+
+    protected byte[] DecryptIfEncrypted(byte[] bytes, bool isEncrypted, bool isIndex = false, object? customData = null)
+    {
+        if (!isEncrypted) return bytes;
+        if (CustomEncryption != null)
+        {
+            return CustomEncryption(bytes, 0, bytes.Length, isIndex, this, customData);
+        }
+
+        return Decrypt(bytes, 0, bytes.Length, AesKey, isIndex: isIndex);
+    }
+
+    protected byte[] DecryptIfEncrypted(byte[] bytes, int beginOffset, int count, bool isEncrypted, bool bypassMountPointCheck = false, bool isIndex = false, object? customData = null)
+    {
+        if (!isEncrypted) return bytes;
+        if (CustomEncryption != null)
+        {
+            return CustomEncryption(bytes, beginOffset, count, isIndex, this, customData);
+        }
+
+        return Decrypt(bytes, beginOffset, count, AesKey, bypassMountPointCheck, isIndex);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    protected abstract byte[] ReadAndDecrypt(int length);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    protected virtual byte[] ReadAndDecryptIndex(int length) => ReadAndDecrypt(length);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    protected byte[] ReadAndDecrypt(int length, FArchive reader, bool isEncrypted) =>
+        DecryptIfEncrypted(reader.ReadBytes(length), isEncrypted);
+
+    protected byte[] ReadAndDecryptAt(long position, int length, FArchive reader, bool isEncrypted) =>
+        DecryptIfEncrypted(reader.ReadBytesAt(position, length), isEncrypted);
+
+    protected byte[] ReadAndDecryptAt(byte[] buffer, long position, int length, FArchive reader, bool isEncrypted)
+    {
+        reader.ReadAt(position, buffer, 0, length);
+        return DecryptIfEncrypted(buffer, isEncrypted);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    protected byte[] ReadAndDecryptIndex(int length, FArchive reader, bool isEncrypted) =>
+        DecryptIfEncrypted(reader.ReadBytes(length), isEncrypted, true);
+
+    protected byte[] ReadAndDecryptIndexAt(long position, int length, FArchive reader, bool isEncrypted) =>
+        DecryptIfEncrypted(reader.ReadBytesAt(position, length), isEncrypted, true);
+}

@@ -1,0 +1,135 @@
+using System.Buffers.Binary;
+using CUE4Parse.UE4.Assets.Exports.Component.Landscape;
+using CUE4Parse.UE4.Assets.Objects;
+using CUE4Parse.UE4.Assets.Readers;
+using CUE4Parse.UE4.Versions;
+using Newtonsoft.Json;
+
+namespace CUE4Parse.UE4.Assets.Exports.Texture;
+
+[JsonConverter(typeof(FTexture2DMipMapConverter))]
+public class FTexture2DMipMap
+{
+    public TBulkData<byte>? BulkData;
+    public int SizeX;
+    public int SizeY;
+    public int SizeZ;
+
+    public FTexture2DMipMap() { }
+
+    public FTexture2DMipMap(int sizeX, int sizeY, int sizeZ)
+    {
+        SizeX = sizeX;
+        SizeY = sizeY;
+        SizeZ = sizeZ;
+    }
+
+    public FTexture2DMipMap(TBulkData<byte> bulkData, int sizeX, int sizeY, int sizeZ)
+    {
+        BulkData = bulkData;
+        SizeX = sizeX;
+        SizeY = sizeY;
+        SizeZ = sizeZ;
+    }
+
+    public FTexture2DMipMap(FAssetArchive Ar, bool bSerializeMipData = true)
+    {
+        var cooked = Ar.Ver >= EUnrealEngineObjectUE4Version.TEXTURE_SOURCE_ART_REFACTOR && Ar.Game < GAME_UE5_0 ? Ar.ReadBoolean() : Ar.IsFilterEditorOnly;
+
+        if (bSerializeMipData) BulkData = new FByteBulkData(Ar);
+
+        if (Ar.Game == GAME_Borderlands3)
+        {
+            SizeX = Ar.Read<ushort>();
+            SizeY = Ar.Read<ushort>();
+            SizeZ = Ar.Read<ushort>();
+        }
+        else if (Ar.Game == GAME_WorldofJadeDynasty)
+        {
+            SizeX = (int)(Ar.Read<uint>() ^ 0xa537ea93);
+            SizeY = Ar.Read<int>();
+            SizeZ = BinaryPrimitives.ReverseEndianness(Ar.Read<int>());
+        }
+        else
+        {
+            SizeX = Ar.Read<int>();
+            SizeY = Ar.Read<int>();
+            SizeZ = Ar.Game >= GAME_UE4_20 ? Ar.Read<int>() : 1;
+        }
+
+        if (Ar.Ver >= EUnrealEngineObjectUE4Version.TEXTURE_DERIVED_DATA2 && !cooked)
+        {
+            var FileRegionType = Ar.Game >= GAME_UE4_26 ? Ar.Read<byte>() : 0;
+            var derivedDataKey = Ar.Game < GAME_UE5_0 ? Ar.ReadFString() : "";
+            var bPagedToDerivedData = Ar.Game >= GAME_UE5_0 ? Ar.ReadBoolean() : false;
+        }
+    }
+
+    public FTexture2DMipMap(FAssetArchive Ar, string tfc)
+    {
+        BulkData = new FByteBulkData(Ar, tfc);
+
+        SizeX = Ar.Read<int>();
+        SizeY = Ar.Read<int>();
+        SizeZ = 1;
+    }
+
+    public bool EnsureValidBulkData(UTextureAllMipDataProviderFactory? provider, int mipLevel)
+    {
+        if (BulkData?.Data is { Length: > 0 })
+            return true;
+
+        switch (provider)
+        {
+            case ULandscapeTextureStorageProviderFactory landscapeProvider:
+            {
+                var data = new Lazy<byte[]?>(() =>
+                {
+                    var mip = landscapeProvider.Mips[mipLevel];
+                    if (mip.BulkData.Data is null)
+                    {
+                        throw new ArgumentException("mip data provider has no data to work with");
+                    }
+
+                    var destination = new byte[mip.SizeX * mip.SizeY * 4];
+                    landscapeProvider.DecompressMip(mip.BulkData.Data, mip.BulkData.Data.Length, destination, destination.Length, mipLevel);
+                    return destination;
+                });
+
+                BulkData = new FByteArrayData(data);
+                return true;
+            }
+            case UOodleTextureStorageProviderFactory oodleProvider:
+            {
+                if (mipLevel >= oodleProvider.Mips.Length)
+                    throw new ArgumentException("UOodleTextureStorageProviderFactory has no data to work with");
+                var data = oodleProvider.Mips[mipLevel];
+                var decoded = new Lazy<byte[]?>(() => BC7PrepDecoder.Decode(data));
+                BulkData = new FByteArrayData(decoded);
+                return true;
+            }
+            // default: throw new NotImplementedException("unknown mip data provider");
+        }
+
+        return false;
+    }
+
+    public class FLegacyMipMap
+    {
+        public FByteBulkData BulkData;
+        public int USize;
+        public int VSize;
+        public byte UBits;
+        public byte VBits;
+
+        public FLegacyMipMap(FAssetArchive Ar)
+        {
+            BulkData = new FByteBulkData(Ar);
+
+            USize = Ar.Read<int>();
+            VSize = Ar.Read<int>();
+            UBits = Ar.Read<byte>();
+            VBits = Ar.Read<byte>();
+        }
+    }
+}

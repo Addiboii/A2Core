@@ -1,0 +1,34 @@
+using CUE4Parse.UE4.Assets.Objects;
+using CUE4Parse.UE4.Assets.Readers;
+using CUE4Parse.UE4.Readers;
+using CUE4Parse.UE4.Wwise;
+using Newtonsoft.Json;
+
+namespace CUE4Parse.UE4.Assets.Exports.Wwise;
+
+public class UAkAssetData : UObject
+{
+    public WwiseReader? Data;
+
+    public override void Deserialize(FAssetArchive Ar, long validPos)
+    {
+        base.Deserialize(Ar, validPos);
+
+        if (Ar.Position >= validPos) return;
+
+        var bulkData = new FByteBulkData(Ar);
+        if (!bulkData.TryCreateReader("AkAssetData", out FArchive dataAr)) return;
+
+        using var reader = new FWwiseArchive(dataAr);
+        Data = new WwiseReader(reader, new WwiseBulkDataSource(Ar, bulkData));
+    }
+
+    protected internal override void WriteJson(JsonWriter writer, JsonSerializer serializer)
+    {
+        base.WriteJson(writer, serializer);
+        if (Data is null) return;
+
+        writer.WritePropertyName("Data");
+        serializer.Serialize(writer, Data);
+    }
+}

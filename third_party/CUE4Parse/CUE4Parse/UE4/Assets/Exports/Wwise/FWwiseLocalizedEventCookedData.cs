@@ -1,0 +1,31 @@
+using CUE4Parse.UE4.Assets.Objects;
+using CUE4Parse.UE4.Assets.Readers;
+using CUE4Parse.UE4.Assets.Utils;
+using CUE4Parse.UE4.Objects.UObject;
+using Newtonsoft.Json;
+
+namespace CUE4Parse.UE4.Assets.Exports.Wwise;
+
+[StructFallback]
+[JsonConverter(typeof(FWwiseLocalizedEventCookedDataConverter))]
+public readonly struct FWwiseLocalizedEventCookedData
+{
+    public readonly Dictionary<FWwiseLanguageCookedData, FWwiseEventCookedData?> EventLanguageMap;
+    public readonly FName DebugName;
+    public readonly uint EventId;
+
+    public FWwiseLocalizedEventCookedData(FStructFallback fallback)
+    {
+        EventLanguageMap = fallback.GetOrDefault<Dictionary<FWwiseLanguageCookedData, FWwiseEventCookedData?>>(nameof(EventLanguageMap), []);
+        DebugName = fallback.GetOrDefault<FName>(nameof(DebugName));
+        EventId = (uint)fallback.GetOrDefault<int>(nameof(EventId), comparisonType: StringComparison.OrdinalIgnoreCase);
+    }
+
+    public void SerializeBulkData(FAssetArchive Ar)
+    {
+        foreach (var lang in EventLanguageMap.Values)
+        {
+            lang?.SerializeBulkData(Ar);
+        }
+    }
+}

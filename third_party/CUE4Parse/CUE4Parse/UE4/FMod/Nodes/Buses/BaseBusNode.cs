@@ -1,0 +1,17 @@
+using CUE4Parse.UE4.FMod.Objects;
+using Newtonsoft.Json;
+
+namespace CUE4Parse.UE4.FMod.Nodes.Buses;
+
+public class BaseBusNode
+{
+    [JsonIgnore] public readonly FModGuid BaseGuid;
+    public readonly FRoutable Routable;
+    public BusNode? BusBody;
+
+    public BaseBusNode(BinaryReader Ar, bool includeRoutable)
+    {
+        BaseGuid = new FModGuid(Ar);
+        if (includeRoutable) Routable = new FRoutable(Ar);
+    }
+}

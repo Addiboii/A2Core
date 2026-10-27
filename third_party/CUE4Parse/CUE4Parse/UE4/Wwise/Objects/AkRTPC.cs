@@ -1,0 +1,73 @@
+using CUE4Parse.UE4.Wwise.Enums;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
+
+namespace CUE4Parse.UE4.Wwise.Objects;
+
+public readonly struct AkSwitchGraphPoint
+{
+    public readonly float From;
+    public readonly uint To;
+    public readonly EAkCurveInterpolation Interp;
+
+    public AkSwitchGraphPoint(FWwiseArchive Ar)
+    {
+        From = Ar.Read<float>();
+        To = Ar.Read<uint>();
+        Interp = (EAkCurveInterpolation) Ar.Read<uint>();
+    }
+}
+
+public readonly struct AkRtpcGraphPoint
+{
+    public readonly float From;
+    public readonly float To;
+    public readonly EAkCurveInterpolation Interpolation;
+
+    public AkRtpcGraphPoint(FWwiseArchive Ar)
+    {
+        From = Ar.Read<float>();
+        To = Ar.Read<float>();
+        Interpolation = (EAkCurveInterpolation) Ar.Read<uint>();
+    }
+
+    public static AkRtpcGraphPoint[] ReadArray(FWwiseArchive Ar) =>
+        Ar.ReadArray((int) Ar.Read<uint>(), () => new AkRtpcGraphPoint(Ar));
+}
+
+public readonly struct AkRtpc
+{
+    public readonly uint RtpcId;
+    [JsonConverter(typeof(StringEnumConverter))]
+    public readonly EAkGameSyncType RtpcType;
+    [JsonConverter(typeof(StringEnumConverter))]
+    public readonly EAkRtpcAccum RtpcAccum;
+    //AkRTPC_ParameterID
+    public readonly uint ParamId;
+    public readonly uint RtpcCurveId;
+    public readonly CAkConversionTable ConversionTable;
+
+    public AkRtpc(FWwiseArchive Ar)
+    {
+        RtpcId = Ar.Read<uint>();
+
+        if (Ar.Version > 89)
+        {
+            RtpcType = Ar.Read<EAkGameSyncType>();
+            RtpcAccum = Ar.Read<EAkRtpcAccum>();
+        }
+
+        ParamId = Ar.Version switch
+        {
+            <= 89 => Ar.Read<uint>(),
+            <= 113 => Ar.Read<byte>(),
+            _ => (uint) Ar.Read7BitEncodedIntBE()
+        };
+
+        RtpcCurveId = Ar.Read<uint>();
+        ConversionTable = new CAkConversionTable(Ar);
+    }
+
+    public static AkRtpc[] ReadArray(FWwiseArchive Ar) =>
+        Ar.ReadArray(Ar.Read<ushort>(), () => new AkRtpc(Ar));
+}

@@ -1,0 +1,252 @@
+{
+  "13824": {
+    "opcode": 13824,
+    "sample_count": 4236,
+    "score": 5.0,
+    "struct": "DevPacketData_GameServer_MapFrame_NT",
+    "widths": {
+      "DevPacketData_GameServer_MapFrame_NT._server_time": "i64"
+    }
+  },
+  "13827": {
+    "opcode": 13827,
+    "sample_count": 21,
+    "score": 16.0,
+    "struct": "DevPacketData_GameServer_Ping_RS",
+    "widths": {
+      "DevPacketData_GameServer_Ping_RS._client_sent_time": "i64",
+      "DevPacketData_GameServer_Ping_RS._result": "u16",
+      "DevPacketData_GameServer_Ping_RS._server_game_clock": "i64"
+    }
+  },
+  "13841": {
+    "opcode": 13841,
+    "sample_count": 1,
+    "score": 798.0,
+    "struct": "DevPacketData_GameServer_Handshake_RS",
+    "widths": {
+      "DevPacketData_GameServer_Handshake_RS._client_version": "u16",
+      "DevPacketData_GameServer_Handshake_RS._ping_threshold_ms": "u16",
+      "DevPacketData_GameServer_Handshake_RS._result": "i32",
+      "DevPacketData_GameServer_Handshake_RS._season_date_offset_hour": "i64",
+      "DevPacketData_GameServer_Handshake_RS._server_version": "u16"
+    }
+  },
+  "13857": {
+    "opcode": 13857,
+    "sample_count": 1,
+    "score": 83.0,
+    "struct": "DevPacketData_GameServer_PrepareEnterMap_NT",
+    "widths": {
+      "DevPacketData_Common_Vec3._x": "f32",
+      "DevPacketData_Common_Vec3._y": "f32",
+      "DevPacketData_Common_Vec3._z": "f32",
+      "DevPacketData_GameServer_PrepareEnterMap_NT._dir": "f32",
+      "DevPacketData_GameServer_PrepareEnterMap_NT._enter_map_ticket": "i32",
+      "DevPacketData_GameServer_PrepareEnterMap_NT._env_start_time": "i64",
+      "DevPacketData_GameServer_PrepareEnterMap_NT._env_state": "u8",
+      "DevPacketData_GameServer_PrepareEnterMap_NT._game_time": "i64",
+      "DevPacketData_GameServer_PrepareEnterMap_NT._inform_type": "u8",
+      "DevPacketData_GameServer_PrepareEnterMap_NT._map_id": "i32",
+      "DevPacketData_GameServer_PrepareEnterMap_NT._reason": "u8",
+      "DevPacketData_GameServer_PrepareEnterMap_NT._teleport_effect_id": "u8"
+    }
+  },
+  "13859": {
+    "opcode": 13859,
+    "sample_count": 1,
+    "score": 50.0,
+    "struct": "DevPacketData_GameServer_LoadComplete_RS",
+    "widths": {
+      "DevPacketData_Common_Vec3._x": "f32",
+      "DevPacketData_Common_Vec3._y": "f32",
+      "DevPacketData_Common_Vec3._z": "f32",
+      "DevPacketData_GameServer_LoadComplete_RS._char_key": "u16",
+      "DevPacketData_GameServer_LoadComplete_RS._enter_map_ticket": "i32",
+      "DevPacketData_GameServer_LoadComplete_RS._frame": "u16",
+      "DevPacketData_GameServer_LoadComplete_RS._result": "i32"
+    }
+  },
+  "13864": {
+    "opcode": 13864,
+    "sample_count": 1,
+    "score": 17.0,
+    "struct": "DevPacketData_GameServer_CharPendingDelete_RS",
+    "widths": {
+      "DevPacketData_GameServer_CharPendingDelete_RS._char_key": "u16",
+      "DevPacketData_GameServer_CharPendingDelete_RS._pending_delete_time": "i64",
+      "DevPacketData_GameServer_CharPendingDelete_RS._result": "u16"
+    }
+  },
+  "13867": {
+    "opcode": 13867,
+    "sample_count": 1,
+    "score": 6.0,
+    "struct": "DevPacketData_GameServer_CharDelete_NT",
+    "widths": {
+      "DevPacketData_GameServer_CharDelete_NT._char_key": "u16"
+    }
+  },
+  "13876": {
+    "opcode": 13876,
+    "sample_count": 2,
+    "struct": "DevPacketData_GameServer_EnvObjSpawn_NT",
+    "widths": null
+  },
+  "13897": {
+    "opcode": 13897,
+    "sample_count": 1,
+    "score": 376.0,
+    "struct": "DevPacketData_GameServer_CharAllStats_RS",
+    "widths": {
+      "DevPacketData_Common_StatType._stat_type": "u16",
+      "DevPacketData_Common_StatType._stat_value": "i32",
+      "DevPacketData_GameServer_CharAllStats_RS._result": "u16",
+      "DevPacketData_GameServer_CharAllStats_RS._stat_hpmax": "i64"
+    }
+  },
+  "13898": {
+    "opcode": 13898,
+    "sample_count": 1,
+    "score": 11.0,
+    "struct": "DevPacketData_GameServer_CharStatsUpdate_NT",
+    "widths": {
+      "DevPacketData_GameServer_CharStatsUpdate_NT._key": "u16",
+      "DevPacketData_GameServer_CharStatsUpdate_NT._stat_hpmax": "i64"
+    }
+  },
+  "13910": {
+    "opcode": 13910,
+    "sample_count": 1,
+    "score": 10.0,
+    "struct": "DevPacketData_GameServer_CharCombatPowerUpdate_NT",
+    "widths": {
+      "DevPacketData_GameServer_CharCombatPowerUpdate_NT._combat_power": "i64",
+      "DevPacketData_GameServer_CharCombatPowerUpdate_NT._highest_combat_power": "i64"
+    }
+  },
+  "14140": {
+    "opcode": 14140,
+    "sample_count": 2,
+    "struct": "DevPacketData_GameServer_RoleVoteCandidateList_NT",
+    "widths": null
+  },
+  "14378": {
+    "opcode": 14378,
+    "sample_count": 5,
+    "struct": "DevPacketData_GameServer_MonsterCubeRewardSelectGiveUp_RQ",
+    "widths": null
+  },
+  "14379": {
+    "opcode": 14379,
+    "sample_count": 1,
+    "struct": "DevPacketData_GameServer_MonsterCubeRewardSelectGiveUp_RS",
+    "widths": null
+  },
+  "14380": {
+    "opcode": 14380,
+    "sample_count": 2,
+    "struct": "DevPacketData_GameServer_ContentsSweep_RQ",
+    "widths": null
+  },
+  "16385": {
+    "sample_count": 1,
+    "struct": null
+  },
+  "17153": {
+    "sample_count": 1,
+    "struct": null
+  },
+  "22148": {
+    "sample_count": 4,
+    "struct": null
+  },
+  "22158": {
+    "sample_count": 1,
+    "struct": null
+  },
+  "22184": {
+    "sample_count": 1,
+    "struct": null
+  },
+  "22287": {
+    "sample_count": 1,
+    "struct": null
+  },
+  "22317": {
+    "sample_count": 1,
+    "struct": null
+  },
+  "35357": {
+    "sample_count": 1,
+    "struct": null
+  },
+  "36096": {
+    "sample_count": 4,
+    "struct": null
+  },
+  "36117": {
+    "sample_count": 3,
+    "struct": null
+  },
+  "36161": {
+    "sample_count": 1,
+    "struct": null
+  },
+  "36163": {
+    "sample_count": 2,
+    "struct": null
+  },
+  "36183": {
+    "sample_count": 1,
+    "struct": null
+  },
+  "37421": {
+    "sample_count": 4,
+    "struct": null
+  },
+  "57346": {
+    "sample_count": 2,
+    "struct": null
+  },
+  "57348": {
+    "sample_count": 2,
+    "struct": null
+  },
+  "57948": {
+    "sample_count": 1,
+    "struct": null
+  },
+  "57955": {
+    "sample_count": 1,
+    "struct": null
+  },
+  "57972": {
+    "sample_count": 1,
+    "struct": null
+  },
+  "58148": {
+    "sample_count": 4,
+    "struct": null
+  },
+  "58165": {
+    "sample_count": 2,
+    "struct": null
+  },
+  "58178": {
+    "sample_count": 1,
+    "struct": null
+  },
+  "58179": {
+    "sample_count": 1,
+    "struct": null
+  },
+  "65449": {
+    "sample_count": 1,
+    "struct": null
+  },
+  "65535": {
+    "sample_count": 8,
+    "struct": null
+  }
+}

@@ -1,0 +1,154 @@
+using CUE4Parse.UE4.Assets;
+using CUE4Parse.UE4.Assets.Readers;
+using CUE4Parse.UE4.Kismet;
+using CUE4Parse.UE4.Versions;
+using Newtonsoft.Json;
+
+namespace CUE4Parse.UE4.Objects.UObject;
+
+[SkipObjectRegistration]
+public class UStruct : UField
+{
+    
+    public FPackageIndex SuperStruct;
+    public FPackageIndex[] Children;
+    public FField[] ChildProperties;
+    public KismetExpression[] ScriptBytecode;
+
+    public override void Deserialize(FAssetArchive Ar, long validPos)
+    {
+        base.Deserialize(Ar, validPos);
+
+        SuperStruct = Ar.Ver >= EUnrealEngineObjectUE3Version.MOVED_SUPERFIELD_TO_USTRUCT ? new FPackageIndex(Ar) : SuperField;
+
+        if (Ar.Ver < EUnrealEngineObjectUE4Version.CONSOLIDATE_HEADER_PARSER_ONLY_PROPERTIES)
+        {
+            new FPackageIndex(Ar); // ScriptText
+        }
+
+        if (FFrameworkObjectVersion.Get(Ar) < FFrameworkObjectVersion.Type.RemoveUField_Next)
+        {
+            var firstChild = new FPackageIndex(Ar);
+            Children = firstChild.IsNull ? [] : [firstChild];
+        }
+        else
+        {
+            Children = Ar.ReadArray(() => new FPackageIndex(Ar));
+        }
+
+        if (Ar.Ver < EUnrealEngineObjectUE3Version.MovedFriendlyNameToUFunction)
+        {
+            Ar.SkipFName();
+        }
+
+        if (Ar.Ver < EUnrealEngineObjectUE4Version.CONSOLIDATE_HEADER_PARSER_ONLY_PROPERTIES)
+        {
+            if (Ar.Ver > EUnrealEngineObjectUE3Version.AddedCppTextToUStruct)
+            {
+                Ar.Position += sizeof(int); // FPackageIndex - CppText
+            }
+
+            Ar.Position += sizeof(int) * 2; // int - Line, TextPos
+        }
+
+        if (FCoreObjectVersion.Get(Ar) >= FCoreObjectVersion.Type.FProperties)
+        {
+            DeserializeProperties(Ar);
+        }
+
+        var bytecodeBufferSize = Ar.Read<int>();
+        var serializedScriptSize = Ar.Ver >= EUnrealEngineObjectUE3Version.USTRUCT_SERIALIZE_ONDISK_SCRIPTSIZE ? Ar.Read<int>() : bytecodeBufferSize;
+
+        if (Ar.Owner!.Provider?.ReadScriptData == true && Ar.Game >= GAME_UE4_0 && serializedScriptSize > 0)
+        {
+            using var kismetAr = new FKismetArchive(Name, Ar.ReadBytes(serializedScriptSize), Ar.Owner, Ar.Versions);
+            var tempCode = new List<KismetExpression>();
+            try
+            {
+                while (kismetAr.Position < kismetAr.Length)
+                {
+                    tempCode.Add(kismetAr.ReadExpression());
+                }
+            }
+            catch (Exception e)
+            {
+                Log.Warning(e, "Failed to serialize script bytecode in {Name}", Name);
+            }
+            finally
+            {
+                ScriptBytecode = [.. tempCode];
+            }
+        }
+        else
+        {
+            Ar.Position += serializedScriptSize;
+        }
+    }
+
+    private void DeserializeProperties(FAssetArchive Ar)
+    {
+        ChildProperties = Ar.ReadArray(() =>
+        {
+            var propertyTypeName = Ar.ReadFName();
+            var prop = FField.Construct(propertyTypeName);
+            prop.Deserialize(Ar);
+            return prop;
+        });
+    }
+
+    // ignore inner properties and return main one
+    public bool GetProperty(FName name, out FField? property)
+    {
+        property = null;
+        if (ChildProperties is null) return false;
+
+        foreach (var item in ChildProperties)
+        {
+            if (item.Name.Text == name.Text)
+            {
+                property = item;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    protected internal override void WriteJson(JsonWriter writer, JsonSerializer serializer)
+    {
+        base.WriteJson(writer, serializer);
+
+        if (SuperStruct is { IsNull: false } && (!SuperStruct.ResolvedObject?.Equals(Super) ?? false))
+        {
+            writer.WritePropertyName("SuperStruct");
+            serializer.Serialize(writer, SuperStruct);
+        }
+
+        if (Children is { Length: > 0 })
+        {
+            writer.WritePropertyName("Children");
+            serializer.Serialize(writer, Children);
+        }
+
+        if (ChildProperties is { Length: > 0 })
+        {
+            writer.WritePropertyName("ChildProperties");
+            serializer.Serialize(writer, ChildProperties);
+        }
+
+        if (ScriptBytecode is { Length: > 0 })
+        {
+            writer.WritePropertyName("ScriptBytecode");
+            writer.WriteStartArray();
+
+            foreach (var expr in ScriptBytecode)
+            {
+                writer.WriteStartObject();
+                expr.WriteJson(writer, serializer, true);
+                writer.WriteEndObject();
+            }
+
+            writer.WriteEndArray();
+        }
+    }
+}

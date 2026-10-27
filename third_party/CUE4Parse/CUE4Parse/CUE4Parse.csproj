@@ -1,0 +1,93 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Description>C# Parser for Unreal Engine packages &amp; assets</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Berrysoft.XXTea" />
+    <PackageReference Include="Blake3" />
+    <PackageReference Include="BouncyCastle.Cryptography" />
+    <PackageReference Include="FixedMathSharp" />
+    <PackageReference Include="Fmod5Sharp" />
+    <PackageReference Include="GenericReader" />
+    <PackageReference Include="Infrablack.UE4Config" />
+    <PackageReference Include="LZMA-SDK" />
+    <PackageReference Include="Newtonsoft.Json" />
+    <PackageReference Include="OffiUtils" />
+    <PackageReference Include="OodleSharp" />
+    <PackageReference Include="Oodle.NET" />
+    <PackageReference Include="Serilog" />
+    <PackageReference Include="Serilog.Sinks.Console" />
+    <PackageReference Include="K4os.Compression.LZ4.Streams" />
+    <PackageReference Include="SubstreamSharp" />
+    <PackageReference Include="System.IO.Hashing" />
+    <PackageReference Include="System.Numerics.Tensors" />
+    <PackageReference Include="VGAudio" />
+    <PackageReference Include="Zlib-ng.NET" />
+    <PackageReference Include="ZstdSharp.Port" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Remove="Resources\ACE7Key.bin" />
+    <EmbeddedResource Include="Resources\ACE7Key.bin" />
+    <None Remove="Resources\PUBGNameHashMap.json" />
+    <EmbeddedResource Include="Resources\PUBGNameHashMap.json" />
+    <None Remove="Resources\BL4SoundTagsMap.json" />
+    <EmbeddedResource Include="Resources\BL4SoundTagsMap.json" />
+    <None Remove="Resources\ProSpiDecryptor.dll" />
+    <EmbeddedResource Include="Resources\ProSpiDecryptor.dll.gz" />
+    <None Remove="Resources\ShaderHashedNames.json" />
+    <EmbeddedResource Include="Resources\ShaderHashedNames.json" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <BuildInParallel>false</BuildInParallel> <!-- we can't run 2 cmake build at same time -->
+    <CMakeProject>../CUE4Parse-Natives/</CMakeProject>
+    <CMakeBuildDir>$(CMakeProject)builddir</CMakeBuildDir>
+  </PropertyGroup>
+
+  <Target Name="Build-Natives" BeforeTargets="BeforeBuild" AfterTargets="AfterBuild" Condition="'$(CUE4PARSE_SKIP_NATIVE)' != 'true' and '$(CUE4PARSE_SKIP_NATIVE)' != '1'">
+    <MakeDir Directories="$(CMakeBuildDir)" Condition="!Exists('$(CMakeBuildDir)')" />
+    <Exec Command="cmake .." ConsoleToMSBuild="true" WorkingDirectory="$(CMakeBuildDir)" IgnoreExitCode="true">
+      <Output TaskParameter="ConsoleOutput" PropertyName="OutputOfExec" />
+      <Output TaskParameter="ExitCode" PropertyName="CMakeExitCode" />
+    </Exec>
+    <Exec Condition=" '$(CMakeExitCode)' == '0' " Command="cmake --build . --config $(Configuration) --target install" ConsoleToMSBuild="true" WorkingDirectory="$(CMakeBuildDir)">
+      <Output TaskParameter="ConsoleOutput" PropertyName="OutputOfExec" />
+      <Output TaskParameter="ExitCode" PropertyName="CMakeExitCode" />
+    </Exec>
+    <Message Condition=" '$(CMakeExitCode)' != '0' " Importance="high" Text="CUE4Parse-Natives build failed. Continuing without it. ERROR: '$(OutputOfExec)'" />
+    <ItemGroup Condition=" '$(CMakeExitCode)' == '0' ">
+      <Content Include="..\CUE4Parse-Natives\bin\$(Configuration)\CUE4Parse-Natives.dll" Condition=" '$(OS)' == 'Windows_NT' ">
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        <PackagePath>lib/$(TargetFramework)</PackagePath>
+        <PackageCopyToOutput>true</PackageCopyToOutput>
+      </Content>
+      <Content Include="..\CUE4Parse-Natives\bin\$(Configuration)\CUE4Parse-Natives.pdb" Condition=" '$(Configuration)' == 'Debug' And  '$(OS)' == 'Windows_NT' ">
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        <Pack>false</Pack>
+      </Content>
+      <Content Include="$(CMakeBuildDir)/CUE4Parse-Natives.so" Condition=" '$([System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform($([System.Runtime.InteropServices.OSPlatform]::Linux)))' ">
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        <PackagePath>lib/$(TargetFramework)</PackagePath>
+        <PackageCopyToOutput>true</PackageCopyToOutput>
+      </Content>
+      <Content Include="$(CMakeBuildDir)/CUE4Parse-Natives.dylib" Condition=" '$([System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform($([System.Runtime.InteropServices.OSPlatform]::OSX)))' ">
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        <PackagePath>lib/$(TargetFramework)</PackagePath>
+        <PackageCopyToOutput>true</PackageCopyToOutput>
+      </Content>
+    </ItemGroup>
+  </Target>
+
+  <!-- remove everything?? -->
+  <Target Name="CleanCMakeProj" BeforeTargets="BeforeClean">
+    <RemoveDir Directories="$(CMakeBuildDir);$(CMakeProject)bin/">
+      <Output TaskParameter="RemovedDirectories" ItemName="DeletedList" />
+    </RemoveDir>
+    <Message Text="Deleted directories: '@(DeletedList)'" />
+  </Target>
+
+</Project>

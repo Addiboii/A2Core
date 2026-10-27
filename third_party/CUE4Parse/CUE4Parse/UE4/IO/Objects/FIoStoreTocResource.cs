@@ -1,0 +1,215 @@
+using CUE4Parse.Compression;
+using CUE4Parse.Encryption.Aes;
+using CUE4Parse.UE4.Exceptions;
+using CUE4Parse.UE4.Objects.Core.Misc;
+using CUE4Parse.UE4.Readers;
+using CUE4Parse.UE4.Versions;
+using CUE4Parse.Utils;
+
+namespace CUE4Parse.UE4.IO.Objects
+{
+    [Flags]
+    public enum EIoStoreTocReadOptions
+    {
+        Default,
+        ReadDirectoryIndex	= 1 << 0,
+        ReadTocMeta			= 1 << 1,
+        ReadAll				= ReadDirectoryIndex | ReadTocMeta
+    }
+
+    public class FIoStoreTocResource
+    {
+        private readonly FArchive? _tocAr;
+        public readonly FIoStoreTocHeader Header;
+        public readonly FIoChunkId[] ChunkIds;
+        public readonly FIoOffsetAndLength[] ChunkOffsetLengths;
+        public readonly int[]? ChunkPerfectHashSeeds;
+        public readonly int[]? ChunkIndicesWithoutPerfectHash;
+        public readonly FIoStoreTocCompressedBlockEntry[] CompressionBlocks;
+        public readonly CompressionMethod[] CompressionMethods;
+        public readonly EIoEncryptionMethod EncryptionMethod;
+        public readonly FIoStoreEncryptionIV[] EncryptionIVs;
+
+        public byte[]? GetDirectoryIndexBuffer()
+        {
+            if (_tocAr == null || DirectoryIndexBufferOffset == -1)
+                return null;
+
+            if (_tocAr.Game is GAME_TheFinals or GAME_ArcRaiders)
+            {
+                var readOffset = DirectoryIndexBufferOffset & ~((long) Aes.ALIGN - 1);
+                var dataOffset = DirectoryIndexBufferOffset - readOffset;
+                var readSize = (dataOffset + Header.DirectoryIndexSize).Align(Aes.ALIGN);
+                var decrypted = _tocAr.ReadBytesAt(readOffset, (int) readSize).Decrypt(new FAesKey("0x5A4741BC469E10E569D48057B7AB43320388C9748759663BB5D13E201CA2052E"));
+                return dataOffset == 0 && Header.DirectoryIndexSize == decrypted.Length ? decrypted : decrypted[(int) dataOffset..(int) (dataOffset + Header.DirectoryIndexSize)];
+            }
+
+            return _tocAr.ReadBytesAt(DirectoryIndexBufferOffset, (int) Header.DirectoryIndexSize);
+        }
+        public readonly long DirectoryIndexBufferOffset = -1;
+        public readonly long DirectoryIndexBufferSize = -1;
+        public readonly FIoStoreTocEntryMeta[]? ChunkMetas;
+
+        public FIoStoreTocResource(FArchive Ar, EIoStoreTocReadOptions readOptions = EIoStoreTocReadOptions.Default)
+        {
+            _tocAr = Ar;
+            var streamBuffer = new byte[Ar.Length];
+            Ar.Read(streamBuffer, 0, streamBuffer.Length);
+
+            if (Ar.Game is GAME_TheFinals or GAME_ArcRaiders)
+            {
+                var decrypted = streamBuffer.Decrypt(FIoStoreTocHeader.SIZE, (int) (Ar.Length - FIoStoreTocHeader.SIZE), new FAesKey("0x5A4741BC469E10E569D48057B7AB43320388C9748759663BB5D13E201CA2052E"));
+                Array.Copy(decrypted, 0, streamBuffer, FIoStoreTocHeader.SIZE, decrypted.Length);
+            }
+
+            using var archive = new FByteArchive(Ar.Name, streamBuffer, Ar.Versions);
+
+            // Header
+            Header = new FIoStoreTocHeader(archive);
+
+            if (Header.Version < EIoStoreTocVersion.PartitionSize)
+            {
+                Header.PartitionCount = 1;
+                Header.PartitionSize = ulong.MaxValue;
+            }
+
+            if (Header.Version < EIoStoreTocVersion.ContainerEncryptionMethod)
+            {
+                Header.EncryptionMethod = Header.ContainerFlags.HasFlag(EIoContainerFlags.Encrypted) ? EIoEncryptionMethod.AES : EIoEncryptionMethod.None;
+                Header.EncryptionIVCount = 0;
+            }
+
+            // Chunk IDs
+            ChunkIds = archive.ReadArray<FIoChunkId>((int) Header.TocEntryCount);
+
+            // Chunk offsets
+            ChunkOffsetLengths = archive.ReadArray<FIoOffsetAndLength>((int) Header.TocEntryCount);
+
+            if (Ar.Game == GAME_NeedForSpeedMobile && !Ar.Name.EndsWith("global.utoc"))
+            {
+                archive.Position -= Header.TocEntryCount * 10;
+                var len = ((int) Header.TocEntryCount * 10).Align(16);
+                var data = archive.ReadArray<byte>(len).Decrypt(new FAesKey("0xB71C91417A3790F27BE3852C6775EBF39D88BEABC0CDDCF721F7B2F0CA69FA12"));
+                using var chunksAr = new FByteArchive("ChunkOffsetLengths", data);
+                ChunkOffsetLengths = chunksAr.ReadArray<FIoOffsetAndLength>((int) Header.TocEntryCount);
+            }
+
+            // Chunk perfect hash map
+            uint perfectHashSeedsCount = 0;
+            uint chunksWithoutPerfectHashCount = 0;
+            if (Header.Version >= EIoStoreTocVersion.PerfectHashWithOverflow)
+            {
+                perfectHashSeedsCount = Header.TocChunkPerfectHashSeedsCount;
+                chunksWithoutPerfectHashCount = Header.TocChunksWithoutPerfectHashCount;
+            }
+            else if (Header.Version >= EIoStoreTocVersion.PerfectHash)
+            {
+                perfectHashSeedsCount = Header.TocChunkPerfectHashSeedsCount;
+            }
+            if (perfectHashSeedsCount > 0)
+            {
+                ChunkPerfectHashSeeds = archive.ReadArray<int>((int) perfectHashSeedsCount);
+            }
+            if (chunksWithoutPerfectHashCount > 0)
+            {
+                ChunkIndicesWithoutPerfectHash = archive.ReadArray<int>((int) chunksWithoutPerfectHashCount);
+            }
+
+            // Compression blocks
+            var isFragPunk = archive.Game == GAME_FragPunk;
+            if (!isFragPunk)
+            {
+                CompressionBlocks = archive.ReadArray<FIoStoreTocCompressedBlockEntry>(
+                    (int) Header.TocCompressedBlockEntryCount);
+            }
+            else
+            {
+                CompressionBlocks = new FIoStoreTocCompressedBlockEntry[Header.TocCompressedBlockEntryCount];
+                for (var i = 0; i < Header.TocCompressedBlockEntryCount; i++)
+                {
+                    CompressionBlocks[i] = new FIoStoreTocCompressedBlockEntry(archive);
+                    archive.Position += 4;
+                }
+            }
+
+            var directoryIndexIVCount = Header.ContainerFlags.HasFlag(EIoContainerFlags.Indexed) ? 1 : 0;
+            var expectedIVCount = Header.EncryptionMethod == EIoEncryptionMethod.AES_CTR ? Header.TocCompressedBlockEntryCount + directoryIndexIVCount : 0;
+
+            if (Header.EncryptionIVCount != expectedIVCount)
+                throw new ParserException(Ar, $"TOC has {Header.EncryptionIVCount} encryption IVs but {Header.EncryptionMethod} over {Header.TocCompressedBlockEntryCount} compression bocks needs {expectedIVCount}");
+
+            EncryptionMethod = Header.EncryptionMethod;
+            EncryptionIVs = Header.EncryptionIVCount > 0 ? archive.ReadArray((int)Header.EncryptionIVCount, () => new FIoStoreEncryptionIV(archive)) : [];
+
+            // Compression methods
+            unsafe
+            {
+                var bufferSize = (int) (Header.CompressionMethodNameLength * Header.CompressionMethodNameCount);
+                var buffer = stackalloc byte[bufferSize];
+                archive.Serialize(buffer, bufferSize);
+                CompressionMethods = new CompressionMethod[Header.CompressionMethodNameCount + 1];
+                CompressionMethods[0] = CompressionMethod.None;
+                for (var i = 0; i < Header.CompressionMethodNameCount; i++)
+                {
+                    var name = new string((sbyte*) buffer + i * Header.CompressionMethodNameLength, 0, (int) Header.CompressionMethodNameLength).TrimEnd('\0');
+                    if (string.IsNullOrEmpty(name))
+                        continue;
+                    if (!Enum.TryParse(name, true, out CompressionMethod method))
+                    {
+                        Log.Warning("Unknown compression method '{CompressionMethod}' in {ArchiveName}", name, Ar.Name);
+                        method = CompressionMethod.Unknown;
+                    }
+
+                    CompressionMethods[i + 1] = method;
+                }
+            }
+
+            // Chunk block signatures
+            if (Header.ContainerFlags.HasFlag(EIoContainerFlags.Signed))
+            {
+                var hashSize = archive.Read<int>();
+                // tocSignature and blockSignature both byte[hashSize]
+                // and ChunkBlockSignature of FSHAHash[Header.TocCompressedBlockEntryCount]
+                archive.Position += hashSize + hashSize + FSHAHash.SIZE * Header.TocCompressedBlockEntryCount;
+
+                // You could verify hashes here but nah
+            }
+
+            // Directory index
+            if (Header.Version >= EIoStoreTocVersion.DirectoryIndex &&
+                Header.ContainerFlags.HasFlag(EIoContainerFlags.Indexed) &&
+                Header.DirectoryIndexSize > 0)
+            {
+                if (readOptions.HasFlag(EIoStoreTocReadOptions.ReadDirectoryIndex))
+                {
+                    DirectoryIndexBufferOffset = archive.Position;
+                }
+                else
+                {
+                    archive.Position += Header.DirectoryIndexSize;
+                }
+
+            }
+
+            // Meta
+            if (readOptions.HasFlag(EIoStoreTocReadOptions.ReadTocMeta))
+            {
+                var replacedIoChunkHashWithIoHash = Header.Version >= EIoStoreTocVersion.ReplaceIoChunkHashWithIoHash;
+                ChunkMetas = new FIoStoreTocEntryMeta[Header.TocEntryCount];
+                for (int i = 0; i < Header.TocEntryCount; i++)
+                {
+                    ChunkMetas[i] = new FIoStoreTocEntryMeta(archive, replacedIoChunkHashWithIoHash);
+                }
+
+                // OnDemand
+                if (Header.Version == EIoStoreTocVersion.OnDemandMetaData && Header.ContainerFlags.HasFlag(EIoContainerFlags.OnDemand))
+                {
+                    // FIoStoreTocOnDemandChunkMeta (FIoHash) OnDemandChunkMeta;
+                    archive.Position += Header.TocEntryCount * FSHAHash.SIZE;
+                    // FIoStoreTocOnDemandCompressedBlockMeta (FIoHash) OnDemandCompressedBlockMeta;
+                    archive.Position += Header.TocCompressedBlockEntryCount * FSHAHash.SIZE;
+                }
+            }
+        }
+    }
+}

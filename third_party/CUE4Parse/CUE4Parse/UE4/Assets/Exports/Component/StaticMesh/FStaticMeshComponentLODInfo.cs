@@ -1,0 +1,119 @@
+using CUE4Parse.UE4.Assets.Exports.BuildData;
+using CUE4Parse.UE4.Assets.Readers;
+using CUE4Parse.UE4.Objects.Core.Math;
+using CUE4Parse.UE4.Objects.Core.Misc;
+using CUE4Parse.UE4.Objects.Engine;
+using CUE4Parse.UE4.Objects.Meshes;
+using CUE4Parse.UE4.Objects.RenderCore;
+using CUE4Parse.UE4.Objects.UObject;
+using CUE4Parse.UE4.Readers;
+using CUE4Parse.UE4.Versions;
+using Newtonsoft.Json;
+
+namespace CUE4Parse.UE4.Assets.Exports.Component.StaticMesh;
+
+public struct FPaintedVertex
+{
+    public FVector Position;
+    public FVector4 Normal;
+    public FColor Color;
+
+    public FPaintedVertex(FArchive Ar)
+    {
+        Position = Ar.Read<FVector>();
+
+        if (FRenderingObjectVersion.Get(Ar) < FRenderingObjectVersion.Type.IncreaseNormalPrecision)
+        {
+            Normal = new FPackedNormal(Ar);
+        }
+        else
+        {
+            Normal = Ar.Read<FVector4>();
+        }
+
+        Color = Ar.Read<FColor>();
+    }
+}
+
+[JsonConverter(typeof(FStaticMeshComponentLODInfoConverter))]
+public class FStaticMeshComponentLODInfo
+{
+    private const byte OverrideColorsStripFlag = 1;
+    public readonly FGuid OriginalMapBuildDataId;
+    public readonly FGuid MapBuildDataId;
+    public readonly FPaintedVertex[]? PaintedVertices;
+    public readonly FColorVertexBuffer? OverrideVertexColors;
+
+    public FStaticMeshComponentLODInfo(FAssetArchive Ar)
+    {
+        var stripFlags = new FStripDataFlags(Ar);
+        if (!stripFlags.IsAudioVisualDataStripped())
+        {
+            if (FRenderingObjectVersion.Get(Ar) < FRenderingObjectVersion.Type.MapBuildDataSeparatePackage)
+            {
+                if (Ar.Game < GAME_UE4_0)
+                {
+                    Ar.ReadArray(() => new FPackageIndex(Ar)); // ShadowMaps
+                    Ar.ReadArray(() => new FPackageIndex(Ar)); // ShadowVertexBuffers
+                }
+
+                FLightMap? lightMap = Ar.Read<ELightMapType>() switch
+                {
+                    ELightMapType.LMT_1D => new FLegacyLightMap1D(Ar),
+                    ELightMapType.LMT_2D => new FLightMap2D(Ar),
+                    _ => null
+                };
+                if (Ar.Ver >= EUnrealEngineObjectUE4Version.PRECOMPUTED_SHADOW_MAPS)
+                {
+                    var shadowMap = Ar.Read<EShadowMapType>() switch
+                    {
+                        EShadowMapType.SMT_2D => new FShadowMap2D(Ar),
+                        _ => null
+                    };
+                }
+            }
+            else
+            {
+                if (Ar.Game >= GAME_UE5_5)
+                {
+                    if (Ar.IsLoadingFromCookedPackage) MapBuildDataId = Ar.Read<FGuid>();
+                    OriginalMapBuildDataId = Ar.Read<FGuid>();
+                }
+                else
+                {
+                    MapBuildDataId = Ar.Read<FGuid>();
+                }
+            }
+        }
+
+        if (Ar.Ver >= EUnrealEngineObjectUE3Version.MESH_PAINT_SYSTEM_ENUM && !stripFlags.IsClassDataStripped(OverrideColorsStripFlag))
+        {
+            if (Ar.Ver >= EUnrealEngineObjectUE3Version.OVERWRITE_VERTEX_COLORS_MEM_OPTIMIZED)
+            {
+                var bLoadVertexColorData = Ar.Read<byte>();
+                if (bLoadVertexColorData == 1)
+                {
+                    if (Ar.Game is GAME_HonorofKingsWorld) Ar.Position += 4;
+                    OverrideVertexColors = new FColorVertexBuffer(Ar);
+                }
+            }
+            else
+            {
+                OverrideVertexColors = new FColorVertexBuffer(Ar.ReadArray<FColor>());
+            }
+        }
+
+        if (Ar.Ver >= EUnrealEngineObjectUE3Version.PRESERVE_SMC_VERT_COLORS && Ar.Ver < EUnrealEngineObjectUE3Version.STATIC_MESH_SOURCE_DATA_COPY)
+        {
+            if (Ar.Game is GAME_Dishonored) return;
+            Ar.ReadArray<FVector>(); // VertexColorPositions
+        }
+
+        if (Ar.Ver >= EUnrealEngineObjectUE3Version.PRESERVE_SMC_VERT_COLORS && !stripFlags.IsEditorDataStripped() && !Ar.IsFilterEditorOnly)
+        {
+            PaintedVertices = Ar.ReadArray(() => new FPaintedVertex(Ar));
+        }
+
+        if (Ar.Game == GAME_StarWarsJediSurvivor) Ar.Position += 20;
+    }
+}

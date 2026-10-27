@@ -1,0 +1,38 @@
+using CUE4Parse.UE4.Assets.Objects;
+using CUE4Parse.UE4.Assets.Readers;
+using Newtonsoft.Json;
+
+namespace CUE4Parse.UE4.Objects.Engine.Curves;
+
+public class UCurveVector : UCurveBase
+{
+    public readonly FRichCurve[] FloatCurves = new FRichCurve[3];
+
+    public override void Deserialize(FAssetArchive Ar, long validPos)
+    {
+        base.Deserialize(Ar, validPos);
+
+        for (var i = 0; i < Properties.Count; ++i)
+        {
+            if (Properties[i].Tag?.GenericValue is FScriptStruct { StructType: FStructFallback fallback })
+            {
+                FloatCurves[i] = new FRichCurve(fallback);
+            }
+        }
+    }
+
+    protected internal override void WriteJson(JsonWriter writer, JsonSerializer serializer)
+    {
+        base.WriteJson(writer, serializer);
+
+        writer.WritePropertyName("FloatCurves");
+        writer.WriteStartArray();
+
+        foreach (var richCurve in FloatCurves)
+        {
+            serializer.Serialize(writer, richCurve);
+        }
+
+        writer.WriteEndArray();
+    }
+}

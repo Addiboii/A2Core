@@ -1,0 +1,33 @@
+using CUE4Parse.UE4.Assets.Exports.Component;
+using CUE4Parse.UE4.Assets.Exports.Component.StaticMesh;
+using CUE4Parse.UE4.Assets.Exports.Engine;
+
+namespace CUE4Parse.GameTypes.PUBG.Assets.Exports;
+
+public class UTslEmoteDB : UDataTable;
+public class ULoadingScreenDataTable : UDataTable;
+public class UTslBaseRadioComponent : USceneComponent;
+public class UTslEquippedWeaponsProxy : USceneComponent;
+public class UTslReactionComponent : UStaticMeshComponent;
+public class UTslGlassWindowComponent : UStaticMeshComponent;
+public class UTslLobbyCharacterAnimationDataTable : UDataTable;
+public class UTslPlatoonSupportDataTable : UDataTable;
+public class UTslReactionDoorComponent : UStaticMeshComponent;
+public class UTslReactionClientComponent : UStaticMeshComponent;
+public class UTslSimpleCollisionReceiver : USceneComponent;
+public class UTslSmokePropagationComponent : USceneComponent;
+public class UTslVendingMachineSpotComponent : USceneComponent;
+public class UTslLaserPointerAttachment : UStaticMeshComponent;
+public class UDoorFrameComponent : UStaticMeshComponent;
+public class UDroppedPackageSpotComponent : USceneComponent;
+public class UTslBpRewardRuleTable : UDataTable;
+public class USceneInteractionComponent : USceneComponent;
+public class UItemSpotComponent : USceneComponent;
+public class UItemSpotGroupComponent : USceneComponent;
+public class UJukeBoxSpotComponent : USceneComponent;
+public class UMapLocationZoomTable : UDataTable;
+public class UMasterySkinnablePropStatic : UStaticMeshComponent;
+public class URedZoneBombComponent : USceneComponent;
+public class UReplicatedRootComponent : USceneComponent;
+public class UThingSpotComponent : USceneComponent;
+public class UTslAccessoryComponent : USceneComponent;

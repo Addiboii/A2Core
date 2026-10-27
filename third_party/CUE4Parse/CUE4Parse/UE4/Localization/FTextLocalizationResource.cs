@@ -1,0 +1,132 @@
+using CUE4Parse.GameTypes.CodeVein2.Encryption;
+using CUE4Parse.GameTypes.EOTU.Encryption;
+using CUE4Parse.GameTypes.NTE.Encryption;
+using CUE4Parse.UE4.Exceptions;
+using CUE4Parse.UE4.Objects.Core.i18N;
+using CUE4Parse.UE4.Objects.Core.Misc;
+using CUE4Parse.UE4.Readers;
+using CUE4Parse.UE4.Versions;
+using Newtonsoft.Json;
+
+namespace CUE4Parse.UE4.Localization;
+
+[JsonConverter(typeof(FTextLocalizationResourceConverter))]
+public class FTextLocalizationResource
+{
+
+    private readonly FGuid _locResMagic = new (0x7574140Eu, 0xFC034A67u, 0x9D90154Au, 0x1B7F37C3u);
+    public readonly Dictionary<FTextKey, Dictionary<FTextKey, FEntry>> Entries = [];
+
+    public FTextLocalizationResource(FArchive Ar)
+    {
+        var locResMagic = Ar.Read<FGuid>();
+        var versionNumber = ELocResVersion.Legacy;
+        if (locResMagic == _locResMagic)
+        {
+            versionNumber = Ar.Read<ELocResVersion>();
+        }
+        else // Legacy LocRes files lack the magic number, assume that's what we're dealing with, and seek back to the start of the file
+        {
+            Ar.Position = 0;
+            Log.Warning("LocRes '{Name}' failed the magic number check! Assuming this is a legacy resource", Ar.Name);
+        }
+
+        if (versionNumber > ELocResVersion.Latest)
+        {
+            if (Ar.Game is not (GAME_StellarBlade or GAME_HonorofKingsWorld))
+                throw new ParserException(Ar, $"LocRes '{Ar.Name}' is too new to be loaded (File Version: {versionNumber:D}, Loader Version: {ELocResVersion.Latest:D})");
+        }
+
+        if (Ar.Game is GAME_HonorofKingsWorld && versionNumber > ELocResVersion.Latest)
+        {
+            Ar.SkipFixedArray(sizeof(uint));
+            var dts = Ar.ReadArray(() => (Ar.ReadFString(), Ar.Read<int>(), Ar.Read<int>()));
+            var dict = new Dictionary<FTextKey, FEntry>(dts.Sum(x => x.Item2));
+            foreach (var dt in  dts)
+            {
+                var entries = Ar.ReadArray(dt.Item2, () => (Ar.Read<uint>(), Ar.ReadFString(), Ar.Read<uint>(), Ar.ReadFString(), Ar.ReadFString()));
+                foreach (var item in entries)
+                {
+                    dict[new FTextKey(item.Item2, item.Item1)] = new FEntry(item.Item4, Ar.Name, item.Item3);
+                }
+            }
+            Entries.Add(new FTextKey(""), dict);
+            return;
+        }
+
+        // Read the localized string array
+        var localizedStringArray = Array.Empty<FTextLocalizationResourceString>();
+        if (versionNumber >= ELocResVersion.Compact)
+        {
+            localizedStringArray = ReadLocResStringArray(Ar, versionNumber);
+        }
+
+        // Read entries count
+        if (versionNumber >= ELocResVersion.Optimized_CRC32)
+        {
+            Ar.Position += 4; // EntriesCount
+        }
+
+        // Read namespace count
+        var namespaceCount = Ar.Read<uint>();
+        for (var i = 0; i < namespaceCount; i++)
+        {
+            var namespce = new FTextKey(Ar, versionNumber);
+            var keyCount = Ar.Read<uint>();
+            var keyValue = new Dictionary<FTextKey, FEntry>((int)keyCount);
+            for (var j = 0; j < keyCount; j++)
+            {
+                var key = new FTextKey(Ar, versionNumber);
+                FEntry newEntry = new(Ar);
+                if (versionNumber >= ELocResVersion.Compact)
+                {
+                    var localizedStringIndex = Ar.Read<int>();
+                    if (localizedStringArray.Length > localizedStringIndex)
+                    {
+                        // Steal the string if possible
+                        var localizedString = localizedStringArray[localizedStringIndex];
+                        newEntry.LocalizedString = localizedString.String;
+                        if (localizedString.RefCount != -1) localizedString.RefCount--;
+                    }
+                    else
+                    {
+                        Log.Warning("LocRes '{LocResName}' has an invalid localized string index for namespace '{Namespace}' and key '{Key}'. This entry will have no translation.", newEntry.LocResName, namespce.Str, key.Str);
+                    }
+
+                    if (Ar.Game == GAME_StellarBlade && versionNumber > ELocResVersion.Latest) Ar.Position += 4;
+                }
+                else
+                {
+                    newEntry.LocalizedString = Ar.ReadFString();
+                }
+
+                keyValue.Add(key, newEntry);
+            }
+            Entries.Add(namespce, keyValue);
+        }
+    }
+
+    private static FTextLocalizationResourceString[] ReadLocResStringArray(FArchive Ar, ELocResVersion versionNumber)
+    {
+        if (Ar.Game is GAME_NevernessToEverness && Ar.Name.StartsWith("HT/Content/Localization/"))
+            return FNTEFTextLocalizationResource.ReadLocResStringArray(Ar);
+
+        var localizedStringArrayOffset = Ar.Read<long>();
+        if (localizedStringArrayOffset != -1) // INDEX_NONE
+        {
+            var currentFileOffset = Ar.Position;
+            Ar.Position = localizedStringArrayOffset;
+            var localizedStringArray = Ar.Game switch
+            {
+                GAME_CodeVein2 when Ar.Name.Contains("CodeVein2/Content/Localization/") => Ar.ReadArray(() =>
+                    new FTextLocalizationResourceString(CodeVein2StringEncryption.CodeVein2EncryptedFString(Ar, ECV2DecryptionMode.Locres), Ar.Read<int>())),
+                GAME_EmbersofTheUncrowned => Ar.ReadArray(() => new FTextLocalizationResourceString(EOTUStringEncryption.DecryptString(Ar), Ar.Read<int>())),
+                _ => Ar.ReadArray(() => new FTextLocalizationResourceString(Ar, versionNumber))
+            };
+            Ar.Position = currentFileOffset;
+            return localizedStringArray;
+        }
+
+        return [];
+    }
+}

@@ -1,0 +1,143 @@
+using System.Runtime.CompilerServices;
+using CUE4Parse.UE4.Assets.Exports.Texture;
+using CUE4Parse.UE4.Objects.Core.Serialization;
+using static CUE4Parse.UE4.Versions.EGame;
+
+namespace CUE4Parse.UE4.Versions
+{
+    public class VersionContainer : ICloneable
+    {
+        public static readonly VersionContainer DEFAULT_VERSION_CONTAINER = new();
+
+        private EGame _game;
+        public EGame Game
+        {
+            get => _game;
+            set
+            {
+                _game = value;
+                InitOptions();
+                InitMapStructTypes();
+            }
+        }
+
+        private FPackageFileVersion _ver;
+        public FPackageFileVersion Ver
+        {
+            get => _ver;
+            set
+            {
+                bExplicitVer = value.FileVersionUE3 != 0 || value.FileVersionUE4 != 0 || value.FileVersionUE5 != 0;
+                _ver = bExplicitVer ? value : _game.GetVersion();
+                InitOptions();
+            }
+        }
+
+        private EUnrealEngineObjectLicenseeUEVersion _licenseever;
+        public EUnrealEngineObjectLicenseeUEVersion LicenseeVer
+        {
+            get => _licenseever;
+            set => _licenseever = value;
+        }
+
+        public ETexturePlatform Platform { get; set; }
+
+        public bool bExplicitVer { get; private set; }
+
+        public FCustomVersionContainer? CustomVersions;
+        public readonly Dictionary<string, bool> Options = new();
+        public readonly Dictionary<string, KeyValuePair<string, string>> MapStructTypes = new();
+
+        private readonly IDictionary<string, bool>? _optionOverrides;
+        private readonly IDictionary<string, KeyValuePair<string, string>>? _mapStructTypesOverrides;
+
+        public VersionContainer(EGame game = GAME_UE4_LATEST, ETexturePlatform platform = ETexturePlatform.DesktopMobile, FPackageFileVersion ver = default, FCustomVersionContainer? customVersions = null, IDictionary<string, bool>? optionOverrides = null, IDictionary<string, KeyValuePair<string, string>>? mapStructTypesOverrides = null)
+        {
+            _optionOverrides = optionOverrides;
+            _mapStructTypesOverrides = mapStructTypesOverrides;
+
+            _game = game; // bypass InitOptions + InitMapStructTypes
+            Ver = ver; // triggers InitOptions for the first time and uses the updated _game.GetVersion()
+            Platform = platform;
+            CustomVersions = customVersions;
+
+            InitMapStructTypes(); // because it was not triggered by any setter
+        }
+
+        private void InitOptions()
+        {
+            Options.Clear();
+
+            // objects
+            Options["MorphTarget"] = true;
+
+            // structs
+            Options["Vector_NetQuantize_AsStruct"] = Game >= GAME_UE5_0;
+
+            // fields
+            Options["RawIndexBuffer.HasShouldExpandTo32Bit"] = Game is >= GAME_UE4_25 and not GAME_DeltaForce and not GAME_ArenaBreakoutMobile;
+            Options["ShaderMap.UseNewCookedFormat"] = Game >= GAME_UE5_0;
+            Options["SkeletalMesh.UseNewCookedFormat"] = Game >= GAME_UE4_24;
+            Options["SkeletalMesh.HasRayTracingData"] = Game is >= GAME_UE4_27 or GAME_UE4_25_Plus or GAME_UE4_26_Plus or GAME_HellLetLoose or GAME_DarkPicturesAnthologyManofMedan or GAME_DarkPicturesAnthologyTheDevilinMe or GAME_DarkPicturesAnthologyLittleHope or GAME_Back4Blood;
+            Options["StaticMesh.HasLODsShareStaticLighting"] = Game is < GAME_UE4_15 or >= GAME_UE4_16; // Exists in all engine versions except UE4.15
+            Options["StaticMesh.HasRayTracingGeometry"] = Game >= GAME_UE4_25;
+            Options["StaticMesh.HasVisibleInRayTracing"] = Game >= GAME_UE4_26 || Game is GAME_Back4Blood;
+            Options["StaticMesh.UseNewCookedFormat"] = Game >= GAME_UE4_23;
+            Options["VirtualTextures"] = Game >= GAME_UE4_23;
+            Options["SoundWave.UseAudioStreaming"] = Game >= GAME_UE4_25 && OverrideUseAudioStreaming(); // A lot of games use this, but some don't, which causes issues.
+            Options["AnimSequence.HasCompressedRawSize"] = Game >= GAME_UE4_17; // Early 4.17 builds don't have this, and some custom engine builds don't either.
+            Options["StaticMesh.HasNavCollision"] = Ver >= EUnrealEngineObjectUE4Version.STATIC_MESH_STORE_NAV_COLLISION && Game != GAME_GearsOfWar4 && Game != GAME_TEKKEN7 && Game != GAME_Farlight84;
+
+            // special general property workarounds
+            Options["ByteProperty.TMap64Bit"] = false;
+            Options["ByteProperty.TMap16Bit"] = false;
+            Options["ByteProperty.TMap8Bit"] = false;
+
+            // defaults
+            Options["StripAdditiveRefPose"] = false;
+            Options["SkeletalMesh.KeepMobileMinLODSettingOnDesktop"] = false;
+            Options["StaticMesh.KeepMobileMinLODSettingOnDesktop"] = false;
+
+            if (_optionOverrides == null) return;
+            foreach (var (key, value) in _optionOverrides)
+            {
+                Options[key] = value;
+            }
+        }
+
+        private bool OverrideUseAudioStreaming()
+        {
+            return Game is not (GAME_UE4_28 or GAME_GTATheTrilogyDefinitiveEdition or GAME_UE4_26_Plus or GAME_BladeAndSoul or GAME_Stray);
+        }
+
+        private void InitMapStructTypes()
+        {
+            MapStructTypes.Clear();
+            MapStructTypes["BindingIdToReferences"] = new KeyValuePair<string, string>("Guid", null);
+            MapStructTypes["UserParameterRedirects"] = new KeyValuePair<string, string>("NiagaraVariable", "NiagaraVariable");
+            MapStructTypes["Tracks"] = new KeyValuePair<string, string>("MovieSceneTrackIdentifier", null);
+            MapStructTypes["SubSequences"] = new KeyValuePair<string, string>("MovieSceneSequenceID", null);
+            MapStructTypes["Hierarchy"] = new KeyValuePair<string, string>("MovieSceneSequenceID", null);
+            MapStructTypes["TrackSignatureToTrackIdentifier"] = Game < GAME_UE4_19
+                ? new KeyValuePair<string, string>("Guid", "MovieSceneTrackIdentifiers")
+                : new KeyValuePair<string, string>("Guid", "MovieSceneTrackIdentifier");
+            MapStructTypes["UserParameterRedirects"] = new KeyValuePair<string, string>("NiagaraVariable", "NiagaraVariable");
+
+            if (_mapStructTypesOverrides == null) return;
+            foreach (var (key, value) in _mapStructTypesOverrides)
+            {
+                MapStructTypes[key] = value;
+            }
+        }
+
+        public bool this[string optionKey]
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get => Options[optionKey];
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            set => Options[optionKey] = value;
+        }
+
+        public object Clone() => new VersionContainer(Game, Platform, Ver, CustomVersions, _optionOverrides, _mapStructTypesOverrides) { bExplicitVer = bExplicitVer };
+    }
+}

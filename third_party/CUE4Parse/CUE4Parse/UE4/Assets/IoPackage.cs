@@ -1,0 +1,589 @@
+using System.Runtime.CompilerServices;
+using CUE4Parse.FileProvider.Vfs;
+using CUE4Parse.UE4.Assets.Exports;
+using CUE4Parse.UE4.Assets.Objects;
+using CUE4Parse.UE4.Assets.Readers;
+using CUE4Parse.UE4.Assets.Utils;
+using CUE4Parse.UE4.Exceptions;
+using CUE4Parse.UE4.IO;
+using CUE4Parse.UE4.IO.Objects;
+using CUE4Parse.UE4.Objects.UObject;
+using CUE4Parse.UE4.Readers;
+using CUE4Parse.UE4.Versions;
+using CUE4Parse.Utils;
+
+namespace CUE4Parse.UE4.Assets;
+
+[SkipObjectRegistration]
+public sealed class IoPackage : AbstractUePackage
+{
+    
+    private readonly IoGlobalData _globalData;
+
+    public override FPackageFileSummary Summary { get; }
+    public override FNameEntrySerialized[] NameMap { get; }
+    public override int ImportMapLength => ImportMap.Length;
+    public override int ExportMapLength => ExportMap.Length;
+
+    public readonly ulong[]? ImportedPublicExportHashes;
+    public readonly FPackageObjectIndex[] ImportMap;
+    public readonly FExportMapEntry[] ExportMap;
+    public readonly FBulkDataMapEntry[] BulkDataMap;
+    public readonly Lazy<IoPackage?[]> ImportedPackages;
+    public readonly Lazy<IPackage?[][]> ImportedPackagesAllVersions;
+
+    public IoPackage(FArchive uasset, FIoContainerHeader? containerHeader = null, FArchive? ubulk = null, FArchive? uptnl = null, IVfsFileProvider? provider = null)
+        : this(
+            uasset,
+            containerHeader,
+            ubulk != null ? _ => ubulk : null,
+            uptnl != null ? _ => uptnl : null,
+            provider)
+    { }
+
+    public IoPackage(
+        FArchive uasset,
+        FIoContainerHeader? containerHeader = null,
+        Func<FByteBulkDataHeader?, FArchive?>? ubulk = null,
+        Func<FByteBulkDataHeader?, FArchive?>? uptnl = null,
+        IVfsFileProvider? provider = null)
+        : base(uasset.Name.SubstringBeforeLast('.'), provider)
+    {
+        _globalData = provider?.GlobalData ?? throw new ParserException("Found IoStore Package but global data is missing, can't serialize");
+
+        var uassetAr = new FAssetArchive(uasset, this);
+
+        FExportBundleHeader[]? exportBundleHeaders;
+        FExportBundleEntry[] exportBundleEntries;
+        FPackageId[] importedPackageIds;
+        int cookedHeaderSize;
+        int allExportDataOffset;
+
+        if (uassetAr.Game >= GAME_UE5_0)
+        {
+            // Summary
+            var summary = new FZenPackageSummary(uassetAr);
+            Summary = new FPackageFileSummary
+            {
+                PackageFlags = summary.PackageFlags,
+                TotalHeaderSize = summary.GraphDataOffset + (int) summary.HeaderSize,
+                NameOffset = (int) uassetAr.Position,
+                ExportCount = (summary.ExportBundleEntriesOffset - summary.ExportMapOffset) / FExportMapEntry.Size,
+                ExportOffset = summary.ExportMapOffset,
+                ImportCount = (summary.ExportMapOffset - summary.ImportMapOffset) / FPackageObjectIndex.Size,
+                ImportOffset = summary.ImportMapOffset,
+            };
+
+            // Versioning info
+            if (summary.bHasVersioningInfo != 0)
+            {
+                var versioningInfo = new FZenPackageVersioningInfo(uassetAr);
+                Summary.FileVersionUE = versioningInfo.PackageVersion;
+                Summary.FileVersionLicenseeUE = (EUnrealEngineObjectLicenseeUEVersion) versioningInfo.LicenseeVersion;
+                Summary.CustomVersionContainer = versioningInfo.CustomVersions;
+                if (!uassetAr.Versions.bExplicitVer)
+                {
+                    uassetAr.Versions.Ver = versioningInfo.PackageVersion;
+                    uassetAr.Versions.CustomVersions = versioningInfo.CustomVersions;
+                }
+            }
+            else
+            {
+                Summary.bUnversioned = true;
+            }
+
+            FZenPackageCellOffsets cellOffsets;
+            if (uassetAr.Ver >= EUnrealEngineObjectUE5Version.VERSE_CELLS)
+            {
+                cellOffsets = uassetAr.Read<FZenPackageCellOffsets>();
+            }
+            else
+            {
+                cellOffsets.CellImportMapOffset = summary.ExportBundleEntriesOffset;
+                cellOffsets.CellExportMapOffset = summary.ExportBundleEntriesOffset;
+            }
+
+            // Name map
+            NameMap = FNameEntrySerialized.LoadNameBatch(uassetAr);
+            Summary.NameCount = NameMap.Length;
+            Name = CreateFNameFromMappedName(summary.Name).Text;
+
+            BulkDataMap = [];
+            if (uassetAr.Ver >= EUnrealEngineObjectUE5Version.DATA_RESOURCES || uassetAr.Game == GAME_TheFirstDescendant)
+            {
+                if (uassetAr.Game >= GAME_UE5_4)
+                {
+                    var pad = uassetAr.Read<ulong>(); // pad
+                    _ = uassetAr.ReadArray<byte>((int) pad);
+                }
+
+                var bulkDataMapSize = uassetAr.Read<long>();
+                BulkDataMap = uassetAr.ReadArray<FBulkDataMapEntry>((int) (bulkDataMapSize / FBulkDataMapEntry.Size));
+            }
+
+            // Imported public export hashes
+            uassetAr.Position = summary.ImportedPublicExportHashesOffset;
+            ImportedPublicExportHashes = uassetAr.ReadArray<ulong>((summary.ImportMapOffset - summary.ImportedPublicExportHashesOffset) / sizeof(ulong));
+
+            // Import map
+            uassetAr.Position = summary.ImportMapOffset;
+            ImportMap = uasset.ReadArray<FPackageObjectIndex>(Summary.ImportCount);
+
+            // Export map
+            uassetAr.Position = summary.ExportMapOffset;
+            ExportMap = uasset.ReadArray(Summary.ExportCount, () => new FExportMapEntry(uassetAr));
+            ExportsLazy = new Lazy<UObject>[Summary.ExportCount];
+
+            // Export bundle entries
+            uassetAr.Position = cellOffsets.CellImportMapOffset;
+            exportBundleEntries = uassetAr.ReadArray<FExportBundleEntry>(Summary.ExportCount * 2);
+
+            (var storeEntry, importedPackageIds) = GetStoreEntryAndImportedPackageIds(containerHeader, provider);
+            if (uassetAr.Game < GAME_UE5_3)
+            {
+                // Export bundle headers
+                uassetAr.Position = summary.GraphDataOffset;
+                var exportBundleHeadersCount = storeEntry?.ExportBundleCount ?? 1;
+                exportBundleHeaders = uassetAr.ReadArray<FExportBundleHeader>(exportBundleHeadersCount);
+                // We don't read the graph data
+            }
+            else exportBundleHeaders = null;
+
+            cookedHeaderSize = (int) summary.CookedHeaderSize;
+            allExportDataOffset = (int) summary.HeaderSize;
+        }
+        else
+        {
+            // Summary
+            var summary = uassetAr.Read<FPackageSummary>();
+            Summary = new FPackageFileSummary
+            {
+                PackageFlags = summary.PackageFlags,
+                TotalHeaderSize = summary.GraphDataOffset + summary.GraphDataSize,
+                NameCount = summary.NameMapHashesSize / sizeof(ulong) - 1,
+                NameOffset = summary.NameMapNamesOffset,
+                ExportCount = (summary.ExportBundlesOffset - summary.ExportMapOffset) / FExportMapEntry.Size,
+                ExportOffset = summary.ExportMapOffset,
+                ImportCount = (summary.ExportMapOffset - summary.ImportMapOffset) / FPackageObjectIndex.Size,
+                ImportOffset = summary.ImportMapOffset,
+                bUnversioned = true
+            };
+
+            // Name map
+            uassetAr.Position = summary.NameMapNamesOffset;
+            NameMap = FNameEntrySerialized.LoadNameBatch(uassetAr, Summary.NameCount);
+            Name = CreateFNameFromMappedName(summary.Name).Text;
+
+            // Import map
+            uassetAr.Position = summary.ImportMapOffset;
+            ImportMap = uasset.ReadArray<FPackageObjectIndex>(Summary.ImportCount);
+
+            // Export map
+            uassetAr.Position = summary.ExportMapOffset;
+            ExportMap = uasset.ReadArray(Summary.ExportCount, () => new FExportMapEntry(uassetAr));
+            ExportsLazy = new Lazy<UObject>[Summary.ExportCount];
+
+            // Export bundles
+            uassetAr.Position = summary.ExportBundlesOffset;
+            LoadExportBundles(uassetAr, summary.GraphDataOffset - summary.ExportBundlesOffset, out exportBundleHeaders, out exportBundleEntries);
+
+            // Graph data
+            uassetAr.Position = summary.GraphDataOffset;
+            importedPackageIds = LoadGraphData(uassetAr);
+
+            cookedHeaderSize = (int) summary.CookedHeaderSize;
+            allExportDataOffset = summary.GraphDataOffset + summary.GraphDataSize;
+        }
+
+        // Preload dependencies
+        ImportedPackages = new Lazy<IoPackage?[]>(() =>
+        {
+            var packages = new IoPackage?[importedPackageIds.Length];
+            for (var i = 0; i < importedPackageIds.Length; i++)
+            {
+                provider.TryLoadPackage(importedPackageIds[i], out packages[i]);
+            }
+            return packages;
+        });
+
+        ImportedPackagesAllVersions = new Lazy<IPackage?[][]>(() =>
+        {
+            var packages = new IPackage?[importedPackageIds.Length][];
+            for (var i = 0; i < importedPackageIds.Length; i++)
+            {
+                var package = ImportedPackages.Value[i];
+                if (package == null)
+                {
+                    packages[i] = [];
+                    continue;
+                }
+
+                packages[i] = provider.TryLoadPackages(package.Name, out var packagesList) ? [.. packagesList] : [];
+            }
+            return packages;
+        });
+
+        if (!CanDeserialize) return;
+
+        // Attach ubulk and uptnl
+        if (ubulk != null) uassetAr.AddPayload(PayloadType.UBULK, Summary.BulkDataStartOffset, ubulk);
+        if (uptnl != null) uassetAr.AddPayload(PayloadType.UPTNL, Summary.BulkDataStartOffset, uptnl);
+
+        // Populate lazy exports
+        int ProcessEntry(FExportBundleEntry entry, int pos, bool newPos)
+        {
+            if (entry.CommandType != EExportCommandType.ExportCommandType_Serialize)
+                return 0; // Skip ExportCommandType_Create
+
+            var export = ExportMap[entry.LocalExportIndex];
+            ExportsLazy[entry.LocalExportIndex] = new Lazy<UObject>(() =>
+            {
+                // Create
+                var obj = ConstructObject(ResolveObjectIndex(export.ClassIndex), this, export.ObjectFlags);
+                obj.Name = CreateFNameFromMappedName(export.ObjectName).Text;
+                obj.Outer = ResolveObjectIndex(export.OuterIndex) as ResolvedExportObject;
+                obj.Outer ??= new ResolvedPackageObject(this);
+                obj.Super = ResolveObjectIndex(export.SuperIndex) as ResolvedExportObject;
+                obj.Template = ResolveObjectIndex(export.TemplateIndex) as ResolvedExportObject;
+                obj.Flags |= export.ObjectFlags; // We give loaded objects the RF_WasLoaded flag in ConstructObject, so don't remove it again in here
+
+                // Serialize
+                var Ar = (FAssetArchive) uassetAr.Clone();
+                Ar.AbsoluteOffset = newPos ? cookedHeaderSize - allExportDataOffset : (int) export.CookedSerialOffset - pos;
+                Ar.Position = pos;
+                DeserializeObject(obj, Ar, (long) export.CookedSerialSize);
+                obj.Flags |= EObjectFlags.RF_LoadCompleted;
+                obj.PostLoad();
+                return obj;
+            });
+            return (int) export.CookedSerialSize;
+        }
+
+        if (exportBundleHeaders != null) // 4.26 - 5.2
+        {
+            var currentExportDataOffset = allExportDataOffset;
+            foreach (var exportBundle in exportBundleHeaders)
+            {
+                for (var i = 0u; i < exportBundle.EntryCount; i++)
+                {
+                    currentExportDataOffset += ProcessEntry(exportBundleEntries[exportBundle.FirstEntryIndex + i], currentExportDataOffset, false);
+                }
+                Summary.BulkDataStartOffset = currentExportDataOffset;
+            }
+        }
+        else foreach (var entry in exportBundleEntries)
+        {
+            ProcessEntry(entry, allExportDataOffset + (int) ExportMap[entry.LocalExportIndex].CookedSerialOffset, true);
+        }
+
+        IsFullyLoaded = true;
+    }
+
+    private (FFilePackageStoreEntry? storeEntry, FPackageId[] importedPackageIds) GetStoreEntryAndImportedPackageIds(FIoContainerHeader? containerHeader, IVfsFileProvider? provider = null)
+    {
+        // Find store entry by package name
+        FFilePackageStoreEntry? storeEntry = null;
+        FFilePackageStoreEntry? mainAssetStoreEntry = null;
+        FPackageId[] importedPackageIds = [];
+        if (containerHeader != null)
+        {
+            var packageId = FPackageId.FromName(Name);
+            var storeEntryIdx = Array.IndexOf(containerHeader.PackageIds, packageId);
+            if (storeEntryIdx != -1)
+            {
+                storeEntry = containerHeader.StoreEntries[storeEntryIdx];
+            }
+            else
+            {
+                var optionalSegmentStoreEntryIdx = Array.IndexOf(containerHeader.OptionalSegmentPackageIds, packageId);
+                if (optionalSegmentStoreEntryIdx != -1)
+                {
+                    storeEntry = containerHeader.OptionalSegmentStoreEntries[optionalSegmentStoreEntryIdx];
+                }
+                else
+                {
+                    // this  should not happen for regular packages, but can be the case for editor only data
+                    mainAssetStoreEntry = (provider as AbstractVfsFileProvider)?.TryFindStoreEntry(packageId);
+                    if (mainAssetStoreEntry == null)
+                        Log.Warning("Couldn't find store entry for package {0}, its data will not be fully read", Name);
+                }
+            }
+        }
+
+        if (storeEntry?.ImportedPackages is null && mainAssetStoreEntry is { ImportedPackages: not null }
+                                                 && Summary.PackageFlags.HasFlag(EPackageFlags.PKG_ContainsNoAsset))
+        {
+            if (!ExportMap[0].OuterIndex.IsPackageImport)
+                return (storeEntry, importedPackageIds);
+
+            // manually inserting main package as outer
+            int index = (int) ExportMap[0].OuterIndex.AsPackageImportRef.ImportedPackageIndex;
+            var list = mainAssetStoreEntry.ImportedPackages;
+
+            (int min, int max) = index < list.Length ? (index, list.Length) : (list.Length, index);
+            if (max > 1024 * 1024)
+                return (storeEntry, list);
+
+            var result = new FPackageId[max+1];
+            Array.Copy(list, result, min);
+            result[index] = FPackageId.FromName(Name);
+
+            if (index < list.Length)
+            {
+                Array.Copy(list, index, result, index + 1, list.Length - index);
+            }
+
+            importedPackageIds = result;
+        }
+        else
+        {
+            importedPackageIds = storeEntry?.ImportedPackages ?? [];
+        }
+
+        return (storeEntry, importedPackageIds);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public FName CreateFNameFromMappedName(FMappedName mappedName) =>
+        new(mappedName, mappedName.IsGlobal ? _globalData.GlobalNameMap : NameMap);
+
+    private void LoadExportBundles(FArchive Ar, int graphDataSize, out FExportBundleHeader[] bundleHeadersArray, out FExportBundleEntry[] bundleEntriesArray)
+    {
+        var remainingBundleEntryCount = graphDataSize / (4 + 4);
+        var foundBundlesCount = 0;
+        var foundBundleHeaders = new List<FExportBundleHeader>();
+        while (foundBundlesCount < remainingBundleEntryCount)
+        {
+            // This location is occupied by header, so it is not a bundle entry
+            remainingBundleEntryCount--;
+            var bundleHeader = new FExportBundleHeader(Ar);
+            foundBundlesCount += (int) bundleHeader.EntryCount;
+            foundBundleHeaders.Add(bundleHeader);
+        }
+
+        if (foundBundlesCount != remainingBundleEntryCount)
+            throw new ParserException(Ar, $"FoundBundlesCount {foundBundlesCount} != RemainingBundleEntryCount {remainingBundleEntryCount}");
+
+        // Load export bundles into arrays
+        bundleHeadersArray = foundBundleHeaders.ToArray();
+        bundleEntriesArray = Ar.ReadArray<FExportBundleEntry>(foundBundlesCount);
+    }
+
+    private FPackageId[] LoadGraphData(FArchive Ar)
+    {
+        if (Ar.Game is GAME_NeedForSpeedMobile && Ar.ReadBoolean()) Ar.Position += 8;
+        var packageCount = Ar.Read<int>();
+        if (packageCount == 0) return [];
+
+        var packageIds = new FPackageId[packageCount];
+        for (var packageIndex = 0; packageIndex < packageCount; packageIndex++)
+        {
+            var packageId = Ar.Read<FPackageId>();
+            var bundleCount = Ar.Read<int>();
+            Ar.Position += bundleCount * (sizeof(int) + sizeof(int)); // Skip FArcs
+            packageIds[packageIndex] = packageId;
+        }
+
+        return packageIds;
+    }
+
+    public override int GetExportIndex(string name, StringComparison comparisonType = StringComparison.Ordinal)
+    {
+        for (var i = 0; i < ExportMap.Length; i++)
+        {
+            if (CreateFNameFromMappedName(ExportMap[i].ObjectName).Text.Equals(name, comparisonType))
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    public override ResolvedObject? ResolvePackageIndex(FPackageIndex? index)
+    {
+        if (index == null || index.IsNull)
+            return null;
+        if (index.IsImport && -index.Index - 1 < ImportMap.Length)
+            return ResolveObjectIndex(ImportMap[-index.Index - 1]);
+        if (index.IsExport && index.Index - 1 < ExportMap.Length)
+            return new ResolvedExportObject(index.Index - 1, this);
+        return null;
+    }
+
+    public ResolvedObject? ResolveObjectIndex(FPackageObjectIndex index)
+    {
+        if (index.IsNull)
+        {
+            return null;
+        }
+
+        if (index.IsExport)
+        {
+            return new ResolvedExportObject((int) index.AsExport, this);
+        }
+
+        if (index.IsScriptImport)
+        {
+            if (_globalData.ScriptObjectEntriesMap.TryGetValue(index, out var scriptObjectEntry))
+            {
+                return new ResolvedScriptObject(scriptObjectEntry, this);
+            }
+        }
+
+        if (index.IsPackageImport)
+        {
+            if (ImportedPublicExportHashes != null)
+            {
+                var packageImportRef = index.AsPackageImportRef;
+                var importedPackages = ImportedPackages.Value;
+                if (packageImportRef.ImportedPackageIndex < importedPackages.Length)
+                {
+                    var pkg = importedPackages[packageImportRef.ImportedPackageIndex];
+                    if (pkg != null)
+                    {
+                        for (int exportIndex = 0; exportIndex < pkg.ExportMap.Length; ++exportIndex)
+                        {
+                            if (pkg.ExportMap[exportIndex].PublicExportHash == ImportedPublicExportHashes[packageImportRef.ImportedPublicExportHashIndex])
+                            {
+                                return new ResolvedExportObject(exportIndex, pkg);
+                            }
+                        }
+                    }
+
+                    // search all previous versions
+                    var importedPackagesAllVersions = ImportedPackagesAllVersions.Value;
+                    var packages = importedPackagesAllVersions[packageImportRef.ImportedPackageIndex];
+                    foreach (var asset in packages)
+                    {
+                        if (asset is IoPackage ioPackage)
+                        {
+                            for (int exportIndex = 0; exportIndex < ioPackage.ExportMap.Length; ++exportIndex)
+                            {
+                                if (ioPackage.ExportMap[exportIndex].PublicExportHash == ImportedPublicExportHashes[packageImportRef.ImportedPublicExportHashIndex])
+                                {
+                                    return new ResolvedExportObject(exportIndex, ioPackage);
+                                }
+                            }
+                        }
+                        else if (asset is Package package)
+                        {
+                            for (int exportIndex = 0; exportIndex < package.ExportMap.Length; ++exportIndex)
+                            {
+                                if (package.ExportMap[exportIndex].GetPublicExportHash() == ImportedPublicExportHashes[packageImportRef.ImportedPublicExportHashIndex])
+                                {
+                                    return new ResolvedPakExportObject(exportIndex, package);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            else
+            {
+                foreach (var pkg in ImportedPackages.Value)
+                {
+                    if (pkg == null) continue;
+                    for (int exportIndex = 0; exportIndex < pkg.ExportMap.Length; ++exportIndex)
+                    {
+                        if (pkg.ExportMap[exportIndex].GlobalImportIndex == index)
+                        {
+                            return new ResolvedExportObject(exportIndex, pkg);
+                        }
+                    }
+                }
+
+                // search all previous versions
+                foreach (var packages in ImportedPackagesAllVersions.Value)
+                {
+                    foreach (var asset in packages)
+                    {
+                        if (asset is IoPackage ioPackage)
+                        {
+                            for (int exportIndex = 0; exportIndex < ioPackage.ExportMap.Length; ++exportIndex)
+                            {
+                                if (ioPackage.ExportMap[exportIndex].GlobalImportIndex == index)
+                                {
+                                    return new ResolvedExportObject(exportIndex, ioPackage);
+                                }
+                            }
+                        }
+                        else if (asset is Package package)
+                        {
+                            for (int exportIndex = 0; exportIndex < package.ExportMap.Length; ++exportIndex)
+                            {
+                                if (package.ExportMap[exportIndex].GetGlobalImportIndex() == index)
+                                {
+                                    return new ResolvedPakExportObject(exportIndex, package);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (Globals.WarnMissingImportPackage)
+        {
+            Log.Warning("Missing {0} import 0x{1:X} for package {2}", index.IsScriptImport ? "script" : "package", index.Value, Name);
+        }
+
+        return null;
+    }
+
+    private class ResolvedPakExportObject : ResolvedObject
+    {
+        private readonly FObjectExport _export;
+
+        public ResolvedPakExportObject(int exportIndex, Package package) : base(package, exportIndex)
+        {
+            _export = package.ExportMap[exportIndex];
+        }
+
+        public override FName Name => _export?.ObjectName ?? "None";
+        public override ResolvedObject Outer => Package.ResolvePackageIndex(_export.OuterIndex) ?? new ResolvedPackageObject(Package);
+        public override ResolvedObject? Class => Package.ResolvePackageIndex(_export.ClassIndex);
+        public override ResolvedObject? Super => Package.ResolvePackageIndex(_export.SuperIndex);
+    }
+
+    private class ResolvedExportObject : ResolvedObject
+    {
+        public FExportMapEntry ExportMapEntry;
+
+        public ResolvedExportObject(int exportIndex, IoPackage package) : base(package, exportIndex)
+        {
+            if (exportIndex >= package.ExportMap.Length) return;
+            ExportMapEntry = package.ExportMap[exportIndex];
+        }
+
+        public override FName Name => ((IoPackage) Package).CreateFNameFromMappedName(ExportMapEntry.ObjectName);
+        public override ResolvedObject Outer => ((IoPackage) Package).ResolveObjectIndex(ExportMapEntry.OuterIndex) ?? new ResolvedPackageObject(Package);
+        public override ResolvedObject? Class => ((IoPackage) Package).ResolveObjectIndex(ExportMapEntry.ClassIndex);
+        public override ResolvedObject? Super => ((IoPackage) Package).ResolveObjectIndex(ExportMapEntry.SuperIndex);
+    }
+
+    private class ResolvedScriptObject : ResolvedObject
+    {
+        public FScriptObjectEntry ScriptImport;
+
+        public ResolvedScriptObject(FScriptObjectEntry scriptImport, IoPackage package) : base(package)
+        {
+            ScriptImport = scriptImport;
+        }
+
+        public override FName Name => ((IoPackage) Package).CreateFNameFromMappedName(ScriptImport.ObjectName);
+        public override ResolvedObject? Outer => ((IoPackage) Package).ResolveObjectIndex(ScriptImport.OuterIndex);
+        // This means we'll have UScriptStruct's shown as UClass which is wrong.
+        // Unfortunately because the mappings format does not distinguish between classes and structs, there's no other way around :(
+        public override ResolvedObject Class => new ResolvedLoadedObject(new UScriptClass("Class"));
+        public override Lazy<UObject> Object => new(() => new UScriptClass(Name.Text));
+    }
+
+    public static string GetIoPackageName(FArchive uasset)
+    {
+        var uassetAr = new FAssetArchive(uasset, null);
+        var summary = new FZenPackageSummary(uassetAr);
+        var nameMap = FNameEntrySerialized.LoadNameBatch(uassetAr);
+        return new FName(summary.Name, nameMap).Text[1..];
+    }
+}

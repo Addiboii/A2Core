@@ -1,0 +1,611 @@
+using System.Diagnostics;
+using CUE4Parse.Compression;
+using CUE4Parse.FileProvider;
+using CUE4Parse.GameTypes.ACE7.Encryption;
+using CUE4Parse.GameTypes.RL.Encryption.Aes;
+using CUE4Parse.UE4.Assets.Exports;
+using CUE4Parse.UE4.Assets.Objects;
+using CUE4Parse.UE4.Assets.Readers;
+using CUE4Parse.UE4.Assets.Utils;
+using CUE4Parse.UE4.IO.Objects;
+using CUE4Parse.UE4.Objects.Core.Misc;
+using CUE4Parse.UE4.Objects.UObject;
+using CUE4Parse.UE4.Readers;
+using CUE4Parse.UE4.Versions;
+using CUE4Parse.Utils;
+
+namespace CUE4Parse.UE4.Assets
+{
+    [SkipObjectRegistration]
+    public sealed class Package : AbstractUePackage
+    {
+
+        public override FPackageFileSummary Summary { get; }
+        public override FNameEntrySerialized[] NameMap { get; }
+        public override int ImportMapLength => ImportMap.Length;
+        public override int ExportMapLength => ExportMap.Length;
+
+        public FObjectImport[] ImportMap { get; }
+        public FObjectExport[] ExportMap { get; }
+        public FPackageIndex[][]? DependsMap { get; }
+        public FPackageIndex[]? PreloadDependencies { get; }
+        public FObjectDataResource[]? DataResourceMap { get; }
+        public FSoftObjectPath[] SoftObjectPaths { get; }
+        public List<byte[]>? EditorThumbnails { get; }
+        public FPackageTrailer? Trailer { get; }
+
+        private ExportLoader[] _exportLoaders; // Nonnull if useLazySerialization is false
+
+        public Package(FArchive uasset, FArchive? uexp, FArchive? ubulk = null, FArchive? uptnl = null, IFileProvider? provider = null, bool useLazySerialization = true)
+            : this(
+                uasset,
+                uexp,
+                ubulk != null ? _ => ubulk : null,
+                uptnl != null ? _ => uptnl : null,
+                provider,
+                useLazySerialization)
+        { }
+
+        public Package(string name, byte[] uasset, byte[]? uexp, byte[]? ubulk = null, byte[]? uptnl = null, IFileProvider? provider = null, bool useLazySerialization = true)
+            : this(
+                new FByteArchive($"{name}.uasset", uasset),
+                uexp != null ? new FByteArchive($"{name}.uexp", uexp) : null,
+                ubulk != null ? new FByteArchive($"{name}.ubulk", ubulk) : null,
+                uptnl != null ? new FByteArchive($"{name}.uptnl", uptnl) : null,
+                provider,
+                useLazySerialization)
+        { }
+
+        public Package(
+            FArchive uasset,
+            FArchive? uexp,
+            Func<FByteBulkDataHeader?, FArchive?>? ubulk = null,
+            Func<FByteBulkDataHeader?, FArchive?>? uptnl = null,
+            IFileProvider? provider = null,
+            bool useLazySerialization = true)
+            : base(uasset.Name.SubstringBeforeLast('.'), provider)
+        {
+            // We clone the version container because it can be modified with package specific versions when reading the summary
+            uasset.Versions = (VersionContainer) uasset.Versions.Clone();
+
+            FAssetArchive uassetAr;
+            ACE7XORKey? xorKey = null;
+            ACE7Decrypt? decryptor = null;
+            if (uasset.Game == GAME_AceCombat7)
+            {
+                decryptor = new ACE7Decrypt();
+                uassetAr = new FAssetArchive(decryptor.DecryptUassetArchive(uasset, out xorKey), this);
+            }
+            else uassetAr = new FAssetArchive(uasset, this);
+
+            // The package has been stored in a separate endianness than the linker expected so we need to force
+            // endian conversion. Latent handling allows the PC version to retrieve information about cooked packages.
+            var Tag = uassetAr.Read<uint>();
+            if (Tag == FPackageFileSummary.PACKAGE_FILE_TAG_SWAPPED)
+            {
+                uassetAr = new FAssetArchive(new FArchiveBigEndian(uasset), this);
+            }
+            uassetAr.Position -= 4;
+
+            Summary = new FPackageFileSummary(uassetAr);
+
+            // Decompresses CompressedChunks and Decrypts Rocket league encrypted files
+            DecryptAndDecompress(uassetAr, Summary);
+
+            uassetAr.SeekAbsolute(Summary.NameOffset, SeekOrigin.Begin);
+            NameMap = new FNameEntrySerialized[Summary.NameCount];
+            uassetAr.ReadArray(NameMap, () => new FNameEntrySerialized(uassetAr));
+
+            uassetAr.SeekAbsolute(Summary.ImportOffset, SeekOrigin.Begin);
+            ImportMap = new FObjectImport[Summary.ImportCount];
+            uassetAr.ReadArray(ImportMap, () => new FObjectImport(uassetAr));
+
+            uassetAr.SeekAbsolute(Summary.ExportOffset, SeekOrigin.Begin);
+            ExportMap = new FObjectExport[Summary.ExportCount]; // we need this to get its final size in some case
+            ExportsLazy = new Lazy<UObject>[Summary.ExportCount];
+            uassetAr.ReadArray(ExportMap, () => new FObjectExport(uassetAr));
+
+            if (Summary.ThumbnailTableOffset > 0)
+            {
+                EditorThumbnails = new List<byte[]>();
+                uassetAr.SeekAbsolute(Summary.ThumbnailTableOffset, SeekOrigin.Begin);
+                var count = uassetAr.Read<int>();
+
+                var thumbnailOffsets = new List<int>(count);
+
+                for (int i = 0; i < count; i++)
+                {
+                    uassetAr.SkipFString(); // objectShortClassName
+                    uassetAr.SkipFString(); // objectPathWithoutPackageName
+                    var thumbnailOffset = uassetAr.Read<int>();
+                    thumbnailOffsets.Add(thumbnailOffset);
+                }
+
+                foreach (var offset in thumbnailOffsets)
+                {
+                    uassetAr.SeekAbsolute(offset + 8, SeekOrigin.Begin);
+                    var totalBytes = uassetAr.Read<int>();
+                    if (totalBytes == 0) continue;
+                    var rawImage = uassetAr.ReadBytes(totalBytes);
+                    EditorThumbnails.Add(rawImage);
+                }
+            }
+
+            if (!useLazySerialization && Summary is { DependsOffset: > 0, ExportCount: > 0 })
+            {
+                uassetAr.SeekAbsolute(Summary.DependsOffset, SeekOrigin.Begin);
+                DependsMap = uassetAr.ReadArray(Summary.ExportCount, () => uassetAr.ReadArray(() => new FPackageIndex(uassetAr)));
+            }
+
+            if (!useLazySerialization && Summary is { PreloadDependencyCount: > 0, PreloadDependencyOffset: > 0 })
+            {
+                uassetAr.SeekAbsolute(Summary.PreloadDependencyOffset, SeekOrigin.Begin);
+                PreloadDependencies = uassetAr.ReadArray(Summary.PreloadDependencyCount, () => new FPackageIndex(uassetAr));
+            }
+
+            if (Summary is { SoftObjectPathsCount: > 0, SoftObjectPathsOffset: > 0 })
+            {
+                uassetAr.SeekAbsolute(Summary.SoftObjectPathsOffset, SeekOrigin.Begin);
+                SoftObjectPaths = uassetAr.ReadArray(Summary.SoftObjectPathsCount, () => new FSoftObjectPath(uassetAr));
+            }
+            else
+            {
+                SoftObjectPaths = [];
+            }
+
+            // if (Summary.SoftPackageReferencesCount > 0)
+            // {
+            //     uassetAr.SeekAbsolute(Summary.SoftPackageReferencesOffset, SeekOrigin.Begin);
+            //     SoftPackageReferences = uassetAr.ReadArray(Summary.SoftPackageReferencesCount, () => FPackageId.FromName(uassetAr.ReadFName()));
+            // }
+
+            if (Summary.DataResourceOffset > 0)
+            {
+                uassetAr.SeekAbsolute(Summary.DataResourceOffset, SeekOrigin.Begin);
+                var dataResourceVersion = (EObjectDataResourceVersion) uassetAr.Read<uint>();
+                if (dataResourceVersion is > EObjectDataResourceVersion.Invalid and <= EObjectDataResourceVersion.Latest)
+                {
+                    DataResourceMap = uassetAr.ReadArray(() => new FObjectDataResource(uassetAr, dataResourceVersion));
+                }
+            }
+
+            if (!Summary.PackageFlags.HasFlag(EPackageFlags.PKG_Cooked) && Summary.PayloadTocOffset > 0)
+            {
+                uassetAr.SeekAbsolute(Summary.PayloadTocOffset, SeekOrigin.Begin);
+                Trailer = new FPackageTrailer(uassetAr);
+            }
+
+            if (!CanDeserialize) return;
+
+            FAssetArchive uexpAr;
+            if (uexp != null)
+            {
+                if (uasset.Game == GAME_AceCombat7 && decryptor != null && xorKey != null)
+                {
+                    uexpAr = new FAssetArchive(decryptor.DecryptUexpArchive(uexp, xorKey), this, (int) uassetAr.Length);
+                } else uexpAr = new FAssetArchive(uexp, this, (int) uassetAr.Length);
+            }
+            else uexpAr = uassetAr;
+
+            if (ubulk != null)
+            {
+                //var offset = (int) (Summary.TotalHeaderSize + ExportMap.Sum(export => export.SerialSize));
+                var offset = Summary.BulkDataStartOffset;
+                uexpAr.AddPayload(PayloadType.UBULK, offset, ubulk);
+            }
+
+            if (uptnl != null)
+            {
+                var offset = Summary.BulkDataStartOffset;
+                uexpAr.AddPayload(PayloadType.UPTNL, offset, uptnl);
+            }
+
+            if (useLazySerialization)
+            {
+                for (var i = 0; i < ExportsLazy.Length; i++)
+                {
+                    var export = ExportMap[i];
+                    ExportsLazy[i] = new Lazy<UObject>(() =>
+                    {
+                        // Create
+                        var obj = ConstructObject(ResolvePackageIndex(export.ClassIndex), this, (EObjectFlags) export.ObjectFlags);
+                        obj.Name = export.ObjectName.Text;
+                        obj.Outer = ResolvePackageIndex(export.OuterIndex) as ResolvedExportObject;
+                        obj.Outer ??= new ResolvedPackageObject(this);
+                        obj.Super = ResolvePackageIndex(export.SuperIndex) as ResolvedExportObject;
+                        obj.Template = ResolvePackageIndex(export.TemplateIndex) as ResolvedExportObject;
+                        obj.Flags |= (EObjectFlags) export.ObjectFlags; // We give loaded objects the RF_WasLoaded flag in ConstructObject, so don't remove it again in here
+
+                        // Serialize
+                        var Ar = (FAssetArchive) uexpAr.Clone();
+                        Ar.SeekAbsolute(export.SerialOffset, SeekOrigin.Begin);
+                        DeserializeObject(obj, Ar, export.SerialSize);
+                        obj.Flags |= EObjectFlags.RF_LoadCompleted;
+                        obj.PostLoad();
+                        return obj;
+                    });
+                }
+            }
+            else
+            {
+                _exportLoaders = new ExportLoader[ExportMap.Length];
+                for (var i = 0; i < ExportMap.Length; i++)
+                {
+                    _exportLoaders[i] = new(this, i, uexpAr);
+                }
+            }
+
+            IsFullyLoaded = true;
+        }
+
+        private static void DecryptAndDecompress(FAssetArchive uassetAr, FPackageFileSummary Summary)
+        {
+            if (uassetAr.Game == GAME_RocketLeague)
+            {
+                var checkSumDataSize = uassetAr.Read<int>();
+                var compressedChunkInfoOffset = uassetAr.Read<int>();
+                var lastBlockSize = uassetAr.Read<int>();
+
+                if (Summary.CompressionFlags != ECompressionFlags.COMPRESS_None)
+                {
+                    var headerEnd = uassetAr.Position;
+                    var checkSumDataOffset = (int) (Summary.TotalHeaderSize - headerEnd - checkSumDataSize);
+
+                    uassetAr.Position = 0;
+                    var before = uassetAr.ReadBytes(Summary.NameOffset);
+
+                    var encryptedSize = (int) (Summary.TotalHeaderSize - lastBlockSize - headerEnd);
+                    if (uassetAr.Game == GAME_RocketLeague && (int)uassetAr.LicenseeVer >= 33) encryptedSize -= encryptedSize % 16;
+                    var encryptedData = uassetAr.ReadBytes(encryptedSize);
+
+                    RocketLeagueAes.Decrypt(encryptedData, checkSumDataOffset, lastBlockSize, true, out var decryptedData);
+
+                    var after = uassetAr.ReadBytes((int) (uassetAr.Length - uassetAr.Position));
+
+                    var fullBuffer = new byte[before.Length + decryptedData.Length + after.Length];
+                    Buffer.BlockCopy(before, 0, fullBuffer, 0, before.Length);
+                    Buffer.BlockCopy(decryptedData, 0, fullBuffer, before.Length, decryptedData.Length);
+                    Buffer.BlockCopy(after, 0, fullBuffer, before.Length + decryptedData.Length, after.Length);
+
+                    uassetAr.SetBaseArchive(new FByteArchive("Rocket League - Decrypted Package", fullBuffer, uassetAr.Versions));
+                    uassetAr.SeekAbsolute(Summary.NameOffset + compressedChunkInfoOffset, SeekOrigin.Begin);
+
+                    Summary.CompressedChunks = uassetAr.ReadArray(() => new FCompressedChunk(uassetAr));
+                }
+            }
+
+            if (Summary.CompressionFlags.HasFlag(ECompressionFlags.COMPRESS_GZIP) || Summary.CompressionFlags.HasFlag(ECompressionFlags.COMPRESS_ZLIB))
+            {
+                long totalSize = uassetAr.Length;
+                foreach (var chunk in Summary.CompressedChunks)
+                    totalSize = Math.Max(totalSize, chunk.UncompressedOffset + chunk.UncompressedSize);
+
+                var buffer = new byte[totalSize];
+                uassetAr.Position = 0;
+                uassetAr.Read(buffer, 0, (int) uassetAr.Length);
+
+                foreach (var chunk in Summary.CompressedChunks)
+                {
+                    uassetAr.Position = chunk.CompressedOffset;
+                    var decompressedData = new byte[chunk.UncompressedSize];
+
+                    uassetAr.SerializeCompressedNew(decompressedData, chunk.UncompressedSize,
+                        Summary.CompressionFlags.HasFlag(ECompressionFlags.COMPRESS_ZLIB)
+                            ? CompressionMethod.Zlib.ToString()
+                            : CompressionMethod.LZO.ToString(),
+                        ECompressionFlags.COMPRESS_None, false, out _);
+
+                    Array.Copy(decompressedData, 0, buffer, chunk.UncompressedOffset, decompressedData.Length);
+                }
+
+                uassetAr.SetBaseArchive(new FByteArchive("Decompressed Package", buffer, uassetAr.Versions));
+            }
+
+            if (uassetAr.Game < GAME_UE4_0 && Summary.CompressionFlags.HasFlag(ECompressionFlags.COMPRESS_Custom)) throw new NotSupportedException("Custom Decompression not supported");
+        }
+
+        public static byte[] GetDecryptedData(FArchive uasset)
+        {
+            uasset.Versions = (VersionContainer) uasset.Versions.Clone();
+            var uassetAr = new FAssetArchive(uasset, null);
+            var Summary = new FPackageFileSummary(uassetAr);
+
+            DecryptAndDecompress(uassetAr, Summary);
+
+            uassetAr.Position = 0;
+            return uassetAr.ReadBytes((int) uassetAr.Length);
+        }
+
+        public override int GetExportIndex(string name, StringComparison comparisonType = StringComparison.Ordinal)
+        {
+            for (var i = 0; i < ExportMap.Length; i++)
+            {
+                if (ExportMap[i].ObjectName.Text.Equals(name, comparisonType))
+                {
+                    return i;
+                }
+            }
+
+            return -1;
+        }
+
+        public override ResolvedObject? ResolvePackageIndex(FPackageIndex? index)
+        {
+            if (index == null || index.IsNull)
+                return null;
+            if (index.IsImport && -index.Index - 1 < ImportMap.Length)
+                return ResolveImport(index);
+            if (index.IsExport && index.Index - 1 < ExportMap.Length)
+                return new ResolvedExportObject(index.Index - 1, this);
+            return null;
+        }
+
+        private ResolvedObject? ResolveImport(FPackageIndex importIndex)
+        {
+            var import = ImportMap[-importIndex.Index - 1];
+            var outerMostIndex = importIndex;
+            FObjectImport outerMostImport;
+            while (true)
+            {
+                // special case when the outermost import is an export in this package
+                if (outerMostIndex.IsExport)
+                    return new ResolvedImportObject(import, this);
+
+                outerMostImport = ImportMap[-outerMostIndex.Index - 1];
+                if (outerMostImport.OuterIndex.IsNull)
+                    break;
+                outerMostIndex = outerMostImport.OuterIndex;
+            }
+
+            outerMostImport = ImportMap[-outerMostIndex.Index - 1];
+            // We don't support loading script packages, so just return a fallback
+            var outerMostObjectName = outerMostImport.ObjectName.Text;
+            if (outerMostObjectName.StartsWith("/Script/", StringComparison.Ordinal))
+            {
+                return new ResolvedImportObject(import, this);
+            }
+
+            if (Provider == null)
+                return null;
+            Package? importPackage = null;
+            if (Provider.TryLoadPackage(outerMostObjectName, out var package) || Provider.TryLoadPackage(outerMostImport.ClassPackage.Text, out package))
+            {
+                if (package is IoPackage ioPackage)
+                {
+                    for (int i = 0; i < ioPackage.ExportMap.Length; i++)
+                    {
+                        FExportMapEntry export = ioPackage.ExportMap[i];
+                        if (ioPackage.CreateFNameFromMappedName(export.ObjectName).Text == import.ObjectName.Text)
+                        {
+                            return ioPackage.ResolvePackageIndex(new FPackageIndex(ioPackage, i + 1));
+                        }
+                    }
+#if DEBUG
+                    Log.Fatal("Missing import of ({0}): {1} in {2} was not found, but the package exists.", Name, import.ObjectName, ioPackage.GetFullName());
+#endif
+                    return new ResolvedImportObject(import, this);
+                }
+                importPackage = package as Package;
+            }
+            if (importPackage == null)
+            {
+#if DEBUG
+                Log.Error("Missing native package ({0}) for import of {1} in {2}.", outerMostImport.ObjectName, import.ObjectName, Name);
+#endif
+                return new ResolvedImportObject(import, this);
+            }
+
+            string? outer = null;
+            if (outerMostIndex != import.OuterIndex && import.OuterIndex.IsImport)
+            {
+                var outerImport = ImportMap[-import.OuterIndex.Index - 1];
+                outer = ResolveImport(import.OuterIndex)?.GetPathName();
+                if (outer == null)
+                {
+#if DEBUG
+                    Log.Fatal("Missing outer for import of ({0}): {1} in {2} was not found, but the package exists.", Name, outerImport.ObjectName, importPackage.GetFullName());
+#endif
+                    return new ResolvedImportObject(import, this);
+                }
+            }
+
+            for (var i = 0; i < importPackage.ExportMap.Length; i++)
+            {
+                var export = importPackage.ExportMap[i];
+                if (export.ObjectName.Text != import.ObjectName.Text)
+                    continue;
+                var thisOuter = importPackage.ResolvePackageIndex(export.OuterIndex);
+                if (thisOuter?.GetPathName() == outer)
+                    return new ResolvedExportObject(i, importPackage);
+            }
+
+#if DEBUG
+            Log.Fatal("Missing import of ({0}): {1} in {2} was not found, but the package exists.", Name, import.ObjectName, importPackage.GetFullName());
+#endif
+            return new ResolvedImportObject(import, this);
+        }
+
+        private class ResolvedExportObject : ResolvedObject
+        {
+            private readonly FObjectExport _export;
+
+            public ResolvedExportObject(int exportIndex, Package package) : base(package, exportIndex)
+            {
+                _export = package.ExportMap[exportIndex];
+            }
+
+            public override FName Name => _export?.ObjectName ?? "None";
+            public override ResolvedObject Outer => Package.ResolvePackageIndex(_export.OuterIndex) ?? new ResolvedPackageObject(Package);
+            public override ResolvedObject? Class => Package.ResolvePackageIndex(_export.ClassIndex);
+            public override ResolvedObject? Super => Package.ResolvePackageIndex(_export.SuperIndex);
+        }
+
+        /** Fallback if we cannot resolve the export in another package */
+        private class ResolvedImportObject : ResolvedObject
+        {
+            private readonly FObjectImport _import;
+
+            public ResolvedImportObject(FObjectImport import, Package package) : base(package)
+            {
+                _import = import;
+            }
+
+            public override FName Name => _import.ObjectName;
+            public override ResolvedObject? Outer => Package.ResolvePackageIndex(_import.OuterIndex);
+            public override ResolvedObject Class => new ResolvedLoadedObject(new UScriptClass(_import.ClassName.Text));
+            public override Lazy<UObject>? Object => _import.ClassName.Text switch
+            {
+                "Class" => new(() => new UScriptClass(Name.Text)),
+                "SharpClass" => new(() => new USharpClass(Name.Text)),
+                "PythonClass" => new(() => new UPythonClass(Name.Text)),
+                "ASClass" => new(() => new UASClass(Name.Text)),
+                "ScriptStruct" => new(() => new UScriptClass(Name.Text)),
+                _ => null
+            };
+        }
+
+        private class ExportLoader
+        {
+            private Package _package;
+            private FObjectExport _export;
+            private FAssetArchive _archive;
+            private UObject _object;
+            private List<LoadDependency>? _dependencies;
+            private LoadPhase _phase = LoadPhase.Create;
+            public Lazy<UObject> Lazy;
+
+            public ExportLoader(Package package, int index, FAssetArchive archive)
+            {
+                _package = package;
+                _export = package.ExportMap[index];
+                _archive = archive;
+                Lazy = new(() =>
+                {
+                    Fire(LoadPhase.Serialize);
+                    return _object;
+                });
+                package.ExportsLazy[index] = Lazy;
+            }
+
+            private void EnsureDependencies()
+            {
+                if (_dependencies != null)
+                {
+                    return;
+                }
+
+                _dependencies = new();
+                var runningIndex = _export.FirstExportDependency;
+                if (runningIndex >= 0)
+                {
+                    for (var index = _export.SerializationBeforeSerializationDependencies; index > 0; index--)
+                    {
+                        var dep = _package.PreloadDependencies[runningIndex++];
+                        // don't request IO for this export until these are serialized
+                        _dependencies.Add(new(LoadPhase.Serialize, LoadPhase.Serialize, ResolveLoader(dep)));
+                    }
+                    for (var index = _export.CreateBeforeSerializationDependencies; index > 0; index--)
+                    {
+                        var dep = _package.PreloadDependencies[runningIndex++];
+                        // don't request IO for this export until these are done
+                        _dependencies.Add(new(LoadPhase.Serialize, LoadPhase.Create, ResolveLoader(dep)));
+                    }
+                    for (var index = _export.SerializationBeforeCreateDependencies; index > 0; index--)
+                    {
+                        var dep = _package.PreloadDependencies[runningIndex++];
+                        // can't create this export until these things are serialized
+                        _dependencies.Add(new(LoadPhase.Create, LoadPhase.Serialize, ResolveLoader(dep)));
+                    }
+                    for (var index = _export.CreateBeforeCreateDependencies; index > 0; index--)
+                    {
+                        var dep = _package.PreloadDependencies[runningIndex++];
+                        // can't create this export until these things are created
+                        _dependencies.Add(new(LoadPhase.Create, LoadPhase.Create, ResolveLoader(dep)));
+                    }
+                }
+                else
+                {
+                    // We only need the outer to be created first
+                    _dependencies.Add(new(LoadPhase.Create, LoadPhase.Create, ResolveLoader(_export.OuterIndex)));
+                }
+            }
+
+            private ExportLoader? ResolveLoader(FPackageIndex index)
+            {
+                if (index.IsExport)
+                {
+                    return _package._exportLoaders[index.Index - 1];
+                }
+                return null;
+            }
+
+            private void Fire(LoadPhase untilPhase)
+            {
+                if (untilPhase >= LoadPhase.Create && _phase <= LoadPhase.Create)
+                {
+                    FireDependencies(LoadPhase.Create);
+                    Create();
+                }
+                if (untilPhase >= LoadPhase.Serialize && _phase <= LoadPhase.Serialize)
+                {
+                    FireDependencies(LoadPhase.Serialize);
+                    Serialize();
+                }
+            }
+
+            private void FireDependencies(LoadPhase phase)
+            {
+                EnsureDependencies();
+                foreach (var dependency in _dependencies)
+                {
+                    if (dependency.FromPhase == phase)
+                    {
+                        dependency.Target?.Fire(dependency.ToPhase);
+                    }
+                }
+            }
+
+            private void Create()
+            {
+                Trace.Assert(_phase == LoadPhase.Create);
+                _phase = LoadPhase.Serialize;
+                _object = _package.ConstructObject(_package.ResolvePackageIndex(_export.ClassIndex), _package, (EObjectFlags) _export.ObjectFlags);
+                _object.Name = _export.ObjectName.Text;
+                _object.Outer = _package.ResolvePackageIndex(_export.OuterIndex) as ResolvedExportObject;
+                _object.Outer ??= new ResolvedPackageObject(_package);
+                _object.Super = _package.ResolvePackageIndex(_export.SuperIndex) as ResolvedExportObject;
+                _object.Template = _package.ResolvePackageIndex(_export.TemplateIndex) as ResolvedExportObject;
+                _object.Flags |= (EObjectFlags) _export.ObjectFlags; // We give loaded objects the RF_WasLoaded flag in ConstructObject, so don't remove it again in here
+            }
+
+            private void Serialize()
+            {
+                Trace.Assert(_phase == LoadPhase.Serialize);
+                _phase = LoadPhase.Complete;
+                var Ar = (FAssetArchive) _archive.Clone();
+                Ar.SeekAbsolute(_export.SerialOffset, SeekOrigin.Begin);
+                _package.DeserializeObject(_object, Ar, _export.SerialSize);
+                _object.Flags |= EObjectFlags.RF_LoadCompleted;
+                _object.PostLoad();
+            }
+        }
+
+        private class LoadDependency
+        {
+            public LoadPhase FromPhase, ToPhase;
+            public ExportLoader? Target;
+
+            public LoadDependency(LoadPhase fromPhase, LoadPhase toPhase, ExportLoader? target)
+            {
+                FromPhase = fromPhase;
+                ToPhase = toPhase;
+                Target = target;
+            }
+        }
+
+        private enum LoadPhase
+        {
+            Create, Serialize, Complete
+        }
+    }
+}

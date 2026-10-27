@@ -1,0 +1,616 @@
+using System.Buffers;
+using System.Diagnostics;
+using System.Runtime.CompilerServices;
+using System.Text;
+using CUE4Parse.Encryption.Aes;
+using CUE4Parse.FileProvider.Objects;
+using CUE4Parse.GameTypes.ProSpi.Encryption.Aes;
+using CUE4Parse.UE4.Assets.Objects;
+using CUE4Parse.UE4.Exceptions;
+using CUE4Parse.UE4.IO.Objects;
+using CUE4Parse.UE4.Objects.Core.Misc;
+using CUE4Parse.UE4.Pak;
+using CUE4Parse.UE4.Readers;
+using CUE4Parse.UE4.Versions;
+using CUE4Parse.UE4.VirtualFileSystem;
+using CUE4Parse.Utils;
+using GenericReader;
+using OffiUtils;
+
+namespace CUE4Parse.UE4.IO;
+
+public partial class IoStoreReader : AbstractAesVfsReader
+{
+    private readonly record struct DirectoryTraversal(uint Directory, int ParentPathLength);
+
+    public readonly IReadOnlyList<FArchive> ContainerStreams;
+
+    public readonly FIoStoreTocResource TocResource;
+    public readonly Dictionary<FIoChunkId, FIoOffsetAndLength>? TocImperfectHashMapFallback;
+    private Lazy<FIoContainerHeader?> _containerHeader;
+    private int _packageDataChunkCount = -1;
+    public FIoContainerHeader? ContainerHeader => _containerHeader.Value;
+    public Dictionary<FPackageId, GameFile> PackageIdIndex { get; private set; } = [];
+
+    internal int GetPackageDataChunkCount()
+    {
+        if (_packageDataChunkCount >= 0)
+            return _packageDataChunkCount;
+
+        var packageDataChunkType = Game >= GAME_UE5_0
+            ? (byte) EIoChunkType5.ExportBundleData
+            : (byte) EIoChunkType.ExportBundleData;
+        var count = 0;
+        foreach (ref readonly var chunkId in TocResource.ChunkIds.AsSpan())
+        {
+            if (chunkId.ChunkType == packageDataChunkType && chunkId._chunkIndex == 0)
+                count++;
+        }
+
+        return _packageDataChunkCount = count;
+    }
+
+    public override string MountPoint { get; protected set; }
+    public sealed override long Length { get; set; }
+
+    public override bool HasDirectoryIndex => TocResource.DirectoryIndexBufferOffset != -1;
+    public override FGuid EncryptionKeyGuid => TocResource.Header.EncryptionKeyGuid;
+    public override bool IsEncrypted => TocResource.Header.ContainerFlags.HasFlag(EIoContainerFlags.Encrypted);
+
+    public IoStoreReader(string tocPath, EIoStoreTocReadOptions readOptions = EIoStoreTocReadOptions.ReadDirectoryIndex, VersionContainer? versions = null)
+        : this(new FileInfo(tocPath), readOptions, versions) { }
+    public IoStoreReader(FileInfo utocFile, EIoStoreTocReadOptions readOptions = EIoStoreTocReadOptions.ReadDirectoryIndex, VersionContainer? versions = null)
+        : this(new FByteArchive(utocFile.FullName, File.ReadAllBytes(utocFile.FullName), versions), it => new FStreamArchive(it, File.Open(it, FileMode.Open, FileAccess.Read, FileShare.ReadWrite), versions), readOptions) { }
+    public IoStoreReader(string tocPath, Stream tocStream, Stream casStream, EIoStoreTocReadOptions readOptions = EIoStoreTocReadOptions.ReadDirectoryIndex, VersionContainer? versions = null)
+        : this(new FStreamArchive(tocPath, tocStream, versions), it => new FStreamArchive(it, casStream, versions), readOptions) { }
+    public IoStoreReader(string tocPath, Stream tocStream, Func<string, FArchive> openContainerStreamFunc, EIoStoreTocReadOptions readOptions = EIoStoreTocReadOptions.ReadDirectoryIndex, VersionContainer? versions = null)
+        : this(new FStreamArchive(tocPath, tocStream, versions), openContainerStreamFunc, readOptions) { }
+
+    public IoStoreReader(string tocPath, RandomAccessStream tocStream, RandomAccessStream casStream, EIoStoreTocReadOptions readOptions = EIoStoreTocReadOptions.ReadDirectoryIndex, VersionContainer? versions = null)
+        : this(new FRandomAccessStreamArchive(tocPath, tocStream, versions), it => new FRandomAccessStreamArchive(it, casStream, versions), readOptions) { }
+    public IoStoreReader(string tocPath, RandomAccessStream tocStream, Func<string, FRandomAccessStreamArchive> openContainerStreamFunc, EIoStoreTocReadOptions readOptions = EIoStoreTocReadOptions.ReadDirectoryIndex, VersionContainer? versions = null)
+        : this(new FRandomAccessStreamArchive(tocPath, tocStream, versions), openContainerStreamFunc, readOptions) { }
+
+    public IoStoreReader(FArchive tocStream, Func<string, FArchive> openContainerStreamFunc, EIoStoreTocReadOptions readOptions = EIoStoreTocReadOptions.ReadDirectoryIndex)
+        : base(tocStream.Name, tocStream.Versions)
+    {
+        Length = tocStream.Length;
+        TocResource = new FIoStoreTocResource(tocStream, readOptions);
+        CompressionMethods = TocResource.CompressionMethods;
+
+        List<FArchive> containerStreams;
+        if (TocResource.Header.PartitionCount <= 1)
+        {
+            containerStreams = new List<FArchive>(1);
+            try
+            {
+                containerStreams.Add(openContainerStreamFunc(tocStream.Name.SubstringBeforeLast('.') + ".ucas"));
+            }
+            catch (Exception e)
+            {
+                throw new FIoStatusException(EIoErrorCode.FileOpenFailed, $"Failed to open container partition 0 for {tocStream.Name}", e);
+            }
+        }
+        else
+        {
+            containerStreams = new List<FArchive>((int) TocResource.Header.PartitionCount);
+            var environmentPath = tocStream.Name.SubstringBeforeLast('.');
+            for (int i = 0; i < TocResource.Header.PartitionCount; i++)
+            {
+                try
+                {
+                    var path = i > 0 ? string.Concat(environmentPath, "_s", i, ".ucas") : string.Concat(environmentPath, ".ucas");
+                    containerStreams.Add(openContainerStreamFunc(path));
+                }
+                catch (Exception e)
+                {
+                    throw new FIoStatusException(EIoErrorCode.FileOpenFailed, $"Failed to open container partition {i} for {tocStream.Name}", e);
+                }
+            }
+        }
+
+        Length += containerStreams.Sum(x => x.Length);
+        ContainerStreams = containerStreams;
+        if (TocResource.ChunkPerfectHashSeeds != null)
+        {
+            TocImperfectHashMapFallback = new();
+            if (TocResource.ChunkIndicesWithoutPerfectHash != null)
+            {
+                foreach (var chunkIndexWithoutPerfectHash in TocResource.ChunkIndicesWithoutPerfectHash)
+                {
+                    TocImperfectHashMapFallback[TocResource.ChunkIds[chunkIndexWithoutPerfectHash]] = TocResource.ChunkOffsetLengths[chunkIndexWithoutPerfectHash];
+                }
+            }
+        }
+#if GENERATE_CHUNK_ID_DICT
+            else
+            {
+                TocImperfectHashMapFallback = new Dictionary<FIoChunkId, FIoOffsetAndLength>((int) TocResource.Header.TocEntryCount);
+                for (var i = 0; i < TocResource.ChunkIds.Length; i++)
+                {
+                    TocImperfectHashMapFallback[TocResource.ChunkIds[i]] = TocResource.ChunkOffsetLengths[i];
+                }
+            }
+#endif
+        if (TocResource.Header.Version > EIoStoreTocVersion.Latest)
+        {
+            Log.Warning("Io Store \"{0}\" has unsupported version {1}", Path, (int) TocResource.Header.Version);
+        }
+    }
+
+    public override byte[] Extract(VfsEntry entry, FByteBulkDataHeader? header = null)
+    {
+        if (!(entry is FIoStoreEntry ioEntry) || entry.Vfs != this) throw new ArgumentException($"Wrong io store reader, required {entry.Vfs.Path}, this is {Path}");
+
+        var offset = ioEntry.Offset;
+        var size = ioEntry.Size;
+        long offsetInFile = 0;
+        if (header is { } bulk)
+        {
+            size = bulk.SizeOnDisk;
+            offsetInFile = bulk.OffsetInFile;
+        }
+
+        var encryptedBytesCount = Game is GAME_TamasShadowveil ? PakFileReader.CalculateEncryptedBytesCountForNetEase(ioEntry.ChunkId) : 0;
+        return Read(offset, size, offsetInFile, encryptedBytesCount);
+    }
+
+    // If anyone really comes to read this here are some of my thoughts on designing loading of chunk ids
+    // UE Code builds a Map<FIoChunkId, FIoOffsetAndLength> to optimize loading of chunks just by their id
+    // After some testing this appeared to take ~30mb of memory
+    // We can save that memory since we rarely use loading by FIoChunkId directly (I'm pretty sure we just do for the global reader)
+    // If anyone want to use the map anyway the define GENERATE_CHUNK_ID_DICT exists
+
+    public bool DoesChunkExist(FIoChunkId chunkId) => TryResolve(chunkId, out _);
+
+    public bool TryResolve(FIoChunkId chunkId, out FIoOffsetAndLength outOffsetLength)
+    {
+        if (TocResource.ChunkPerfectHashSeeds != null)
+        {
+            var chunkCount = TocResource.Header.TocEntryCount;
+            if (chunkCount == 0)
+            {
+                outOffsetLength = default;
+                return false;
+            }
+            var seedCount = (uint) TocResource.ChunkPerfectHashSeeds.Length;
+            var seedIndex = (uint) (chunkId.HashWithSeed(0) % seedCount);
+            var seed = TocResource.ChunkPerfectHashSeeds[seedIndex];
+            if (seed == 0)
+            {
+                outOffsetLength = default;
+                return false;
+            }
+            uint slot;
+            if (seed < 0)
+            {
+                var seedAsIndex = (uint) (-seed - 1);
+                if (seedAsIndex < chunkCount)
+                {
+                    slot = seedAsIndex;
+                }
+                else
+                {
+                    // Entry without perfect hash
+                    return TryResolveImperfect(chunkId, out outOffsetLength);
+                }
+            }
+            else
+            {
+                slot = (uint) (chunkId.HashWithSeed(seed) % chunkCount);
+            }
+            if (TocResource.ChunkIds[slot].GetHashCode() == chunkId.GetHashCode())
+            {
+                outOffsetLength = TocResource.ChunkOffsetLengths[slot];
+                return true;
+            }
+            outOffsetLength = default;
+            return false;
+        }
+
+        return TryResolveImperfect(chunkId, out outOffsetLength);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private bool TryResolveImperfect(FIoChunkId chunkId, out FIoOffsetAndLength outOffsetLength)
+    {
+        if (TocImperfectHashMapFallback != null)
+        {
+            return TocImperfectHashMapFallback.TryGetValue(chunkId, out outOffsetLength);
+        }
+
+        var chunkIndex = Array.IndexOf(TocResource.ChunkIds, chunkId);
+        if (chunkIndex == -1)
+        {
+            outOffsetLength = default;
+            return false;
+        }
+
+        outOffsetLength = TocResource.ChunkOffsetLengths[chunkIndex];
+        return true;
+    }
+
+    public virtual byte[] Read(FIoChunkId chunkId)
+    {
+        if (TryResolve(chunkId, out var offsetLength))
+        {
+            var encryptedBytesCount = Game is GAME_TamasShadowveil ? PakFileReader.CalculateEncryptedBytesCountForNetEase(chunkId) : 0;
+            return Read((long) offsetLength.Offset, (long) offsetLength.Length, encryptedBytesCount: encryptedBytesCount);
+        }
+
+        throw new KeyNotFoundException($"Couldn't find chunk {chunkId} in IoStore {Name}");
+    }
+
+    private byte[] Read(long offset, long length, long offsetInFile = 0L, int encryptedBytesCount = 0)
+    {
+        switch (Game)
+        {
+            case GAME_MindsEye or GAME_TamasShadowveil:
+                return ReadPartiallyEncrypted(offset, length, offsetInFile, encryptedBytesCount);
+        }
+
+        offset += offsetInFile;
+        var compressionBlockSize = TocResource.Header.CompressionBlockSize;
+        var dst = new byte[length];
+        var firstBlockIndex = (int) (offset / compressionBlockSize);
+        var lastBlockIndex = (int) (((offset + dst.Length).Align((int) compressionBlockSize) - 1) / compressionBlockSize);
+        var offsetInBlock = offset % compressionBlockSize;
+        var remainingSize = length;
+        var dstOffset = 0;
+
+        var compressedBuffer = Array.Empty<byte>();
+        var uncompressedBuffer = Array.Empty<byte>();
+
+        FArchive?[]? clonedReaders = null;
+        for (int blockIndex = firstBlockIndex; blockIndex <= lastBlockIndex; blockIndex++)
+        {
+            ref var compressionBlock = ref TocResource.CompressionBlocks[blockIndex];
+
+            var rawSize = compressionBlock.CompressedSize.Align(Aes.ALIGN);
+            if (Game is GAME_eBaseballProSpirit)
+            {
+                rawSize = (compressionBlock.CompressedSize + ProSpiEncryption.EncryptionDataTrailerSize).Align(Aes.ALIGN);
+            }
+
+            if (compressedBuffer.Length < rawSize)
+            {
+                //Console.WriteLine($"{chunkId}: block {blockIndex} CompressedBuffer size: {rawSize} - Had to create copy");
+                compressedBuffer = new byte[rawSize];
+            }
+
+            var partitionIndex = (int) ((ulong) compressionBlock.Offset / TocResource.Header.PartitionSize);
+            var partitionOffset = (long) ((ulong) compressionBlock.Offset % TocResource.Header.PartitionSize);
+            FArchive reader;
+            if (IsConcurrent)
+            {
+                clonedReaders ??= new FArchive?[ContainerStreams.Count];
+                ref var clone = ref clonedReaders[partitionIndex];
+                clone ??= (FArchive) ContainerStreams[partitionIndex].Clone();
+                reader = clone;
+            }
+            else reader = ContainerStreams[partitionIndex];
+
+            reader.ReadAt(partitionOffset, compressedBuffer, 0, (int) rawSize);
+            // FragPunk decided to encrypt the global utoc too.
+            // For Lord of Mysteries utoc files are "synthetic", without dir index, so we can't test the key.
+            compressedBuffer = DecryptCompressionBlock(compressedBuffer, (int) rawSize, blockIndex,
+                Game == GAME_LordOfMysteries || Game == GAME_FragPunk && Path.Contains("global", StringComparison.Ordinal));
+
+            byte[] src;
+            if (compressionBlock.CompressionMethodIndex == 0)
+            {
+                src = compressedBuffer;
+            }
+            else
+            {
+                var uncompressedSize = compressionBlock.UncompressedSize;
+                if (uncompressedBuffer.Length < uncompressedSize)
+                {
+                    //Console.WriteLine($"{chunkId}: block {blockIndex} UncompressedBuffer size: {uncompressedSize} - Had to create copy");
+                    uncompressedBuffer = new byte[uncompressedSize];
+                }
+
+                var compressionMethod = TocResource.CompressionMethods[compressionBlock.CompressionMethodIndex];
+                if (Game is GAME_SleeplessWilds && compressionMethod is Compression.CompressionMethod.Oodle &&
+                    compressedBuffer.Length > 1 && compressedBuffer[0] == 0x8C && compressedBuffer[1] == 0x14)
+                {
+                    compressedBuffer[1] = 0x0C;
+                }
+
+                Compression.Compression.Decompress(compressedBuffer, 0, (int)compressionBlock.CompressedSize, uncompressedBuffer, 0,
+                    (int) uncompressedSize, compressionMethod, reader);
+                src = uncompressedBuffer;
+            }
+
+            var sizeInBlock = (int) Math.Min(compressionBlockSize - offsetInBlock, remainingSize);
+            Buffer.BlockCopy(src, (int) offsetInBlock, dst, dstOffset, sizeInBlock);
+            offsetInBlock = 0;
+            remainingSize -= sizeInBlock;
+            dstOffset += sizeInBlock;
+        }
+
+        return dst;
+    }
+
+    private byte[] ReadPartiallyEncrypted(long offset, long length, long offsetInFile, int encryptedBytesCount)
+    {
+        var limit = Game switch
+        {
+            GAME_MindsEye => 0x1000,
+            GAME_TamasShadowveil => encryptedBytesCount,
+            _ => throw new ArgumentOutOfRangeException(nameof(Game), "Unsupported game for partial encrypted io store extraction")
+        };
+
+        var compressionBlockSize = TocResource.Header.CompressionBlockSize;
+        var firstBlockIndex = (int) (offset / compressionBlockSize);
+        var newFirstBlockIndex = (int) ((offset + offsetInFile) / compressionBlockSize);
+        if (newFirstBlockIndex != firstBlockIndex)
+        {
+            // TODO: Check if other games using partial encryption might have the same problem as Tamas?
+            // It skips encryption bytes belonging to earlier blocks to find how much of the requested block still needs decryption
+            if (Game is GAME_TamasShadowveil)
+            {
+                for (var blockIndex = firstBlockIndex; blockIndex < newFirstBlockIndex && limit > 0; blockIndex++)
+                {
+                    var skippedRawSize = (int) TocResource.CompressionBlocks[blockIndex].CompressedSize.Align(Aes.ALIGN);
+                    limit = Math.Max(0, limit - skippedRawSize);
+                }
+            }
+            else
+            {
+                limit = 0;
+            }
+            offset += offsetInFile;
+            offsetInFile = 0;
+            firstBlockIndex = (int) (offset / compressionBlockSize);
+        }
+        else
+        {
+            length += offsetInFile;
+        }
+
+        var dst = new byte[length];
+        var lastBlockIndex = (int) (((offset + dst.Length).Align((int) compressionBlockSize) - 1) / compressionBlockSize);
+        var offsetInBlock = offset % compressionBlockSize;
+        var remainingSize = length;
+        var dstOffset = 0;
+
+        var compressedBuffer = Array.Empty<byte>();
+        var uncompressedBuffer = Array.Empty<byte>();
+
+        FArchive?[]? clonedReaders = null;
+
+        for (int blockIndex = firstBlockIndex; blockIndex <= lastBlockIndex; blockIndex++)
+        {
+            ref var compressionBlock = ref TocResource.CompressionBlocks[blockIndex];
+
+            var rawSize = compressionBlock.CompressedSize.Align(Aes.ALIGN);
+            if (compressedBuffer.Length < rawSize)
+            {
+                compressedBuffer = new byte[rawSize];
+            }
+
+            var partitionIndex = (int) ((ulong) compressionBlock.Offset / TocResource.Header.PartitionSize);
+            var partitionOffset = (long) ((ulong) compressionBlock.Offset % TocResource.Header.PartitionSize);
+            FArchive reader;
+            if (IsConcurrent)
+            {
+                clonedReaders ??= new FArchive?[ContainerStreams.Count];
+                ref var clone = ref clonedReaders[partitionIndex];
+                clone ??= (FArchive) ContainerStreams[partitionIndex].Clone();
+                reader = clone;
+            }
+            else
+                reader = ContainerStreams[partitionIndex];
+
+            reader.ReadAt(partitionOffset, compressedBuffer, 0, (int) rawSize);
+            if (IsEncrypted && limit > 0)
+            {
+                if ((int) rawSize < limit)
+                {
+                    compressedBuffer = DecryptIfEncrypted(compressedBuffer, 0, (int) rawSize, IsEncrypted);
+                    limit -= (int) rawSize;
+                }
+                else
+                {
+                    var decrypted = DecryptIfEncrypted(compressedBuffer, 0, limit, IsEncrypted);
+                    Buffer.BlockCopy(decrypted, 0, compressedBuffer, 0, limit);
+                    limit = 0;
+                }
+            }
+
+            byte[] src;
+            if (compressionBlock.CompressionMethodIndex == 0)
+            {
+                src = compressedBuffer;
+            }
+            else
+            {
+                var uncompressedSize = compressionBlock.UncompressedSize;
+                if (uncompressedBuffer.Length < uncompressedSize)
+                {
+                    uncompressedBuffer = new byte[uncompressedSize];
+                }
+
+                var compressionMethod = TocResource.CompressionMethods[compressionBlock.CompressionMethodIndex];
+                Compression.Compression.Decompress(compressedBuffer, 0, (int) compressionBlock.CompressedSize, uncompressedBuffer, 0,
+                    (int) uncompressedSize, compressionMethod, reader);
+                src = uncompressedBuffer;
+            }
+
+            var sizeInBlock = (int) Math.Min(compressionBlockSize - offsetInBlock, remainingSize);
+            Buffer.BlockCopy(src, (int) offsetInBlock, dst, dstOffset, sizeInBlock);
+            offsetInBlock = 0;
+            remainingSize -= sizeInBlock;
+            dstOffset += sizeInBlock;
+        }
+
+        return offsetInFile == 0 ? dst : dst[(int)offsetInFile..];
+    }
+
+    public override void Mount(StringComparer pathComparer)
+    {
+        var watch = new Stopwatch();
+        watch.Start();
+
+        ProcessIndex(pathComparer);
+        InitializeContainerHeader();
+
+        if (Globals.LogVfsMounts)
+        {
+            var elapsed = watch.Elapsed;
+            var sb = new StringBuilder($"IoStore \"{Name}\": {FileCount} files");
+            if (EncryptedFileCount > 0)
+                sb.Append($" ({EncryptedFileCount} encrypted)");
+            if (MountPoint.Contains('/'))
+                sb.Append($", mount point: \"{MountPoint}\"");
+            sb.Append($", order {ReadOrder}");
+            sb.Append($", version {(int) TocResource.Header.Version} in {elapsed}");
+            Log.Information(sb.ToString());
+        }
+    }
+
+    private void ProcessIndex(StringComparer pathComparer)
+    {
+        if (!HasDirectoryIndex || TocResource.GetDirectoryIndexBuffer() is not { } indexBuffer) throw new ParserException("No directory index");
+        using var directoryIndex = new GenericBufferReader(DecryptIfEncrypted(indexBuffer, IsEncrypted, true));
+
+        string mountPoint;
+        try
+        {
+            mountPoint = directoryIndex.ReadFString();
+        }
+        catch (Exception e)
+        {
+            throw new InvalidAesKeyException($"Given aes key '{AesKey?.KeyString}'is not working with '{Path}'", e);
+        }
+
+        ValidateMountPoint(ref mountPoint);
+        MountPoint = mountPoint;
+
+        var directoryEntries = directoryIndex.ReadArray<FIoDirectoryIndexEntry>();
+        var fileEntries = directoryIndex.ReadArray<FIoFileIndexEntry>();
+        var stringTable = directoryIndex.ReadFStringMemoryArray();
+        EncryptedFileCount = IsEncrypted ? fileEntries.Length : 0;
+
+        var files = new Dictionary<string, GameFile>(fileEntries.Length, pathComparer);
+        var dirNamePool = ArrayPool<char>.Shared.Rent(512);
+        try
+        {
+            var mountPointLength = Write(dirNamePool, 0, MountPoint);
+            ReadIndex(dirNamePool, mountPointLength, directoryEntries, fileEntries, stringTable, files);
+            Files = files;
+        }
+        finally
+        {
+            ArrayPool<char>.Shared.Return(dirNamePool);
+        }
+    }
+
+    protected override byte[] DecryptBytes(byte[] bytes, int beginOffset, int count, FAesKey key, bool isIndex)
+    {
+        if (TocResource.EncryptionMethod != EIoEncryptionMethod.AES_CTR)
+            return base.DecryptBytes(bytes, beginOffset, count, key, isIndex);
+        if (!isIndex)
+            throw new InvalidOperationException("AES-CTR IoStore data requires a compression-block IV.");
+
+        var directoryIndexIv = TocResource.EncryptionIVs[^1];
+        return bytes.CryptCtr(beginOffset, count, key, directoryIndexIv.Bytes);
+    }
+
+    private byte[] DecryptCompressionBlock(byte[] bytes, int count, int blockIndex, bool bypassMountPointCheck)
+    {
+        if (!IsEncrypted || TocResource.EncryptionMethod != EIoEncryptionMethod.AES_CTR)
+            return DecryptIfEncrypted(bytes, 0, count, IsEncrypted, bypassMountPointCheck);
+        if (CustomEncryption is not null)
+            return CustomEncryption(bytes, 0, count, false, this);
+
+        EnsureValidAesKey(AesKey, bypassMountPointCheck);
+        bytes.AsSpan(0, count).CryptCtrInPlace(AesKey!, TocResource.EncryptionIVs[blockIndex].Bytes);
+        return bytes;
+    }
+
+    private void ReadIndex(char[] pathBuffer, int mountPointLength,
+        FIoDirectoryIndexEntry[] directoryEntries, FIoFileIndexEntry[] fileEntries,
+        FStringMemory[] stringTable, Dictionary<string, GameFile> files)
+    {
+        const uint invalidHandle = uint.MaxValue;
+        var packageDataChunkType = Game >= GAME_UE5_0
+            ? (byte) EIoChunkType5.ExportBundleData
+            : (byte) EIoChunkType.ExportBundleData;
+        PackageIdIndex = new Dictionary<FPackageId, GameFile>(GetPackageDataChunkCount());
+        var pendingDirectories = new Stack<DirectoryTraversal>(64);
+        pendingDirectories.Push(new DirectoryTraversal(0U, mountPointLength));
+
+        while (pendingDirectories.TryPop(out var traversal))
+        {
+            var dirEntry = directoryEntries[traversal.Directory];
+            var directoryLength = traversal.ParentPathLength;
+            if (dirEntry.Name != invalidHandle)
+            {
+                var dirName = stringTable[dirEntry.Name];
+                if (!dirName.IsEmpty())
+                    directoryLength = Write(pathBuffer, directoryLength, dirName, false);
+            }
+
+            if (dirEntry.NextSiblingEntry != invalidHandle)
+                pendingDirectories.Push(new DirectoryTraversal(dirEntry.NextSiblingEntry, traversal.ParentPathLength));
+            if (dirEntry.FirstChildEntry != invalidHandle)
+                pendingDirectories.Push(new DirectoryTraversal(dirEntry.FirstChildEntry, directoryLength));
+
+            var file = dirEntry.FirstFileEntry;
+            while (file != invalidHandle)
+            {
+                var fileEntry = fileEntries[file];
+                var name = stringTable[fileEntry.Name];
+                var fullPathLength = Write(pathBuffer, directoryLength, name, true);
+                var fullPathSpan = pathBuffer.AsSpan(..fullPathLength);
+                if (Game is GAME_NeedForSpeedMobile or >= GAME_UE6_0) fullPathSpan = fullPathSpan.SubstringAfter("../../../");
+                var path = new string(fullPathSpan);
+
+                var entry = new FIoStoreEntry(this, path, fileEntry.UserData);
+                ref readonly var chunkId = ref TocResource.ChunkIds[fileEntry.UserData];
+                // Normal package data uses chunk index zero. Some optional segments use a non-zero index,
+                // while older containers identify them only through the ".o" package-path modifier.
+                if (chunkId.ChunkType == packageDataChunkType &&
+                    chunkId._chunkIndex == 0 && !FIoStoreEntry.IsOptionalPackagePath(path))
+                {
+                    PackageIdIndex[chunkId.AsPackageId()] = entry;
+                }
+                files[path] = entry;
+
+                file = fileEntry.NextFileEntry;
+            }
+        }
+    }
+
+    protected void InitializeContainerHeader() => _containerHeader = new Lazy<FIoContainerHeader?>(ReadContainerHeader);
+
+    private FIoContainerHeader ReadContainerHeader()
+    {
+        try
+        {
+            var headerChunkId = new FIoChunkId(TocResource.Header.ContainerId.Id, 0, Game >= GAME_UE5_0 ? (byte) EIoChunkType5.ContainerHeader : (byte) EIoChunkType.ContainerHeader);
+            using var Ar = new FByteArchive("ContainerHeader", Read(headerChunkId), Versions);
+            return new FIoContainerHeader(Ar);
+        }
+        catch (Exception)
+        {
+            if (Game >= GAME_UE5_0)
+                throw;
+            else
+                return null!;
+        }
+    }
+
+    public override byte[] MountPointCheckBytes() => TocResource.GetDirectoryIndexBuffer() ?? new byte[MAX_MOUNTPOINT_TEST_LENGTH];
+    protected override byte[] ReadAndDecrypt(int length) => throw new InvalidOperationException("IoStore can't read bytes without context"); //ReadAndDecrypt(length, Ar, IsEncrypted);
+
+    public override void Dispose()
+    {
+        foreach (var stream in ContainerStreams)
+        {
+            stream.Dispose();
+        }
+    }
+}

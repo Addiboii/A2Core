@@ -1,0 +1,376 @@
+using System.Runtime.InteropServices;
+using CUE4Parse.UE4.Assets.Readers;
+using CUE4Parse.UE4.Objects.UObject;
+using CUE4Parse.UE4.Readers;
+using CUE4Parse.UE4.Versions;
+
+namespace CUE4Parse.UE4.Objects.RigVM;
+
+public class FRigVMByteCode
+{
+    public List<IRigInstruction> Instructions = [];
+    public string[] Entries = [];
+    public FRigVMBranchInfo[] BranchInfos = [];
+    public FRigVMCallableInfo[] CallableInfos = [];
+    public FTopLevelAssetPath? PublicContextAssetPath;
+    public bool bHasPublicContextPathName = false;
+
+    public FRigVMByteCode(FAssetArchive Ar)
+    {
+        if (FAnimObjectVersion.Get(Ar) < FAnimObjectVersion.Type.StoreMarkerNamesOnSkeleton)
+        {
+            var size = Ar.Read<int>();
+            using var RigVMAr = new FByteArchive("ByteCode", Ar.ReadBytes(size), Ar.Versions);
+
+            try
+            {
+                while (RigVMAr.Position < RigVMAr.Length)
+                {
+                    Instructions.Add(ReadRigVMInstruction(RigVMAr));
+                }
+            }
+            catch (Exception e)
+            {
+                Log.Warning(e, "Failed to serialize RigVM bytecode");
+            }
+
+            return;
+        }
+
+        var instructionCount = Ar.Read<int>();
+        Instructions = new List<IRigInstruction>(instructionCount);
+        for (var i = 0; i < instructionCount; i++)
+        {
+            Instructions.Add(ReadRigVMInstruction(Ar));
+        }
+
+        if (FAnimObjectVersion.Get(Ar) >= FAnimObjectVersion.Type.SerializeRigVMEntries)
+        {
+            Entries = Ar.ReadArray(Ar.ReadFString);
+        }
+
+        if (FUE5MainStreamObjectVersion.Get(Ar) >= FUE5MainStreamObjectVersion.Type.RigVMLazyEvaluation)
+        {
+            BranchInfos = Ar.ReadArray(() => new FRigVMBranchInfo(Ar));
+        }
+
+        if (FRigVMObjectVersion.Get(Ar) >= FRigVMObjectVersion.Type.RigVMCallables)
+        {
+            CallableInfos = Ar.ReadArray(() => new FRigVMCallableInfo(Ar));
+        }
+
+        if (FRigVMObjectVersion.Get(Ar) >= FRigVMObjectVersion.Type.VMBytecodeStorePublicContextPathAsTopLevelAssetPath)
+        {
+            PublicContextAssetPath = new FTopLevelAssetPath(Ar);
+            bHasPublicContextPathName = true;
+        }
+        else if (FRigVMObjectVersion.Get(Ar) >= FRigVMObjectVersion.Type.VMBytecodeStorePublicContextPath)
+        {
+            var publicContextPathName = Ar.ReadFString();
+
+            PublicContextAssetPath = new FTopLevelAssetPath(publicContextPathName);
+            bHasPublicContextPathName = true;
+        }
+    }
+
+    public IRigInstruction ReadRigVMInstruction(FArchive Ar)
+    {
+        var opCode = Ar.Read<ERigVMOpCode>();
+        IRigInstruction op = opCode switch
+        {
+            <= ERigVMOpCode.Execute_64_Operands or ERigVMOpCode.Execute => new FRigVMExecuteOp(Ar),
+            ERigVMOpCode.Copy => new FRigVMCopyOp(Ar),
+            ERigVMOpCode.Zero or ERigVMOpCode.BoolFalse or ERigVMOpCode.BoolTrue or ERigVMOpCode.Increment
+                or ERigVMOpCode.Decrement or ERigVMOpCode.ArrayReset or ERigVMOpCode.ArrayReverse or ERigVMOpCode.SetupTraits => Ar.Read<FRigVMUnaryOp>(),
+            ERigVMOpCode.Equals or ERigVMOpCode.NotEquals => Ar.Read<FRigVMComparisonOp>(),
+            ERigVMOpCode.JumpAbsolute or ERigVMOpCode.JumpForward or ERigVMOpCode.JumpBackward => Ar.Read<FRigVMJumpOp>(),
+            ERigVMOpCode.JumpAbsoluteIf or ERigVMOpCode.JumpForwardIf or ERigVMOpCode.JumpBackwardIf => new FRigVMJumpIfOp(Ar),
+            ERigVMOpCode.BeginBlock or ERigVMOpCode.ArrayGetNum or ERigVMOpCode.ArraySetNum or ERigVMOpCode.ArrayAppend
+                or ERigVMOpCode.ArrayClone or ERigVMOpCode.ArrayRemove or ERigVMOpCode.ArrayUnion => Ar.Read<FRigVMBinaryOp>(),
+            ERigVMOpCode.ArrayAdd or ERigVMOpCode.ArrayGetAtIndex or ERigVMOpCode.ArraySetAtIndex or ERigVMOpCode.ArrayInsert
+                or ERigVMOpCode.ArrayDifference or ERigVMOpCode.ArrayIntersection => Ar.Read<FRigVMTernaryOp>(),
+            ERigVMOpCode.ArrayFind => Ar.Read<FRigVMQuaternaryOp>(),
+            ERigVMOpCode.ArrayIterator => Ar.Read<FRigVMSenaryOp>(),
+            ERigVMOpCode.InvokeEntry => new FRigVMInvokeEntryOp(Ar),
+            ERigVMOpCode.JumpToBranch => Ar.Read<FRigVMJumpToBranchOp>(),
+            ERigVMOpCode.RunInstructions => Ar.Read<FRigVMRunInstructionsOp>(),
+            ERigVMOpCode.InvokeCallable => new FRigVMInvokeCallableOp(Ar),
+            _ => new FRigVMBaseOp(opCode),
+        };
+        return op;
+    }
+}
+
+public class FRigVMCallableArgument(FArchive Ar)
+{
+    public FName Name = Ar.ReadFName();
+    public string TypeString = Ar.ReadFString();
+    public FRigVMOperand InterfaceOperand = Ar.Read<FRigVMOperand>();
+    public FRigVMOperand ForwardedOperand = Ar.Read<FRigVMOperand>();
+    public ERigVMPinDirection Direction = Ar.Read<ERigVMPinDirection>();
+}
+
+public class FRigVMCallableInfo(FArchive Ar)
+{
+    public int Index = Ar.Read<int>();
+    public FName Name = Ar.ReadFName();
+    public uint FunctionHash = Ar.Read<uint>();
+    public FRigVMCallableArgument[] Arguments = Ar.ReadArray(() => new FRigVMCallableArgument(Ar));
+    public int FirstInstruction = Ar.Read<int>();
+    public int LastInstruction = Ar.Read<int>();
+}
+
+public readonly struct FRigVMBranchInfo
+{
+    public readonly int Index;
+    public readonly FName Label;
+    public readonly int InstructionIndex;
+    public readonly int ArgumentIndex;
+    public readonly int FirstInstruction;
+    public readonly int LastInstruction;
+
+    public FRigVMBranchInfo(FAssetArchive Ar)
+    {
+        Index = Ar.Read<int>();
+        Label = Ar.ReadFString();
+        InstructionIndex = Ar.Read<int>();
+        ArgumentIndex = Ar.Read<int>();
+
+        if (FRigVMObjectVersion.Get(Ar) < FRigVMObjectVersion.Type.ByteCodeCleanup)
+        {
+            FirstInstruction = Ar.Read<ushort>();
+            LastInstruction = Ar.Read<ushort>();
+        }
+        else
+        {
+            FirstInstruction = Ar.Read<int>();
+            LastInstruction = Ar.Read<int>();
+        }
+    }
+}
+
+public interface IRigInstruction;
+
+public readonly struct FRigVMBaseOp(ERigVMOpCode opCode) : IRigInstruction
+{
+    public readonly ERigVMOpCode OpCode = opCode;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public readonly struct FRigVMExecuteOp : IRigInstruction
+{
+    public readonly ERigVMOpCode OpCode;
+    public readonly ushort FunctionIndex;
+    public readonly ushort ArgumentCount;
+    public readonly ushort FirstPredicateIndex;
+    public readonly ushort PredicateCount;
+    public readonly FRigVMOperand[] Arguments;
+
+    public FRigVMExecuteOp(FArchive Ar)
+    {
+        OpCode = Ar.Read<ERigVMOpCode>();
+        FunctionIndex = Ar.Read<ushort>();
+
+        if (OpCode >= ERigVMOpCode.Execute_0_Operands && OpCode <= ERigVMOpCode.Execute_64_Operands)
+        {
+            ArgumentCount = (OpCode - ERigVMOpCode.Execute_0_Operands);
+            OpCode = ERigVMOpCode.Execute;
+        }
+        else
+        {
+            ArgumentCount = Ar.Read<ushort>();
+        }
+
+        if (FRigVMObjectVersion.Get(Ar) >= FRigVMObjectVersion.Type.PredicatesAddedToExecuteOps)
+        {
+            FirstPredicateIndex = Ar.Read<ushort>();
+            PredicateCount = Ar.Read<ushort>();
+        }
+
+        Arguments = Ar.ReadArray<FRigVMOperand>(ArgumentCount);
+    }
+}
+
+[StructLayout(LayoutKind.Sequential, Pack = 1, Size = 5)]
+public readonly struct FRigVMOperand
+{
+    public readonly ERigVMMemoryType MemoryType;
+    public readonly ushort RegisterIndex;
+    public readonly ushort RegisterOffset;
+}
+
+[StructLayout(LayoutKind.Sequential, Pack = 1, Size = 6)]
+public readonly struct FRigVMUnaryOp : IRigInstruction
+{
+    public readonly ERigVMOpCode OpCode;
+    public readonly FRigVMOperand Arg;
+}
+
+[StructLayout(LayoutKind.Sequential, Pack = 1, Size = 11)]
+public readonly struct FRigVMBinaryOp : IRigInstruction
+{
+    public readonly ERigVMOpCode OpCode;
+    public readonly FRigVMOperand ArgA;
+    public readonly FRigVMOperand ArgB;
+}
+
+[StructLayout(LayoutKind.Sequential, Pack = 1, Size = 16)]
+public readonly struct FRigVMTernaryOp : IRigInstruction
+{
+    public readonly ERigVMOpCode OpCode;
+    public readonly FRigVMOperand ArgA;
+    public readonly FRigVMOperand ArgB;
+    public readonly FRigVMOperand ArgC;
+}
+
+[StructLayout(LayoutKind.Sequential, Pack = 1, Size = 21)]
+public readonly struct FRigVMQuaternaryOp : IRigInstruction
+{
+    public readonly ERigVMOpCode OpCode;
+    public readonly FRigVMOperand ArgA;
+    public readonly FRigVMOperand ArgB;
+    public readonly FRigVMOperand ArgC;
+    public readonly FRigVMOperand ArgD;
+}
+
+[StructLayout(LayoutKind.Sequential, Pack = 1, Size = 26)]
+public readonly struct FRigVMQuinaryOp : IRigInstruction
+{
+    public readonly ERigVMOpCode OpCode;
+    public readonly FRigVMOperand ArgA;
+    public readonly FRigVMOperand ArgB;
+    public readonly FRigVMOperand ArgC;
+    public readonly FRigVMOperand ArgD;
+    public readonly FRigVMOperand ArgE;
+}
+
+[StructLayout(LayoutKind.Sequential, Pack = 1,Size = 31)]
+public readonly struct FRigVMSenaryOp : IRigInstruction
+{
+    public readonly ERigVMOpCode OpCode;
+    public readonly FRigVMOperand ArgA;
+    public readonly FRigVMOperand ArgB;
+    public readonly FRigVMOperand ArgC;
+    public readonly FRigVMOperand ArgD;
+    public readonly FRigVMOperand ArgE;
+    public readonly FRigVMOperand ArgF;
+}
+
+public enum ERigVMCopyType : byte
+{
+    Default,
+    FloatToDouble,
+    DoubleToFloat
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public readonly struct FRigVMCopyOp : IRigInstruction
+{
+    public readonly ERigVMOpCode OpCode;
+    public readonly FRigVMOperand Source;
+    public readonly FRigVMOperand Target;
+    public readonly ushort NumBytes;
+    public readonly ERigVMRegisterType RegisterType;
+    public readonly ERigVMCopyType CopyType;
+
+    public FRigVMCopyOp(FArchive Ar)
+    {
+        OpCode = Ar.Read<ERigVMOpCode>();
+        Source = Ar.Read<FRigVMOperand>();
+        Target = Ar.Read<FRigVMOperand>();
+
+        if (FUE5MainStreamObjectVersion.Get(Ar) < FUE5MainStreamObjectVersion.Type.RigVMCopyOpStoreNumBytes && Ar.Game != GAME_HonorofKingsWorld)
+        {
+            NumBytes = 0;
+            RegisterType = ERigVMRegisterType.Invalid;
+        }
+        else
+        {
+            if (FRigVMObjectVersion.Get(Ar) < FRigVMObjectVersion.Type.ByteCodeCleanup)
+                NumBytes = Ar.Read<ushort>();
+
+            RegisterType = Ar.Read<ERigVMRegisterType>();
+        }
+    }
+}
+
+[StructLayout(LayoutKind.Sequential, Pack = 1, Size = 16)]
+public readonly struct FRigVMComparisonOp : IRigInstruction
+{
+    public readonly ERigVMOpCode OpCode;
+    public readonly FRigVMOperand A;
+    public readonly FRigVMOperand B;
+    public readonly FRigVMOperand Result;
+}
+
+[StructLayout(LayoutKind.Sequential, Pack = 1, Size = 5)]
+public readonly struct FRigVMJumpOp : IRigInstruction
+{
+    public readonly ERigVMOpCode OpCode;
+    public readonly int InstructionIndex;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public readonly struct FRigVMJumpIfOp : IRigInstruction
+{
+    public readonly ERigVMOpCode OpCode;
+    public readonly FRigVMOperand Arg;
+    public readonly int InstructionIndex;
+    public readonly bool Condition;
+
+    public FRigVMJumpIfOp(FArchive Ar)
+    {
+        OpCode = Ar.Read<ERigVMOpCode>();
+        Arg = Ar.Read<FRigVMOperand>();
+        InstructionIndex = Ar.Read<int>();
+        Condition = Ar.ReadBoolean();
+    }
+}
+
+public readonly struct FRigVMInvokeEntryOp(FArchive Ar) : IRigInstruction
+{
+    public readonly ERigVMOpCode OpCode = ERigVMOpCode.InvokeEntry;
+    public readonly FName EntryName = Ar.ReadFString();
+}
+
+[StructLayout(LayoutKind.Sequential, Pack = 1, Size = 10)]
+public readonly struct FRigVMJumpToBranchOp : IRigInstruction
+{
+    public readonly ERigVMOpCode OpCode;
+    public readonly FRigVMOperand Arg;
+    public readonly int FirstBranchInfoIndex;
+}
+
+[StructLayout(LayoutKind.Sequential, Pack = 1, Size = 14)]
+public readonly struct FRigVMRunInstructionsOp : IRigInstruction
+{
+    public readonly ERigVMOpCode OpCode;
+    public readonly FRigVMOperand Arg;
+    public readonly int StartInstruction;
+    public readonly int EndInstruction;
+}
+
+struct FRigVMInvokeCallableOp : IRigInstruction
+{
+    public readonly ERigVMOpCode OpCode;
+    public readonly ushort CallableIndex;
+    public readonly ushort ArgumentCount;
+    public readonly FRigVMOperand[] Arguments;
+
+    public FRigVMInvokeCallableOp(FArchive Ar)
+    {
+        OpCode = Ar.Read<ERigVMOpCode>();
+        CallableIndex = Ar.Read<ushort>();
+        // backwards compatibility for old opcodes
+        if(OpCode <= ERigVMOpCode.Execute_64_Operands)
+        {
+            ArgumentCount = (ushort) OpCode;
+            OpCode = ERigVMOpCode.Execute;
+        }
+        else
+        {
+            ArgumentCount = Ar.Read<ushort>();
+        }
+        Arguments = Ar.ReadArray<FRigVMOperand>(ArgumentCount);
+    }
+}

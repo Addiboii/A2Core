@@ -1,0 +1,38 @@
+using CUE4Parse.Compression;
+using CUE4Parse.UE4.Assets.Objects;
+using CUE4Parse.UE4.Versions;
+
+namespace CUE4Parse.FileProvider.Objects;
+
+public class StreamedGameFile : VersionedGameFile
+{
+    private readonly Stream _baseStream;
+    private readonly long _position;
+
+    public StreamedGameFile(string path, Stream stream, VersionContainer versions) : base(path, stream.Length, versions)
+    {
+        _baseStream = stream;
+        _position = _baseStream.Position;
+    }
+
+    public override bool IsEncrypted => false;
+    public override CompressionMethod CompressionMethod => CompressionMethod.None;
+
+    public override byte[] Read(FByteBulkDataHeader? header = null)
+    {
+        if (header != null)
+        {
+            _baseStream.Seek(_position + header.Value.OffsetInFile, SeekOrigin.Begin);
+            var buffer = new byte[header.Value.SizeOnDisk];
+            _baseStream.ReadExactly(buffer, 0, buffer.Length);
+            return buffer;
+        }
+
+        var data = new byte[Size];
+        var _ = _baseStream.Seek(_position, SeekOrigin.Begin);
+        var bytesRead = _baseStream.Read(data, 0, data.Length);
+        if (bytesRead != Size)
+            throw new FileLoadException("Read operation mismatch: bytesRead ≠ Size");
+        return data;
+    }
+}

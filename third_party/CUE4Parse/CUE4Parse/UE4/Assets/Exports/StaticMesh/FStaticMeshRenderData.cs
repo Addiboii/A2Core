@@ -1,0 +1,298 @@
+using CUE4Parse.UE4.Assets.Exports.Nanite;
+using CUE4Parse.UE4.Assets.Objects;
+using CUE4Parse.UE4.Assets.Readers;
+using CUE4Parse.UE4.Objects.Core.Math;
+using CUE4Parse.UE4.Objects.Engine;
+using CUE4Parse.UE4.Readers;
+using CUE4Parse.UE4.Versions;
+using CUE4Parse.GameTypes.DFHO.Assets.Objects;
+using CUE4Parse.GameTypes.Tencent.GangstarMirageCity.Objects.Meshes;
+using Newtonsoft.Json;
+
+namespace CUE4Parse.UE4.Assets.Exports.StaticMesh;
+
+[JsonConverter(typeof(FStaticMeshRenderDataConverter))]
+public class FStaticMeshRenderData
+{
+    protected const int MAX_STATIC_UV_SETS_UE4 = 8;
+    protected const int MAX_STATIC_LODS_UE4 = 8;
+
+    public FStaticMeshLODResources[]? LODs;
+    public FNaniteResources? NaniteResources;
+    public FBoxSphereBounds? Bounds;
+    public bool bLODsShareStaticLighting;
+    public float[] ScreenSize = [];
+
+    public FStaticMeshRenderData() { }
+
+    public FStaticMeshRenderData(FAssetArchive Ar)
+    {
+        if (Ar.Versions["StaticMesh.KeepMobileMinLODSettingOnDesktop"])
+            _ = Ar.Read<int>(); // minMobileLODIdx
+
+        if (Ar.Game == GAME_TonyHawkProSkater34 && !Ar.ReadBoolean()) return;
+
+        Ar.Position += Ar.Game switch
+        {
+            GAME_HYENAS => 1,
+            GAME_DuneAwakening or GAME_Squad => 4,
+            GAME_DaysGone => Ar.Read<int>() * 4 + 4,
+            _ => 0
+        };
+
+        if (Ar.Game is GAME_Undawn or GAME_PUBGLite)
+        {
+            var size = Ar.Read<int>();
+            LODs = new FStaticMeshLODResources[size];
+            for (var i = 0; i < size; i++)
+            {
+                var savedPos = Ar.Position;
+                var bulkData = new FByteBulkData(Ar);
+                if (bulkData.Header.ElementCount > 0 && bulkData.Data != null && bulkData.Data.Length > 0)
+                {
+                    using var tempAr = new FByteArchive("StaticMeshLODResources", bulkData.Data, Ar.Versions);
+                    LODs[i] = new FStaticMeshLODResources(tempAr);
+                }
+                else
+                {
+                    Ar.Position = savedPos;
+                    LODs[i] = new FStaticMeshLODResources(Ar);
+                }
+            }
+        }
+        else
+        {
+            LODs = Ar.ReadArray(() => new FStaticMeshLODResources(Ar));
+            if (Ar.Game < GAME_UE4_0) return;
+        }
+
+        // In Fortnite S8, engine is 4.22, but has static mesh from 4.23.
+        // Comment this check out to fix.
+        if (Ar.Game >= GAME_UE4_23)
+        {
+            var numInlinedLODs = Ar.Read<byte>();
+        }
+
+        if (Ar.Game >= GAME_UE5_0)
+        {
+            NaniteResources = new FNaniteResources(Ar);
+
+            if (Ar.Game >= GAME_UE5_5)
+            {
+                var bHasRayTracingProxy = Ar.ReadBoolean();
+                if (bHasRayTracingProxy)
+                {
+                    _ = new FStaticMeshRayTracingProxy(Ar); // RayTracingProxy
+                }
+            }
+
+            SerializeInlineDataRepresentations(Ar);
+        }
+
+        if (Ar.Game is GAME_HonorofKingsWorld &&
+            LODs.Any(x => x.Sections.Length > 0 && x.Sections[0] is { CustomData: 1 }))
+        {
+            Ar.SkipMultipleFixedArrays(Ar.Read<int>(), 41);
+        }
+
+        if (Ar.Ver >= EUnrealEngineObjectUE4Version.RENAME_CROUCHMOVESCHARACTERDOWN)
+        {
+            var stripped = false;
+            if (Ar.Ver >= EUnrealEngineObjectUE4Version.RENAME_WIDGET_VISIBILITY)
+            {
+                var stripDataFlags = new FStripDataFlags(Ar);
+                stripped = stripDataFlags.IsAudioVisualDataStripped();
+                if (Ar.Game >= GAME_UE4_21)
+                {
+                    stripped |= stripDataFlags.IsClassDataStripped(0x01);
+                }
+            }
+
+            if (!stripped)
+            {
+                if (Ar.Game is GAME_DeltaForce)
+                {
+                    FDeltaForceStaticMeshRenderData.SkipDistanceFields(Ar, LODs.Length);
+                }
+                else
+                {
+                    for (var i = 0; i < LODs.Length; i++)
+                    {
+                        var bValid = Ar.ReadBoolean();
+                        if (bValid)
+                        {
+                            if (Ar.Game is >= GAME_UE5_0 or GAME_TerminullBrigade or GAME_WutheringWaves)
+                            {
+                                _ = new FDistanceFieldVolumeData5(Ar);
+                            }
+                            else
+                            {
+                                _ = new FDistanceFieldVolumeData(Ar);
+                            }
+                        }
+
+                        if (Ar.Game is GAME_TheFinals or GAME_ArcRaiders)
+                            _ = Ar.ReadArray(() => new FDistanceFieldVolumeData5(Ar));
+                    }
+                }
+            }
+        }
+
+        if (Ar.Game is GAME_ArenaBreakoutInfinite)
+        {
+            var flags = new FStripDataFlags(Ar);
+            if (Ar.ReadBoolean())
+            {
+                _ = new FBox(Ar);
+                Ar.Position += 4+3*56;
+                Ar.SkipFixedArray(1); // SDF array??
+                for (var i = 0; i < LODs.Length; i++)
+                {
+                    var idk2 = Ar.Read<int>(); // some flags
+                    if (idk2 != 0) _ = new FByteBulkData(Ar);
+                }
+            }
+        }
+
+        Bounds = new FBoxSphereBounds(Ar);
+        switch (Ar.Game)
+        {
+            case GAME_GangstarMirageCity:
+            {
+                foreach (var lod in LODs)
+                {
+                    if (lod.PositionVertexBuffer is FGangstarPositionVertexBuffer positions)
+                    {
+                        positions.Decode(Bounds);
+                    }
+                }
+                break;
+            }
+            case GAME_RocoKingdomWorld:
+            {
+                foreach (var lod in LODs)
+                {
+                    if (lod.PositionVertexBuffer != null && lod.PositionVertexBuffer.Stride != 8)
+                        continue;
+                    if (lod.PositionVertexBuffer?.Verts == null)
+                        continue;
+
+                    var verts = lod.PositionVertexBuffer.Verts;
+                    for (var i = 0; i < verts.Length; i++)
+                    {
+                        verts[i] = verts[i] * Bounds.BoxExtent + Bounds.Origin;
+                    }
+                }
+                break;
+            }
+        }
+
+        if (Ar.Versions["StaticMesh.HasLODsShareStaticLighting"])
+        {
+            if (Ar.Game is >= GAME_UE5_6 or GAME_GrayZoneWarfare or GAME_HighOnLife2 or GAME_Gothic1Remake or GAME_TheBloodofDawnwalker)
+            {
+                var bRenderDataFlags = Ar.Read<byte>();
+                bLODsShareStaticLighting = (bRenderDataFlags & 1) != 0;
+            }
+            else
+            {
+                bLODsShareStaticLighting = Ar.ReadBoolean();
+            }
+        }
+
+        if (Ar.Game < GAME_UE4_14)
+            _ = Ar.ReadBoolean();
+
+        if (FRenderingObjectVersion.Get(Ar) < FRenderingObjectVersion.Type.TextureStreamingMeshUVChannelData)
+        {
+            var uvsets = Ar.Game is not GAME_Abzu ? MAX_STATIC_UV_SETS_UE4 : 4;
+            Ar.Position += 4 * uvsets; // StreamingTextureFactor for each UV set
+            Ar.Position += 4; // MaxStreamingTextureFactor
+        }
+
+        if (Ar.Game is GAME_DeltaForce)
+        {
+            Bounds = FDeltaForceStaticMeshRenderData.DeserializeCustomData(Ar, LODs.Length);
+        }
+        if (Ar.Game is GAME_DeadzoneRogue) Ar.Position += 4;
+        if (Ar.Game is GAME_InfinityNikki or GAME_RogueCompany) Ar.Position += 8;
+
+        var screenSizeLength = Ar.Game switch
+        {
+            GAME_FragPunk or GAME_RocoKingdomWorld => 16,
+            GAME_Stalker2 => 14,
+            GAME_TheBloodofDawnwalker => 2,
+            >= GAME_UE4_9 => MAX_STATIC_LODS_UE4,
+            _ => 4
+        };
+        ScreenSize = new float[screenSizeLength];
+        for (var i = 0; i < ScreenSize.Length; ++i)
+        {
+            if (Ar.Game >= GAME_UE4_20)
+            {
+                ScreenSize[i] = new FPerPlatformFloat(Ar).Value;
+            }
+            else
+            {
+                ScreenSize[i] = Ar.Read<float>();
+            }
+
+            if (Ar.Game == GAME_HogwartsLegacy) Ar.Position += 8;
+            if (Ar.Game is GAME_VisionsofMana or GAME_ValorantSource) Ar.Position += 4;
+        }
+
+        if (Ar.Game == GAME_Borderlands3)
+        {
+            var count = Ar.Read<int>();
+            for (var i = 0; i < count; i++)
+            {
+                var count2 = Ar.Read<byte>();
+                Ar.Position += count2 * 12; // bool, bool, float
+            }
+        }
+
+        if (Ar.Game == GAME_DaysGone)
+        {
+            const float packed64scale = 2.0f / ushort.MaxValue;
+            const float packed32scale = 2.0f / 1024;
+            var offset = Bounds.Origin - Bounds.BoxExtent;
+            var scale = Bounds.BoxExtent;
+            foreach (var lod in LODs)
+            {
+                var perlodscale = lod.PositionVertexBuffer?.Stride switch
+                {
+                    4 => scale * packed32scale,
+                    8 => scale * packed64scale,
+                    12 => scale,
+                    _ => throw new ArgumentOutOfRangeException($"Unknown stride {lod.PositionVertexBuffer?.Stride} for FPositionVertexBuffer")
+                };
+
+                for (var i = 0; i < lod.PositionVertexBuffer.NumVertices; i++)
+                {
+                    lod.PositionVertexBuffer.Verts[i] = lod.PositionVertexBuffer.Verts[i] * perlodscale + offset;
+                }
+            }
+        }
+
+        if (Ar.Game >= GAME_UE5_4) _ = new FStripDataFlags(Ar);
+    }
+
+    private void SerializeInlineDataRepresentations(FAssetArchive Ar)
+    {
+        // Defined class flags for possible stripping
+        const byte CardRepresentationDataStripFlag = 2;
+
+        var stripFlags = new FStripDataFlags(Ar);
+        if (!stripFlags.IsAudioVisualDataStripped() && !stripFlags.IsClassDataStripped(CardRepresentationDataStripFlag))
+        {
+            foreach (var lod in LODs ?? [])
+            {
+                var bValid = Ar.ReadBoolean();
+                if (bValid)
+                {
+                    lod.CardRepresentationData = new FCardRepresentationData(Ar);
+                }
+            }
+        }
+    }
+}

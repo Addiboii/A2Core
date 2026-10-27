@@ -1,0 +1,521 @@
+using CUE4Parse.GameTypes.EOTU.Encryption;
+using CUE4Parse.UE4.Assets.Exports.Internationalization;
+using CUE4Parse.UE4.Assets.Readers;
+using CUE4Parse.UE4.Exceptions;
+using CUE4Parse.UE4.Objects.Core.Misc;
+using CUE4Parse.UE4.Objects.UObject;
+using CUE4Parse.UE4.Versions;
+using Newtonsoft.Json;
+
+namespace CUE4Parse.UE4.Objects.Core.i18N;
+
+[Flags]
+public enum ETextFlag : uint
+{
+    Transient = (1 << 0),
+    CultureInvariant = (1 << 1),
+    ConvertedProperty = (1 << 2),
+    Immutable = (1 << 3),
+    InitializedFromString = (1 << 4),  // this ftext was initialized using FromString
+}
+
+public enum ETextHistoryType : sbyte
+{
+    None = -1,
+    Base = 0,
+    NamedFormat,
+    OrderedFormat,
+    ArgumentFormat,
+    AsNumber,
+    AsPercent,
+    AsCurrency,
+    AsDate,
+    AsTime,
+    AsDateTime,
+    Transform,
+    StringTableEntry,
+    TextGenerator,
+
+    // Add new enum types at the end only! They are serialized by index.
+}
+
+public enum EFormatArgumentType : sbyte
+{
+    Int,
+    UInt,
+    Float,
+    Double,
+    Text,
+    Gender,
+
+    // Add new enum types at the end only! They are serialized by index.
+}
+
+public enum ERoundingMode : sbyte
+{
+    /** Rounds to the nearest place, equidistant ties go to the value which is closest to an even value: 1.5 becomes 2, 0.5 becomes 0 */
+    HalfToEven,
+
+    /** Rounds to nearest place, equidistant ties go to the value which is further from zero: -0.5 becomes -1.0, 0.5 becomes 1.0 */
+    HalfFromZero,
+
+    /** Rounds to nearest place, equidistant ties go to the value which is closer to zero: -0.5 becomes 0, 0.5 becomes 0. */
+    HalfToZero,
+
+    /** Rounds to the value which is further from zero, "larger" in absolute value: 0.1 becomes 1, -0.1 becomes -1 */
+    FromZero,
+
+    /** Rounds to the value which is closer to zero, "smaller" in absolute value: 0.1 becomes 0, -0.1 becomes 0 */
+    ToZero,
+
+    /** Rounds to the value which is more negative: 0.1 becomes 0, -0.1 becomes -1 */
+    ToNegativeInfinity,
+
+    /** Rounds to the value which is more positive: 0.1 becomes 1, -0.1 becomes 0 */
+    ToPositiveInfinity,
+
+
+    // Add new enum types at the end only! They are serialized by index.
+}
+
+public enum EDateTimeStyle : sbyte
+{
+    Default,
+    Short,
+    Medium,
+    Long,
+
+    Full
+    // Add new enum types at the end only! They are serialized by index.
+}
+
+public enum ETransformType : byte
+{
+    ToLower = 0,
+    ToUpper,
+
+    // Add new enum types at the end only! They are serialized by index.
+}
+
+public enum EStringTableLoadingPhase : byte
+{
+    /** This string table is pending load, and load should be attempted when possible */
+    PendingLoad,
+
+    /** This string table is currently being loaded, potentially asynchronously */
+    Loading,
+
+    /** This string was loaded, though that load may have failed */
+    Loaded,
+}
+
+[JsonConverter(typeof(FTextConverter))]
+public class FText : IUStruct
+{
+    public readonly ETextFlag Flags;
+    public readonly ETextHistoryType HistoryType;
+    public readonly FTextHistory TextHistory;
+    public string Text => TextHistory.Text;
+
+    public FText(FAssetArchive Ar)
+    {
+        if (Ar.Ver < EUnrealEngineObjectUE4Version.FTEXT_HISTORY)
+        {
+            var SourceStringToImplantIntoHistory = Ar.ReadFString();
+            if (Ar.Ver >= EUnrealEngineObjectUE4Version.ADDED_NAMESPACE_AND_KEY_DATA_TO_FTEXT)
+            {
+                var @namespace = Ar.ReadFString();
+                var key = Ar.ReadFString();
+                TextHistory = new FTextHistory.Base(@namespace, key, SourceStringToImplantIntoHistory);
+            }
+        }
+
+        Flags = Ar.Read<ETextFlag>();
+
+        if (Ar.Ver >= EUnrealEngineObjectUE4Version.FTEXT_HISTORY)
+        {
+            HistoryType = Ar.Read<ETextHistoryType>();
+            TextHistory = HistoryType switch
+            {
+                ETextHistoryType.Base => new FTextHistory.Base(Ar),
+                ETextHistoryType.NamedFormat => new FTextHistory.NamedFormat(Ar),
+                ETextHistoryType.OrderedFormat => new FTextHistory.OrderedFormat(Ar),
+                ETextHistoryType.ArgumentFormat => new FTextHistory.ArgumentFormat(Ar),
+                ETextHistoryType.AsNumber => new FTextHistory.FormatNumber(Ar, HistoryType),
+                ETextHistoryType.AsPercent => new FTextHistory.FormatNumber(Ar, HistoryType),
+                ETextHistoryType.AsCurrency => new FTextHistory.FormatNumber(Ar, HistoryType),
+                ETextHistoryType.AsDate => new FTextHistory.AsDate(Ar),
+                ETextHistoryType.AsTime => new FTextHistory.AsTime(Ar),
+                ETextHistoryType.AsDateTime => new FTextHistory.AsDateTime(Ar),
+                ETextHistoryType.Transform => new FTextHistory.Transform(Ar),
+                ETextHistoryType.StringTableEntry => new FTextHistory.StringTableEntry(Ar),
+                ETextHistoryType.TextGenerator => new FTextHistory.TextGenerator(Ar),
+                (ETextHistoryType)22 when Ar.Game is GAME_Zeus => new FTextHistory.Base("", Ar.Read<ulong>().ToString(), ""),
+                _ => new FTextHistory.None(Ar)
+            };
+            if (Ar.Game is GAME_Splitgate2 or GAME_Empulse) Ar.Position += 4;
+        }
+    }
+
+    public FText(string sourceString, string localizedString = "") : this("", "", sourceString, localizedString) { }
+
+    public FText(string @namespace, string key, string sourceString, string localizedString = "") : this(0, ETextHistoryType.Base,
+        new FTextHistory.Base(@namespace, key, sourceString, localizedString)) { }
+
+    public FText(uint flags, ETextHistoryType historyType, FTextHistory textHistory)
+    {
+        Flags = (ETextFlag) flags;
+        HistoryType = historyType;
+        TextHistory = textHistory;
+    }
+
+    public override string ToString() => Text;
+}
+
+public abstract class FTextHistory : IUStruct
+{
+    [JsonIgnore] public abstract string Text { get; }
+
+    public class None : FTextHistory
+    {
+        public readonly string? CultureInvariantString;
+        public override string Text => CultureInvariantString ?? string.Empty;
+
+        public None()
+        {
+
+        }
+        public None(FAssetArchive Ar)
+        {
+            if (FEditorObjectVersion.Get(Ar) >= FEditorObjectVersion.Type.CultureInvariantTextSerializationKeyStability)
+            {
+                var bHasCultureInvariantString = Ar.ReadBoolean();
+                if (bHasCultureInvariantString)
+                {
+                    CultureInvariantString = Ar.ReadFString();
+                }
+            }
+        }
+    }
+
+    public class Base : FTextHistory
+    {
+        public readonly string Namespace;
+        public readonly string Key;
+        public readonly string SourceString;
+        public readonly string LocalizedString;
+        public sealed override string Text => LocalizedString;
+
+        public Base(FAssetArchive Ar)
+        {
+            Namespace = Ar.ReadFString();
+            Key = Ar.ReadFString();
+            SourceString = Ar.ReadFString();
+            if (!Ar.IsFilterEditorOnly && FFortniteMainBranchObjectVersion.Get(Ar) >= FFortniteMainBranchObjectVersion.Type.AddDevNotesToFText)
+            {
+                Ar.SkipFString(); // dev notes
+            }
+            var strNamespace = Namespace;
+
+            switch (Ar.Game)
+            {
+                case GAME_HonorofKingsWorld:
+                    strNamespace = "";
+                    break;
+                case GAME_EmbersofTheUncrowned:
+                    SourceString = EOTUStringEncryption.DecryptString(SourceString);
+                    break;
+                default:
+                    break;
+            }
+
+            LocalizedString = Ar.Owner?.Provider?.Internationalization.SafeGet(strNamespace, Key, SourceString) ?? string.Empty;
+        }
+
+        public Base(string @namespace, string key, string sourceString, string localizedString = "")
+        {
+            Namespace = @namespace;
+            Key = key;
+            SourceString = sourceString;
+            LocalizedString = string.IsNullOrEmpty(localizedString) ? sourceString : localizedString;
+        }
+    }
+
+    public class NamedFormat : FTextHistory
+    {
+        public readonly FText SourceFmt;
+        public readonly Dictionary<string, FFormatArgumentValue> Arguments; /* called FFormatNamedArguments in UE4 */
+        public sealed override string Text { get; }
+
+        public NamedFormat(FAssetArchive Ar)
+        {
+            SourceFmt = new FText(Ar);
+            Arguments = Ar.ReadMap(Ar.ReadFString, () => new FFormatArgumentValue(Ar));
+
+            var text = SourceFmt.Text;
+            foreach (var (key, value) in Arguments)
+            {
+                text = text.Replace($"{{{key}}}", value.Value.ToString());
+            }
+            Text = text;
+        }
+    }
+
+    public class OrderedFormat : FTextHistory
+    {
+        public readonly FText SourceFmt;
+        public readonly FFormatArgumentValue[] Arguments; /* called FFormatOrderedArguments in UE4 */
+        public sealed override string Text { get; }
+
+        public OrderedFormat(FAssetArchive Ar)
+        {
+            SourceFmt = new FText(Ar);
+            Arguments = Ar.ReadArray(() => new FFormatArgumentValue(Ar));
+
+            var text = SourceFmt.Text;
+            for (var i = 0; i < Arguments.Length; i++)
+            {
+                text = text.Replace($"{{{i}}}", Arguments[i].Value.ToString());
+            }
+            Text = text;
+        }
+    }
+
+    public class ArgumentFormat : FTextHistory
+    {
+        public readonly FText SourceFmt;
+        public readonly FFormatArgumentData[] Arguments;
+        public sealed override string Text { get; }
+
+        public ArgumentFormat(FAssetArchive Ar)
+        {
+            SourceFmt = new FText(Ar);
+            Arguments = Ar.ReadArray(() => new FFormatArgumentData(Ar));
+
+            var text = SourceFmt.Text;
+            foreach (var argument in Arguments)
+            {
+                text = text.Replace($"{{{argument.ArgumentName}}}", argument.ArgumentValue.Value.ToString());
+            }
+            Text = text;
+        }
+    }
+
+    public class FormatNumber : FTextHistory
+    {
+        public readonly string? CurrencyCode;
+        public readonly FFormatArgumentValue SourceValue;
+        public readonly FNumberFormattingOptions? FormatOptions;
+        public readonly string TargetCulture;
+        public override string Text => SourceValue.Value.ToString();
+
+        public FormatNumber(FAssetArchive Ar, ETextHistoryType historyType)
+        {
+            if (historyType == ETextHistoryType.AsCurrency &&
+                Ar.Ver >= EUnrealEngineObjectUE4Version.ADDED_CURRENCY_CODE_TO_FTEXT)
+            {
+                CurrencyCode = Ar.ReadFString();
+            }
+
+            SourceValue = new FFormatArgumentValue(Ar);
+            if (Ar.ReadBoolean()) // bHasFormatOptions
+            {
+                FormatOptions = new FNumberFormattingOptions(Ar);
+            }
+
+            TargetCulture = Ar.ReadFString();
+        }
+    }
+
+    public class AsDate : FTextHistory
+    {
+        public readonly FDateTime SourceDateTime;
+        public readonly EDateTimeStyle DateStyle;
+        public readonly string? TimeZone;
+        public readonly string TargetCulture;
+        public override string Text => SourceDateTime.ToString();
+
+        public AsDate(FAssetArchive Ar)
+        {
+            SourceDateTime = Ar.Read<FDateTime>();
+            DateStyle = Ar.Read<EDateTimeStyle>();
+            if (Ar.Ver >= EUnrealEngineObjectUE4Version.FTEXT_HISTORY_DATE_TIMEZONE)
+            {
+                TimeZone = Ar.ReadFString();
+            }
+
+            TargetCulture = Ar.ReadFString();
+        }
+    }
+
+    public class AsTime : FTextHistory
+    {
+        public readonly FDateTime SourceDateTime;
+        public readonly EDateTimeStyle TimeStyle;
+        public readonly string TimeZone;
+        public readonly string TargetCulture;
+        public override string Text => SourceDateTime.ToString();
+
+        public AsTime(FAssetArchive Ar)
+        {
+            SourceDateTime = Ar.Read<FDateTime>();
+            TimeStyle = Ar.Read<EDateTimeStyle>();
+            TimeZone = Ar.ReadFString();
+            TargetCulture = Ar.ReadFString();
+        }
+    }
+
+    public class AsDateTime : FTextHistory
+    {
+        public readonly FDateTime SourceDateTime;
+        public readonly EDateTimeStyle DateStyle;
+        public readonly EDateTimeStyle TimeStyle;
+        public readonly string TimeZone;
+        public readonly string TargetCulture;
+        public override string Text => SourceDateTime.ToString();
+
+        public AsDateTime(FAssetArchive Ar)
+        {
+            SourceDateTime = Ar.Read<FDateTime>();
+            DateStyle = Ar.Read<EDateTimeStyle>();
+            TimeStyle = Ar.Read<EDateTimeStyle>();
+            TimeZone = Ar.ReadFString();
+            TargetCulture = Ar.ReadFString();
+        }
+    }
+
+    public class Transform : FTextHistory
+    {
+        public readonly FText SourceText;
+        public readonly ETransformType TransformType;
+        public override string Text => SourceText.Text;
+
+        public Transform(FAssetArchive Ar)
+        {
+            SourceText = new FText(Ar);
+            TransformType = Ar.Read<ETransformType>();
+        }
+    }
+
+    public class StringTableEntry : FTextHistory
+    {
+        public readonly FName TableId;
+        public readonly string Key;
+        public readonly string SourceString;
+        public readonly string LocalizedString;
+        public override string Text => LocalizedString;
+
+        public StringTableEntry(FAssetArchive Ar)
+        {
+            TableId = Ar.ReadFName();
+            Key = Ar.ReadFString();
+
+            if (Ar.Owner?.Provider is { } provider)
+            {
+                if (UStringTable.TryGet(provider, TableId.Text, out var table) &&
+                    table.StringTable.KeysToEntries.TryGetValue(Key, out var t))
+                {
+                    SourceString = t;
+                    LocalizedString = provider.Internationalization.SafeGet(table.StringTable.TableNamespace, Key, t);
+                }
+                else
+                {
+                    // some games incorrectly utilize StringTableEntry for generated locres.
+                    // fallback to loading from loaded internationalization where TableId isn't a filepath.
+                    LocalizedString = provider.Internationalization.SafeGet(TableId.Text, Key);
+                }
+            }
+
+            if (Ar.Game is GAME_DeltaForce) Ar.Position += 4;
+        }
+    }
+
+    public class TextGenerator : FTextHistory
+    {
+        public readonly FName GeneratorTypeID;
+        public readonly byte[]? GeneratorContents;
+        public override string Text => GeneratorTypeID.Text;
+
+        public TextGenerator(FAssetArchive Ar)
+        {
+            GeneratorTypeID = Ar.ReadFName();
+            if (!GeneratorTypeID.IsNone)
+            {
+                // https://github.com/EpicGames/UnrealEngine/blob/4.26/Engine/Source/Runtime/Core/Private/Internationalization/TextHistory.cpp#L2916
+                // I don't understand what it does here
+            }
+        }
+    }
+}
+
+public class FFormatArgumentValue : IUStruct
+{
+    public EFormatArgumentType Type;
+    public object Value;
+
+    public FFormatArgumentValue(FAssetArchive Ar, bool isArgumentData = false)
+    {
+        if (FEditorObjectVersion.Get(Ar) <= FEditorObjectVersion.Type.TextFormatArgumentDataIsVariant && isArgumentData)
+            Type = EFormatArgumentType.Text;
+        else
+            Type = Ar.Read<EFormatArgumentType>();
+
+        Value = Type switch
+        {
+            EFormatArgumentType.Text => new FText(Ar),
+            EFormatArgumentType.Int => isArgumentData && FUE5ReleaseStreamObjectVersion.Get(Ar) < FUE5ReleaseStreamObjectVersion.Type.TextFormatArgumentData64bitSupport ? Ar.Read<int>() : Ar.Read<long>(),
+            EFormatArgumentType.UInt => Ar.Read<ulong>(),
+            EFormatArgumentType.Double => Ar.Read<double>(),
+            EFormatArgumentType.Float => Ar.Read<float>(),
+            _ => throw new ParserException(Ar, $"{Type} argument not supported yet"),
+        };
+    }
+}
+
+public class FFormatArgumentData : IUStruct
+{
+    public string ArgumentName;
+    public FFormatArgumentValue ArgumentValue;
+
+    public FFormatArgumentData(FAssetArchive Ar)
+    {
+        ArgumentName = Ar.Ver >= EUnrealEngineObjectUE4Version.K2NODE_VAR_REFERENCEGUIDS ? Ar.ReadFString() : new FText(Ar).Text;
+        ArgumentValue = new FFormatArgumentValue(Ar, true);
+    }
+}
+
+public class FNumberFormattingOptions : IUStruct
+{
+    private const int _DBL_DIG = 15;
+    private const int _DBL_MAX_10_EXP = 308;
+
+    public bool AlwaysSign;
+    public bool UseGrouping;
+    public ERoundingMode RoundingMode;
+    public int MinimumIntegralDigits;
+    public int MaximumIntegralDigits;
+    public int MinimumFractionalDigits;
+    public int MaximumFractionalDigits;
+
+    public FNumberFormattingOptions()
+    {
+        AlwaysSign = false;
+        UseGrouping = true;
+        RoundingMode = ERoundingMode.HalfToEven;
+        MinimumIntegralDigits = 1;
+        MaximumIntegralDigits = _DBL_MAX_10_EXP + _DBL_DIG + 1;
+        MinimumFractionalDigits = 0;
+        MaximumFractionalDigits = 3;
+    }
+
+    public FNumberFormattingOptions(FAssetArchive Ar)
+    {
+        AlwaysSign = FEditorObjectVersion.Get(Ar) >= FEditorObjectVersion.Type.AddedAlwaysSignNumberFormattingOption && Ar.ReadBoolean();
+        UseGrouping = Ar.ReadBoolean();
+        RoundingMode = Ar.Read<ERoundingMode>();
+        MinimumIntegralDigits = Ar.Read<int>();
+        MaximumIntegralDigits = Ar.Read<int>();
+        MinimumFractionalDigits = Ar.Read<int>();
+        MaximumFractionalDigits = Ar.Read<int>();
+    }
+}

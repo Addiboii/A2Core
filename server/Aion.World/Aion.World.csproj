@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Aion.Native.Checks" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Aion.Protocol/Aion.Protocol.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Derived summaries of the client's own tables, rebuilt by tools/starter_skills.py,
+         tools/class_skills.py, tools/world_npcs.py, tools/map_geometry.py, tools/map_points.py and tools/dev_menu.py; one copy, shared with the Python tools. -->
+    <EmbeddedResource Include="../../tools/data/starter-skills.json" LogicalName="starter-skills.json" />
+    <EmbeddedResource Include="../../tools/data/class-skills.json" LogicalName="class-skills.json" />
+    <EmbeddedResource Include="../../tools/data/items.json" LogicalName="items.json" />
+    <EmbeddedResource Include="../../tools/data/decompose.json" LogicalName="decompose.json" />
+    <EmbeddedResource Include="../../tools/data/achievements.json" LogicalName="achievements.json" />
+    <EmbeddedResource Include="../../tools/data/collections.json" LogicalName="collections.json" />
+    <EmbeddedResource Include="../../tools/data/bosschallenge.json" LogicalName="bosschallenge.json" />
+    <EmbeddedResource Include="../../tools/data/boxes.json" LogicalName="boxes.json" />
+    <EmbeddedResource Include="../../tools/data/levels.json" LogicalName="levels.json" />
+    <EmbeddedResource Include="../../tools/data/loot.json" LogicalName="loot.json" />
+    <EmbeddedResource Include="../../tools/data/shops.json" LogicalName="shops.json" />
+    <EmbeddedResource Include="../../tools/data/enchant.json" LogicalName="enchant.json" />
+    <EmbeddedResource Include="../../tools/data/instances.json" LogicalName="instances.json" />
+    <EmbeddedResource Include="../../tools/data/crafts.json" LogicalName="crafts.json" />
+    <EmbeddedResource Include="../../tools/data/world-npcs.json" LogicalName="world-npcs.json" />
+    <EmbeddedResource Include="../../tools/data/map-bases.json" LogicalName="map-bases.json" />
+    <EmbeddedResource Include="../../tools/data/map-points.json" LogicalName="map-points.json" />
+    <EmbeddedResource Include="../../tools/data/dev-menu.json" LogicalName="dev-menu.json" />
+    <EmbeddedResource Include="../../tools/data/quests.json" LogicalName="quests.json" />
+    <EmbeddedResource Include="../../tools/data/teleport-artifacts.json" LogicalName="teleport-artifacts.json" />
+    <EmbeddedResource Include="../../tools/data/subzones.json" LogicalName="subzones.json" />
+    <EmbeddedResource Include="../../tools/data/world-objects.json" LogicalName="world-objects.json" />
+    <EmbeddedResource Include="../../tools/data/map-events.json" LogicalName="map-events.json" />
+    <EmbeddedResource Include="../../tools/data/titles.json" LogicalName="titles.json" />
+    <EmbeddedResource Include="../../tools/data/skins.json" LogicalName="skins.json" />
+  </ItemGroup>
+</Project>

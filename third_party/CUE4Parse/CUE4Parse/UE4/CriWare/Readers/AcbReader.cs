@@ -1,0 +1,122 @@
+using CUE4Parse.UE4.Readers;
+using Newtonsoft.Json;
+using SubstreamSharp;
+
+namespace CUE4Parse.UE4.Criware.Readers;
+
+[JsonConverter(typeof(AcbReaderConverter))]
+public sealed class AcbReader : IDisposable
+{
+    private readonly Stream _outerStream;
+    private readonly long _offset;
+    private readonly uint _awbOffset;
+    private readonly uint _awbLength;
+
+    private readonly AcbParser _acbParser;
+
+    public string Name { get; }
+    public Dictionary<string, List<Dictionary<string, object?>>> AtomCueSheetData => _acbParser.TableData;
+    public IReadOnlyDictionary<string, VLData> BinaryPayloads => _acbParser.BinaryPayloads;
+
+    public AcbReader(Stream acbStream) : this(acbStream, 0) { }
+
+    public AcbReader(Stream acbStream, long positionOffset)
+    {
+        _outerStream = acbStream;
+        _offset = positionOffset;
+
+        acbStream.Position = _offset;
+
+        UtfTable utfTable = new(acbStream, (uint) _offset, out int rows, out string name);
+
+        if (rows != 1 || !name.Equals("Header"))
+            throw new InvalidDataException("No Header table.");
+
+        var nameColumn = utfTable.GetColumn("Name");
+        Name = nameColumn >= 0 && utfTable.Query(0, nameColumn, out string acbName)
+            ? acbName
+            : Path.GetFileNameWithoutExtension((acbStream as FArchive)?.Name) ?? string.Empty;
+
+        if (utfTable.Query(0, "AwbFile", out VLData awbValueData))
+        {
+            _awbOffset = awbValueData.Offset;
+            _awbLength = awbValueData.Size;
+        }
+        else
+        {
+            _awbLength = 0;
+        }
+
+        HasMemoryAwb = _awbLength > 0;
+
+        _outerStream.Position = positionOffset;
+        _acbParser = new AcbParser(_outerStream);
+    }
+
+    public bool HasMemoryAwb { get; set; }
+
+    public AwbReader? GetAwb()
+    {
+        if (_awbLength <= 0)
+        {
+            Log.Warning("ACB has no AWB in memory, skipping");
+            return null;
+        }
+
+        return new AwbReader(_outerStream.Substream(_awbOffset, _awbLength));
+    }
+
+    public bool TryGetBinaryPayload(string name, out byte[] data)
+    {
+        data = [];
+        if (!BinaryPayloads.TryGetValue(name, out var payload) || payload.Size > int.MaxValue || payload.Offset > _outerStream.Length - payload.Size)
+            return false;
+
+        var previousPosition = _outerStream.Position;
+        try
+        {
+            data = new byte[payload.Size];
+            _outerStream.Position = payload.Offset;
+            _outerStream.ReadExactly(data);
+            return true;
+        }
+        finally
+        {
+            _outerStream.Position = previousPosition;
+        }
+    }
+
+    public T? TryGetTableValue<T>(string tableName, string key) where T : class
+    {
+        var value = TryGetTableValue(tableName, key);
+        return value as T;
+    }
+
+    public object? TryGetTableValue(string tableName, string key)
+    {
+        if (AtomCueSheetData?.TryGetValue(tableName, out var list) != true || list == null)
+            return null;
+
+        foreach (var dict in list)
+        {
+            if (dict?.TryGetValue(key, out var value) == true)
+                return value;
+        }
+
+        return null;
+    }
+
+    public string GetWaveName(int waveId, int port, bool memory)
+    {
+        _outerStream.Position = _offset;
+        return _acbParser.LoadWaveName(waveId, port, memory);
+    }
+
+    public List<Waveform> GetWaveformsFromCueId(int cueId)
+    {
+        _outerStream.Position = _offset;
+        return _acbParser.WaveformsFromCueId(cueId);
+    }
+
+    public void Dispose() => _outerStream.Dispose();
+}

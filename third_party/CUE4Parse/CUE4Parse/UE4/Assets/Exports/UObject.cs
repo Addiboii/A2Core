@@ -1,0 +1,812 @@
+using System.Runtime.CompilerServices;
+using System.Text;
+using CUE4Parse.MappingsProvider;
+using CUE4Parse.UE4.Assets.Exports.Component;
+using CUE4Parse.UE4.Assets.Objects;
+using CUE4Parse.UE4.Assets.Objects.Properties;
+using CUE4Parse.UE4.Assets.Objects.Unversioned;
+using CUE4Parse.UE4.Assets.Readers;
+using CUE4Parse.UE4.Exceptions;
+using CUE4Parse.UE4.Objects.Core.Misc;
+using CUE4Parse.UE4.Objects.UObject;
+using CUE4Parse.UE4.Versions;
+using CUE4Parse.Utils;
+using Newtonsoft.Json;
+
+namespace CUE4Parse.UE4.Assets.Exports;
+
+public interface IPropertyHolder
+{
+    public List<FPropertyTag> Properties { get; }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public T GetOrDefault<T>(string name, T defaultValue = default!, StringComparison comparisonType = StringComparison.Ordinal);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public Lazy<T> GetOrDefaultLazy<T>(string name, T defaultValue = default!, StringComparison comparisonType = StringComparison.Ordinal);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public T Get<T>(string name, StringComparison comparisonType = StringComparison.Ordinal);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public Lazy<T> GetLazy<T>(string name, StringComparison comparisonType = StringComparison.Ordinal);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public T GetByIndex<T>(int index);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool TryGetValue<T>(out T obj, params string[] names);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool TryGetAllValues<T>(out T[] obj, string name);
+}
+
+public abstract class AbstractPropertyHolder : IPropertyHolder
+{
+    public List<FPropertyTag> Properties { get; protected set; } = new();
+
+    public T GetOrDefault<T>(string name, T defaultValue = default!, StringComparison comparisonType = StringComparison.Ordinal) =>
+        PropertyUtil.GetOrDefault(this, name, defaultValue, comparisonType);
+
+    public Lazy<T> GetOrDefaultLazy<T>(string name, T defaultValue = default!, StringComparison comparisonType = StringComparison.Ordinal) =>
+        PropertyUtil.GetOrDefaultLazy(this, name, defaultValue, comparisonType);
+
+    public T Get<T>(string name, StringComparison comparisonType = StringComparison.Ordinal) =>
+        PropertyUtil.Get<T>(this, name, comparisonType);
+
+    public Lazy<T> GetLazy<T>(string name, StringComparison comparisonType = StringComparison.Ordinal) =>
+        PropertyUtil.GetLazy<T>(this, name, comparisonType);
+
+    public T GetByIndex<T>(int index) => PropertyUtil.GetByIndex<T>(this, index);
+
+    public bool TryGetValue<T>(out T obj, params string[] names)
+    {
+        foreach (string name in names)
+        {
+            if (this.TryGet<T>(name, out obj, comparisonType: StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        obj = default!;
+        return false;
+    }
+
+    public bool TryGetAllValues<T>(out T[] obj, string name)
+    {
+        var maxIndex = -1;
+        var collected = new List<FPropertyTag>();
+        foreach (var prop in Properties)
+        {
+            if (prop.Name.Text != name) continue;
+            collected.Add(prop);
+            maxIndex = Math.Max(maxIndex, prop.ArrayIndex);
+        }
+
+        obj = new T[maxIndex + 1];
+        foreach (var prop in collected) {
+            obj[prop.ArrayIndex] = (T)prop.Tag?.GetValue(typeof(T))!;
+        }
+
+        return obj.Length > 0;
+    }
+}
+
+[JsonConverter(typeof(UObjectConverter))]
+[SkipObjectRegistration]
+public class UObject : AbstractPropertyHolder
+{
+    
+    public string Name { get; set; } = null!;
+    public ResolvedObject? Class;
+    public ResolvedObject? Outer;
+    public ResolvedObject? Super;
+    public ResolvedObject? Template;
+    public FGuid? ObjectGuid { get; private set; }
+    public EObjectFlags Flags;
+    public UStruct? SerializedSparseClassDataStruct;
+    public FStructFallback? SerializedSparseClassData;
+    // field for any custom data
+    public object? CustomGameData;
+
+    // public FObjectExport Export;
+    public IPackage? Owner => Outer?.Package;
+    public string ExportType => Class?.Name.Text ?? GetType().Name;
+
+    public UObject()
+    {
+        Properties = [];
+    }
+
+    public UObject(List<FPropertyTag> properties)
+    {
+        Properties = properties;
+    }
+
+    public virtual void Deserialize(FAssetArchive Ar, long validPos)
+    {
+        if (Ar.HasUnversionedProperties)
+        {
+            if (Class == null)
+                throw new ParserException(Ar, "Found unversioned properties but object does not have a class");
+            if (Class.Object?.Value is not UStruct struc)
+                throw new ParserException(Ar, "Found unversioned properties but object's class is not a struct");
+
+            DeserializePropertiesUnversioned(Properties = [], Ar, struc);
+        }
+        else
+        {
+            if (Ar.Ver < EUnrealEngineObjectUE3Version.Release40)
+            {
+                Ar.Position += sizeof(int) * 2; // int - TempNum, TempMax
+            }
+
+            if (Class?.Name.Text == null && Ar.Game < GAME_UE4_0)
+            {
+                Ar.Position = validPos;
+                return; // there some missing data after this
+            }
+
+            if (Ar.Ver < EUnrealEngineObjectUE3Version.Release47)
+            {
+                var node = 0;
+                if (Ar.Ver >= EUnrealEngineObjectUE3Version.Release51)
+                {
+                    node = Ar.Read<int>(); // FPackageIndex - Node
+                    Ar.Position += sizeof(int); // FPackageIndex - StateNode
+                }
+                else
+                {
+                    var oldClass = Ar.Read<int>(); // FPackageIndex - OldClass
+                    if (oldClass != 0)
+                    {
+                        Ar.Position += sizeof(int); // int - iOldNode
+                    }
+                }
+
+                if (Ar.Ver < EUnrealEngineObjectUE3Version.Release52)
+                {
+                    Ar.Position += sizeof(int); // FPackageIndex - Tmp
+                }
+
+                if (Ar.Ver < EUnrealEngineObjectUE3Version.REDUCED_PROBEMASK_REMOVED_IGNOREMASK)
+                {
+                    Ar.Position += sizeof(long); // long - ProbeMask
+                }
+                else
+                {
+                    Ar.Position += sizeof(int); // int - ProbeMask
+                }
+
+                if (Ar.Ver >= EUnrealEngineObjectUE3Version.REDUCED_STATEFRAME_LATENTACTION_SIZE)
+                {
+                    Ar.Position += sizeof(short); // short - LatentAction
+                }
+                else if (Ar.Ver >= EUnrealEngineObjectUE3Version.Release55)
+                {
+                    Ar.Position += sizeof(int); // int - LatentAction
+                }
+
+                if (Ar.Ver >= EUnrealEngineObjectUE3Version.AddedStateStackToUStateFrame)
+                {
+                    Ar.SkipFixedArray(9); // StateStack
+                }
+
+                if (node != 0)
+                {
+                    Ar.Position += sizeof(int);
+                }
+            }
+
+            if (Ar.Ver >= EUnrealEngineObjectUE3Version.REMOVE_SIZE_VJOINTPOS && Ar.Game < GAME_UE4_0)
+            {
+                if (this is UComponent)
+                {
+                    Ar.Position += sizeof(int); // FPackageIndex
+                    if (Ar.Ver < EUnrealEngineObjectUE3Version.FIXED_COMPONENT_TEMPLATES)
+                    {
+                        Ar.SkipFName();
+                    }
+                }
+            }
+
+            if (Ar.Ver >= EUnrealEngineObjectUE3Version.LINKERFREE_PACKAGEMAP && Ar.Ver < EUnrealEngineObjectUE4Version.REMOVE_NET_INDEX)
+            {
+                var NetIndex = Ar.Read<int>();
+
+                if (Ar.Game == GAME_Paladins && NetIndex == -1)
+                {
+                    Ar.Position += 8; // Unknown, should be an index to bulkdata payload
+                }
+            }
+
+            DeserializePropertiesTagged(Properties = [], Ar, false);
+        }
+
+        if (Ar.Game >= GAME_UE4_0 && !Flags.HasFlag(EObjectFlags.RF_ClassDefaultObject))
+        {
+            var hasGuid = Ar.ReadBoolean();
+
+            if (hasGuid)
+            {
+                if (Ar.Position + 16 > validPos)
+                    throw new ParserException(Ar, "Unexpected EOF in ObjectGuid");
+
+                ObjectGuid = Ar.Read<FGuid>();
+            }
+        }
+
+        if (Ar.Ver < EUnrealEngineObjectUE3Version.Release57)
+        {
+            Ar.SkipFName(); // TempState
+        }
+
+        if (Ar.Ver < EUnrealEngineObjectUE3Version.Release58)
+        {
+            Ar.SkipFName(); // TempGroup
+        }
+
+        if (FUE5MainStreamObjectVersion.Get(Ar) < FUE5MainStreamObjectVersion.Type.SparseClassDataStructSerialization || !Flags.HasFlag(EObjectFlags.RF_ClassDefaultObject))
+            return;
+
+        if (Class?.Object?.Value.ExportType is { } type && type.EndsWith("BlueprintGeneratedClass"))
+        {
+            SerializedSparseClassDataStruct = new FPackageIndex(Ar).Load<UStruct>();
+            if (SerializedSparseClassDataStruct is null) return;
+            SerializedSparseClassData = new FStructFallback(Ar, SerializedSparseClassDataStruct);
+        }
+    }
+
+    /**
+     * Returns the fully qualified pathname for this object as well as the name of the class, in the format:
+     * 'ClassName Outermost.[Outer:]Name'.
+     *
+     * @param   stopOuter   if specified, indicates that the output string should be relative to this object.  if StopOuter
+     *                      does not exist in this object's Outer chain, the result would be the same as passing NULL.
+     */
+    public string GetFullName(UObject? stopOuter = null, bool includeClassPackage = false)
+    {
+        var result = new StringBuilder(128);
+        GetFullName(stopOuter, result, includeClassPackage);
+        return result.ToString();
+    }
+
+    public void GetFullName(UObject? stopOuter, StringBuilder resultString, bool includeClassPackage = false)
+    {
+        resultString.Append(includeClassPackage ? Class?.GetPathName() : ExportType);
+        resultString.Append('\'');
+        GetPathName(stopOuter, resultString);
+        resultString.Append('\'');
+    }
+
+    /// <summary>
+    /// Returns the fully qualified pathname for this object, in the format:
+    /// 'Outermost.[Outer:]Name'
+    /// </summary>
+    /// <param name="stopOuter">
+    /// if specified, indicates that the output string should be relative to this object.
+    /// if stopOuter does not exist in this object's outer chain, the result would be the same as passing null.
+    /// </param>
+    /// <returns></returns>
+    public string GetPathName(UObject? stopOuter = null)
+    {
+        var result = new StringBuilder();
+        GetPathName(stopOuter, result);
+        return result.ToString();
+    }
+
+    /**
+     * Versions of getPathName() that eliminates unnecessary copies and allocations.
+     */
+    public void GetPathName(UObject? stopOuter, StringBuilder resultString)
+    {
+        if (this != stopOuter)
+        {
+            if (Outer?.TryLoad(out var objOuter) == true && objOuter != stopOuter)
+            {
+                objOuter.GetPathName(stopOuter, resultString);
+                // SUBOBJECT_DELIMITER_CHAR is used to indicate that this object's outer is not a UPackage
+                resultString.Append(objOuter.Outer is ResolvedPackageObject ? ':' : '.');
+            }
+
+            resultString.Append(Name);
+        }
+        else
+        {
+            resultString.Append("None");
+        }
+    }
+
+    /**
+     * Traverses the outer chain searching for the next object of a certain type.  (T must be derived from UObject)
+     *
+     * @param	Target class to search for
+     * @return	a pointer to the first object in this object's Outer chain which is of the correct type.
+     */
+    public UObject? GetTypedOuter(Type target)
+    {
+        UObject? result = null;
+        for (var nextOuter = Outer; result == null && nextOuter != null; nextOuter = nextOuter.Outer)
+        {
+            if (target.IsInstanceOfType(nextOuter))
+            {
+                nextOuter.TryLoad(out result);
+            }
+        }
+        return result;
+    }
+
+    /**
+         * Traverses the outer chain searching for the next object of a certain type.  (T must be derived from UObject)
+         *
+         * @return	a pointer to the first object in this object's Outer chain which is of the correct type.
+         */
+    public T? GetTypedOuter<T>() where T : UObject
+    {
+        return GetTypedOuter(typeof(T)) as T;
+    }
+
+    /**
+         * Do any object-specific cleanup required immediately after loading an object,
+         * and immediately after any undo/redo.
+         */
+    public virtual void PostLoad()
+    {
+
+    }
+
+    internal static void DeserializePropertiesUnversioned(List<FPropertyTag> properties, FAssetArchive Ar, UStruct struc)
+    {
+        var header = new FUnversionedHeader(Ar);
+        if (!header.HasValues)
+            return;
+        var type = struc.Name;
+
+        Struct? propMappings = null;
+        if (struc is UScriptClass)
+            Ar.Owner!.Mappings?.Types.TryGetValue(type, out propMappings);
+        else
+            propMappings = new SerializedStruct(Ar.Owner!.Mappings, struc);
+
+        if (propMappings == null)
+        {
+            throw new ParserException(Ar, "Missing prop mappings for type " + type);
+        }
+
+        using var it = new FIterator(header);
+        do
+        {
+            var (val, isNonZero) = it.Current;
+            // The value has content and needs to be serialized normally
+            if (isNonZero)
+            {
+                if (propMappings.TryGetValue(val, out var propertyInfo))
+                {
+                    var tag = new FPropertyTag(Ar, propertyInfo, ReadType.NORMAL);
+                    if (tag.Tag != null)
+                        properties.Add(tag);
+                    else
+                    {
+                        throw new ParserException(Ar, $"{type}: Failed to serialize property {propertyInfo.MappingType.Type} {propertyInfo.Name}. Can't proceed with serialization (Serialized {properties.Count} properties until now)");
+                    }
+                }
+                else
+                {
+                    throw new ParserException(Ar, $"{type}: Unknown property with value {val}. Can't proceed with serialization (Serialized {properties.Count} properties until now)");
+                }
+            }
+            // The value is serialized as zero meaning we don't have to read any bytes here
+            else
+            {
+                if (propMappings.TryGetValue(val, out var propertyInfo))
+                {
+                    properties.Add(new FPropertyTag(Ar, propertyInfo, ReadType.ZERO));
+                }
+                else
+                {
+                    Log.Warning(
+                        "{0}: Unknown property with value {1} but it's zero so we are good",
+                        type, val);
+                }
+            }
+        } while (it.MoveNext());
+    }
+
+    internal static void DeserializePropertiesTagged(List<FPropertyTag> properties, FAssetArchive Ar, bool isStruct)
+    {
+        if (!isStruct && Ar.Ver >= EUnrealEngineObjectUE5Version.PROPERTY_TAG_EXTENSION_AND_OVERRIDABLE_SERIALIZATION)
+        {
+            var SerializationControl = Ar.Read<EClassSerializationControlExtension>();
+
+            if (SerializationControl.HasFlag(EClassSerializationControlExtension.OverridableSerializationInformation))
+            {
+                var Operation = Ar.Read<byte>(); // Operation
+            }
+        }
+
+        while (true)
+        {
+            var tag = new FPropertyTag(Ar, true);
+            if (tag.Name.IsNone)
+                break;
+            properties.Add(tag);
+        }
+    }
+
+    internal static void DeserializeRawProperties(List<FPropertyTag> properties, FAssetArchive Ar, UStruct struc, FRawHeader? header, ReadType readType = ReadType.NORMAL)
+    {
+        var type = struc.Name;
+        Struct? propMappings = null;
+        if (struc is UScriptClass)
+            Ar.Owner!.Mappings?.Types.TryGetValue(type, out propMappings);
+        else
+            propMappings = new SerializedStruct(Ar.Owner!.Mappings, struc);
+
+        if (propMappings is null)
+        {
+            if (Ar.HasUnversionedProperties) throw new ParserException(Ar, "Missing prop mappings for type " + type);
+            Log.Warning("Couldn't find {type} struct definition", type);
+            return;
+        }
+
+        header ??= FRawHeader.FullRead;
+
+        var readtype = readType;
+        if (readType == ReadType.RAW || header.Flags.HasFlag(ERawHeaderFlags.RawProperties))
+        {
+            readtype = ReadType.RAW;
+        }
+
+        var indices = header.BuildIndices(propMappings);
+        foreach (var index in indices)
+        {
+            if (propMappings.TryGetValue(index, out var propertyInfo))
+            {
+                if (propertyInfo.MappingType.Type is "StructProperty" && readtype is ReadType.RAW && header.Flags.HasFlag(ERawHeaderFlags.RawPropertiesExceptStructs))
+                {
+                    readtype = ReadType.NORMAL;
+                }
+                var tag = new FPropertyTag(Ar, propertyInfo, readtype);
+                if (tag.Tag != null)
+                    properties.Add(tag);
+                else
+                {
+                    throw new ParserException(Ar, $"{type}: Failed to serialize property {propertyInfo.MappingType.Type} {propertyInfo.Name}. Can't proceed with serialization (Serialized {properties.Count} properties until now)");
+                }
+            }
+            else
+            {
+                throw new ParserException(Ar, $"{type}: Unknown property with value {index}. Can't proceed with serialization (Serialized {properties.Count} properties until now)");
+            }
+        }
+    }
+
+    protected internal virtual void WriteJson(JsonWriter writer, JsonSerializer serializer)
+    {
+        writer.WritePropertyName("Type");
+        writer.WriteValue(ExportType);
+
+        writer.WritePropertyName(nameof(Name)); // ctrl click depends on the name, we always need it
+        writer.WriteValue(Name);
+
+        writer.WritePropertyName(nameof(Flags));
+        writer.WriteValue(Flags.ToStringBitfield());
+
+        if (Class is { Object.Value: { } clas })
+        {
+            writer.WritePropertyName(nameof(Class));
+            writer.WriteValue(clas.GetFullName());
+        }
+
+        if (Outer is not null && Outer is not ResolvedPackageObject)
+        {
+            writer.WritePropertyName(nameof(Outer));
+            serializer.Serialize(writer, Outer);
+        }
+        else if (Owner is not null)
+        {
+            writer.WritePropertyName("Package");
+            writer.WriteValue(Owner.Name);
+        }
+
+        if (Super != null)
+        {
+            writer.WritePropertyName(nameof(Super));
+            serializer.Serialize(writer, Super);
+        }
+
+        if (Template != null)
+        {
+            writer.WritePropertyName(nameof(Template));
+            serializer.Serialize(writer, Template);
+        }
+
+        if (Properties.Count > 0)
+        {
+            writer.WritePropertyName(nameof(Properties));
+            writer.WriteStartObject();
+            foreach (var property in Properties)
+            {
+                writer.WritePropertyName(property.ArrayIndex > 0 ? $"{property.Name.Text}[{property.ArrayIndex}]" : property.Name.Text);
+                serializer.Serialize(writer, property.Tag);
+            }
+            writer.WriteEndObject();
+        }
+
+        if (SerializedSparseClassDataStruct != null)
+        {
+            writer.WritePropertyName(nameof(SerializedSparseClassDataStruct));
+            writer.WriteValue(SerializedSparseClassDataStruct.GetFullName());
+
+            writer.WritePropertyName(nameof(SerializedSparseClassData));
+            serializer.Serialize(writer, SerializedSparseClassData);
+        }
+    }
+
+    // Just ignore it for the parser
+    /*-----------------------------------------------------------------------------
+            Replication.
+    -----------------------------------------------------------------------------*/
+
+    /** Returns properties that are replicated for the lifetime of the actor channel */
+    public virtual void GetLifetimeReplicatedProps(List<FLifetimeProperty> outLifetimeProps)
+    {
+
+    }
+
+    /** Called right before receiving a bunch */
+    public virtual void PreNetReceive()
+    {
+
+    }
+
+    /** Called right after receiving a bunch */
+    public virtual void PostNetReceive()
+    {
+
+    }
+
+    /** Called right after calling all OnRep notifies (called even when there are no notifies) */
+    public virtual void PostRepNotifies()
+    {
+
+    }
+
+    /** Called right before being marked for destruction due to network replication */
+    public virtual void PreDestroyFromReplication()
+    {
+
+    }
+
+    /** IsNameStableForNetworking means an object can be referred to its path name (relative to outer) over the network */
+    public virtual bool IsNameStableForNetworking() => Flags.HasFlag(EObjectFlags.RF_WasLoaded) || Flags.HasFlag(EObjectFlags.RF_DefaultSubObject) /* || IsNative() || IsDefaultSubobject() */;
+
+    /** IsFullNameStableForNetworking means an object can be referred to its full path name over the network */
+    public virtual bool IsFullNameStableForNetworking()
+    {
+        if (Outer?.TryLoad(out var outer) == true && !outer.IsNameStableForNetworking())
+        {
+            return false;	// If any outer isn't stable, we can't consider the full name stable
+        }
+
+        return IsNameStableForNetworking();
+    }
+
+    /** IsSupportedForNetworking means an object can be referenced over the network */
+    public virtual bool IsSupportedForNetworking()
+    {
+        return IsFullNameStableForNetworking();
+    }
+
+    public override string ToString() => Name;
+}
+
+public static class PropertyUtil
+{
+    public static bool SearchPropertyInTemplate = false;
+
+    private static bool TryGet(this IPropertyHolder holder, string name, out FPropertyTag? tag, StringComparison comparisonType = StringComparison.Ordinal)
+    {
+        foreach (var prop in holder.Properties.Where(prop => prop.Name.Text.Equals(name, comparisonType)))
+        {
+            tag = prop;
+            return true;
+        }
+
+        if (SearchPropertyInTemplate && holder is UObject obj)
+        {
+            // if not here then in look in template
+            var temp = obj.Template?.Object?.Value;
+            if (temp != null && temp.TryGet(name, out tag, comparisonType))
+            {
+                return true;
+            }
+
+            // if not here then in look in class ..? // not sure about this one
+            temp = obj.Class?.Object?.Value;
+            if (temp != null && temp.TryGet(name, out tag, comparisonType))
+            {
+                return true;
+            }
+        }
+
+        tag = null;
+        return false;
+    }
+
+    public static bool TryGet<T>(this IPropertyHolder holder, string name, out T value, T defaultValue = default!, StringComparison comparisonType = StringComparison.Ordinal)
+    {
+        if (holder.TryGet(name, out var prop, comparisonType) && prop?.Tag?.GetValue(typeof(T)) is T val)
+        {
+            value = val;
+            return true;
+        }
+
+        value = defaultValue;
+        return false;
+    }
+
+    // TODO Little Problem here: Can't use T? since this would need a constraint to struct or class, which again wouldn't work fine with primitives
+    public static T GetOrDefault<T>(IPropertyHolder holder, string name, T defaultValue = default!, StringComparison comparisonType = StringComparison.Ordinal)
+    {
+        if (holder.TryGet(name, out var value, defaultValue, comparisonType))
+        {
+            return value;
+        }
+        return defaultValue;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Lazy<T> GetOrDefaultLazy<T>(IPropertyHolder holder, string name, T defaultValue = default!, StringComparison comparisonType = StringComparison.Ordinal)
+        => new(() => GetOrDefault(holder, name, defaultValue, comparisonType));
+
+    // Not optimal as well. Can't really compare against null or default. That's why this is a copy of GetOrDefault that throws instead
+    public static T Get<T>(IPropertyHolder holder, string name, StringComparison comparisonType = StringComparison.Ordinal)
+    {
+        if (!holder.TryGet(name, out var tag) || tag?.Tag == null)
+        {
+            throw new NullReferenceException($"{holder.GetType().Name} does not have a property '{name}'");
+        }
+
+        if (tag.Tag.GetValue(typeof(T)) is T cast)
+        {
+            return cast;
+        }
+
+        throw new NullReferenceException($"Couldn't get property '{name}' of type {typeof(T).Name} in {holder.GetType().Name}");
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Lazy<T> GetLazy<T>(IPropertyHolder holder, string name, StringComparison comparisonType = StringComparison.Ordinal)
+        => new(() => Get<T>(holder, name, comparisonType));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static T GetByIndex<T>(IPropertyHolder holder, int index)
+    {
+        var tag = holder.Properties[index]?.Tag;
+        if (tag == null)
+        {
+            throw new NullReferenceException($"{holder.GetType().Name} does not have a property at index '{index}'");
+        }
+
+        if (tag.GetValue(typeof(T)) is T cast)
+        {
+            return cast;
+        }
+
+        throw new NullReferenceException($"Couldn't get property of type {typeof(T).Name} at index '{index}' in {holder.GetType().Name}");
+    }
+
+    public static void Set<T>(IPropertyHolder holder, string name, T value, StringComparison comparisonType = StringComparison.Ordinal)
+    {
+        FPropertyTag? tag = null;
+        int foundIndex = -1;
+        for (var i = 0; i < holder.Properties.Count; i++) {
+            var prop = holder.Properties[i];
+            if (prop.Name.Text.Equals(name, comparisonType)) {
+                if (prop.Tag != null) {
+                    if (prop.Tag is ObjectProperty tagData && value is FPackageIndex idx) {
+                        tagData.Value = idx;
+                        return;
+                    }
+                }
+
+                tag = prop;
+                foundIndex = i;
+                break;
+            }
+        }
+
+        var tag2 = tag ?? new FPropertyTag(name, typeof(T).Name, 0, 0, null, false, null, null);
+
+        tag2.Tag = value switch
+        {
+            FPackageIndex idx => new ObjectProperty(idx),
+            IUStruct uStruct => new StructProperty(new FScriptStruct(uStruct)),
+            FPropertyTagType propType => propType,
+            _ => throw new NotImplementedException($"Setting properties of type {typeof(T).Name} is not implemented yet")
+        };
+
+        if (foundIndex != -1)
+        {
+            holder.Properties[foundIndex] = tag2;
+        }
+        else
+        {
+            holder.Properties.Add(tag2);
+        }
+    }
+}
+
+// ~Fabian: Please just ignore that, needed it in a different project
+
+/** FLifetimeProperty
+ *	This class is used to track a property that is marked to be replicated for the lifetime of the actor channel.
+ *  This doesn't mean the property will necessarily always be replicated, it just means:
+ *	"check this property for replication for the life of the actor, and I don't want to think about it anymore"
+ *  A secondary condition can also be used to skip replication based on the condition results
+ */
+public class FLifetimeProperty
+{
+    public ushort RepIndex;
+    public ELifetimeCondition Condition;
+    public ELifetimeRepNotifyCondition RepNotifyCondition;
+
+    public FLifetimeProperty()
+    {
+        RepIndex = 0;
+        Condition = ELifetimeCondition.COND_None;
+        RepNotifyCondition = ELifetimeRepNotifyCondition.REPNOTIFY_OnChanged;
+    }
+
+    public FLifetimeProperty(int repIndex)
+    {
+        RepIndex = (ushort) repIndex;
+        Condition = ELifetimeCondition.COND_None;
+        RepNotifyCondition = ELifetimeRepNotifyCondition.REPNOTIFY_OnChanged;
+    }
+
+    public FLifetimeProperty(int repIndex, ELifetimeCondition condition, ELifetimeRepNotifyCondition repNotifyCondition = ELifetimeRepNotifyCondition.REPNOTIFY_OnChanged)
+    {
+        RepIndex = (ushort) repIndex;
+        Condition = condition;
+        RepNotifyCondition = repNotifyCondition;
+    }
+
+    protected bool Equals(FLifetimeProperty other)
+    {
+        return RepIndex == other.RepIndex && Condition == other.Condition && RepNotifyCondition == other.RepNotifyCondition;
+    }
+
+    public override bool Equals(object? obj)
+    {
+        if (ReferenceEquals(null, obj)) return false;
+        if (ReferenceEquals(this, obj)) return true;
+        if (obj.GetType() != this.GetType()) return false;
+        return Equals((FLifetimeProperty) obj);
+    }
+
+    public override int GetHashCode()
+    {
+        return HashCode.Combine(RepIndex, (int) Condition, (int) RepNotifyCondition);
+    }
+
+    public static bool operator ==(FLifetimeProperty a, FLifetimeProperty b) => a.RepIndex == b.RepIndex && a.Condition == b.Condition && a.RepNotifyCondition == b.RepNotifyCondition;
+    public static bool operator !=(FLifetimeProperty a, FLifetimeProperty b) => !(a == b);
+}
+
+[Flags]
+public enum EClassSerializationControlExtension : byte
+{
+    NoExtension					= 0x00,
+    ReserveForFutureUse			= 0x01, // Can be use to add a next group of extension
+
+    ////////////////////////////////////////////////
+    // First extension group
+    OverridableSerializationInformation	= 0x02,
+
+    //
+    // Add more extension for the first group here
+    //
+}

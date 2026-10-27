@@ -1,0 +1,157 @@
+namespace CUE4Parse.UE4.Wwise.Objects;
+
+public readonly struct AkFx
+{
+    public readonly byte FXIndex;
+    public readonly uint FXId;
+    public readonly byte BitVector;
+    public readonly bool IsShareSet; // Version <= 145
+    public readonly bool IsRendered; // Version <= 145
+
+    public AkFx(FWwiseArchive Ar)
+    {
+        switch (Ar.Version)
+        {
+            case <= 26:
+                // No additional fields for version <= 26
+                break;
+            case <= 145:
+                FXIndex = Ar.Read<byte>();
+                FXId = Ar.Read<uint>();
+                IsShareSet = Ar.ReadBool();
+                IsRendered = Ar.ReadBool();
+                break;
+            default: // Version > 145
+                FXIndex = Ar.Read<byte>();
+                FXId = Ar.Read<uint>();
+                BitVector = Ar.Read<byte>();
+                IsShareSet = (BitVector & (1 << 1)) != 0;
+                IsRendered = (BitVector & (1 << 2)) != 0;
+                break;
+        }
+    }
+}
+
+public readonly struct AkFxParams
+{
+    public readonly bool BypassAll;
+    public readonly AkFx[] Effects = [];
+
+    public AkFxParams(FWwiseArchive Ar)
+    {
+        int count;
+        if (Ar.Version <= 26)
+        {
+            count = Ar.Read<uint>() != 0 ? 1 : 0; // uNumFx (flag check for version <= 26)
+        }
+        else
+        {
+            count = Ar.Read<byte>(); // uNumFx
+        }
+
+        if (count > 0)
+        {
+            switch (Ar.Version)
+            {
+                case <= 26:
+                    break;
+                case <= 145:
+                    BypassAll = Ar.ReadBool();
+                    break;
+                default:
+                    BypassAll = Ar.ReadBool();
+                    break;
+            }
+
+            Effects = Ar.ReadArray(count, () => new AkFx(Ar));
+        }
+    }
+}
+
+public readonly struct AkFxChunk
+{
+    public readonly byte FxIndex;
+    public readonly uint FxId;
+    public readonly byte IsShareSet;
+
+    public AkFxChunk(FWwiseArchive Ar)
+    {
+        FxIndex = Ar.Read<byte>();
+        FxId = Ar.Read<uint>();
+        IsShareSet = Ar.Read<byte>();
+    }
+
+    public AkFxChunk(byte fxIndex, uint fxId, byte isShareSet)
+    {
+        FxIndex = fxIndex;
+        FxId = fxId;
+        IsShareSet = isShareSet;
+    }
+}
+
+public class AkFxBus
+{
+    public readonly byte BitsFxBypass;
+    public readonly AkFxChunk[] FxChunks = [];
+    public readonly AkFxParams? FxParams; // >136
+    public readonly uint FxId0;
+    public readonly bool IsShareSet0;
+
+    public AkFxBus(FWwiseArchive Ar)
+    {
+        int count;
+
+        if (Ar.Version <= 26)
+        {
+            var numFX = Ar.Read<uint>();
+            count = numFX != 0 ? 1 : 0;
+        }
+        else if (Ar.Version <= 135)
+        {
+            count = Ar.Read<byte>();
+        }
+        else
+        {
+            count = 0;
+        }
+
+        bool readFx;
+        if (Ar.Version > 48 && Ar.Version <= 65)
+        {
+            readFx = count > 0; // or if is environmental, only possible in versions <= 53, we shouldn't really care about versions < 100
+        }
+        else
+        {
+            readFx = count > 0;
+        }
+
+        if (readFx)
+        {
+            if (Ar.Version > 26)
+            {
+                BitsFxBypass = Ar.Read<byte>();
+            }
+
+            FxChunks = new AkFxChunk[count];
+            for (int i = 0; i < count; i++)
+            {
+                var fxIndex = Ar.Read<byte>();
+                var fxId = Ar.Read<uint>();
+                var isShareSet = Ar.Read<byte>();
+                Ar.Read<byte>(); // unused byte
+                FxChunks[i] = new AkFxChunk(fxIndex, fxId, isShareSet);
+            }
+        }
+
+        if (Ar.Version > 135)
+        {
+            FxParams = new AkFxParams(Ar);
+        }
+
+        if (Ar.Version > 89 && Ar.Version <= 145)
+        {
+            FxId0 = Ar.Read<uint>();
+            IsShareSet0 = Ar.ReadBool();
+        }
+    }
+}

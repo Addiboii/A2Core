@@ -1,0 +1,379 @@
+using System.Runtime.CompilerServices;
+using CUE4Parse.Compression;
+using CUE4Parse.Encryption.Aes;
+using CUE4Parse.GameTypes.Tencent.ValorantSource.Encryption.Aes;
+using CUE4Parse.UE4.Assets.Objects;
+using CUE4Parse.UE4.IO;
+using CUE4Parse.UE4.Objects.Core.Misc;
+using CUE4Parse.UE4.Readers;
+using CUE4Parse.UE4.Versions;
+using CUE4Parse.UE4.VirtualFileSystem;
+using CUE4Parse.Utils;
+using GenericReader;
+using static CUE4Parse.UE4.Objects.Core.Misc.ECompressionFlags;
+using static CUE4Parse.UE4.Pak.Objects.EPakFileVersion;
+
+namespace CUE4Parse.UE4.Pak.Objects;
+
+public class FPakEntry : VfsEntry
+{
+    private const byte Flag_None = 0x00;
+    private const byte Flag_Encrypted = 0x01;
+    private const byte Flag_Deleted = 0x02;
+
+    public readonly long CompressedSize;
+    public readonly long UncompressedSize;
+    public override CompressionMethod CompressionMethod { get; }
+    public readonly FPakCompressedBlock[] CompressionBlocks = [];
+    public readonly uint Flags;
+    public override bool IsEncrypted => (Flags & Flag_Encrypted) == Flag_Encrypted;
+    public bool IsDeleted => (Flags & Flag_Deleted) == Flag_Deleted;
+    public readonly uint CompressionBlockSize;
+    public FIoStoreEncryptionIV? EncryptionIV { get; internal set; }
+    public int CustomData;
+
+    public readonly int StructSize; // computed value: size of FPakEntry prepended to each file
+    public bool IsCompressed => UncompressedSize != CompressedSize && CompressionBlockSize > 0;
+
+    public FPakEntry(IVfsReader vfs, string path, long size = 0) : base(vfs, path) { }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public FPakEntry(PakFileReader reader, string path, FArchive Ar) : base(reader, path)
+    {
+        // FPakEntry is duplicated before each stored file, without a filename. So,
+        // remember the serialized size of this structure to avoid recomputation later.
+        var startOffset = Ar.Position;
+
+        Offset = Ar.Read<long>();
+
+        if (Ar.Game == GAME_GearsOfWar4)
+        {
+            CompressedSize = Ar.Read<int>();
+            UncompressedSize = Ar.Read<int>();
+            CompressionMethod = (CompressionMethod) Ar.Read<byte>();
+
+            if (reader.Info.Version < PakFile_Version_NoTimestamps)
+            {
+                Ar.Position += 8;
+            }
+
+            if (reader.Info.Version >= PakFile_Version_CompressionEncryption)
+            {
+                if (CompressionMethod != CompressionMethod.None)
+                    CompressionBlocks = Ar.ReadArray<FPakCompressedBlock>();
+                CompressionBlockSize = Ar.Read<uint>();
+                if (CompressionMethod == CompressionMethod.Oodle)
+                    CompressionMethod = CompressionMethod.LZ4;
+            }
+
+            goto endRead;
+        }
+
+        CompressedSize = Ar.Read<long>();
+        UncompressedSize = Ar.Read<long>();
+        Size = UncompressedSize;
+
+        if (reader.Info.Version < PakFile_Version_FNameBasedCompressionMethod)
+        {
+            var legacyCompressionMethod = Ar.Read<ECompressionFlags>();
+            var compressionMethodIndex = legacyCompressionMethod switch
+            {
+                COMPRESS_None => 0,
+                (ECompressionFlags) 259 => 4, // SOD2
+                _ when legacyCompressionMethod.HasFlag(COMPRESS_ZLIB) => 1,
+                _ when legacyCompressionMethod.HasFlag(COMPRESS_GZIP) => 2,
+                _ when legacyCompressionMethod.HasFlag(COMPRESS_Custom) => reader.Game == GAME_SeaOfThieves ? 4 : 3, // LZ4 or Oodle, used by Fortnite Mobile until early 2019
+                _ => reader.Game switch
+                {
+                    GAME_PlayerUnknownsBattlegrounds or GAME_Ashen or GAME_WhatRemainsofEdithFinch => 3, // TODO: Investigate what a proper detection is.
+                    GAME_DeadIsland2 => 6, // ¯\_(ツ)_/¯
+                    _ => -1
+                }
+            };
+            CompressionMethod = compressionMethodIndex == -1 ? CompressionMethod.Unknown : reader.Info.CompressionMethods[compressionMethodIndex];
+        }
+        else if (reader.Info is { Version: PakFile_Version_FNameBasedCompressionMethod, IsSubVersion: false })
+        {
+            CompressionMethod = reader.Info.CompressionMethods[Ar.Read<byte>()];
+        }
+        else
+        {
+            CompressionMethod = reader.Info.CompressionMethods[Ar.Read<int>()];
+        }
+
+        if (reader.Info.Version < PakFile_Version_NoTimestamps)
+            Ar.Position += 8; // Timestamp
+        Ar.Position += 20; // Hash
+        if (Ar.Game is GAME_Overhit) Ar.Position += 20;
+
+        if (reader.Info.Version >= PakFile_Version_CompressionEncryption)
+        {
+            if (CompressionMethod != CompressionMethod.None)
+                CompressionBlocks = Ar.ReadArray<FPakCompressedBlock>();
+
+            switch (Ar.Game)
+            {
+                case GAME_Back4Blood:
+                    CompressionBlockSize = Ar.Read<uint>();
+                    Flags = Ar.Read<byte>();
+                    break;
+                default:
+                    Flags = Ar.Read<byte>();
+                    CompressionBlockSize = Ar.Read<uint>();
+                    break;
+            }
+
+            if (Ar.Game == GAME_ConanExiles)
+            {
+                if (CompressionMethod != CompressionMethod.None && (path.EndsWith("gtp") || path.EndsWith("gts")))
+                {
+                    // Conan Exiles has a bug where it stores the CompressionBlocks for gpt files, but doesn't use them.
+                    // It also doesn't use CompressionBlockSize, so we can ignore it.
+                    CompressionBlocks = [];
+                    CompressionBlockSize = 0;
+                    CompressionMethod = CompressionMethod.None;
+        }
+                Ar.Position += 4;
+            }
+        }
+
+        if (Ar.Game == GAME_TEKKEN7) Flags = (uint) (Flags & ~Flag_Encrypted);
+
+        if (reader.Info.Version >= PakFile_Version_RelativeChunkOffsets)
+        {
+            // Convert relative compressed offsets to absolute
+            for (var i = 0; i < CompressionBlocks.Length; i++)
+            {
+                CompressionBlocks[i].CompressedStart += Offset;
+                CompressionBlocks[i].CompressedEnd += Offset;
+            }
+        }
+
+        endRead:
+        StructSize = (int) (Ar.Position - startOffset);
+
+        if (Ar.Game == GAME_StateOfDecay2 && CompressionMethod == CompressionMethod.None) StructSize = 0;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public FPakEntry(PakFileReader reader, string path, GenericBufferReader Ar, int offset) : base(reader, path)
+    {
+        // UE4 reference: FPakFile::DecodePakEntry()
+        Ar.Seek(offset, SeekOrigin.Begin);
+        var bitfield = Ar.Read<uint>();
+
+        if (reader.Game == GAME_WutheringWaves && reader.Info.Version > PakFile_Version_Fnv64BugFix)
+        {
+            bitfield = (bitfield >> 16) & 0x3F | (bitfield & 0xFFFF) << 6 | (bitfield & (1 << 28)) >> 6 |
+                       (bitfield & 0x0FC00000) << 1 | (bitfield & 0xC0000000) >> 1 | (bitfield & 0x20000000) << 2;
+            CustomData = Ar.Read<byte>();
+        }
+
+        if (reader.Game is GAME_InfinityNikki)
+        {
+            var compressionBlocksNum = (bitfield >> 6) & 0xFFFF;
+            var isOffset32BitSafe = (bitfield >> 31) & 1;
+            var isSize32BitSafe = (bitfield >> 22) & 1;
+            var isUncompressedSize32BitSafe = (bitfield >> 30) & 1;
+            var compressedSizeBacked = bitfield & 0x3F;
+            var isEncrypted = (bitfield >> 29) & 1;
+            var compressionMethodIndex = (bitfield >> 23) & 0x3F;
+
+            bitfield = compressedSizeBacked
+                       | (compressionBlocksNum << 6)
+                       | (isEncrypted << 22)
+                       | (compressionMethodIndex << 23)
+                       | (isSize32BitSafe << 29)
+                       | (isUncompressedSize32BitSafe << 30)
+                       | (isOffset32BitSafe << 31);
+        }
+
+        if (reader.Game is GAME_ValorantSource) Ar.Position += FSHAHash.SIZE;
+
+        uint compressionBlockSize = (bitfield & 0x3f) == 0x3f ? Ar.Read<uint>() : (bitfield & 0x3f) << 11;
+
+        // Filter out the CompressionMethod.
+        CompressionMethod = reader.Info.CompressionMethods[(int) ((bitfield >> 23) & 0x3f)];
+
+        // Read the Offset.
+        var bIsOffset32BitSafe = (bitfield & (1 << 31)) != 0;
+        var bIsUncompressedSize32BitSafe = (bitfield & (1 << 30)) != 0;
+        if (reader.Game is GAME_ValorantSource)
+        {
+            var obfuscatedA = Ar.Read<ulong>();
+            var obfuscatedB = Ar.Read<ulong>();
+
+            const ulong lowNibbles = ValorantSourceAes.LOW_NIBBLES_MASK;
+            const ulong highNibbles = ValorantSourceAes.HIGH_NIBBLES_MASK;
+
+            var reconstructedOffset = (obfuscatedB & highNibbles) | (obfuscatedA & lowNibbles);
+            var reconstructedSize = (obfuscatedB & lowNibbles) | (obfuscatedA & highNibbles);
+            Offset = bIsOffset32BitSafe ? (uint) (reconstructedOffset >> 8) : (long) reconstructedOffset;
+            UncompressedSize = bIsUncompressedSize32BitSafe ? (uint) (reconstructedSize >> 8) : (long) reconstructedSize;
+        }
+        else
+        {
+            Offset = bIsOffset32BitSafe ? Ar.Read<uint>() : Ar.Read<long>(); // Should be ulong
+            UncompressedSize = bIsUncompressedSize32BitSafe ? Ar.Read<uint>() : Ar.Read<long>(); // Should be ulong
+        }
+
+        if (reader.Game == GAME_Snowbreak) Offset ^= 0x1F1E1D1C;
+        if (reader.Game is GAME_QQ or GAME_DreamStar) Offset += 8;
+
+        if (reader.Game == GAME_WutheringWaves && reader.Info.Version > PakFile_Version_Fnv64BugFix)
+            (Offset, UncompressedSize) = (UncompressedSize, Offset);
+
+        Size = UncompressedSize;
+
+        var entryIsEncrypted = (bitfield & (1 << 22)) != 0;
+        if (reader.Info.EncryptionMethod == EIoEncryptionMethod.AES_CTR && entryIsEncrypted)
+            EncryptionIV = new FIoStoreEncryptionIV(Ar.ReadArray<byte>(FIoStoreEncryptionIV.Size));
+
+        // Fill in the Size.
+        if (CompressionMethod != CompressionMethod.None)
+        {
+            var bIsSize32BitSafe = (bitfield & (1 << 29)) != 0;
+            CompressedSize = bIsSize32BitSafe ? Ar.Read<uint>() : Ar.Read<long>();
+        }
+        else
+        {
+            // The Size is the same thing as the UncompressedSize when
+            // CompressionMethod == CompressionMethod.None.
+            CompressedSize = UncompressedSize;
+        }
+
+        // Filter the encrypted flag.
+        Flags |= entryIsEncrypted ? 1u : 0u;
+
+        // This should clear out any excess CompressionBlocks that may be valid in the user's passed in entry.
+        var compressionBlocksCount = (bitfield >> 6) & 0xffff;
+        if (reader.Ar.Game == GAME_RocoKingdomWorld)
+        {
+            var strategyIndex = compressionBlocksCount >> 10;
+            compressionBlocksCount &= 0x3FF;
+            CustomData = (int)strategyIndex;
+        }
+
+        CompressionBlocks = compressionBlocksCount > 0 ? new FPakCompressedBlock[compressionBlocksCount] : [];
+        CompressionBlockSize = compressionBlocksCount switch
+        {
+            1 => (uint) UncompressedSize,
+            > 0 => compressionBlockSize,
+            _ => 0
+        };
+
+        // Compute StructSize: each file still have FPakEntry data prepended, and it should be skipped.
+        StructSize = sizeof(long) * 3 + sizeof(int) * 2 + 1 + 20;
+        // Take into account CompressionBlocks
+        if (CompressionMethod != CompressionMethod.None)
+            StructSize += (int) (sizeof(int) + compressionBlocksCount * 2 * sizeof(long));
+
+        StructSize += reader.Ar.Game switch
+        {
+            GAME_TorchlightInfinite or GAME_EtheriaRestart or GAME_BlackMythWukong or GAME_ArcheAgeWar => 1,
+            GAME_InfinityNikki => 20,
+            GAME_VisionsofMana => -3,
+            _ => 0
+        };
+
+        if (reader.Game == GAME_ValorantSource)
+            StructSize = 0;
+
+        // Handle building of the CompressionBlocks array.
+        var compressedBlockOffset = Offset + StructSize;
+        if (compressionBlocksCount == 1 && !IsEncrypted)
+        {
+            ref var b = ref CompressionBlocks[0];
+            b.CompressedStart = compressedBlockOffset;
+            b.CompressedEnd = compressedBlockOffset + CompressedSize;
+        }
+        else if (compressionBlocksCount > 0)
+        {
+            var compressedBlockAlignment = IsEncrypted ? Aes.ALIGN : 1;
+            for (var compressionBlockIndex = 0; compressionBlockIndex < compressionBlocksCount; ++compressionBlockIndex)
+            {
+                ref var compressedBlock = ref CompressionBlocks[compressionBlockIndex];
+                var length = Ar.Read<uint>();
+                compressedBlock.CompressedStart = compressedBlockOffset;
+                compressedBlock.CompressedEnd = compressedBlockOffset + length;
+                compressedBlockOffset += length.Align(compressedBlockAlignment);
+            }
+        }
+    }
+
+    public FPakEntry(PakFileReader reader, FMemoryImageArchive Ar) : base(reader)
+    {
+        Offset = Ar.Read<long>();
+        CompressedSize = Ar.Read<long>();
+        UncompressedSize = Ar.Read<long>();
+        Size = UncompressedSize;
+        Ar.Position += FSHAHash.SIZE + 4 /*align to 8 bytes*/; //Hash = new FSHAHash(Ar);
+        CompressionBlocks = Ar.ReadArray<FPakCompressedBlock>();
+        CompressionBlockSize = Ar.Read<uint>();
+        CompressionMethod = reader.Info.CompressionMethods[Ar.Read<int>()];
+        Flags = Ar.Read<byte>();
+
+        if (reader.Info.Version >= PakFile_Version_RelativeChunkOffsets)
+        {
+            // Convert relative compressed offsets to absolute
+            for (var i = 0; i < CompressionBlocks.Length; i++)
+            {
+                CompressionBlocks[i].CompressedStart += Offset;
+                CompressionBlocks[i].CompressedEnd += Offset;
+            }
+        }
+
+        // Compute StructSize: each file still have FPakEntry data prepended, and it should be skipped.
+        StructSize = sizeof(long) * 3 + sizeof(int) * 2 + 1 + 20;
+        // Take into account CompressionBlocks
+        if (CompressionMethod != CompressionMethod.None)
+            StructSize += (int) (sizeof(int) + CompressionBlocks.Length * 2 * sizeof(long));
+    }
+
+    public PakFileReader PakFileReader
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => (PakFileReader) Vfs;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public override byte[] Read(FByteBulkDataHeader? header = null)  => Vfs.Extract(this, header);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public override FArchive CreateReader(FByteBulkDataHeader? header = null) => new FByteArchive(Path, Read(header), Vfs.Versions);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public FPakEntry(PakFileReader reader, string path, FArchive Ar, EGame game) : base(reader, path)
+    {
+        var startOffset = Ar.Position;
+
+        if (game is GAME_GameForPeace or GAME_PUBGMobile or GAME_PUBGLite)
+        {
+            Ar.Position += 20;
+            Offset = Ar.Read<long>();
+            UncompressedSize = Ar.Read<long>();
+            var serializedCompressionMethod = Ar.Read<int>();
+            if (game is GAME_PUBGMobile) CustomData = serializedCompressionMethod;
+            CompressionMethod = game is GAME_PUBGMobile or GAME_PUBGLite
+                ? serializedCompressionMethod switch
+                {
+                    0 => CompressionMethod.None,
+                    1 => CompressionMethod.Zlib,
+                    6 => CompressionMethod.Zstd,
+                    7 => CompressionMethod.Oodle,
+                    152 => CompressionMethod.Zstd, // ZSTD using `mini_obbzsdic_obb` dictionary
+                    _ => CompressionMethod.Unknown
+                }
+                : reader.Info.CompressionMethods[serializedCompressionMethod];
+            CompressedSize = Ar.Read<long>();
+            Size = UncompressedSize;
+            Ar.Position += 21;
+            if (CompressionMethod != CompressionMethod.None)
+                CompressionBlocks = Ar.ReadArray<FPakCompressedBlock>();
+            CompressionBlockSize = Ar.Read<uint>();
+            Flags = (uint) Ar.ReadByte();
+        }
+
+        StructSize = game is GAME_PUBGMobile or GAME_PUBGLite ? 0 : (int) (Ar.Position - startOffset);
+    }
+}

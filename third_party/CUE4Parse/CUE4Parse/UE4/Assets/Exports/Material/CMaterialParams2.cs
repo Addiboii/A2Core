@@ -1,0 +1,353 @@
+using System.Diagnostics.CodeAnalysis;
+using System.Text.RegularExpressions;
+using CUE4Parse.UE4.Assets.Exports.Texture;
+using CUE4Parse.UE4.Assets.Objects;
+using CUE4Parse.UE4.Objects.Core.Math;
+using CUE4Parse.UE4.Objects.UObject;
+
+namespace CUE4Parse.UE4.Assets.Exports.Material;
+
+public struct TextureMapping
+{
+    public int UVSet;
+    public int Index;
+}
+
+public class CMaterialParams2
+{
+    public const string FallbackDiffuse = "PM_Diffuse";
+    public const string FallbackNormals = "PM_Normals";
+    public const string FallbackSpecularMasks = "PM_SpecularMasks";
+    public const string FallbackEmissive = "PM_Emissive";
+
+    public const string RegexDiffuse = ".*(?:Diff|_Tex|_?Albedo|_?Base_?Color).*|(?:_D|_DIF|_DM|_C|_CM|_DS|_DA)$";
+    public const string RegexNormals = "^NO_|.*Norm.*|(?:_N|_NM|_NRM)$";
+    public const string RegexSpecularMasks = "^SP_|.*(?:Specu|_S_|MR|(?<!no)RM).*|(?:_S|_LP|_PAK)$";
+    public const string RegexEmissive = ".*Emiss.*|(?:_E|_EM)$";
+
+    public bool HasTopDiffuse => HasTopTexture(Diffuse[0]);
+    public bool HasTopNormals => HasTopTexture(Normals[0]);
+    public bool HasTopSpecularMasks => HasTopTexture(SpecularMasks[0]);
+    public bool HasTopEmissive => HasTopTexture(Emissive[0]);
+
+    public EBlendMode BlendMode = EBlendMode.BLEND_Opaque;
+    public EMaterialShadingModel ShadingModel = EMaterialShadingModel.MSM_Unlit;
+
+    public bool IsTranslucent => BlendMode == EBlendMode.BLEND_Translucent;
+    public bool IsNull => Textures.Count == 0;
+
+    /// <summary>
+    /// SWITCH TO REGEX ONCE WE HAVE A GOOD OVERVIEW OF TEXTURE NAMES
+    /// AND POSSIBLY RE-USE THE REGEX FOR BOTH UMaterial & UMaterialInstanceConstant
+    /// </summary>
+
+    public static readonly string[][] Diffuse =
+    [
+        [
+            "Trunk_BaseColor", "ShadedDiffuse", "LitDiffuse", "Base Colour", "CLRM", "Diffuse_Map", "Base Color", "Base_Tex", "BaseTex", "ColorTexture",
+            "Background Diffuse", "BG Diffuse Texture", "Diffuse", "Diffuse_1", "DiffuseTexture", "DiffuseMap", "Diffuse A", "Base Color Map", "DesatTexture",
+            "Diffuse A Map", "Diffuse Top", "Diffuse Side", "Base Diffuse", "Diffuse Base", "Diffuse Base Map", "Diffuse Color Map", "BaseColor_Tex", "UDR",
+            "DiffuseLayer1", "1 - Albedo", "albedo", "Albedo", "Aldebo", "ALB", "TextureAlbedo", "AlbedoTex", "Color_Texture", "color", "Base_D", "Tex_BaseColor",
+            "AlbedoColour", "BCR", "Base Texture", "BaseColour", "Color Map", "Base Color - Texture",
+            "Base Color Texture", "BaseColorTexture", "BaseColor_Texture", "Base_Color", "BaseColor", "Basecolor", "Tex_BC", "TexA_BC", "BaseDiffuse",
+            "Base Texture Color", "BaseColorA", "BC", "BCA", "BC_Map", "Base Map", "BCE", "Color", "CO", "CO_", "CO_1", "Base_CO", "Base Color + Linework", "Bc",
+            "BaseColorVT", "Tex_Color", "Color Tex", "TexColor", "AlbedMap", "Tex_Colormap", "ColorMap", "Main_T_BaseColor", "BaseColour", "Base_Texture",
+            "T_BaseColor", "Decal_Texture", "PetalDetailMap", "CliffTexture", "M1_T_BC", "Skin Diffuse", "Color_MAIN", "MainTex", "ToneRimTex", "C",
+            "Primary Base Color", "BaseColor_NonVT", "L0_B/BM", "B/BM", "NRO_Base_Color","BaeColor_Tex", "Layer00_BaseColor_Tex","01. Diffuse Texture",
+            "BaseMap", "Tex_SkinBase_BC", "Tex_Core_Layer_Albedo", "BC_Texture", "RGBMap", "RGB_Map", "MW_TextureBaseColor", "Texture", "ColorOpacity",
+            "Simple_BaseColor_Texture", "AlbedoTexture", "Albedo Texture", "BC_LUT", "BCO", "CR", "C/R" /*Finals*/, "BaseColor_Tex(a:mask)", "Base Color Map VT",
+            "Basecolor_VT", "BaseColor_Map", "BaceColor_Map", "ColorAo", "RGBMask", "Color & Alpha", "BaseColor - Texture", "Clothing Diffuse",
+            "Base Color [Standard]", "Base Color VT", "BaseColorRoughness", "BaseColorAlpha", "Color Map (Packed)", "D(ID)", "BC Texture (BC/BCO)",
+            "BCM BaseColor|Metallic Map", "Color_Main", "Texture_BC", "Virtual Texture Base Color", "DF", "L01.BaseColor", "BCM", "WGAD_Map", "OSGB",
+            "Decal Base Color & Alpha",
+        ],
+        ["Background Diffuse 2", "Diffuse_Texture_2", "DiffuseLayer2", "Diffuse B", "Diffuse B Map", "BaseColorB", "CO_2", "M2_T_BC"],
+        ["Background Diffuse 3", "Diffuse_Texture_3", "DiffuseLayer3", "Diffuse C", "Diffuse C Map", "BaseColorC", "CO_3", "M3_T_BC"],
+        ["Background Diffuse 4", "Diffuse_Texture_4", "DiffuseLayer4", "Diffuse D", "Diffuse D Map", "BaseColorD", "CO_4", "M4_T_BC"],
+        ["Background Diffuse 5", "Diffuse_Texture_5", "DiffuseLayer5", "Diffuse E", "Diffuse E Map", "BaseColorE", "CO_5", "M5_T_BC"],
+        ["Background Diffuse 6", "Diffuse_Texture_6", "DiffuseLayer6", "Diffuse F", "Diffuse F Map", "BaseColorF", "CO_6", "M6_T_BC"],
+        ["Background Diffuse 7", "Diffuse_Texture_7", "DiffuseLayer7", "Diffuse G", "Diffuse G Map", "BaseColorG", "CO_7", "M7_T_BC"],
+        ["Background Diffuse 8", "Diffuse_Texture_8", "DiffuseLayer8", "Diffuse H", "Diffuse H Map", "BaseColorH", "CO_8", "M8_T_BC"]
+    ];
+
+    public static readonly string[][] Normals =
+    [
+        [
+            "Trunk_Normal", "T_Normal", "normal", "normalmap", "NRRO", "Base Normal", "BaseNormalMap", "Normal Map", "Base Normal Map",
+            "Normals", "Normal", "NormalA", "NormalTexture", "Normal Texture", "Normal_Texture", "NormalMap", "Normal Tex",
+            "Normal A Map", "Normals Top", "Normals Side", "Fallback Normal", "Base_N", "BaseNormal_Tex", "BaseNormal_NonVT",
+            "Base_Normal", "BaseNormal", "Normal Base", "NormalVT", "TextureNormal", "Tex_BakedNormal", "TexNor", "Normal VT",
+            "BakedNormalMap", "3 - Baked Normal", "Base Texture Normal", "Normal Base Map", "Tex_NM","TexA_NM", "Normal_Tex",
+            "N", "NM", "NM_1", "Base_NM", "NRM", "T_NRM", "M1_T_NRM", "Base NRM", "NRM Base", "NRH", "MW_TextureNormal",
+            "Texture A Normal", "CliffNormal", "Skin Normal", "Normal_MAIN","Main_T_Normal(B：SSSMask)", "PBREmissiveTex",
+            "Primary Normal Map", "ORN" /*ABI*/, "NRO_Base_Normal", "Layer00_Normal_Tex", "Tex_SkinBase_N", "Tex_Core_Layer_Normal",
+            "Simple_Normal_Texture", "BaseNormal Texture", "NOH", "N/O/H", "NMH", "NWO" /*Finals*/, "Normal_VT", "NRM_Map",
+            "Normal - Texture", "Clothing Normal", "Normal [Standard]", "NCD_Mask", "Normal Map (Packed)", "N2R(M)", "Normal Texture (N)",
+            "Normal(HrNM)_Texture", "VT Normal", "L01.Normal.Metallic.Roughness", "NRA"
+        ],
+        ["Normals_Texture_2", "Texture B Normal", "NormalB", "Normal B Map", "NM_2", "M2_T_NRM"],
+        ["Normals_Texture_3", "Texture C Normal", "NormalC", "Normal C Map", "NM_3", "M3_T_NRM"],
+        ["Normals_Texture_4", "Texture D Normal", "NormalD", "Normal D Map", "NM_4", "M4_T_NRM"],
+        ["Normals_Texture_5", "Texture E Normal", "NormalE", "Normal E Map", "NM_5", "M5_T_NRM"],
+        ["Normals_Texture_6", "Texture F Normal", "NormalF", "Normal F Map", "NM_6", "M6_T_NRM"],
+        ["Normals_Texture_7", "Texture G Normal", "NormalG", "Normal G Map", "NM_7", "M7_T_NRM"],
+        ["Normals_Texture_8", "Texture H Normal", "NormalH", "Normal H Map", "NM_8", "M8_T_NRM"]
+    ];
+
+    public static readonly string[][] SpecularMasks =
+    [
+        [
+            "Trunk_Specular", "PackedTexture",
+            "SpecularMasks", "Specular", "SpecMap", "T_Specular", "Specular Top", "Specular Side",
+            "MG", "ORM", "MRAE", "MRAS", "MRAO", "MRA", "MRAO_Map", "MRA A", "MRS", "LP", "LP_1", "Base_LP", "Base_R*", "MRO_Tex",
+            "TextureRMA", "Tex_MultiMask", "Tex_Multi", "TexMRC", "TexMRA", "TexRCN", "MultiMaskMap", "MRO Map", "MROA Map", "MRO",
+            "Base_ORM", "Base_SRO", "Base Texture RMAO", "Skin SRXO", "SRXO_Mask", "SRXO", "SROA", "SR", "SRO Map", "SRM", "SC_Map", "AO",
+            "Pack", "PAK", "T_PAK", "M1_T_PAK", "2 - Packed mask (MRAO)", "RoughnessMaterial_Mask", "Packed Tex", "Packed Texture",
+            "Cliff Spec Texture", "PhysicalMap", "KizokMap", "Roughness_MAIN", "Main_T_MGA", "Tex_CH", "TexA_CH", "ARMMap", "REM",
+            "Primary ARME", "CombineTex(HRA)", "ORN", "TPA_SpecColorTex", "Tex_RME", "CompVT", "MetalRoughOcc_Tex",
+            "Layer00_MetalRoughOccDp_Tex", "Tex_SkinBase_ORM", "Tex_Core_Layer_AO", "RGB[AO/R/Metallic]_Texture", "MRO - Texture",
+            "Simple_OcclRoughMet_Texture", "P (NoneVT)", "Pack Tex1", "CASR", "Roughness_VT", "OcclusionRoughnessMetallicTexture",
+            "Clothing ORM", "ORC [Standard]", "ORME_Tex", "Roughness VT", "RMAO VT", "Mix(AO,Rough,Mask,Metal)", "Texture_S",
+            "MetallicRoughnessOcclusionSpecularTexture", "Virtual Texture ORM", "L01.Normal.Metallic.Roughness"
+        ],
+        ["SpecularMasks_2", "MRA B", "LP_2", "M2_T_PAK"],
+        ["SpecularMasks_3", "MRA C", "LP_3", "M3_T_PAK"],
+        ["SpecularMasks_4", "MRA D", "LP_4", "M4_T_PAK"],
+        ["SpecularMasks_5", "MRA E", "LP_5", "M5_T_PAK"],
+        ["SpecularMasks_6", "MRA F", "LP_6", "M6_T_PAK"],
+        ["SpecularMasks_7", "MRA G", "LP_7", "M7_T_PAK"],
+        ["SpecularMasks_8", "MRA H", "LP_8", "M8_T_PAK"]
+    ];
+
+    public static readonly string[][] Emissive =
+    [
+        [
+            "Emissive", "EmissiveTexture", "EmissiveColorTexture", "EmissiveColor", "EmissiveMask",
+            "EmmisiveColor_A", "TextureEmissive", "TexEm", "Main_T_Emissive", "VT Emissive"
+        ],
+        ["L1_Emissive", "EmmisiveColor_B"],
+        ["L2_Emissive", "EmmisiveColor_C"],
+        ["L3_Emissive", "EmmisiveColor_D"],
+        ["L4_Emissive", "EmmisiveColor_E"],
+        ["L5_Emissive", "EmmisiveColor_F"],
+        ["L6_Emissive", "EmmisiveColor_G"],
+        ["L7_Emissive", "EmmisiveColor_H"]
+    ];
+
+    public static readonly string[][] DiffuseColors =
+    [
+        [
+            "ColorMult", "Color_mul", "Base Color", "BaseColor", "Color", "color", "DiffuseColor", "tex1_CO",
+            "ColorA", "ALB", "AlbedoColor", "Layer A Tint"
+        ],
+        ["tex2_CO", "ColorB", "Layer B Tint"],
+        ["tex3_CO", "ColorC", "Layer C Tint"],
+        ["tex4_CO", "ColorD", "Layer D Tint"],
+        ["tex5_CO", "ColorE", "Layer E Tint"],
+        ["tex6_CO", "ColorF", "Layer F Tint"],
+        ["tex7_CO", "ColorG", "Layer G Tint"],
+        ["tex8_CO", "ColorH", "Layer H Tint"]
+    ];
+
+    public static readonly string[][] EmissiveColors =
+    [
+        [
+            "Emissive", "Emissive Color", "EmissiveColor", "EMI", "EmColor", "Color"
+        ],
+        ["Emissive1", "Color01"],
+        ["Emissive2", "Color02"],
+        ["Emissive3", "Color03"],
+        ["Emissive4", "Color04"],
+        ["Emissive5", "Color05"],
+        ["Emissive6", "Color06"],
+        ["Emissive7", "Color07"]
+    ];
+
+    public readonly Dictionary<string, ILoadableObject> Textures = [];
+    public readonly Dictionary<string, FLinearColor> Colors = [];
+    public readonly Dictionary<string, float> Scalars = [];
+    public readonly Dictionary<string, bool> Switches = [];
+    public readonly Dictionary<string, object?> Properties = [];
+
+    public IEnumerable<UTexture> GetTextures(IEnumerable<string> names)
+    {
+        foreach (string name in names)
+        {
+            if (Textures.TryGetValue(name, out var y) && y.TryLoad<UTexture>(out var t))
+                yield return t;
+        }
+    }
+
+    public IEnumerable<UTexture?> GetTexturesOrNull(IEnumerable<string> names)
+    {
+        foreach (string name in names)
+        {
+            if (Textures.TryGetValue(name, out var y) && y.TryLoad<UTexture>(out var t))
+                yield return t;
+            else yield return null;
+        }
+    }
+
+    public IEnumerable<UTexture> GetTexturesByRegex(Regex regex)
+    {
+        foreach ((string key, ILoadableObject value) in Textures)
+            if (regex.IsMatch(key) && value.TryLoad<UTexture>(out var t))
+                yield return t;
+    }
+
+    public bool TryGetFirstTexture2d(out UTexture? texture)
+    {
+        if (Textures.Count > 0 && Textures.First().Value.TryLoad<UTexture>(out var texture2D))
+        {
+            texture = texture2D;
+            return true;
+        }
+
+        texture = null;
+        return false;
+    }
+
+    /// <summary>
+    /// find matching textures between <paramref name="names"/> and <see cref="Textures"/>
+    /// </summary>
+    /// <param name="numTexCoords"></param>
+    /// <param name="names"></param>
+    /// <returns>
+    /// the uv set and index in <paramref name="names"/> of all textures found limited to <paramref name="numTexCoords"/>
+    /// <br/>
+    /// if used with <paramref name="names"/> it basically gives the textures' key in <see cref="Textures"/>
+    /// </returns>
+    public TextureMapping[] GetTextureMapping(int numTexCoords, params string[][] names)
+    {
+        var uvset = 0;
+        var index = 0;
+        var mapping = new TextureMapping[numTexCoords];
+        for (int i = 0; i < mapping.Length; i++)
+        {
+            for (; uvset < names.Length; uvset++)
+            {
+                var found = false;
+                for (; index < names[uvset].Length; index++)
+                {
+                    if (Textures.ContainsKey(names[uvset][index]))
+                    {
+                        mapping[i] = new TextureMapping { UVSet = uvset, Index = index };
+                        found = true;
+                        break;
+                    }
+                }
+
+                index++;
+                if (found) break;
+                index = 0;
+            }
+        }
+        return mapping;
+    }
+
+    public bool TryGetTexture2d([MaybeNullWhen(false)] out UTexture texture, params string[] names)
+    {
+        foreach (var name in names)
+        {
+            if (Textures.TryGetValue(name, out var ptr) && ptr.TryLoad<UTexture>(out var texture2d))
+            {
+                texture = texture2d;
+                return true;
+            }
+        }
+
+        texture = null;
+        return false;
+    }
+
+    public bool TryGetLinearColor(out FLinearColor linearColor, params string[] names)
+    {
+        foreach (string name in names)
+        {
+            if (Colors.TryGetValue(name, out linearColor))
+            {
+                return true;
+            }
+        }
+
+        linearColor = default;
+        return false;
+    }
+
+    public bool TryGetScalar(out float scalar, params string[] names)
+    {
+        foreach (string name in names)
+        {
+            if (Scalars.TryGetValue(name, out scalar))
+            {
+                return true;
+            }
+        }
+
+        scalar = 0f;
+        return false;
+    }
+
+    public bool TryGetSwitch(out bool stitch, params string[] names)
+    {
+        foreach (string name in names)
+        {
+            if (Switches.TryGetValue(name, out stitch))
+            {
+                return true;
+            }
+        }
+
+        stitch = false;
+        return false;
+    }
+
+    public void AppendAllProperties(IList<FPropertyTag> properties)
+    {
+        foreach (var property in properties)
+        {
+            if (property.Name.Text is "Parent" or
+                "TextureParameterValues" or
+                "VectorParameterValues" or
+                "ScalarParameterValues" or
+                "StaticParameters" or
+                "StaticParametersRuntime" or
+                "CachedExpressionData" or
+                "CachedReferencedTextures" or
+                "TextureStreamingData" or
+                "BlendMode" or
+                "ShadingModel")
+                continue;
+
+            Properties[property.Name.Text] = property.Tag?.GenericValue;
+        }
+    }
+
+    public bool VerifyTexture(string name, ILoadableObject texture, bool appendToDictionary = true, EMaterialSamplerType samplerType = EMaterialSamplerType.SAMPLERTYPE_Color)
+    {
+        var fallback = "";
+        if (Regex.IsMatch(name, RegexDiffuse, RegexOptions.IgnoreCase))
+            fallback = FallbackDiffuse;
+        else if (samplerType == EMaterialSamplerType.SAMPLERTYPE_Normal ||
+                 Regex.IsMatch(name, RegexNormals, RegexOptions.IgnoreCase))
+            fallback = FallbackNormals;
+        else if (Regex.IsMatch(name, RegexSpecularMasks, RegexOptions.IgnoreCase))
+            fallback = FallbackSpecularMasks;
+        else if (Regex.IsMatch(name, RegexEmissive, RegexOptions.IgnoreCase))
+            fallback = FallbackEmissive;
+
+        var ret = !string.IsNullOrEmpty(fallback);
+        if (ret) Textures[fallback] = texture;
+        if (appendToDictionary) Textures[name] = texture;
+        return ret;
+    }
+
+    private bool HasTopTexture(params string[] names)
+    {
+        foreach (string name in names)
+            if (Textures.ContainsKey(name))
+                return true;
+
+        return false;
+    }
+}

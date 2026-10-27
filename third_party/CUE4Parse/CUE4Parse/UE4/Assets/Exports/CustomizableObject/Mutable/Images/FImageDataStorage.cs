@@ -1,0 +1,98 @@
+using CUE4Parse.UE4.Assets.Readers;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
+using FImageArray = byte[];
+using FImageSize = CUE4Parse.UE4.Objects.Core.Math.TIntVector2<ushort>;
+
+namespace CUE4Parse.UE4.Assets.Exports.CustomizableObject.Mutable.Images;
+
+public class FImageDataStorage
+{
+    public FImageSize Size;
+    public EImageFormat ImageFormat;
+    [JsonIgnore] public byte NumLODs;
+    public FImageArray[] Buffers;
+    public int NumTailOffsets;
+    public ushort[] CompactedTailOffsets;
+
+    public FImageDataStorage(FMutableArchive Ar, int version)
+    {
+        Size = Ar.Read<FImageSize>();
+
+        if (version <= 3)
+        {
+            NumLODs = Ar.Read<byte>();
+            ImageFormat = Ar.Read<EImageFormat>();
+            Buffers = [Ar.ReadArray<byte>()];
+            CompactedTailOffsets = [];
+        }
+        else
+        {
+            ImageFormat = Ar.Read<EImageFormat>();
+            Ar.Position += 3;
+            NumLODs = Ar.Read<byte>();
+
+            var buffersNum = Ar.Read<int>();
+            Buffers = new FImageArray[buffersNum];
+            for (var i = 0; i < buffersNum; i++)
+                Buffers[i] = Ar.ReadArray<byte>();
+
+            CompactedTailOffsets = Ar.ReadArray<ushort>();
+        }
+
+    }
+}
+
+[JsonConverter(typeof(StringEnumConverter))]
+public enum EImageFormat : byte
+{
+    None,
+    RGB_UByte,
+    RGBA_UByte,
+    L_UByte,
+
+    //! Deprecated formats
+    _DEPRECATED_1,
+    _DEPRECATED_2,
+    _DEPRECATED_3,
+    _DEPRECATED_4,
+
+    L_UByteRLE,
+    RGB_UByteRLE,
+    RGBA_UByteRLE,
+    L_UBitRLE,
+
+    //! Common S3TC formats
+    BC1,
+    BC2,
+    BC3,
+    BC4,
+    BC5,
+
+    //! Not really supported yet
+    BC6,
+    BC7,
+
+    //! Swizzled versions, engineers be damned.
+    BGRA_UByte,
+
+    //! The new standard
+    ASTC_4x4_RGB_LDR,
+    ASTC_4x4_RGBA_LDR,
+    ASTC_4x4_RG_LDR,
+
+    ASTC_8x8_RGB_LDR,
+    ASTC_8x8_RGBA_LDR,
+    ASTC_8x8_RG_LDR,
+    ASTC_12x12_RGB_LDR,
+    ASTC_12x12_RGBA_LDR,
+    ASTC_12x12_RG_LDR,
+    ASTC_6x6_RGB_LDR,
+    ASTC_6x6_RGBA_LDR,
+    ASTC_6x6_RG_LDR,
+    ASTC_10x10_RGB_LDR,
+    ASTC_10x10_RGBA_LDR,
+    ASTC_10x10_RG_LDR,
+
+    Count
+}

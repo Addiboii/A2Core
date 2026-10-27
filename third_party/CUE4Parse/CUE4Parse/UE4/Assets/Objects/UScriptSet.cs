@@ -1,0 +1,82 @@
+using CUE4Parse.GameTypes.AoC.Objects;
+using CUE4Parse.GameTypes.DuneAwakening.Assets.Objects;
+using CUE4Parse.UE4.Assets.Objects.Properties;
+using CUE4Parse.UE4.Assets.Readers;
+using CUE4Parse.UE4.Exceptions;
+using Newtonsoft.Json;
+
+namespace CUE4Parse.UE4.Assets.Objects;
+
+[JsonConverter(typeof(UScriptSetConverter))]
+public class UScriptSet
+{
+    public readonly List<FPropertyTagType> Properties;
+
+    public UScriptSet() => Properties = [];
+
+    public UScriptSet(List<FPropertyTagType> properties) => Properties = properties;
+
+    public UScriptSet(FAssetArchive Ar, FPropertyTagData? tagData, ReadType readType)
+    {
+        if (Ar.Game == GAME_StateOfDecay2 && tagData is not null)
+        {
+            tagData.InnerType = tagData.Name switch
+            {
+                "AllEntityIds" or "SceneNameSet" => "NameProperty",
+                "TextVarSources" => "StrProperty",
+                _ => null
+            };
+        }
+        if (Ar.Game is GAME_HonorofKingsWorld && tagData?.Name is "LogicState" or "CategorySet") tagData.InnerType = "EnumProperty";
+
+        var innerType = tagData?.InnerType ?? throw new ParserException(Ar, "UScriptSet needs inner type");
+
+        if (tagData.InnerTypeData is null && !Ar.HasUnversionedProperties && innerType == "StructProperty")
+        {
+            if (tagData.Name is "AnimSequenceInstances" or "PostProcessInstances")
+            {
+                tagData.InnerTypeData = new FPropertyTagData("Guid");
+            }
+
+            tagData.InnerTypeData = Ar.Game switch
+            {
+                GAME_AssaultFireFuture when tagData.Name is "Data" => new FPropertyTagData("SoftObjectPath"),
+                GAME_AssaultFireFuture when tagData.Name is "MGCIdList" => new FPropertyTagData("GPRowName"),
+                GAME_AssaultFireFuture when tagData.Name is "PrimitiveBindingGuids" or "RefSets" or "OwnerActors" => new FPropertyTagData("Guid"),
+                GAME_ThroneAndLiberty when tagData.Name is "ExcludeMeshes" or "IncludeMeshes" => new FPropertyTagData("SoftObjectPath"),
+                GAME_MetroAwakening when tagData.Name is "SoundscapePaletteCollection" => new FPropertyTagData("SoftObjectPath"),
+                GAME_Avowed when tagData.Name.EndsWith("IDs") => new FPropertyTagData("Guid"),
+                GAME_Farlight84 => new FPropertyTagData("SoftObjectPath"),
+                GAME_HonorofKingsWorld when tagData.Name is "WaterPhysicalMaterials" => new FPropertyTagData("SoftObjectPath"),
+                GAME_HonorofKingsWorld when tagData.Name is "InstanceIdsNotToHide" => new FPropertyTagData("Guid"),
+                GAME_ChasingKaleidoRIDER when tagData.Name is "DialogueEntityInstances" => new FPropertyTagData("Guid"),
+                GAME_NeedForSpeedMobile when tagData.Name is "ReferencedAssetsPath" or "ReferencedMeshMergeAssets" or "FilterWhiteList" or "Paths"=> new FPropertyTagData("SoftObjectPath"),
+                GAME_DuneAwakening => DAStructs.ResolveSetPropertyInnerTypeData(tagData),
+                GAME_DeadIsland2 => new FPropertyTag(Ar, false).TagData,
+                _ => tagData.InnerTypeData
+            };
+        }
+
+        if (readType != ReadType.RAW)
+        {
+            var numElementsToRemove = Ar.Read<int>();
+            for (var i = 0; i < numElementsToRemove; i++)
+            {
+                FPropertyTagType.ReadPropertyTagType(Ar, innerType, tagData.InnerTypeData, ReadType.ARRAY);
+            }
+        }
+        if (Ar.Game is GAME_AshesOfCreation && Ar is FAoCDBCReader) Ar.Position += 4;
+
+        var type = readType == ReadType.RAW ? ReadType.RAW : ReadType.ARRAY;
+        var num = Ar.Read<int>();
+        Properties = new List<FPropertyTagType>(num);
+        for (var i = 0; i < num; i++)
+        {
+            var property = FPropertyTagType.ReadPropertyTagType(Ar, innerType, tagData.InnerTypeData, type);
+            if (property != null)
+                Properties.Add(property);
+            else
+                Log.Debug("Failed to read element for index {Index} in set", i);
+        }
+    }
+}
