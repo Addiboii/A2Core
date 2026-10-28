@@ -243,11 +243,16 @@ public sealed class NpcAi(Random rng, GameData? data = null)
     }
 
     /// <summary>A map event (SetAggroNpc): the NPC attacks another NPC now, whatever their relationships (a companion joins a fight).</summary>
-    public List<byte[]> ForceAggroNpc(Target target, Target victim, long now)
+    /// <paramref name="others"/>: the rest of the victim's spawner, fought next (their hate is 0, below the first's).
+    public List<byte[]> ForceAggroNpc(Target target, Target victim, long now, IEnumerable<Target>? others = null)
     {
         var brain = BrainOf(target);
         if (target.Dead || victim.Dead || target.RunSpeed == 0 && target.WalkSpeed == 0) return [];
+        // A following companion sent into a fight follows its player again afterwards (Munihelle step 7: FollowPc, then
+        // SetAggroNpc at the Drakan; the order dropped the follow and she stood idle).
+        if (brain.Mode == Mode.Follow && brain.FollowKey != 0) brain.ResumeFollowKey = brain.FollowKey;
         brain.Hate[victim.Key] = brain.Hate.GetValueOrDefault(victim.Key) + 1;
+        foreach (var other in others ?? []) if (other.Key != victim.Key && !other.Dead) brain.Hate.TryAdd(other.Key, 0);
         brain.CandidateKey = victim.Key;
         brain.VictimIsNpc = true;
         brain.Directed = true;
@@ -265,6 +270,10 @@ public sealed class NpcAi(Random rng, GameData? data = null)
     List<byte[]> HitNpc(IReadOnlyDictionary<int, Target> targets, int victimKey, Target attacker, int damage, long now)
     {
         if (!targets.TryGetValue(victimKey, out var victim) || victim.Dead) return [];
+        // A friendly NPC hits a lower-level enemy at the enemy's level (OURS): the level-12 story Elvida took Munihelle's level-3
+        // Drakan and watchstone in one hit each, since NPC damage follows the attacker's level.
+        if (!attacker.Hostile && victim.Level < attacker.Level)
+            damage = Math.Max(1, (int)Math.Round(damage * (double)Combat.HpForLevel(victim.Level) / Combat.HpForLevel(attacker.Level)));
         if (!victim.Immune) victim.Hp = Math.Max(0, victim.Hp - damage);
         npcHurt.Add(victim.Key);
         var replies = new List<byte[]> { GamePackets.NpcHp(victim.Key, victim.Hp) };

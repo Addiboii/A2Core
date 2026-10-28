@@ -895,6 +895,33 @@ Check(new PacketWriter().String(new string('a', 130)).ToArray().AsSpan(0, 2).Seq
     }
     Check(!healed && fellBack && elv.Dead, "Elvida keeps fighting the player when Maard runs off: no walk home, no heal to full");
 }
+// Munihelle step 7 (live 2026-10-28): the friendly Elvida, following the player, is sent at the Drakan wave (SetAggroNpc). She fights
+// the whole wave, a few seconds each at their level (her level-12 hits killed the level-3 Drakan at once), then follows again.
+{
+    Target Sp2(int key, string name, int nth = 0)
+    {
+        var sp = data.Spawns(110002).Where(s => s.Name == name).ElementAt(nth);
+        var hp = Combat.HpFor(sp);
+        return new Target { Key = key, Name = name, Hp = hp, HpMax = hp, Position = new Vector3d(sp.Position[0], sp.Position[1], sp.Position[2]), NpcId = sp.NpcId,
+            Level = sp.Level, Direction = sp.Yaw, Relationship = sp.Relationship, Aggressive = sp.Aggressive, WalkSpeed = sp.WalkSpeed, RunSpeed = sp.RunSpeed,
+            Radius = sp.Radius, Function = sp.Function, Aggro = sp.Aggro, Skills = sp.Skills ?? [], NoRotation = sp.NoRotation };
+    }
+    var ev = Sp2(5000, "N_D_Starter_HQ001_Elvida_01");
+    var dk = Sp2(5001, "M_D0_HQ_Drakan_01_Multi_1", 0);
+    var dk2 = Sp2(5002, "M_D0_HQ_Drakan_01_Multi_1", 1);
+    var tg2 = new Dictionary<int, Target> { [5000] = ev, [5001] = dk, [5002] = dk2 };
+    var ai2 = new NpcAi(new Random(4), data);
+    var killedAt = new Dictionary<int, int>(); var pk2 = 100_001; var pl2 = new Vector3d(ev.Position.X + 200, ev.Position.Y, ev.Position.Z);
+    ai2.Follow(ev, pk2, true, Now);
+    ai2.ForceAggroNpc(ev, dk, Now, [dk, dk2]);
+    for (var ms = 0; ms <= 20_000; ms += 50)
+    {
+        ai2.Tick(tg2, new List<(int Key, Vector3d Position)> { (pk2, pl2) }, Now + ms, (_, _) => []);
+        foreach (var d in new[] { dk, dk2 }) if (d.Dead) killedAt.TryAdd(d.Key, ms);
+    }
+    Check(killedAt.Count == 2 && killedAt[5001] >= 3000 && killedAt[5002] > killedAt[5001] && ai2.Brains[5000].Mode == NpcAi.Mode.Follow && ai2.Brains[5000].FollowKey == pk2,
+          "a following companion sent at a wave fights all of it (not one hit each), then follows the player again");
+}
 // HQ002 (live 2026-10-24): the story companions cannot die (official 999999 HP), and Salros (Function None, 2300 from his
 // spawn) fights the elite he is sent at instead of running home; after the kill both stand, and the step-13 walk gathers them.
 {

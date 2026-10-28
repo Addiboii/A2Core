@@ -232,6 +232,7 @@ public sealed partial class GameSession : IMapEventHost
         startedSpawners.Clear();
         removedObjects.Clear();
         pendingSpawns.Clear();
+        pendingAggro.Clear();
         pendingExit = null;
         npcBuffs.Clear();
         if (!RunsMapEvents || targets is null) return;
@@ -393,12 +394,17 @@ public sealed partial class GameSession : IMapEventHost
     /// <summary>Each tick: due spawns, NPC arrivals, the runs' timers and the exit.</summary>
     List<byte[]> MapEventTick(long now)
     {
-        if (mapEventRuns.Count == 0 && pendingSpawns.Count == 0 && pendingExit is null && npcBuffs.Count == 0 && copy is null) return [];
+        if (mapEventRuns.Count == 0 && pendingSpawns.Count == 0 && pendingAggro.Count == 0 && pendingExit is null && npcBuffs.Count == 0 && copy is null) return [];
         mapEventNow = now;
         DungeonTimeLimit(now);
         var phase = DungeonPhaseTick(now);
         if (phase.Count > 0) mapEventOut.InsertRange(0, phase);
         NpcBuffTick(now);
+        foreach (var order in pendingAggro.Where(p => now >= p.DueMs).ToList())
+        {
+            pendingAggro.Remove(order);
+            AggroNpc(order.Spawner, order.Target);
+        }
         foreach (var pending in pendingSpawns.Where(p => now >= p.DueMs).ToList())
         {
             pendingSpawns.Remove(pending);
@@ -560,7 +566,11 @@ public sealed partial class GameSession : IMapEventHost
             mapEventOut.AddRange(ai.Face(t, NpcAi.HeadingTo(t.Position, (goal.X, goal.Y)), mapEventNow));
     }
 
-    void IMapEventHost.Talk(string talk) => mapEventOut.Add(GamePackets.Caption(talk));
+    void IMapEventHost.Talk(string talk)
+    {
+        lastTalkMs = mapEventNow;
+        mapEventOut.Add(GamePackets.Caption(talk));
+    }
     void IMapEventHost.ChatBubble(string spawner, string talk) => mapEventOut.Add(GamePackets.Caption(talk));
 
     void IMapEventHost.SocialAction(string spawner, int action, bool stop)
@@ -574,13 +584,29 @@ public sealed partial class GameSession : IMapEventHost
     }
 
     /// <summary>SetAggroNpc [spawner, target spawner, aggro]: each NPC of the spawner attacks the nearest living NPC of the target.</summary>
+    /// <summary>
+    /// SetAggroNpc: the spawner's NPCs fight the target spawner's, the nearest first, then the rest of them. An order given with
+    /// an NPC talk waits for it (OURS, <see cref="TalkHoldMs"/>): Munihelle's "attack the watchstone" and Elvida's attack came
+    /// in one moment, so she attacked before the line was read.
+    /// </summary>
     void IMapEventHost.SetAggroNpc(string spawner, string target)
+    {
+        if (lastTalkMs == mapEventNow) pendingAggro.Add((spawner, target, mapEventNow + TalkHoldMs));
+        else AggroNpc(spawner, target);
+    }
+
+    void AggroNpc(string spawner, string target)
     {
         var prey = SpawnerNpcs(target).Where(t => !t.Dead).ToList();
         if (prey.Count == 0) { Note($"SetAggroNpc {spawner} -> {target}: no living target"); return; }
         foreach (var t in SpawnerNpcs(spawner).Where(t => !t.Dead))
-            mapEventOut.AddRange(ai.ForceAggroNpc(t, prey.MinBy(p => p.Position.DistanceSquared(t.Position))!, mapEventNow));
+            mapEventOut.AddRange(ai.ForceAggroNpc(t, prey.MinBy(p => p.Position.DistanceSquared(t.Position))!, mapEventNow, prey));
     }
+
+    /// <summary>How long an NPC talk holds an attack order given with it (OURS: a caption's reading time).</summary>
+    public const int TalkHoldMs = 3000;
+    long lastTalkMs = -1;
+    readonly List<(string Spawner, string Target, long DueMs)> pendingAggro = [];
 
     /// <summary>Where a player revives inside a dungeon: the running stage's RevivalPoint (a teleport point), else the dungeon's start; null elsewhere.</summary>
     Vector3d? DungeonRevivalPoint()
