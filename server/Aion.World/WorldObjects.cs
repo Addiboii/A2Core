@@ -18,7 +18,9 @@ public sealed record WorldObject(
     [property: JsonPropertyName("portal")] int[]? Portal = null,
     [property: JsonPropertyName("cube")] bool Cube = false,
     [property: JsonPropertyName("long_range")] bool LongRange = false,
-    [property: JsonPropertyName("flight_ring")] bool FlightRing = false)
+    [property: JsonPropertyName("flight_ring")] bool FlightRing = false,
+    // Its EnvObjData name, when the spawn entry is named after another object (tools/world_objects.py).
+    [property: JsonPropertyName("env_name")] string? EnvName = null)
 {
     public Vector3d At => new(Position[0], Position[1], Position[2]);
 }

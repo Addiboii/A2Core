@@ -152,6 +152,21 @@ static class MapEventChecks
         C(host.Exit == "CurrentPosition" && run.Finished && run.Status == MapEventRun.Complete, "3 s later MapExit to the current position; the event is complete");
         C(!host.Calls.Any(c => c.StartsWith("Unsupported")), "nothing in HQ001 was unsupported");
 
+        // Munihelle's two supply batches (the Dark HQ001): the second firewood (EnvObjData E_D0_FireWood_002) is spawned as
+        // E_D0_FireWood_001_2; it answers to its own name, not to the first batch's (live 2026-10-28: the second never counted).
+        var second = WorldObjects.ObjectsOn(110002).Single(o => o.Name == "E_D0_FireWood_001_2");
+        var hostM = new FakeHost();
+        var munihelle = new MapEventRun(tables.Event("World_D_Starter_HQ001_MapEvent")!, 3, hostM, 0);
+        munihelle.Start(0);
+        for (var i = 0; i < 4; i++) munihelle.Killed(2590123, "M_D_Starter_HQ001_SkurvWar_02", true, i < 3, 1000 + i);
+        C(munihelle.StepOrder == 2 && second.EnvName == "E_D0_FireWood_002" && !munihelle.WantsObject(second.Name, second.EnvName)
+          && munihelle.WantsObject("E_D0_FireWood_001_1"), "Munihelle's first batch: only the first firewood counts");
+        munihelle.UsedObject("E_D0_FireWood_001_1", 2000);
+        for (var i = 0; i < 4; i++) munihelle.Killed(2590013, "M_D_Starter_HQ001_SkurvWar_01", true, i < 3, 3000 + i);
+        C(munihelle.StepOrder == 4 && munihelle.WantsObject(second.Name, second.EnvName), "the second batch: the second firewood counts by its own name");
+        munihelle.UsedObject(second.Name, 4000, second.EnvName);
+        C(munihelle.StepOrder == 5, "using it ends the step");
+
         // Client-side and untracked objectives time out instead of stalling (InstanceLayer_2 has a cutscene).
         var layer2 = tables.Event("World_L_Starter_InstanceLayer_2_MapEvent")!;
         var host2 = new FakeHost();

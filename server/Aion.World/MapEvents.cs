@@ -429,11 +429,20 @@ public sealed class MapEventRun
         Apply(o => o.Type == (close ? "CloseNpc" : "AskNpc") && ((o.Npcs ?? []).Contains(npcId) || Names(o, spawnName))
                    && (index is not { } i || Step!.Objectives.Length <= i || ReferenceEquals(Step.Objectives[i], o)), now);
 
-    public bool UsedObject(string spawnName, long now) => Apply(o => o.Type == "UseEnvObj" && Names(o, spawnName), now);
+    /// <summary>
+    /// An object a UseEnvObj objective names: its spawn entry, or its EnvObjData name. <paramref name="envName"/> is set when the
+    /// spawn entry is named after another object (Munihelle's E_D0_FireWood_002 spawned as E_D0_FireWood_001_2): that object
+    /// answers to its own name and its exact spawn name, not to the other's name (the second batch never counted).
+    /// </summary>
+    static bool NamesObject(MapEventObjective o, string spawnName, string? envName) => envName is null ? Names(o, spawnName)
+        : o.Names.Any(n => string.Equals(n, envName, StringComparison.OrdinalIgnoreCase) || string.Equals(n, spawnName, StringComparison.OrdinalIgnoreCase));
+
+    public bool UsedObject(string spawnName, long now, string? envName = null) =>
+        Apply(o => o.Type == "UseEnvObj" && NamesObject(o, spawnName, envName), now);
 
     /// <summary>Whether a UseEnvObj objective of the current step still counts this spawner (the object despawns once used: OBSERVED for the phoenix eggs).</summary>
-    public bool WantsObject(string spawnName) =>
-        !Finished && Step is { } step && step.Objectives.Where((o, i) => i < Goals.Length && Goals[i] < o.Count && o.Type == "UseEnvObj" && Names(o, spawnName)).Any();
+    public bool WantsObject(string spawnName, string? envName = null) =>
+        !Finished && Step is { } step && step.Objectives.Where((o, i) => i < Goals.Length && Goals[i] < o.Count && o.Type == "UseEnvObj" && NamesObject(o, spawnName, envName)).Any();
 
     /// <summary>Where the player stands: EnterVolumePC (trigger names) and EnterSubZone objectives.</summary>
     public bool PositionAt(Func<string, bool> insideTrigger, Func<string, bool> insideSubzone, long now) =>

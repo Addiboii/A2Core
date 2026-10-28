@@ -323,11 +323,11 @@ public sealed partial class GameSession : IMapEventHost
         return DrainMapEvents();
     }
 
-    List<byte[]> MapEventUsedObject(string spawnName, long now)
+    List<byte[]> MapEventUsedObject(string spawnName, long now, string? envName = null)
     {
-        if (ToCopyOwner(o => o.MapEventUsedObject(spawnName, now)) || mapEventRuns.Count == 0) return [];
+        if (ToCopyOwner(o => o.MapEventUsedObject(spawnName, now, envName)) || mapEventRuns.Count == 0) return [];
         mapEventNow = now;
-        foreach (var run in mapEventRuns.ToList()) run.UsedObject(spawnName, now);
+        foreach (var run in mapEventRuns.ToList()) run.UsedObject(spawnName, now, envName);
         return DrainMapEvents();
     }
 

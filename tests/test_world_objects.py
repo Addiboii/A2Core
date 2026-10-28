@@ -31,6 +31,15 @@ class WorldObjectTests(unittest.TestCase):
             {'Value': {'Name': 'Sound', 'Location': {'X': 0, 'Y': 0, 'Z': 0}, 'FuncType': 'ETriggerActorFuncType::Sound'}}]}, wanted=set())
         self.assertEqual([(a['name'], a['shape'], a['box']) for a in areas], [('Trigger_Q_A', 'Box', [100, 50])])
 
+    def test_spawn_named_after_another_object_keeps_its_own_name(self):
+        names = {'e_d0_firewood_001', 'e_d0_firewood_002'}
+        self.assertTrue(world_objects.misleading('E_D0_FireWood_001_2', 'E_D0_FireWood_002', names))
+        self.assertFalse(world_objects.misleading('E_D0_FireWood_001_1', 'E_D0_FireWood_001', names))
+        self.assertFalse(world_objects.misleading('Gather_Herb_Spawner_01', 'E_D0_FireWood_002', names))
+        data = json.loads((ROOT / 'tools/data/world-objects.json').read_text(encoding='utf-8'))
+        fire = {o['name']: o.get('env_name') for o in data['maps']['110002']['objects'] if 'FireWood' in o['name']}
+        self.assertEqual(fire, {'E_D0_FireWood_001_1': None, 'E_D0_FireWood_001_2': 'E_D0_FireWood_002'})
+
     def test_generated_poeta(self):
         data = json.loads((ROOT / 'tools/data/world-objects.json').read_text(encoding='utf-8'))['maps']['1000']
         self.assertIn(1200530, [o['env'] for o in data['objects']])

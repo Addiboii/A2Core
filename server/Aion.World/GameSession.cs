@@ -827,8 +827,8 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         if (objects[index].Gather is not null) replies.AddRange(await CompleteGatherAsync(index, objects[index], now, ct));
         if (questLog is not null)
             replies.AddRange(await Stored(() => QuestChangesAsync(questLog.UsedObject(objects[index].Env, level), ct)));
-        var consumed = (CopyOwner ?? this).mapEventRuns.Any(r => r.WantsObject(objects[index].Name));
-        replies.AddRange(MapEventUsedObject(objects[index].Name, now));
+        var consumed = (CopyOwner ?? this).mapEventRuns.Any(r => r.WantsObject(objects[index].Name, objects[index].EnvName));
+        replies.AddRange(MapEventUsedObject(objects[index].Name, now, objects[index].EnvName));
         if (consumed)
         {
             usedObjects.Add(index);
