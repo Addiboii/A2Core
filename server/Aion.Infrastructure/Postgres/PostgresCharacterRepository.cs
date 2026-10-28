@@ -17,13 +17,13 @@ public sealed partial class PostgresCharacterRepository(NpgsqlDataSource dataSou
     public async Task<IReadOnlyList<CharacterSummary>> ListOwnedAsync(Guid accountId, CancellationToken cancellationToken)
     {
         await using var command = dataSource.CreateCommand($"""
-            SELECT {SummaryColumns} FROM game.characters c JOIN auth.accounts a USING(account_id)
+            SELECT {SummaryColumns},c.race FROM game.characters c JOIN auth.accounts a USING(account_id)
             WHERE c.account_id=$1 AND a.disabled_at IS NULL ORDER BY c.created_at,c.character_id
             """);
         command.Parameters.AddWithValue(accountId);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         var result = new List<CharacterSummary>();
-        while (await reader.ReadAsync(cancellationToken)) result.Add(ReadSummary(reader));
+        while (await reader.ReadAsync(cancellationToken)) result.Add(ReadSummary(reader) with { Race = reader.GetInt32(5) });
         return result;
     }
 

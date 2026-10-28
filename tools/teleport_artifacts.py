@@ -22,6 +22,10 @@ MAPDATA = {1000: ROOT / 'research/local/reuse-mapdata-probe/table-001.json'}
 ALL_MAPDATA = ROOT / 'research/local/all-mapdata-full'   # every map's MapData.dat (tools/map_points.py)
 ENVOBJDATA = ROOT / 'research/local/world/gameplay-tables/table-000.json'
 USAGE = 'EEnvObjectUsage::TeleportArtifact'
+# EnvObjData RelationshipEntity -> the 0x3634 relationship byte (ERelationshipEntity ordinals, tools/world_objects.py).
+# The client only offers the bind on its own race's object: Ishalgen's are EnvObj_Dark, and spawned as Light (the
+# Poeta capture's 8) an Asmodian could not bind them (live 2026-10-28).
+RELATIONSHIP = {'EnvObj_Neutral': 7, 'EnvObj_Light': 8, 'EnvObj_Dark': 9}
 
 
 def walk(node):
@@ -45,7 +49,13 @@ def artifact_objects(envobj_rows):
     return result
 
 
-def placements(mapdata, objects):
+def relationships(envobj_rows):
+    """EnvObjData id -> relationship byte for every teleport-artifact object (8 EnvObj_Light when unnamed)."""
+    return {row['ID']['Value']: RELATIONSHIP.get(str(row.get('RelationshipEntity', '')).split('::')[-1], 8)
+            for row in walk(envobj_rows) if row.get('Usage') == USAGE and isinstance(row.get('ID'), dict)}
+
+
+def placements(mapdata, objects, relation=None):
     """Spawn records whose EnvObjIdList names a teleport-artifact object, one per position."""
     found = []
     for record in walk(mapdata):
@@ -60,24 +70,25 @@ def placements(mapdata, objects):
                     'name': record.get('Name'), 'env_obj': env, 'artifact': code,
                     'artifact_id': int(code.rsplit('_', 1)[1]), 'unique_key': record.get('UniqueKey', 0),
                     'position': [round(loc['X'], 2), round(loc['Y'], 2), round(loc['Z'], 2)],
-                    'yaw': round(rot['Yaw'], 4)})
+                    'yaw': round(rot['Yaw'], 4), 'relationship': (relation or {}).get(env, 8)})
     return found
 
 
 def build():
-    objects = artifact_objects(json.loads(ENVOBJDATA.read_text(encoding='utf-8')))
+    rows = json.loads(ENVOBJDATA.read_text(encoding='utf-8'))
+    objects, relation = artifact_objects(rows), relationships(rows)
     maps = {}
     for path in sorted(ALL_MAPDATA.glob('*/table-*.json')):
         if not path.stem.split('-')[-1].isdigit():
             continue
         data = json.loads(path.read_text(encoding='utf-8'))['Properties']['Data']
-        found = placements({'SpawnInfoList': data.get('SpawnInfoList', [])}, objects)
+        found = placements({'SpawnInfoList': data.get('SpawnInfoList', [])}, objects, relation)
         if found:
             maps.setdefault(str(data['MapId']), []).extend(found)
     if not maps:   # only the Poeta probe extracted
         for map_id, path in MAPDATA.items():
             if path.exists():
-                maps[str(map_id)] = placements(json.loads(path.read_text(encoding='utf-8')), objects)
+                maps[str(map_id)] = placements(json.loads(path.read_text(encoding='utf-8')), objects, relation)
     DATA.write_text(json.dumps({'source': 'MapData.dat SpawnInfoList + EnvObjData.dat TeleportArtifact usage',
                                 'maps': maps}, separators=(',', ':')) + '\n', encoding='utf-8')
     return maps

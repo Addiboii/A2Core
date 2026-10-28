@@ -11,7 +11,9 @@ public sealed record KibeliskPlacement(
     [property: JsonPropertyName("artifact_id")] int ArtifactId,
     [property: JsonPropertyName("unique_key")] int UniqueKey,
     [property: JsonPropertyName("position")] double[] Position,
-    [property: JsonPropertyName("yaw")] double Yaw);
+    [property: JsonPropertyName("yaw")] double Yaw,
+    // EnvObjData RelationshipEntity (8 EnvObj_Light, 9 EnvObj_Dark): the client offers the bind only on its race's.
+    [property: JsonPropertyName("relationship")] byte Relationship = 8);
 
 /// <summary>Kibelisks by map (embedded teleport-artifacts.json).</summary>
 public static class Kibelisks

@@ -217,17 +217,29 @@ var grants = 0;
 var secured = new LoginSession(new LoginSessionOptions(), (id, _) =>
 {
     grants++;
-    return Task.FromResult(id.AuthnToken == "good" ? new LoginGrant("42", guid, [("Player1", 3)]) : null);
+    return Task.FromResult(id.AuthnToken == "good" ? new LoginGrant("42", guid, [("Player1", 3, 1)]) : null);
 });
 Check((await secured.HandleAsync([0x0a, 0x39], Now)).Close == "required", "requests before login close the connection");
-var gated = new LoginSession(new LoginSessionOptions(), (id, _) => Task.FromResult(id.AuthnToken == "good" ? new LoginGrant("42", guid, [("Player1", 3)]) : null));
+var gated = new LoginSession(new LoginSessionOptions(), (id, _) => Task.FromResult(id.AuthnToken == "good" ? new LoginGrant("42", guid, [("Player1", 3, 1)]) : null));
 Check((await gated.HandleAsync([0x02, 0x39, 1, 0, 0, 0, 0, 0, 0, 0], Now)).Close is null, "pings are allowed before login");
 Check((await gated.HandleAsync(Strings(0x3905, "", "bad", "", "", "", ""), Now)).Close == "rejected", "unknown ticket rejected");
-var accepted = new LoginSession(new LoginSessionOptions(), (id, _) => Task.FromResult(id.AuthnToken == "good" ? new LoginGrant("42", guid, [("Player1", 3)]) : null));
+var accepted = new LoginSession(new LoginSessionOptions(), (id, _) => Task.FromResult(id.AuthnToken == "good" ? new LoginGrant("42", guid, [("Player1", 3, 1)]) : null));
 var account = await accepted.HandleAsync(Strings(0x3905, "", "good", "", "", "", ""), Now);
 Check(account.Close is null && Encoding.ASCII.GetString(account.Replies.Single()).Contains("42:" + guid), "accepted login uses the granted account");
 Check((await accepted.HandleAsync([0x0a, 0x39], Now)).Replies.Single().SequenceEqual(LoginPackets.Characters([new LoginCharacterRow(1361, "Player1", 3)])), "stored characters listed");
 Check((await accepted.HandleAsync(Strings(0x3905, "", "good", "", "", "", ""), Now)).Close == "replay_rejected", "second login closes");
+var bothRaces = new LoginSession(new LoginSessionOptions(), (_, _) => Task.FromResult<LoginGrant?>(new LoginGrant("42", guid, [("Light", 3, 1), ("Dark", 5, 2)])));
+await bothRaces.HandleAsync(Strings(0x3905, "", "good", "", "", "", ""), Now);
+Check((await bothRaces.HandleAsync([0x0a, 0x39], Now)).Replies.Single().SequenceEqual(LoginPackets.Characters([new LoginCharacterRow(1361, "Light", 3), new LoginCharacterRow(2361, "Dark", 5)])),
+      "each character is listed on the world of its race (Light 1361, Dark 2361)");
+// The server list opens on the account's race's world (the first server in 0x3906), not always the Light one.
+var darkAccount = new LoginSession(new LoginSessionOptions(), (_, _) => Task.FromResult<LoginGrant?>(new LoginGrant("42", guid, [("Dark", 5, 2)])));
+Check((await darkAccount.HandleAsync(Strings(0x3905, "", "good", "", "", "", ""), Now)).Replies.Single().SequenceEqual(LoginPackets.Account("42", guid, 2361, 1361, 2361)),
+      "an Asmodian account's server list opens on the Dark world (2361), with the last Light/Dark servers 1361/2361");
+var emptyAccount = new LoginSession(new LoginSessionOptions { LastPickedRace = id => id == "42" ? 2 : null },
+    (_, _) => Task.FromResult<LoginGrant?>(new LoginGrant("42", guid, [])));
+Check(BitConverter.ToUInt16((await emptyAccount.HandleAsync(Strings(0x3905, "", "good", "", "", "", ""), Now)).Replies.Single().AsSpan()[^12..]) == 2361,
+      "an account without characters opens on the world it last picked");
 Console.WriteLine($"{checks} login session checks passed.");
 
 // ---------- Game session: development flow ----------
@@ -966,6 +978,36 @@ Check(Refused(await stored.HandleAsync(create.Append((byte)0).ToArray(), Now), G
       "unknown creation tail stores nothing and is refused (0x361c kCharCreate_InvalidCustomizingData)");
 var darkCreate = new PacketWriter().U16(0x361b).String("Dark").U8(1).U32((uint)DarkCreation(data)).Bytes([1]).U8(0).U8(2).U8(0).ToArray();
 Check(Refused(await stored.HandleAsync(darkCreate, Now), GamePackets.CreateInvalidServerRace) && store.Created.Count == 1, "one race per account per server (kCharCreate_InvalidServerRace)");
+// The listed worlds are one race each (the 0x3909 race byte), both on this server, which keeps one race per account: a new
+// account that picked the Dark world (2361) gets race 2 and creates a Dark character; an account with a Light character
+// sees an empty Dark lobby (races never mix in a lobby) and cannot create there until its Light characters are deleted.
+{
+    var choices = new WorldChoices();
+    var picker = new LoginSession(new LoginSessionOptions { WorldPicked = choices.Pick });
+    await picker.HandleAsync([0x05, 0x39], Now);
+    await picker.HandleAsync([0x0c, 0x39, 0x39, 0x09], Now);
+    Check(choices.Race("1000001") == 2 && choices.Race("42") is null, "picking world 2361 on the login port records its race (Dark) for that account");
+    byte[] RaceLobby(List<byte[]> replies)
+    {
+        var frame = replies.Single();
+        return NativeFraming.Split(Lz4Block.Decode(frame.AsSpan(6), BitConverter.ToInt32(frame, 2)), out _).Single();
+    }
+    var gameLogin = Strings(0x3613, Session, "", "t", "").Concat(new byte[9]).ToArray();
+    var newStore = new FakeStore();
+    var newDark = new GameSession(data, new GameSessionOptions { WorldRace = choices.Race }, new Random(5)) { Store = newStore };
+    Check(RaceLobby(await newDark.HandleAsync(gameLogin, Now)).SequenceEqual(GamePackets.LoginCharacters([], Session, "1204", GamePackets.CommServerKey, Now, serverRace: 2)),
+          "a new account on the Dark world gets race 2");
+    Check((await newDark.HandleAsync(darkCreate, Now)).Single()[0] == 0x1c && newStore.States.Single().Race == 2, "and creates a Dark character");
+    var lightStore = new FakeStore();
+    var lightFirst = new GameSession(data, new GameSessionOptions(), new Random(6)) { Store = lightStore };
+    await lightFirst.HandleAsync(gameLogin, Now);
+    await lightFirst.HandleAsync(create, Now);
+    var lightOnDark = new GameSession(data, new GameSessionOptions { WorldRace = choices.Race }, new Random(7)) { Store = lightStore };
+    Check(RaceLobby(await lightOnDark.HandleAsync(gameLogin, Now)).SequenceEqual(GamePackets.LoginCharacters([], Session, "1204", GamePackets.CommServerKey, Now, serverRace: 2)),
+          "an account with a Light character sees an empty Dark lobby (race 2): races never mix in a lobby");
+    Check(Refused(await lightOnDark.HandleAsync(darkCreate, Now), GamePackets.CreateInvalidServerRace) && lightStore.States.Count == 1,
+          "its Dark creation is refused until the Light characters are deleted (kCharCreate_InvalidServerRace)");
+}
 Check(Refused(await stored.HandleAsync(create, Now), GamePackets.CreateDuplicateName) && store.Created.Count == 1, "the same name again is refused as a duplicate (kCharCreate_DuplicateCharName)");
 Check(BitConverter.ToUInt16((await stored.HandleAsync(NameRequest("Player1"), Now)).Single(), 2) == GamePackets.NameDuplicate, "the name check says duplicate (kCharCheckName_DuplicateCharName)");
 var picked = await stored.HandleAsync(new PacketWriter().U16(0x361f).Varint(store.States[0].WireId << 16).I32(0).Vec3(Vector3d.Zero).ToArray(), Now);
@@ -1801,6 +1843,8 @@ Check(liveBind.Count >= 3 && liveBind[0].SequenceEqual(GamePackets.InteractEnvOb
 var unknownObject = await staffSession.HandleAsync(new PacketWriter().U16(0x3636).U8(1).Varint(123_456).I64(0).I32(0).ToArray(), Now);
 Check(unknownObject.Single().SequenceEqual(GamePackets.InteractEnvObjReply(123_456, 1)), "an unknown object is refused (0x3637 result 1), so the client is not left waiting");
 Check(Kibelisks.OnMap(1000).Single().ArtifactId == 1051035, "the Poeta Kibelisk is placed (TeleportArtifact_1051035)");
+Check(Kibelisks.OnMap(1000).Single().Relationship == 8 && Kibelisks.OnMap(1100).All(k => k.Relationship == 9),
+      "Kibelisks spawn with their race's relationship (Poeta EnvObj_Light 8, Ishalgen EnvObj_Dark 9)");
 var devDepot = await (await BarSession()).HandleAsync([0x10, 0x56], Now);
 Check(devDepot[0].SequenceEqual(GamePackets.ItemDepotList([new InventoryItem(1, 110160001, 1, InventoryItem.Equipped, 1, new EquipDetail(1, 1))])),
       "development: the starter weapon in the official inventory format");
@@ -2021,6 +2065,10 @@ Check(rewarded.Count(b => Op(b) == 0x8d11) == 1 && jo.DevelopmentQuestLog().Get(
 Check(rewarded.Any(b => Op(b) == 0x5676) && rewarded.Any(b => Op(b) == 0x8d00 && b.AsSpan().IndexOf(new PacketWriter().U8(13).I32(GameSession.FpMax).ToArray()) > 0)
       && rewarded.Any(b => Op(b) == 0x5672),
       "HQ1101020's reward ascends the character: the flight gauge's maximum (0x8d00 type 13, 250,000), WingChange 0x5676, the wing list");
+Check(GameSession.AscensionQuests.Select(c => book.Find(c)!).ToList() is [var lightAscent, var darkAscent]
+      && lightAscent.Race == "Light" && darkAscent.Race == "Dark" && lightAscent.FinishNpc == darkAscent.FinishNpc
+      && book.Find(lightAscent.Next!)!.Map == 200005 && book.Find(darkAscent.Next!)!.Map == 200005,
+      "each race ascends at its Ashar turn-in (HQ1101020 Light, HQ2101050 Dark), whose next quest is in the Ascension Subspace");
 jo.ExitSharedWorld();
 Check(layer.TakeWhile(b => Op(b) != 0x3623).Any(b => Op(b) == 0x3642 && b[^1] == 1) && !layer.Any(b => b.SequenceEqual(GamePackets.Death(guide.Key, 1))) && layerOps.IndexOf(0x3623) >= 0,
       "the layer shares Poeta's level: the base map's other NPCs are removed before the load reply (0x3642 flag 1, as observed; Robin not twice)");

@@ -99,6 +99,8 @@ if (native.LoginPort is not null || native.GamePort is not null)
     builder.Services.AddSingleton<Aion.Host.Authentication.ScheduledRestart>();
     // Multiplayer: one shared world (maps, NPCs, players) for every game connection on this host.
     builder.Services.AddSingleton(_ => new Aion.World.SharedWorld(Aion.World.GameData.Embedded));
+    // The race of the world each account picks on the login port, for the game port's lobby.
+    builder.Services.AddSingleton<Aion.World.WorldChoices>();
     builder.Services.AddSingleton(provider =>
     {
         var log = provider.GetRequiredService<ILoggerFactory>().CreateLogger("Aion.Gm");

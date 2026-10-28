@@ -6,7 +6,7 @@ namespace Aion.Protocol.Native;
 public sealed record LoginCharacterRow(int ServerId, string Name, uint Level = 1, uint Experience = 0,
     uint Code = 5, byte Flags = 1, ulong LastPlayedUnixMs = 0);
 
-/// <summary>A 0x3909 world-directory row.</summary>
+/// <summary>A 0x3909 world-directory row. Group is the world's race (Common_ServerInfo _server_race: 1 Light, 2 Dark).</summary>
 public sealed record WorldRow(int Id, int Group, string Name, byte Status = 0, byte Load = 0);
 
 /// <summary>
@@ -25,18 +25,26 @@ public static class LoginPackets
         new(2361, 2, "PotatoeWorld", 1, 50),
     ];
 
-    /// <summary>0x3906 account body; account ID decimal, GUID in canonical 36-character text form.</summary>
-    public static byte[] Account(string accountId, Guid guid, int serverId)
+    /// <summary>
+    /// 0x3906 account body; account ID decimal, GUID in canonical 36-character text form. After the last server, one
+    /// packed boolean byte: bit 0 _tutorial_completed_light, bit 1 _tutorial_completed_dark (usmap Login_RS order;
+    /// booleans share a byte as in our writer: a second byte here was read as the pre-generated nickname and the login
+    /// failed, live 2026-10-28). The official sample had only bit 0, and with it picking the Dark world sent the client
+    /// back to the login port (MoveToLoginServer 0x3617) for the race's prologue, which this server does not run.
+    /// </summary>
+    /// The first server is the last-accessed one, which the client's server list opens on; the last two are the last Light
+    /// and Dark servers (usmap order, CANDIDATE: the official sample's Dark one, 03 09, is 2307, an official Dark server).
+    public static byte[] Account(string accountId, Guid guid, int serverId, int? lightServerId = null, int darkServerId = 0x0903)
     {
         if (accountId.Length is < 1 or > 16 || !accountId.All(char.IsAsciiDigit)) throw new ArgumentException("Account ID must be a short decimal string");
-        if (serverId is < 0 or > 0xFFFF) throw new ArgumentOutOfRangeException(nameof(serverId));
+        if (new[] { serverId, lightServerId ?? 0, darkServerId }.Any(id => id is < 0 or > 0xFFFF)) throw new ArgumentOutOfRangeException(nameof(serverId));
         var first = guid.ToString("D");
         var combined = accountId + ":" + first;
         return PacketWriter.Opcode(0x3906).U16(0).U8(0)
             .U8(first.Length).Raw(Encoding.ASCII.GetBytes(first))
             .U8(1).U16(0)
             .U8(combined.Length).Raw(Encoding.ASCII.GetBytes(combined))
-            .U16(serverId).U8(1).U32(0).U16(serverId).U8(3).U8(9).U8(3).ToArray();
+            .U16(serverId).U8(0b11).U32(0).U16(lightServerId ?? serverId).U16(darkServerId).U8(3).ToArray();
     }
 
     /// <summary>

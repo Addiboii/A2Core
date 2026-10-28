@@ -206,6 +206,8 @@ public sealed class NativeLoginListener(NativeOptions options, IServiceProvider 
             RedirectPort = Options.GamePort ?? 13328,
             Characters = Options.Development && Options.IntroCharacter
                 ? [LoginPackets.PreGeneratedIntro(LoginPackets.DefaultWorlds[0].Id, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds())] : [],
+            WorldPicked = services.GetService<WorldChoices>() is { } choices ? choices.Pick : null,
+            LastPickedRace = services.GetService<WorldChoices>() is { } picks ? picks.Race : null,
         }, Options.Development ? null : AuthenticateAsync);
         var chunk = new byte[8192];
         while (true)
@@ -243,7 +245,7 @@ public sealed class NativeLoginListener(NativeOptions options, IServiceProvider 
         }
         // The login port's character list (0x390b) shows a per-server character count.
         var owned = (await characters.ListAsync(new VerifiedAccount(grant.AccountId), ct)).Where(c => c.WorldId == grant.WorldId)
-            .Select(c => (c.Name, c.Level)).ToList();
+            .Select(c => (c.Name, c.Level, c.Race)).ToList();
         return new LoginGrant(grant.WireAccountId.ToString(System.Globalization.CultureInfo.InvariantCulture), grantId, owned);
     }
 }
@@ -272,6 +274,7 @@ public sealed class NativeGameListener(NativeOptions options, IServiceProvider s
             StaffRole = services.GetService<GmPolicy>()?.StaffRole,
             Builder = services.GetService<BuilderCommands>(), Terrain = services.GetService<TerrainStore>(), Nav = services.GetService<NavMeshStore>(),
             World = services.GetService<SharedWorld>(), DevelopmentMap = Options.Development ? Options.DevelopmentStartMap : null,
+            WorldRace = services.GetService<WorldChoices>() is { } choices ? choices.Race : null,
         }, new Random());
         // With a shared world, sessions take turns (WorldTurn): world work alone, map work in parallel per map;
         // storage calls run outside the turn (TurnStore).

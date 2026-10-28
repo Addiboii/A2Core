@@ -36,7 +36,7 @@ class LoginServerFrameTests(unittest.TestCase):
         self.assertTrue(combined.startswith("123456:123e4567-e89b-12d3-a456-426614174000"))
         server = reader.uint(2)
         self.assertEqual(server, 1301)
-        self.assertEqual(reader.take(5), b"\x01\x00\x00\x00\x00")
+        self.assertEqual(reader.take(5), b"\x03\x00\x00\x00\x00")  # both races' tutorials completed (packed bits)
         self.assertEqual(reader.uint(2), 1301)
         self.assertEqual(reader.take(3), b"\x03\x09\x03")
         self.assertEqual(reader.offset, len(body))

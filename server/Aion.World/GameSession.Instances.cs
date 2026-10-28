@@ -88,7 +88,9 @@ public sealed partial class GameSession
         int map; Vector3d exit;
         if (hand is not null) (map, exit) = (hand.Exit.Map, new Vector3d(hand.Exit.Position[0], hand.Exit.Position[1], hand.Exit.Position[2]));
         else if (instanceReturn is { } back) (map, exit) = back;
-        else (map, exit) = (volume?.Base ?? 1000, position ?? spawn?.Position ?? default);
+        else if (volume is not null) (map, exit) = (volume.Base, position ?? spawn?.Position ?? default);
+        // No way out recorded: the race's starting map (Poeta for Light, Ishalgen for Dark) at its start point.
+        else (map, exit) = (HomeMap, data.MapStart(HomeMap)?.Position ?? GamePackets.SpawnPosition);
         if (hand is null && volume is { } overlay && overlay.Base == map && string.Equals(mode, "CurrentPosition", StringComparison.OrdinalIgnoreCase) && position is { } here)
             exit = here;
         var leaving = (CopyOwner ?? this).mapEventRuns.Select(r => GamePackets.MapEventLeave(r.Id)).ToList();

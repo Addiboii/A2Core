@@ -84,7 +84,10 @@ def build_account(account_id, guid, server_id):
             + b"\x01\x00\x00"
             + bytes([len(combined)]) + combined
             + server_id.to_bytes(2, "little")
-            + b"\x01\x00\x00\x00\x00"
+            # One packed boolean byte: bit 0 _tutorial_completed_light, bit 1 _tutorial_completed_dark (the official
+            # sample had only bit 0, and picking the Dark world then sent the client back for the prologue), then the
+            # empty pre-generated character (nickname, race, server).
+            + b"\x03\x00\x00\x00\x00"
             + server_id.to_bytes(2, "little")
             + b"\x03\x09\x03")
 

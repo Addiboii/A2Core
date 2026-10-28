@@ -30,6 +30,8 @@ public sealed record GameSessionOptions
     public int? DevelopmentMap { get; init; }
     /// <summary>The training dummy (key 1000) next to the spawn point: off since 2026-10-18 (it was the first combat target; the checks still use it).</summary>
     public bool TrainingDummy { get; init; }
+    /// <summary>The race of the world this wire account picked on the login port (<see cref="WorldChoices"/>); null: none known.</summary>
+    public Func<string, int?>? WorldRace { get; init; }
 }
 
 /// <summary>
@@ -220,6 +222,8 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
     string? accountRole;
     /// <summary>Whether any of the account's characters is flagged staff (the Login_RS "is admin" flag).</summary>
     bool lobbyStaff;
+    // The picked world's race (1 Light, 2 Dark): the lobby's _server_race and the only race it lists.
+    int? worldRace;
     /// <summary>
     /// The selected character's staff role ("admin", "gamemaster"), else null: the account's role when the character is
     /// flagged staff (CharacterState.Staff, set by hand; a new character is a player even on a staff account).
@@ -878,7 +882,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         for (var i = 0; i < placed.Count; i++)
         {
             var k = placed[i];
-            replies.Add(GamePackets.EnvObjSpawn(Kibelisks.FirstKey + i, k.EnvObj, new Vector3d(k.Position[0], k.Position[1], k.Position[2]), k.Yaw, now, k.UniqueKey));
+            replies.Add(GamePackets.EnvObjSpawn(Kibelisks.FirstKey + i, k.EnvObj, new Vector3d(k.Position[0], k.Position[1], k.Position[2]), k.Yaw, now, k.UniqueKey, k.Relationship));
         }
         return replies;
     }
@@ -1019,7 +1023,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
                 replies.AddRange(await GainExperienceAsync(total, rewards.Exp, ExpReasonQuest, ct));
                 replies.AddRange(await InventoryChangesAsync(ct));
             }
-            if (record.Code == AscensionQuest && (selected?.Ascension ?? 1) < 2
+            if (AscensionQuests.Contains(record.Code) && (selected?.Ascension ?? 1) < 2
                 && (Store is not { } ascending || CharacterId is not { } ascended || await ascending.AscendAsync(ascended, 2, ct)))
                 replies.AddRange(Ascend(2));
             questLog.Set(record with { Status = QuestLog.Rewarded });
@@ -1039,9 +1043,11 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
     /// The quest whose turn-in ascends the character. OBSERVED in the 2026-10-19 recording at HQ1101020's reward (Ashar): the
     /// flight gauge's maximum (0x8d00 type 13, 250,000), WingChange 0x5676 with the race's default wing, the stats, then the
     /// Subspace's event and quests; the gauge then filled from 40,000 in 40,000 steps (a self skill, 5002). OURS: filled at once,
-    /// the wing list resent (0x5672; the official 0x5673/0xe295 notices are not decoded).
+    /// the wing list resent (0x5672; the official 0x5673/0xe295 notices are not decoded). The Dark chain's counterpart is
+    /// HQ2101050 (same Ashar turn-in, then "Spread Your Wings" HQ2101060 in the Subspace, as HQ1101021); only the Light one
+    /// ascended, so an Asmodian never got wings.
     /// </summary>
-    public const string AscensionQuest = "HQ1101020";
+    public static readonly IReadOnlySet<string> AscensionQuests = new HashSet<string> { "HQ1101020", "HQ2101050" };
 
     List<byte[]> Ascend(int grade)
     {
@@ -1416,18 +1422,26 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
 
     StarterProfile? Profile() => character is null ? data.Profile(1, 1) : data.Profile(character.CreationId, character.Gender);
 
+    /// <summary>A race's starting map: Poeta (1000) for Light, Ishalgen (1100) for Dark (tools/configure_starters.py).</summary>
+    static int HomeMapOf(int race) => race == 2 ? 1100 : 1000;
+    int HomeMap => HomeMapOf(Profile()?.Race ?? 1);
+
     async Task<List<byte[]>> GameLoginAsync(byte[] plain, long now, CancellationToken ct)
     {
         loginIdentity = LoginIdentity(plain);
+        worldRace = options.WorldRace?.Invoke(loginIdentity.AccountSid);
         if (Store is not null)
             return await Stored(async () =>
             {
                 var characters = await LobbyCharactersAsync(ct);
                 var races = characters.Select(c => c.Race).Distinct().ToList();
                 accountRole = await StaffRoleAsync(Store.AccountId, ct);
+                // _server_race: the picked world's race (each world holds one race, as an official server), else the race
+                // of the account's characters (0 when none, CANDIDATE "not chosen"; a new account then saw its own race's
+                // text scrambled).
                 return [NativeFraming.CompressedEnvelope(GamePackets.LoginCharacters(characters,
                     $"{loginIdentity.AccountSid}:{loginIdentity.Guid}", Store.WorldId.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                    GamePackets.CommServerKey, now, serverRace: races.Count == 1 ? races[0] : 0, isAdmin: accountRole is not null && lobbyStaff))];
+                    GamePackets.CommServerKey, now, serverRace: worldRace ?? (races.Count == 1 ? races[0] : 0), isAdmin: accountRole is not null && lobbyStaff))];
             });
         // A '$' placeholder with the spawn position loads by itself; the origin record leaves
         // the client on the create screen.
@@ -1461,6 +1475,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         foreach (var state in await Store!.LobbyAsync(ct))
         {
             if (state.Staff) lobbyStaff = true;
+            if (worldRace is { } race && state.Race != race) continue;   // a world lists only its own race's characters
             var profile = StoredProfile(state);
             // The stored equipment as others see it (a new character wears its starter weapon,
             // as in the official records of level-one starter characters).
@@ -1506,6 +1521,16 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         }
     }
 
+    /// <summary>
+    /// A creation of the other race than the account's characters: one race per account on this server (an official
+    /// server holds one race; this one holds both), so the other race needs every character of this one deleted first.
+    /// </summary>
+    static bool OtherRace(IReadOnlyList<CharacterState> lobby, int race)
+    {
+        var races = lobby.Select(s => s.Race).Distinct().ToList();
+        return races.Count == 1 && races[0] != race;
+    }
+
     /// <summary>Why a creation was refused, as the client's EResult (checked in the client's own order: name, class, race, slot).</summary>
     async Task<int> CreateRefusalAsync(INativeCharacterStore store, CreateRequestData refused, byte[] plain, CancellationToken ct)
     {
@@ -1517,8 +1542,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             var profile = data.Profile(refused.CreationId, refused.Gender);
             if (profile is null) return GamePackets.CreateInvalidPcData;
             var lobby = await store.LobbyAsync(ct);
-            var races = lobby.Select(s => s.Race).Distinct().ToList();
-            if (races.Count == 1 && races[0] != profile.Race) return GamePackets.CreateInvalidServerRace;
+            if (OtherRace(lobby, profile.Race)) return GamePackets.CreateInvalidServerRace;
             if (lobby.Any(s => s.LobbySlot == refused.SlotNo)) return GamePackets.CreateInvalidSlot;
             return GamePackets.CreateErrorInternal;
         }
@@ -1537,9 +1561,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
                 // Strict complete parsing: unknown tails must not create a character.
                 var request = CreateRequest(plain, strict: true) ?? throw new ArgumentException("Unsupported character creation layout");
                 var profile = data.Profile(request.CreationId, request.Gender) ?? throw new ArgumentException("Unknown creation profile");
-                // One race per account per server, as on the official servers.
-                var races = (await store.LobbyAsync(ct)).Select(s => s.Race).Distinct().ToList();
-                if (races.Count == 1 && races[0] != profile.Race) throw new ArgumentException("Account already chose the other race on this server");
+                if (OtherRace(await store.LobbyAsync(ct), profile.Race)) throw new ArgumentException("The other race on this server");
                 var requestId = StoredCharacters.Uuid5(store.AccountId, "native-create-v1:" + Convert.ToHexStringLower(SHA256.HashData(plain)));
                 var state = await store.CreateAsync(new CreatePlayer(requestId, $"dev-v1-{request.CreationId}:{request.Gender}", request.Name,
                     request.CustomizingData, VoiceType: request.VoiceType, LobbySlot: request.SlotNo), ct);
@@ -1622,7 +1644,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
                 // same spot, any other dungeon at the race's starting point (live 2026-10-18: a relog from the HQ001 layer).
                 else if (IsInstanceMap(savedMap))
                 {
-                    var home = state.Race == 2 ? 1100 : 1000;
+                    var home = HomeMapOf(state.Race);
                     var dungeonMap = savedMap;
                     (savedMap, savedAt) = MapEventData.Volume(savedMap) is { } overlay ? (overlay.Base, savedAt)
                         : data.MapStart(home) is { } start ? (home, start.Position) : (GamePackets.SpawnMapId, GamePackets.SpawnPosition);
@@ -1820,7 +1842,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
                 replies.Add(Hotbar(profile.DefaultBar()));
             }
             var unlocked = GamePackets.UnlockedContents(level).Concat(QuestUnlockTypes()).Except(GamePackets.LaterUnlockedContents);
-            // The wing menu (Wing, 12) is quest-gated (HQ1101020); a winged character has it open.
+            // The wing menu (Wing, 12) is quest-gated (HQ1101020 / HQ2101050); a winged character has it open.
             if (wingId != 0) unlocked = unlocked.Append((byte)12);
             replies.Add(GamePackets.ContentsUnlockList(unlocked.Distinct().Order().ToArray()));
             if (questLog?.All.Where(q => q.Status < QuestLog.Rewarded).Select(Wire).ToList() is { Count: > 0 } open)

@@ -23,11 +23,22 @@ class TeleportArtifactTests(unittest.TestCase):
         found = teleport_artifacts.placements(mapdata, objects)
         self.assertEqual(found, [{'name': 'EnvObj_L0_R3_TeleportArtifact_1', 'env_obj': 1200081,
                                   'artifact': 'TeleportArtifact_1051035', 'artifact_id': 1051035,
-                                  'unique_key': 794868238, 'position': [-5970.18, -16702.43, 20292.85], 'yaw': 74.5312}])
+                                  'unique_key': 794868238, 'position': [-5970.18, -16702.43, 20292.85], 'yaw': 74.5312,
+                                  'relationship': 8}])
+
+    def test_relationship_follows_envobj_race(self):
+        rows = {'Properties': [
+            {'ID': {'Value': 1300671}, 'Usage': 'EEnvObjectUsage::TeleportArtifact', 'UsageValue': 'TeleportArtifact_1052070',
+             'RelationshipEntity': 'ERelationshipEntity::EnvObj_Dark'},
+            {'ID': {'Value': 1200081}, 'Usage': 'EEnvObjectUsage::TeleportArtifact', 'UsageValue': 'TeleportArtifact_1051035',
+             'RelationshipEntity': 'ERelationshipEntity::EnvObj_Light'}]}
+        self.assertEqual(teleport_artifacts.relationships(rows), {1300671: 9, 1200081: 8})
 
     def test_generated_poeta_kibelisk(self):
         data = json.loads((ROOT / 'tools/data/teleport-artifacts.json').read_text(encoding='utf-8'))
         self.assertEqual([k['artifact_id'] for k in data['maps']['1000']], [1051035])
+        self.assertEqual({k['relationship'] for k in data['maps']['1000']}, {8})
+        self.assertEqual({k['relationship'] for k in data['maps']['1100']}, {9})   # Ishalgen: EnvObj_Dark
 
 
 if __name__ == '__main__':
