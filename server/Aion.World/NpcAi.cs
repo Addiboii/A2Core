@@ -211,6 +211,9 @@ public sealed class NpcAi(Random rng, GameData? data = null)
             awake.Add(target.Key);
             return [];
         }
+        // Stopped while fighting (Munihelle's StopFollowPc comes with the watchstone's kill, before the companion's fight has
+        // ended): it must not take up following again afterwards (live 2026-10-28 Elvida kept following, no talk).
+        brain.ResumeFollowKey = 0;
         if (brain.Mode != Mode.Follow) return [];
         brain.Mode = Mode.Idle;
         brain.FollowKey = 0;
