@@ -921,6 +921,17 @@ Check(new PacketWriter().String(new string('a', 130)).ToArray().AsSpan(0, 2).Seq
     }
     Check(killedAt.Count == 2 && killedAt[5001] >= 3000 && killedAt[5002] > killedAt[5001] && ai2.Brains[5000].Mode == NpcAi.Mode.Follow && ai2.Brains[5000].FollowKey == pk2,
           "a following companion sent at a wave fights all of it (not one hit each), then follows the player again");
+    Check(!ai2.Brains[5000].Engaged, "and leaves combat (0x8d21 off): an NPC left in combat cannot be talked to");
+    // Not following (the watchstone: StopFollowPc comes after the kill): the fight's end leaves it idle and out of combat too.
+    var ev3 = Sp2(5100, "N_D_Starter_HQ001_Elvida_01");
+    var watchstone = Sp2(5101, "M_D_Starter_HQ001_DraTotemA_01");
+    var tg3 = new Dictionary<int, Target> { [5100] = ev3, [5101] = watchstone };
+    var ai3 = new NpcAi(new Random(5), data);
+    var stoneOut = ai3.ForceAggroNpc(ev3, watchstone, Now);
+    var stoneEnd = new List<byte[]>();
+    for (var ms = 0; ms <= 30_000; ms += 50) stoneEnd.AddRange(ai3.Tick(tg3, new List<(int Key, Vector3d Position)> { (pk2, pl2) }, Now + ms, (_, _) => []));
+    Check(watchstone.Dead && ai3.Brains[5100].Mode == NpcAi.Mode.Idle && !ai3.Brains[5100].Engaged
+          && stoneEnd.Any(b => b.SequenceEqual(GamePackets.CombatState(5100, false))), "a companion's fight at the watchstone ends idle with 0x8d21 off (talkable)");
 }
 // HQ002 (live 2026-10-24): the story companions cannot die (official 999999 HP), and Salros (Function None, 2300 from his
 // spawn) fights the elite he is sent at instead of running home; after the kill both stand, and the step-13 walk gathers them.

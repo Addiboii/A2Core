@@ -575,6 +575,17 @@ public sealed class NpcAi(Random rng, GameData? data = null)
         return [PlayerPackets.MoveSpeedUpdate(target.Key, [(205, boost)])];
     }
 
+    /// <summary>
+    /// A companion's fight is over (0x8d21 off, as a reset monster's). Left on, the client kept it in combat: Munihelle's Elvida
+    /// could not be talked to after the watchstone, so the event's last step (AskNpc) never came (live 2026-10-28).
+    /// </summary>
+    static List<byte[]> LeaveCombat(Target target, Brain brain)
+    {
+        if (!brain.Engaged) return [];
+        brain.Engaged = false;
+        return [GamePackets.CombatState(target.Key, false)];
+    }
+
     List<byte[]> Reset(Target target, Brain brain, long now)
     {
         var replies = new List<byte[]>();
@@ -762,7 +773,7 @@ public sealed class NpcAi(Random rng, GameData? data = null)
                     brain.ResumeFollowKey = 0;
                     brain.VictimIsNpc = false;
                     brain.Pending = null;
-                    return brain.Moving ? Stop(target, brain, brain.Heading, now) : [];
+                    return [.. LeaveCombat(target, brain), .. brain.Moving ? Stop(target, brain, brain.Heading, now) : []];
                 }
                 if (companion)
                 {
@@ -772,7 +783,7 @@ public sealed class NpcAi(Random rng, GameData? data = null)
                     brain.Directed = false;
                     brain.Pending = null;
                     brain.WanderAtMs = long.MaxValue;
-                    return [.. SetBoost(target, brain, 0), .. brain.Moving ? Stop(target, brain, brain.Heading, now) : []];
+                    return [.. LeaveCombat(target, brain), .. SetBoost(target, brain, 0), .. brain.Moving ? Stop(target, brain, brain.Heading, now) : []];
                 }
                 brain.Mode = Mode.Return;
                 brain.VictimKey = 0;
