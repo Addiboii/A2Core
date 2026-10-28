@@ -855,6 +855,46 @@ Check((beastNpc.Dead || guardNpc.Dead) && fightKills.Count == 1 && fightKills[0]
 Check(Convert.ToHexString(GameSession.Notice("Hello", 20, "FFD54A")) == "2F8D" + "1400" + "06464644353441" + "0A" + string.Concat(Enumerable.Repeat("0548656C6C6F", 10)) + "02000000",
     "the centre notice has the client's layout (u16 size, colour, ten culture texts, en-US fallback)");
 Check(new PacketWriter().String(new string('a', 130)).ToArray().AsSpan(0, 2).SequenceEqual(new byte[] { 0x82, 0x01 }), "strings of 128+ bytes carry a varint length");
+// Munihelle (live 2026-10-28): Elvida fights Maard; at her 70% he runs off along his route. She turns on the player hitting her
+// (next on her hate table) instead of walking home, which dropped the table and healed her to full: she never reached 40%.
+{
+    Target Sp(int key, string name)
+    {
+        var sp = data.Spawns(110002).First(s => s.Name == name);
+        var hp = Combat.HpFor(sp);
+        return new Target { Key = key, Name = name, Hp = hp, HpMax = hp, Position = new Vector3d(sp.Position[0], sp.Position[1], sp.Position[2]), NpcId = sp.NpcId,
+            Level = sp.Level, Direction = sp.Yaw, Relationship = sp.Relationship, Aggressive = sp.Aggressive, WalkSpeed = sp.WalkSpeed, RunSpeed = sp.RunSpeed,
+            Radius = sp.Radius, Function = sp.Function, Aggro = sp.Aggro, Skills = sp.Skills ?? [], NoRotation = sp.NoRotation };
+    }
+    var elv = Sp(4000, "M_D_Starter_HQ001_Elvida_V01_01");
+    var mard = Sp(4001, "N_D_Starter_HQ001_Mard_01");
+    mard.Position = new Vector3d(17088.0, -21903.3, 5896.3);   // end of Waypoints6
+    var tg = new Dictionary<int, Target> { [4000] = elv, [4001] = mard };
+    var eai = new NpcAi(new Random(3), data);
+    elv.Relationship = 11;
+    eai.ForceAggroNpc(mard, elv, Now); eai.ForceAggroNpc(elv, mard, Now);
+    var route3 = data.Route(110002, "N_D_Starter_HQ001_Mard_01_Waypoints3")!;
+    long t0 = Now; var pk = 100_001; var lowest = 100; var healed = false; var fellBack = false;
+    for (var ms = 0; ms <= 60_000; ms += 50)
+    {
+        var now = t0 + ms;
+        var pl = new Vector3d(elv.Position.X + 150, elv.Position.Y, elv.Position.Z);   // the player stays on her
+        if (ms % 600 == 0 && !elv.Dead)
+        {
+            elv.Hp = Math.Max(0, elv.Hp - elv.HpMax / 80);
+            eai.Engage(tg, elv, now, pk, elv.HpMax / 80);
+        }
+        if (ms == 3000) { elv.Relationship = 6; mard.Relationship = 4; }   // the 70% chain
+        if (ms >= 3500 && ms < 8500) { var i = Math.Min(route3.Points.Length - 1, (ms - 3500) / 700); var q = route3.Points[i]; mard.Position = new Vector3d(q[0], q[1], q[2]); }
+        if (ms == 8500) { mard.Hp = 0; mard.CorpseRemoved = true; eai.Killed(mard); }
+        eai.Tick(tg, new List<(int Key, Vector3d Position)> { (pk, pl) }, now, (_, _) => []);
+        var pct = elv.Hp * 100 / elv.HpMax;
+        healed |= !elv.Dead && pct > lowest + 5;
+        lowest = Math.Min(lowest, pct);
+        fellBack |= ms > 8500 && eai.Brains[4000].VictimKey == pk && !eai.Brains[4000].VictimIsNpc;
+    }
+    Check(!healed && fellBack && elv.Dead, "Elvida keeps fighting the player when Maard runs off: no walk home, no heal to full");
+}
 // HQ002 (live 2026-10-24): the story companions cannot die (official 999999 HP), and Salros (Function None, 2300 from his
 // spawn) fights the elite he is sent at instead of running home; after the kill both stand, and the step-13 walk gathers them.
 {

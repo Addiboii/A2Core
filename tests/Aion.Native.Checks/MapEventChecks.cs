@@ -166,6 +166,35 @@ static class MapEventChecks
         C(munihelle.StepOrder == 4 && munihelle.WantsObject(second.Name, second.EnvName), "the second batch: the second firewood counts by its own name");
         munihelle.UsedObject(second.Name, 4000, second.EnvName);
         C(munihelle.StepOrder == 5, "using it ends the step");
+        // Its ending (step 6): Elvida at 70% sends Maard away; at 40% she turns companion, the Dredgion comes, the friendly Elvida
+        // follows the player into the Drakan wave (step 7).
+        munihelle.PositionAt(n => n == "World_D_Starter_HQ001_TriggerActor_4", _ => false, 5000);
+        for (var ms = 5000; ms < 12000; ms += 100) munihelle.Tick(ms);
+        munihelle.HpChanged(2590120, "M_D_Starter_HQ001_Elvida_V01_01", 65, 13000);
+        for (var ms = 13000; ms < 20000; ms += 100) munihelle.Tick(ms);
+        C(munihelle.StepOrder == 6 && hostM.Calls.Contains("Relationship M_D_Starter_HQ001_Elvida_V01_01 Monster")
+          && hostM.Calls.Contains("Despawn N_D_Starter_HQ001_Mard_01 5000 False"), "Elvida at 70%: a Monster, Maard walks off and leaves");
+        munihelle.HpChanged(2590120, "M_D_Starter_HQ001_Elvida_V01_01", 35, 21000);
+        for (var ms = 21000; ms < 40000; ms += 100) munihelle.Tick(ms);
+        C(munihelle.StepOrder == 7 && hostM.Calls.Contains("Relationship M_D_Starter_HQ001_Elvida_V01_01 NPC_Companion")
+          && hostM.Calls.Contains("Spawn N_D_Starter_HQ001_Elvida_01 0") && hostM.Calls.Contains("Follow N_D_Starter_HQ001_Elvida_01 True"),
+          "Elvida at 40%: a companion, the friendly Elvida spawns and follows into step 7");
+        // As the official footage: Elvida fights the Balaur (two Drakan waves; her kills count), then the watchstone turns
+        // attackable and they destroy it, then the talk to her ends the event.
+        for (var i = 0; i < 4; i++) munihelle.Killed(2590109, "M_D0_HQ_Drakan_01_Multi_1", true, i < 3, 41_000 + i);
+        C(munihelle.StepOrder == 8 && hostM.Calls.Contains("Spawn M_D0_HQ_Drakan_01_Multi_2 0"), "the first Drakan wave down: the second comes");
+        hostM.Calls.Clear();
+        for (var i = 0; i < 4; i++) munihelle.Killed(2590110, "M_D0_HQ_Drakan_01_Multi_2", true, i < 3, 42_000 + i);
+        for (var ms = 42_000; ms < 45_000; ms += 100) munihelle.Tick(ms);
+        C(munihelle.StepOrder == 9 && hostM.Calls.Contains("Relationship M_D_Starter_HQ001_DraTotemA_01 Monster_AntiCompanion")
+          && hostM.Calls.Contains("AggroNpc N_D_Starter_HQ001_Elvida_01 M_D_Starter_HQ001_DraTotemA_01"), "the second wave down: the watchstone turns attackable and Elvida attacks it");
+        munihelle.Killed(2590052, "M_D_Starter_HQ001_DraTotemA_01", true, false, 46_000);
+        for (var ms = 46_000; ms < 50_000; ms += 100) munihelle.Tick(ms);
+        C(munihelle.StepOrder == 10 && hostM.Calls.Contains("Follow N_D_Starter_HQ001_Elvida_01 False"), "the watchstone destroyed: Elvida stops following, the talk remains");
+        munihelle.Talked(2950867, "N_D_Starter_HQ001_Elvida_01", 0, false, 51_000);
+        for (var ms = 51_000; ms < 56_000; ms += 100) munihelle.Tick(ms);
+        C(munihelle.Finished && munihelle.Status == MapEventRun.Complete && hostM.Exit == "CurrentPosition"
+          && !hostM.Calls.Any(c => c.StartsWith("Unsupported")), "talking to her clears the event and leaves the layer where the player stands");
 
         // Client-side and untracked objectives time out instead of stalling (InstanceLayer_2 has a cutscene).
         var layer2 = tables.Event("World_L_Starter_InstanceLayer_2_MapEvent")!;

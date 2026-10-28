@@ -301,14 +301,15 @@ public sealed partial class GameSession : IMapEventHost
         return DrainMapEvents();
     }
 
-    List<byte[]> MapEventHp(Target target, long now)
+    List<byte[]> MapEventHp(Target target, long now, bool byPlayer = true)
     {
-        if (ToCopyOwner(o => o.MapEventHp(target, now)) || mapEventRuns.Count == 0 || target.HpMax <= 0) return [];
+        if (ToCopyOwner(o => o.MapEventHp(target, now, byPlayer)) || mapEventRuns.Count == 0 || target.HpMax <= 0) return [];
         mapEventNow = now;
         var percent = (int)Math.Ceiling(target.Hp * 100.0 / target.HpMax);
         foreach (var run in mapEventRuns.ToList())
         {
-            run.CombatStarted(now);   // the player's own hit is a fight too (PCCombatStart), whether or not the client bracketed it
+            // The player's own hit is a fight too (PCCombatStart), whether or not the client bracketed it; an NPC's hit is not.
+            if (byPlayer) run.CombatStarted(now);
             run.HpChanged(target.NpcId, target.Name, percent, now);
         }
         return DrainMapEvents();

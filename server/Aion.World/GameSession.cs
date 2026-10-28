@@ -2155,10 +2155,16 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         }
     }
 
-    /// <summary>NPCs killed by other NPCs (SetAggroNpc fights): the kill sequence without loot or experience; the map events count it.</summary>
+    /// <summary>
+    /// NPCs hit or killed by other NPCs (SetAggroNpc fights): their HP goes to the map events first (Munihelle's Elvida takes most
+    /// of her damage from Maard; her HpRemaining steps counted only the player's hits), then the kill sequence without loot or
+    /// experience, which the map events count.
+    /// </summary>
     List<byte[]> NpcKillsByNpcs(NpcAi fights, long now)
     {
         var replies = new List<byte[]>();
+        foreach (var key in fights.TakeNpcHurt())
+            if (targets?.GetValueOrDefault(key) is { } hurt) replies.AddRange(MapEventHp(hurt, now, byPlayer: false));
         foreach (var (victim, killer) in fights.TakeNpcKills())
         {
             respawnAt[victim.Key] = now + RespawnMs;

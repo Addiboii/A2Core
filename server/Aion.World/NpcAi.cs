@@ -131,6 +131,16 @@ public sealed class NpcAi(Random rng, GameData? data = null)
         return taken;
     }
 
+    /// <summary>NPCs other NPCs hit since the last take (the host reports their HP to the map events: HpRemaining steps).</summary>
+    readonly HashSet<int> npcHurt = [];
+
+    public List<int> TakeNpcHurt()
+    {
+        var taken = npcHurt.ToList();
+        npcHurt.Clear();
+        return taken;
+    }
+
     Brain BrainOf(Target target)
     {
         if (!brains.TryGetValue(target.Key, out var brain))
@@ -256,6 +266,7 @@ public sealed class NpcAi(Random rng, GameData? data = null)
     {
         if (!targets.TryGetValue(victimKey, out var victim) || victim.Dead) return [];
         if (!victim.Immune) victim.Hp = Math.Max(0, victim.Hp - damage);
+        npcHurt.Add(victim.Key);
         var replies = new List<byte[]> { GamePackets.NpcHp(victim.Key, victim.Hp) };
         LastAttacker = attacker.Key;
         if (victim.Dead) { npcKills.Add((victim, attacker)); return replies; }
@@ -724,6 +735,16 @@ public sealed class NpcAi(Random rng, GameData? data = null)
             var companion = !target.Hostile && (target.Function == "Companion" || brain.Directed);
             if (player is not { } p || !companion && (Distance(target.Position, Flat(brain.Home)) > LeashRange || Distance(p, Flat(brain.Home)) > LeashRange))
             {
+                // An NPC prey ran out of the leash (Munihelle's Maard walks off at Elvida's 70%): the fight goes on with the next
+                // one on the hate table, the player hitting it. Walking home dropped the whole table and healed her to full, so
+                // she never reached 40% (live 2026-10-28).
+                if (player is not null && brain.VictimIsNpc && !companion && brain.Hate.Remove(brain.VictimKey) && TopHate(brain) is { } next)
+                {
+                    brain.VictimKey = brain.CandidateKey = next;
+                    brain.VictimIsNpc = false;
+                    brain.Pending = null;
+                    return [];
+                }
                 // A companion's fight is over: it follows its player again instead of walking home.
                 if (brain.ResumeFollowKey != 0 && (player is null || brain.VictimIsNpc))
                 {
