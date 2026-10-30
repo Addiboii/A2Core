@@ -72,6 +72,11 @@ same).
 
 Players need a Steam account that owns the game; the launcher downloads the supported build with it.
 
+> **Do not run the launcher as administrator** (no right-click → "Run as administrator", no compatibility setting).
+> The game must not run elevated, and a launcher started as administrator starts the game as administrator too. Start
+> it normally: the steps that need administrator rights (the firewall rules and the hosts entries) ask through their
+> own Windows prompt.
+
 ## Develop
 
 - Server: `dotnet build server/Aion.Host`. Game logic lives in `server/Aion.World` (`GameSession*.cs`, `NpcAi.cs`,
