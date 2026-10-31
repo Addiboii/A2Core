@@ -342,6 +342,13 @@ public sealed class MapEventRun
     public MapEventStep? Step => Stage is { } stage && StepIndex < stage.Steps.Length ? stage.Steps[StepIndex] : null;
     public int StageOrder => Stage?.Id ?? 0;
     public int StepOrder => Step?.Id ?? 0;
+    /// <summary>
+    /// The step as 0x922e / 0x922d carry it: its 1-based place within the stage, not the script's step id. OBSERVED
+    /// (capture-13700-20261019-231752, server bodies): Dungeon_L_0016_MapEvent stage 2 (step ids 10, 11, 12) went out as
+    /// steps 1, 2, 3 and stage 3 (id 13) as 1; Dungeon_0005_MapEvent stage 2 (ids 2, 3) as 1, 2. Single-stage events
+    /// (World_L_Starter_HQ001-004) cannot tell the two apart. Ported from A2Core PR #4 (Artezianec).
+    /// </summary>
+    public int WireStep => Step is null ? 0 : StepIndex + 1;
     /// <summary>Objectives of the current step still open (for markers and area checks).</summary>
     public IEnumerable<(int Index, MapEventObjective Objective)> Open =>
         Step is { } step ? step.Objectives.Select((o, i) => (i, o)).Where(x => Goals[x.i] < x.o.Count) : [];

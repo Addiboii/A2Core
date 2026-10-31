@@ -241,6 +241,7 @@ static class MapEventChecks
         C(!cave.CutsceneDone("Cutscene_Other", 15_000) && cave.CutsceneDone("Cutscene_L_A_Seq_1290", 15_000) && cave.StepOrder == 13
           && hostC.Calls.Contains("Spawn Dungeon_L_0016_Spawn_Boss_1 0") && hostC.Calls.Contains("Guide Tutorial_ForcedPopup_Groggy_01"),
           "the cutscene's end report finishes the step: the boss spawns and the groggy guide shows");
+        C(cave.StageOrder == 3 && cave.WireStep == 1, "0x922d carries the step's place within its stage (OBSERVED: Dungeon_L_0016 step 13 went out as stage 3 step 1)");
         hostC.Calls.Clear();
         foreach (var percent in new[] { 70, 40, 10 }) cave.HpChanged(2701034, "Dungeon_L_0016_Spawn_Boss_1", percent, 15_500 + percent);
         cave.Killed(2701034, "Dungeon_L_0016_Spawn_Boss_1", true, false, 16_000);

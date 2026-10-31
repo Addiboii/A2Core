@@ -274,7 +274,7 @@ public sealed partial class GameSession : IMapEventHost
     {
         // In a party member's copy: the owner's running events (their joins), none of this player's own.
         if (CopyOwner is { } owner)
-            return owner.mapEventRuns.Select(run => GamePackets.MapEventJoin(run.Id, run.Name, (byte)run.Status, run.StageOrder, run.StepOrder, run.Goals, run.StartedMs, run.Variables)).ToList();
+            return owner.mapEventRuns.Select(run => GamePackets.MapEventJoin(run.Id, run.Name, (byte)run.Status, run.StageOrder, run.WireStep, run.Goals, run.StartedMs, run.Variables)).ToList();
         if (!RunsMapEvents) return [];
         // A reload of the same map (a PCTeleport) keeps the runs and the client keeps its event state: the official boss-room
         // move in the 2026-10-19 recording sent no 0x922e after the load (the earlier re-join was a guess).
@@ -296,7 +296,7 @@ public sealed partial class GameSession : IMapEventHost
             var run = new MapEventRun(definition, Interlocked.Increment(ref nextMapEventId), this, now);
             if (!run.Holds(definition.Start, now)) continue;
             mapEventRuns.Add(run);
-            replies.Add(GamePackets.MapEventJoin(run.Id, run.Name, (byte)run.Status, run.StageOrder, run.StepOrder, run.Goals, run.StartedMs, run.Variables));
+            replies.Add(GamePackets.MapEventJoin(run.Id, run.Name, (byte)run.Status, run.StageOrder, run.WireStep, run.Goals, run.StartedMs, run.Variables));
             run.Start(now);
         }
         replies.AddRange(DrainMapEvents());
@@ -889,7 +889,7 @@ public sealed partial class GameSession : IMapEventHost
     }
 
     void IMapEventHost.Progress(MapEventRun run) =>
-        mapEventOut.Add(GamePackets.MapEventProgress(run.Id, (byte)run.Status, run.StageOrder, run.StepOrder, run.Goals, run.Variables));
+        mapEventOut.Add(GamePackets.MapEventProgress(run.Id, (byte)run.Status, run.StageOrder, run.WireStep, run.Goals, run.Variables));
 
     void IMapEventHost.Unsupported(MapEventRun run, string what) => Note($"map event {run.Name}: {what}");
 
