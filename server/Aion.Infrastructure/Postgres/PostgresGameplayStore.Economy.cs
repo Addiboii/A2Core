@@ -567,6 +567,8 @@ public sealed partial class PostgresGameplayStore : IEconomyStore
         var (build, plain) = ((string)item[0], (bool)item[1]);
         if (count == listing.Quantity)
         {
+            // The listing is closed first: deleting its escrow row sets instance_id to NULL, which an open listing may not have.
+            await Execute(c, t, "UPDATE game.trade_listings SET sold=true,quantity=0,instance_id=NULL WHERE sale_id=$1", ct, saleId);
             if (plain)
             {
                 if (await ExecuteCount(c, t, "DELETE FROM game.item_instances WHERE instance_id=$1 AND location='trade_escrow'", ct, listing.Item) != 1) return ("none", listing);
@@ -574,7 +576,6 @@ public sealed partial class PostgresGameplayStore : IEconomyStore
             }
             else if (await ExecuteCount(c, t, "UPDATE game.item_instances SET character_id=$2,location='bag',slot=NULL WHERE instance_id=$1 AND location='trade_escrow'", ct, listing.Item, character) != 1)
                 return ("none", listing);
-            await Execute(c, t, "UPDATE game.trade_listings SET sold=true,quantity=0,instance_id=NULL WHERE sale_id=$1", ct, saleId);
         }
         else
         {
