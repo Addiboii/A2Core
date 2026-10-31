@@ -1980,6 +1980,7 @@ var devDepot = await (await BarSession()).HandleAsync([0x10, 0x56], Now);
 Check(devDepot[0].SequenceEqual(GamePackets.ItemDepotList([new InventoryItem(1, 110160001, 1, InventoryItem.Equipped, 1, new EquipDetail(1, 1))])),
       "development: the starter weapon in the official inventory format");
 Console.WriteLine($"{checks} stored game session checks passed.");
+Console.WriteLine($"{await EconomyChecks.RunAsync(staffSession, staffStore, Now)} economy checks passed (godstones, exceed, legion warehouse and wallet, broker).");
 
 // ---------- Multiplayer: the shared world (players see each other, shared NPCs) ----------
 checks = 0;
@@ -2702,7 +2703,7 @@ void Rejects(Action action, string name)
     throw new Exception("Expected rejection: " + name);
 }
 
-sealed class FakeStore : INativeCharacterStore
+sealed partial class FakeStore : INativeCharacterStore
 {
     public List<CharacterState> States { get; } = [];
     public List<CreatePlayer> Created { get; } = [];

@@ -58,7 +58,16 @@ public sealed record InventoryItem(long Key, int ItemId, long Count, byte Contai
 /// <summary>Equipment detail of an item: item level and equip slot (1 weapon, 3 helm, 4 shoulder, 5 torso, 6 pants, 7 gloves, 8 boots, 19 cape; 0 in the bag).</summary>
 // Soul bind: the binding character's db id (the DbId of the character list) and the bind count;
 // the client soul-binds an unbound item again on every equip attempt.
-public sealed record EquipDetail(int ItemLevel, byte EquipSlot, byte EnchantLevel = 0, long SoulBindOwner = 0, byte SoulBindCount = 0);
+// Godstones: the godstone slots' stone ids (always sent as three slots, OBSERVED width); Exceed: the exceed enchant level, sent as
+// _surpass_enchant_level (CANDIDATE: the usmap detail has no separate exceed field).
+public sealed record EquipDetail(int ItemLevel, byte EquipSlot, byte EnchantLevel = 0, long SoulBindOwner = 0, byte SoulBindCount = 0,
+    IReadOnlyList<int>? Godstones = null, byte Exceed = 0)
+{
+    public bool Equals(EquipDetail? other) => other is not null && ItemLevel == other.ItemLevel && EquipSlot == other.EquipSlot && EnchantLevel == other.EnchantLevel
+        && SoulBindOwner == other.SoulBindOwner && SoulBindCount == other.SoulBindCount && Exceed == other.Exceed
+        && (Godstones ?? []).SequenceEqual(other.Godstones ?? []);
+    public override int GetHashCode() => HashCode.Combine(ItemLevel, EquipSlot, EnchantLevel, SoulBindOwner, SoulBindCount, Exceed);
+}
 
 /// <summary>A 0x561b change: type 0 add / 1 update, and the official reason codes (24 grant, 38 potion use observed).</summary>
 public sealed record ItemModification(byte Type, InventoryItem Item, byte Increase = 0, byte Decrease = 0, byte Update = 0);
@@ -604,12 +613,15 @@ public static class GamePackets
         w.U8(item.Detail is null ? 0 : 1).I64(item.Key).I32(item.ItemId).I64(item.Count).U8(item.Container).I32(item.Slot)
             .Bool(item.Locked).String(item.Maker).I64(item.ExpireTime).Bool(item.ExpireFixed);
         if (item.Detail is { } d)
-            w.U8(d.EnchantLevel).I32(0).I32(0).U8(0).I32(0).I32(d.ItemLevel).Bool(false).U8(d.EquipSlot)
+        {
+            w.U8(d.EnchantLevel).I32(0).I32(0).U8(d.Exceed).I32(0).I32(d.ItemLevel).Bool(false).U8(d.EquipSlot)
                 // One magicstone slot (7 zero bytes observed; usmap id, stat, grade), then
                 // _soul_bind_char_dbid i64 and _soul_bind_count u8 (usmap order; CANDIDATE placement).
                 .Varint(1).Zeros(7).I64(d.SoulBindOwner).U8(d.SoulBindCount)
-                .Varint(3).Zeros(12)     // three godstone slots
-                .Zeros(7).U8(0);         // seven empty arrays, skin extraction count
+                .Varint(3);              // three godstone slots
+            for (var i = 0; i < 3; i++) w.I32(d.Godstones is { } g && i < g.Count ? g[i] : 0);
+            w.Zeros(7).U8(0);            // seven empty arrays, skin extraction count
+        }
         return w;
     }
 

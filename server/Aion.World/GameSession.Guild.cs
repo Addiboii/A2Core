@@ -122,9 +122,12 @@ public sealed partial class GameSession
                 }
                 case GuildJoinRq:
                 {
-                    var (id, _, _, password) = ((long)r.U64(), r.U8(), r.String(), r.String());
+                    var (id, _, comment, password) = ((long)r.U64(), r.U8(), r.String(), r.String());
                     var outcome = "none";
                     await Stored(async () => { outcome = await store.JoinGuildAsync(character, id, password, GuildMaxMembers, ct); return []; });
+                    // A manual-join legion takes an application (GameSession.GuildEconomy.cs; CANDIDATE: result 0, not joined).
+                    if (outcome == "denied" && await ApplyToGuildAsync(id, comment, ct))
+                        return [WriteGuildDesc(PacketWriter.Opcode(GuildJoinRs).U16(0).I64(id).U8(0), null, 2).ToArray()];
                     if (outcome != "ok")
                         return [WriteGuildDesc(PacketWriter.Opcode(GuildJoinRs).U16(outcome switch { "member" => 4, "full" => 5, "password" => 6, "denied" => 7, _ => 1 }).I64(id).U8(0), null, 2).ToArray()];
                     await ReloadGuildAsync(ct);

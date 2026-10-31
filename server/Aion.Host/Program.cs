@@ -34,7 +34,9 @@ if (!string.IsNullOrWhiteSpace(connectionString))
     builder.Services.AddSingleton<IWireCharacterRepository>(provider => provider.GetRequiredService<PostgresCharacterRepository>());
     builder.Services.AddSingleton<CharacterService>();
     builder.Services.AddSingleton<CharacterPersistenceService>();
-    builder.Services.AddSingleton<IGameplayStore, PostgresGameplayStore>();
+    builder.Services.AddSingleton<PostgresGameplayStore>();
+    builder.Services.AddSingleton<IGameplayStore>(provider => provider.GetRequiredService<PostgresGameplayStore>());
+    builder.Services.AddSingleton<IEconomyStore>(provider => provider.GetRequiredService<PostgresGameplayStore>());
     builder.Services.AddSingleton<IGameTicketRedeemer, PostgresGameTicketRedeemer>();
 }
 var accountsReady = !string.IsNullOrWhiteSpace(connectionString) && !string.IsNullOrWhiteSpace(authConnectionString);

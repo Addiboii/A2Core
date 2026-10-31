@@ -104,6 +104,8 @@ public sealed partial class GameSession
         var itemId = row?.TemplateId ?? 0;
         var use = row is null ? null : Boxes.Use(row.TemplateId);
         if (use is { Effect: "RewardBox" }) return await OpenBoxAsync(uid, 0, 1, now, ct);
+        if (row is { Location: "bag" } && await UseGodstoneItemAsync(row, ct) is { Count: > 0 } godstone)
+            return reply ? [RidePackets.ItemUseReply(0, uid, itemId), .. godstone] : godstone;
         List<byte[]> Fail() => reply ? [RidePackets.ItemUseReply(1, uid, itemId)] : [];
         if (Store is not { } store || CharacterId is not { } character || row is null || row.Location != "bag" || use is null || resources is null || dead)
             return Fail();

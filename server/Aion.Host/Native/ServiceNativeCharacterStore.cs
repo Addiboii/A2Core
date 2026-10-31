@@ -14,7 +14,7 @@ namespace Aion.Host.Native;
 /// /internal/world bridge used. The world session token fixes account and world; every call
 /// revalidates it (and its parent browser session), and disposing closes it.
 /// </summary>
-public sealed class ServiceNativeCharacterStore(string token, WorldIdentity identity, IWorldSessions sessions,
+public sealed partial class ServiceNativeCharacterStore(string token, WorldIdentity identity, IWorldSessions sessions,
     IWireCharacterRepository wire, IGameplayStore game, CharacterPersistenceService persistence) : INativeCharacterStore
 {
     bool closed;

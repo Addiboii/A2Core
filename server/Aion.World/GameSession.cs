@@ -294,6 +294,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             case CharDeleteCancelRq when plain.Length >= 3: return await CancelDeleteAsync(plain, ct);
             case CharRenameRq when plain.Length >= 4: return await RenameCharacterAsync(plain, ct);
         }
+        if (InWorld && await EconomyRequestAsync(plain, now, ct) is { } economyReplies) return economyReplies;
         if (InWorld && ClientRequest(plain, now) is { } clientReplies) return clientReplies;
         if (InWorld && await GuildRequestAsync(plain, ct) is { } guildReplies) return guildReplies;
         if (await SocialRequestAsync(plain, now, ct) is { } socialReplies) return socialReplies;
@@ -1281,7 +1282,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             var container = equipped ? InventoryItem.Equipped : item.Location == "storage" ? InventoryItem.Storage : InventoryItem.Bag;
             result.Add(new InventoryItem(key, item.TemplateId, item.Quantity, container, slot,
                 equipment ? new EquipDetail((data?.ItemLevel(item.TemplateId) ?? 1) + Enchants.Effect(item.TemplateId, EnchantOf(item)).ItemLevel, equipped ? (byte)slot : (byte)0,
-                    (byte)EnchantOf(item), SoulBindCount(item) > 0 ? owner : 0, SoulBindCount(item)) : null));
+                    (byte)EnchantOf(item), SoulBindCount(item) > 0 ? owner : 0, SoulBindCount(item), GodstonesOf(item), (byte)EnchantOf(item, "exceed")) : null));
         }
         return result;
     }
@@ -1640,6 +1641,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
                 await LoadBuybackAsync(store, state.Summary.CharacterId, ct);
                 await LoadGuildAsync(store, state.Summary.CharacterId, ct);
                 await LoadQuestsAsync(store, state.Summary.CharacterId, state.Race, ct);
+                await LoadEconomyAsync(ct);
                 engraved.Clear();
                 engraved.AddRange(await store.TeleportArtifactsAsync(state.Summary.CharacterId, ct));
                 fog.Clear();
@@ -1826,6 +1828,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             replies.Add(PeriodCollectionList(now));
             replies.Add(BossChallengeList());
             replies.AddRange(EntryConstants(now));
+            replies.AddRange(EconomyAtEntry());
             replies.AddRange(AchieveSet("EquipItemLevel", EquipItemLevel(), now: now));
             if (fresh) { replies.AddRange(Achieve("LoginCharacter", now: now)); elapsedAchieveAt = now + 60_000; }
             replies.AddRange(CraftListsAtEntry());

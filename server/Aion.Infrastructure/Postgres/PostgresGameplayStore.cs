@@ -6,7 +6,7 @@ using NpgsqlTypes;
 
 namespace Aion.Infrastructure.Postgres;
 
-public sealed class PostgresGameplayStore(NpgsqlDataSource source) : IGameplayStore
+public sealed partial class PostgresGameplayStore(NpgsqlDataSource source) : IGameplayStore
 {
     /// <summary>The highest character level (class-skills.json max_level, PcStatLevel).</summary>
     public const int MaxLevel = 100;
