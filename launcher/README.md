@@ -14,9 +14,10 @@ Design and evidence: `research/client-installer.md`.
   arguments), the supported-build reference and file checks/placement, GamePlatform.ini, hosts and
   firewall text, the account API client. Cross-platform; tested by `tests/Aion.Launcher.Checks`.
 - `AionLauncher/`: the WinForms app and its elevated helper modes.
-- `supported-build.json`: every file of Steam depot 3393111 manifest 1699273097574069541 (path, size,
-  SHA-256; `tools/launcher_build.py --depot-manifest <Steam>/depotcache/3393111_1699273097574069541.manifest`
-  from `research/local/dev-client/verification.json`, keeping only the depot's 1218 files).
+- `supported-build.json`: every file of Steam depot 3393111 manifest 586322693862358479 (path, size,
+  SHA-256; `tools/launcher_build.py --depot-manifest <Steam>/depotcache/3393111_586322693862358479.manifest`
+  from `research/local/client-26262663/verification.json`, keeping only the depot's files; Steam build 26262663,
+  supported since 2026-10-31; before that manifest 1699273097574069541).
 - `launcher.json`: the server (account URL, IPv4 address, bootstrap port, private saved-folder suffix).
   Embedded; a `launcher.json` next to the exe overrides it.
 - `AionLauncher/icon.ico` (exe, window, taskbar, shortcuts) and `AionLauncher/emblem.png` (the rail): the "AH"
@@ -44,7 +45,7 @@ next one itself; the player only confirms and answers Windows prompts.
    no extra space) or copied. Otherwise the launcher downloads it from Steam itself
    (`Aion.Launcher.Core/SteamDownload.cs`, SteamKit2): the player signs in by scanning a QR code with
    the Steam mobile app (no password reaches the launcher), then the launcher asks for the depot key
-   and the manifest request code of depot 3393111 manifest 1699273097574069541 and fetches every
+   and the manifest request code of depot 3393111 manifest 586322693862358479 and fetches every
    chunk from Steam's content servers into the private folder (16 chunks in parallel, each checked
    against its SHA-1 id; a bad chunk is fetched again from another server). The folder is
    `%LOCALAPPDATA%\A2CorePrivate\AION2` when the system drive has room, else `<drive>:\A2CorePrivate\AION2`
@@ -99,5 +100,5 @@ it equal to `<Version>` in AionLauncher.csproj).
 
 - A full run on a second PC: remote certificate acceptance by the client, Steam ownership checks
   without our dev tools, the per-session hosts helper, and the firewall rules with a remote server.
-- Whether Steam still serves manifest 1699273097574069541 to `download_depot`.
+- Whether Steam still serves manifest 586322693862358479 to `download_depot`.
 - The exe is not code-signed: Windows SmartScreen warns on first start ("More info" -> "Run anyway").

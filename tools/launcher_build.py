@@ -1,7 +1,8 @@
 """Write the launcher's reference for the supported client build (launcher/supported-build.json).
 
-Source: research/local/dev-client/verification.json, the verified copy of Steam depot 3393111
-manifest 1699273097574069541 (research/client-installer.md). The output lists every file's
+Source: research/local/client-26262663/verification.json, the verified copy of Steam depot 3393111
+manifest 586322693862358479 (Steam build 26262663; the earlier supported build, manifest
+1699273097574069541 / build 25767555, is research/local/dev-client/verification.json). The output lists every file's
 relative path, size and SHA-256 (hashes only, no game data). The launcher checks sizes of all
 files at each launch, hashes the "quick" set (AION2.exe and the pak index/signature files) and
 offers a full verification.
@@ -18,9 +19,9 @@ import struct
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE = ROOT / 'research/local/dev-client/verification.json'
+SOURCE = ROOT / 'research/local/client-26262663/verification.json'
 OUTPUT = ROOT / 'launcher/supported-build.json'
-BUILD = {'appId': 3393110, 'depotId': 3393111, 'manifestId': '1699273097574069541',
+BUILD = {'appId': 3393110, 'depotId': 3393111, 'manifestId': '586322693862358479',
          'executable': 'Aion2/Binaries/Win64/AION2.exe'}
 
 

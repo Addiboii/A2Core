@@ -20,7 +20,7 @@ def _field(number, value):
     return _varint(number << 3 | 2) + _varint(len(value)) + value
 
 
-def _manifest(entries, depot=3393111, manifest=1699273097574069541):
+def _manifest(entries, depot=3393111, manifest=586322693862358479):
     payload = b''.join(_field(1, _field(1, name.encode()) + _field(2, size) + _field(3, flags))
                        for name, size, flags in entries)
     meta = _field(1, depot) + _field(2, manifest)
@@ -39,7 +39,7 @@ def _verification(paths):
 class LauncherBuildTests(unittest.TestCase):
     def test_depot_manifest_lists_files_not_directories(self):
         depot = launcher_build.depot_manifest(_manifest([('Aion2', 0, 0x40), ('Aion2\\Binaries\\Win64\\AION2.exe', 10, 0)]))
-        self.assertEqual(depot, {'depotId': 3393111, 'manifestId': '1699273097574069541', 'files': {EXE: 10}})
+        self.assertEqual(depot, {'depotId': 3393111, 'manifestId': '586322693862358479', 'files': {EXE: 10}})
 
     def test_runtime_files_are_left_out(self):
         depot = launcher_build.depot_manifest(_manifest([('Aion2\\Binaries\\Win64\\AION2.exe', 10, 0)]))

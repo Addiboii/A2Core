@@ -73,9 +73,9 @@ using (var account = new AccountClient(config, new StubHandler(async request =>
 
 // ---------- Supported build ----------
 var build = SupportedBuild.Embedded;
-Check(build.ManifestId == "1699273097574069541" && build.Files.Count == build.FileCount && build.FileCount > 1000, "supported build reference");
-Check(build.Files.Single(f => f.Path == build.Executable).Sha256 == "d93b050d623550fcf509888a9afe9cb8bd3864869f06dd3fe9ecaa697337f1ba", "supported AION2.exe hash");
-Check(build.Files.Count(f => f.Quick) > 500 && build.DownloadCommand == "download_depot 3393110 3393111 1699273097574069541", "quick set and download command");
+Check(build.ManifestId == "586322693862358479" && build.Files.Count == build.FileCount && build.FileCount > 1000, "supported build reference");
+Check(build.Files.Single(f => f.Path == build.Executable).Sha256 == "7dfbcde8d97f42a7cef9261ad7ceef7f1e1cd773c7b2b4ca3c7cd54005389530", "supported AION2.exe hash");
+Check(build.Files.Count(f => f.Quick) > 500 && build.DownloadCommand == "download_depot 3393110 3393111 586322693862358479", "quick set and download command");
 
 // ---------- Text KeyValues ----------
 var kv = KeyValuesText.Parse("""

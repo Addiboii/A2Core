@@ -16,7 +16,7 @@
     <Product>A2Core Launcher</Product>
     <AssemblyTitle>A2Core Launcher</AssemblyTitle>
     <Description>A2Core Launcher: sets up the game and plays on the A2Core Launcher server.</Description>
-    <Version>0.4.1</Version>
+    <Version>0.5.0</Version>
     <SelfContained>true</SelfContained>
     <PublishSingleFile>true</PublishSingleFile>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
