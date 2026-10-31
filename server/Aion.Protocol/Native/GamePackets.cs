@@ -621,13 +621,47 @@ public static class GamePackets
 
     // ---------- Combat ----------
 
-    /// <summary>0x3804 hit (a2kit layout; candidate key order: target, then actor).</summary>
+    /// <summary>
+    /// 0x3804 hit (switch 04, PlayerPackets.SkillEffect). <paramref name="actionUid"/> is the cast's 0x3802 action uid (OBSERVED: every
+    /// official player hit carries it, e.g. #14400 uid 1); it sits last and is passed by name, so a positional sequence number can
+    /// never land in it (A2Core PR #4 inserted it before <paramref name="seq"/>, and two of its callers passed a constant seq there).
+    /// </summary>
     public static byte[] SkillHit(int targetKey, int actorKey, int skillId, int effectId, int damage, bool critical = false,
-        int seq = 1, int attackSpeed = 10000)
+        int seq = 1, int attackSpeed = 10000, byte actionUid = 0)
     {
         if (seq is < 0 or > 255) throw new ArgumentException("Hit sequence must fit one byte");
-        return PacketWriter.Opcode(0x3804).Varint(targetKey).U8(4).U8(0).Varint(actorKey).U32((uint)skillId).U8(0)
+        return PacketWriter.Opcode(0x3804).Varint(targetKey).U8(4).U8(0).Varint(actorKey).U32((uint)skillId).U8(actionUid)
             .Varint(critical ? 3 : 2).U32((uint)effectId).U32((uint)seq).Varint(attackSpeed).Varint(damage).U8(seq).U8(0).ToArray();
+    }
+
+    /// <summary>
+    /// 0x3804 with presence byte 0x14 (bit 0x10 adds one u8 before the trailing 00): target | 14 00 | caster | skill | action uid |
+    /// hit type | effect id u32 | effect seq u32 | attack speed | damage | seq u8 | 01 | 00. OBSERVED in the 2.0.6 recording
+    /// 20261019-231752 (#73349; 112 hits, a Gladiator's melee skills, so not projectile-only there). A2Core PR #4 (Artezianec)
+    /// reports the same bytes for a Ranger's arrows on the current client. CANDIDATE: what bit 0x10 means (its byte was 01 in
+    /// every sample); used for the hits of projectile skills, as the PR does.
+    /// </summary>
+    public static byte[] ProjectileHit(int targetKey, int actorKey, int skillId, int effectId, int damage, bool critical,
+        byte actionUid, int seq, int attackSpeed = 10000)
+    {
+        if (seq is < 0 or > 255) throw new ArgumentException("Hit sequence must fit one byte");
+        return PacketWriter.Opcode(0x3804).Varint(targetKey).U8(0x14).U8(0).Varint(actorKey).U32((uint)skillId).U8(actionUid)
+            .Varint(critical ? 3 : 2).U32((uint)effectId).U32((uint)seq).Varint(attackSpeed).Varint(damage).U8(seq).U8(1).U8(0).ToArray();
+    }
+
+    /// <summary>
+    /// 0xe005 UpdateGroggyInfo_NT (dev 0x3b04 + 0xa501): key | presence u8 (bit 0 max, bit 1 energy) | state u8 | [max i32] |
+    /// [energy i32] | u8. OBSERVED (2.0.6 recording 20261019-231752, boss a2eb01, 9 messages): mask 03 state 01 max 50 with the
+    /// energy falling 50 -> 7 under the player's hits, then mask 00 state 03 once it broke; the last byte was 02 in all nine.
+    /// CANDIDATE: the state names and the last byte's meaning (A2Core PR #4 wrote it as "activated ? 2 : 0", which the recording
+    /// contradicts: 02 while the guard still held). Not sent yet: what drains the guard is not recovered.
+    /// </summary>
+    public static byte[] UpdateGroggyInfo(int key, byte state, int? maxEnergy, int? energy, byte tail = 2)
+    {
+        var w = PacketWriter.Opcode(0xe005).Varint(key).U8((byte)((maxEnergy is null ? 0 : 1) | (energy is null ? 0 : 2))).U8(state);
+        if (maxEnergy is { } max) w.I32(max);
+        if (energy is { } e) w.I32(e);
+        return w.U8(tail).ToArray();
     }
 
     /// <summary>
@@ -1085,11 +1119,49 @@ public static class GamePackets
         PacketWriter.Opcode(0x3801).U8(3).U16(accepted ? 0 : 1).I32(skill).U8(0).U8(uid).ToArray();
 
     /// <summary>
-    /// 0x3801 for a dodge: result u16, the skill, u8 0 and nothing else (OBSERVED, 9 bytes at all 100 official dodges of
+    /// 0x3801 for a dodge: presence 00, result u16, the skill and nothing else (OBSERVED, 9 bytes at all 100 official dodges of
     /// 2026-10-19, the sprint's dash included: the skill is CombatDodge 11000100 even when the start is NormalDodge 11000101).
     /// Result 1 is the refusal (DashVariant 6). The flags-first 11-byte cast reply reads as a failure to this client and drops the sprint.
     /// </summary>
-    public static byte[] DodgeResult(int skill, int result = 0) => PacketWriter.Opcode(0x3801).U16(result).I32(skill).U8(0).ToArray();
+    public static byte[] DodgeResult(int skill, int result = 0) => PacketWriter.Opcode(0x3801).U8(0).U16(result).I32(skill).ToArray();
+
+    /// <summary>
+    /// 0x3801 cast result as the official server sends it: presence u8 (bit 0 change toggle, bit 1 client action uid) | result u16 |
+    /// skill i32 | [toggle u8]. OBSERVED with no optional field for every official cast and dodge (2.0.6 recordings: 123 + 532 + 6 + 6,
+    /// e.g. 20261013-144836 #876 `01 38 00 0000 e026a800`, 20261019-230917 #1340 the dodge `... 24d9a700`); A2Core PR #4 (Artezianec)
+    /// reports the same bytes on the current client (`01 38 00 00 00 a0 ed d5 00`). <see cref="DodgeResult"/> wrote result u16 first
+    /// until 2026-10-31, which this layout reads as presence 00 and result 0x2400 (a refusal). CANDIDATE: echoing the toggle when the
+    /// request carried one (the PR does; no official sample of such a reply). The flags-3 <see cref="CastReply"/> stays for the dodge
+    /// variant 0 and the Python parity fixture.
+    /// </summary>
+    public static byte[] CastResult(bool accepted, int skill, ushort refusal = 1, byte? changeToggle = null)
+    {
+        var w = PacketWriter.Opcode(0x3801).U8((byte)(changeToggle is null ? 0 : 1)).U16(accepted ? (ushort)0 : refusal).I32(skill);
+        if (changeToggle is { } toggle) w.U8(toggle);
+        return w.ToArray();
+    }
+
+    /// <summary>
+    /// 0x3818 ChainSkillActiveList_NT: previous skill i32 | count varint | skill i32 each: the chain steps the client may cast next.
+    /// OBSERVED (2.0.6, 20261013-144836 #875 `18 38 e026a800 01 f04da800` right after the 0x3802 of 11020000; 42 + 272 samples).
+    /// </summary>
+    public static byte[] ChainSkillActiveList(int prevSkillId, IReadOnlyList<int> chainSkills)
+    {
+        var w = PacketWriter.Opcode(0x3818).I32(prevSkillId).Varint(chainSkills.Count);
+        foreach (var id in chainSkills) w.I32(id);
+        return w.ToArray();
+    }
+
+    /// <summary>
+    /// 0x3819 ChainSkillDeactiveList_NT: count varint | skill i32 each: chain steps no longer offered (cast, or the window closed).
+    /// OBSERVED (2.0.6, 20261013-144836 #957 `19 38 01 f04da800` when 11030000 was cast, after its own 0x3818).
+    /// </summary>
+    public static byte[] ChainSkillDeactiveList(IReadOnlyList<int> chainSkills)
+    {
+        var w = PacketWriter.Opcode(0x3819).Varint(chainSkills.Count);
+        foreach (var id in chainSkills) w.I32(id);
+        return w.ToArray();
+    }
 
     /// <summary>
     /// 0x3804 with switch 00: a self skill's effect (OBSERVED 50-60 ms after all 36 official CombatDodge starts): target, 00 00, actor,

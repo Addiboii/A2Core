@@ -29,7 +29,9 @@ public sealed record DamageRow(
     [property: JsonPropertyName("flat")] int?[] Flat,
     [property: JsonPropertyName("ratio")] int?[] Ratio,
     [property: JsonPropertyName("pvp")] DamageValues? Pvp,
-    [property: JsonPropertyName("effect_id")] int EffectId);
+    [property: JsonPropertyName("effect_id")] int EffectId,
+    // Skill.dat SkillEffectTimeDataList ProjectileId of this row's time row (0: none): the 0x3803 projectile (A2Core PR #4).
+    [property: JsonPropertyName("projectile")] int Projectile = 0);
 
 public sealed record DamageValues(
     [property: JsonPropertyName("flat")] int?[] Flat,
@@ -47,7 +49,13 @@ public sealed record SkillDefinition(
     [property: JsonPropertyName("weapons")] string[] Weapons,
     [property: JsonPropertyName("cooldown_ms")] int CooldownMs,
     [property: JsonPropertyName("cost")] SkillCost Cost,
-    [property: JsonPropertyName("damage")] DamageRow[] Damage);
+    [property: JsonPropertyName("damage")] DamageRow[] Damage,
+    // Skill.dat ChainSkill*: the skill whose cast offers this one (0x3818), the window, ActivateRate (1/10000); chain_next: the
+    // steps this skill offers (tools/class_skills.py; chain-only steps ported from A2Core PR #4).
+    [property: JsonPropertyName("chain_prev")] int ChainPrev = 0,
+    [property: JsonPropertyName("chain_window_ms")] int ChainWindowMs = 0,
+    [property: JsonPropertyName("chain_rate")] int ChainRate = 0,
+    [property: JsonPropertyName("chain_next")] int[]? ChainNext = null);
 
 public sealed record WeaponStats(
     [property: JsonPropertyName("min")] int Min,
@@ -133,7 +141,8 @@ public sealed class GameData
         [property: JsonPropertyName("weapon_stats")] Dictionary<string, WeaponStats> WeaponStats,
         [property: JsonPropertyName("classes")] Dictionary<string, ClassRules> Classes,
         [property: JsonPropertyName("common_unlocks")] int[][] CommonUnlocks,
-        [property: JsonPropertyName("skills")] Dictionary<string, SkillDefinition> Skills);
+        [property: JsonPropertyName("skills")] Dictionary<string, SkillDefinition> Skills,
+        [property: JsonPropertyName("projectile_speeds")] Dictionary<string, int>? ProjectileSpeeds = null);
 
     /// <summary>An NpcData template of the compact world-npcs.json (every field of a spawn but where it stands).</summary>
     sealed record NpcTemplate(
@@ -279,6 +288,9 @@ public sealed class GameData
     }
 
     public SkillDefinition? Skill(int skillId) => classes.Skills.GetValueOrDefault(skillId.ToString(System.Globalization.CultureInfo.InvariantCulture));
+    /// <summary>SkillProjectile.dat Speed of a projectile a class skill fires (0: unknown).</summary>
+    public int ProjectileSpeed(int projectileId) =>
+        classes.ProjectileSpeeds?.GetValueOrDefault(projectileId.ToString(System.Globalization.CultureInfo.InvariantCulture)) ?? 0;
 
     /// <summary>Level-one weapon of the class's weapon type for race 1 (Light) or 2 (Dark).</summary>
     public int? StarterWeapon(StarterProfile? profile) =>

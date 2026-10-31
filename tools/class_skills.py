@@ -12,15 +12,20 @@ without ascension or other prerequisites. Skill-point upgrades (skill levels 2+)
 stigma-point skills and ascension skills are separate systems and stay locked.
 """
 import json
+import os
 from collections import Counter
 from functools import lru_cache
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / 'tools/data/class-skills.json'
-TABLES = ROOT / 'research/local/starter-skills-tables'
-CATALOG = ROOT / 'research/local/game-catalog-v2/entries.jsonl'
+# research/local lives in the main checkout only (git-ignored); a worktree points here with AION_RESEARCH_LOCAL.
+LOCAL = Path(os.environ.get('AION_RESEARCH_LOCAL', ROOT / 'research/local'))
+TABLES = LOCAL / 'starter-skills-tables'
+CATALOG = LOCAL / 'game-catalog-v2/entries.jsonl'
 COMMON = 'None'
+# Player class skills (Gladiator 11xxxxxx .. Chanter 18xxxxxx); NPC and item skills sit outside.
+PC_SKILL_MIN, PC_SKILL_MAX = 11_000_000, 20_000_000
 
 
 def _short(value):
@@ -35,16 +40,123 @@ def damage_rows(entry):
     same four values again, read as the player-vs-player variant.
     """
     rows = []
-    for group in entry.get('relationships', {}).get('effects', []):
+    projectiles = effect_projectiles(entry)
+    for index, group in enumerate(entry.get('relationships', {}).get('effects', [])):
         for row in group.get('rows', []):
             values = row.get('EffectValueList', [])
             if _short(row.get('EffectType')) != 'Damage' or len(values) < 4:
                 continue
             number = lambda i: int(values[i]) if i < len(values) and str(values[i]).lstrip('-').isdigit() else None
-            rows.append({'flat': [number(0), number(1)], 'ratio': [number(2), number(3)], 'value4': values[4] if len(values) > 4 else None,
-                         'pvp': {'flat': [number(21), number(22)], 'ratio': [number(23), number(24)]} if len(values) > 24 else None,
-                         'effect_id': row['ID']['Value']})
+            damage = {'flat': [number(0), number(1)], 'ratio': [number(2), number(3)], 'value4': values[4] if len(values) > 4 else None,
+                      'pvp': {'flat': [number(21), number(22)], 'ratio': [number(23), number(24)]} if len(values) > 24 else None,
+                      'effect_id': row['ID']['Value']}
+            if index < len(projectiles) and projectiles[index]:
+                damage['projectile'] = projectiles[index]
+            rows.append(damage)
     return rows
+
+
+def _value(v):
+    return v.get('Value') if isinstance(v, dict) else v
+
+
+def effect_projectiles(entry):
+    """ProjectileId of each used SkillEffectTimeDataList row (Skill.dat), in the order of the entry's linked effect groups.
+
+    The catalogue links one effect group per time row whose SkillEffectGroupId is set, in row order (checked against the group
+    ids: Rapid Fire 14030000 has three rows of group 140300001 with projectiles 140300001-140300003, Snipe 14020000 one row with
+    140200001). The projectile is the SkillProjectile.dat row the client draws for that row's 0x3803 (OBSERVED layout).
+    """
+    timed = [t for t in entry.get('raw', {}).get('SkillEffectTimeDataList') or [] if _value(t.get('SkillEffectGroupId')) or 0]
+    groups = entry.get('relationships', {}).get('effects', [])
+    out = []
+    for index, group in enumerate(groups):
+        if index >= len(timed):
+            break
+        ids = {_value(r.get('SkillEffectGroupId')) for r in group.get('rows', [])}
+        out.append(int(_value(timed[index].get('ProjectileId')) or 0) if not ids - {_value(timed[index]['SkillEffectGroupId'])} else 0)
+    return out
+
+
+def chain_fields(entry):
+    """Skill.dat ChainSkill* of a chain step (empty for a skill that follows nothing): the previous skill whose cast offers this one
+    (0x3818), the window in ms (ChainSkillAvailableTime), ChainSkillActivateRate (1/10000) and ChainSkillDeactivateType."""
+    raw = entry.get('raw', {})
+    prev = int(_value(raw.get('ChainSkillPrevSkillId')) or 0)
+    if not prev:
+        return {}
+    return {'chain_prev': prev, 'chain_window_ms': int(raw.get('ChainSkillAvailableTime') or 0),
+            'chain_rate': int(raw.get('ChainSkillActivateRate') or 0), 'chain_deactivate': _short(raw.get('ChainSkillDeactivateType', 'None'))}
+
+
+def cast_row(entry):
+    facts = entry.get('facts', {})
+    return {
+        'name': entry.get('name'),
+        'icon': facts.get('SkillIcon'),
+        'type': _short(facts.get('SkillType', '')),
+        'target': _short(facts.get('TargetProcessType', '')),
+        'weapons': [_short(w) for w in facts.get('NeedMainWeaponTypes', [])],
+        'cooldown_ms': int(facts.get('NeedCoolTime') or 0),
+        'casting_ms': int(facts.get('CastingTime') or 0),
+        'cost': {k: int(facts.get('NeedCost' + k.title()) or 0) for k in ('mp', 'hp', 'sp')},
+        'damage': damage_rows(entry),
+        **chain_fields(entry),
+    }
+
+
+def find_table(name, local=None):
+    """The newest WorldProbe export of a client table (<dir>/summary.json names it) under research/local, or None."""
+    found = []
+    for summary in sorted(Path(local or LOCAL).glob('*/summary.json')):
+        try:
+            packages = json.loads(summary.read_text(encoding='utf-8')).get('packages', [])
+        except (OSError, ValueError):
+            continue
+        for package in packages:
+            if package.get('path', '').endswith('/' + name) and package.get('file'):
+                found.append((summary.stat().st_mtime, summary.parent / package['file']))
+    return max(found)[1] if found else None
+
+
+def projectile_speeds(cast, table):
+    """{projectile id: SkillProjectile.dat Speed} for every projectile a skill row names (the 0x3803 flight time, CANDIDATE:
+    distance / Speed; an official NPC arrow of Speed 4000 flew 600 ms)."""
+    wanted = {row['projectile'] for skill in cast.values() for row in skill['damage'] if row.get('projectile')}
+    if not table or not wanted:
+        return {}
+    rows = json.loads(Path(table).read_text(encoding='utf-8'))['Properties']['Data']
+    return {str(_value(r['ID'])): int(r.get('Speed') or 0) for r in rows if _value(r['ID']) in wanted}
+
+
+def merge_chain_skills(cast, skills, seeds):
+    """Add the chain-only player skills (Skill.dat ChainSkillPrevSkillId) reachable from `seeds`, then set each skill's chain_next.
+
+    A chain step (Gladiator 11020000 -> 11030000 -> 11040000, Ranger 14020000 -> 14030000) is not learned: the client casts it
+    after the server offers it (0x3818), so its cast data must resolve. Ported from A2Core PR #4 (Artezianec) without its
+    E-stack seeds, family variants and improvised damage rows: every row here comes from the client tables.
+    """
+    by_prev = {}
+    for entry in skills.values():
+        prev = int(_value(entry.get('raw', {}).get('ChainSkillPrevSkillId')) or 0)
+        if prev and PC_SKILL_MIN <= entry['id'] < PC_SKILL_MAX:
+            by_prev.setdefault(prev, []).append(entry['id'])
+    todo, seen = [int(s) for s in seeds], {int(s) for s in seeds}
+    while todo:
+        for child in by_prev.get(todo.pop(), []):
+            if child not in seen:
+                seen.add(child)
+                todo.append(child)
+                if str(child) not in cast:
+                    cast[str(child)] = cast_row(skills[child])
+    nexts = {}
+    for key, row in cast.items():
+        if row.get('chain_prev'):
+            nexts.setdefault(row['chain_prev'], []).append(int(key))
+    for key, row in cast.items():
+        row.pop('chain_next', None)
+        if int(key) in nexts:
+            row['chain_next'] = sorted(nexts[int(key)])
 
 
 def build(tables=TABLES, catalog=CATALOG):
@@ -95,20 +207,11 @@ def build(tables=TABLES, catalog=CATALOG):
         classes[cls] = {'weapon_type': weapon, 'starter_weapons': begin_weapons.get(weapon, {}),
                         'unlocks': unlocks.get(cls, [])}
 
-    cast = {}
-    for skill in sorted({s for entries in unlocks.values() for s, _, _ in entries}):
-        facts = skills.get(skill, {}).get('facts', {})
-        cast[str(skill)] = {
-            'name': skills.get(skill, {}).get('name'),
-            'icon': facts.get('SkillIcon'),
-            'type': _short(facts.get('SkillType', '')),
-            'target': _short(facts.get('TargetProcessType', '')),
-            'weapons': [_short(w) for w in facts.get('NeedMainWeaponTypes', [])],
-            'cooldown_ms': int(facts.get('NeedCoolTime') or 0),
-            'casting_ms': int(facts.get('CastingTime') or 0),
-            'cost': {k: int(facts.get('NeedCost' + k.title()) or 0) for k in ('mp', 'hp', 'sp')},
-            'damage': damage_rows(skills.get(skill, {})),
-        }
+    auto = sorted({s for entries in unlocks.values() for s, _, _ in entries})
+    cast = {str(skill): cast_row(skills.get(skill, {})) for skill in auto}
+    merge_chain_skills(cast, skills, auto)
+    projectile_table = find_table('SkillProjectile.dat')
+    speeds = projectile_speeds(cast, projectile_table)
     # Per-class base stats by level (PcStatLevel): FixingDamage, Defense, HPMax, ...
     stats = {}
     for row in stat_levels:
@@ -116,13 +219,16 @@ def build(tables=TABLES, catalog=CATALOG):
     return {'max_level': max(r['Level'] for r in stat_levels), 'common': COMMON,
             'stats': stats, 'weapon_stats': weapon_stats,
             'classes': {k: v for k, v in classes.items()}, 'common_unlocks': unlocks.get(COMMON, []),
-            'skills': cast, 'levels': levels,
+            'skills': cast, 'levels': levels, 'projectile_speeds': speeds,
             'evidence': {'acquire': 'SkillAcquireData bAutoLearn rows without costs/prerequisites/ascension',
                          'levels': 'SkillAcquireData Mastery rows of SkillLevel 2+: level, CostSkillPoint, NeedCharacterLevel',
                          'max_level': 'PcStatLevel highest Level',
                          'damage': 'Damage EffectValueList, candidate reading: flat min/max, weapon ratio min/max (1/10000)',
                          'weapon_type': "most frequent NeedMainWeaponTypes of the class's auto-learned skills",
-                         'starter_weapons': 'Item.dat equip_wp_<Type>_<L|D>_c_begin_001a_b (L for race 1, D for race 2)'}}
+                         'starter_weapons': 'Item.dat equip_wp_<Type>_<L|D>_c_begin_001a_b (L for race 1, D for race 2)',
+                         'chains': 'Skill.dat ChainSkillPrevSkillId/AvailableTime/ActivateRate/DeactivateType; chain-only player skills reachable from the auto-learned ones added (A2Core PR #4)',
+                         'projectile': 'Skill.dat SkillEffectTimeDataList ProjectileId of the time row a Damage row belongs to',
+                         'projectile_speeds': 'SkillProjectile.dat Speed (newest research/local export naming the table)'}}
 
 
 @lru_cache(maxsize=1)
@@ -198,7 +304,7 @@ def main(argv=None):
     args = parser.parse_args(argv)
     if args.command == 'build':
         result = build()
-        DATA.write_text(json.dumps(result, indent=1) + '\n', encoding='utf-8')
+        DATA.write_text(json.dumps(result, separators=(',', ':')) + '\n', encoding='utf-8')
         for name, cls in result['classes'].items():
             print(f"{name}: {len(cls['unlocks'])} unlocks, weapon {cls['weapon_type']} {cls['starter_weapons']}")
         print(f"{len(result['common_unlocks'])} common unlocks, {len(result['skills'])} skills, max level {result['max_level']}")

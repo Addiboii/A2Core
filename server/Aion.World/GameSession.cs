@@ -257,19 +257,11 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         var header = Opcode(plain);
         if (plain.Length == 2 && header is 0x383a or 0x383c)
         {
-            // Every cast is bracketed by 0x383a/0x383c (u16 result replies). The player enters
-            // combat once and leaves ~3.5 s after the last action, not on 0x383c.
+            // Every cast is bracketed by 0x383a/0x383c (u16 result replies). The player enters combat with the accepted cast
+            // (EnterCombat: OBSERVED 20261013-144836 #873-#877, 0x383b, 0x3802, 0x3818, 0x3801, then 0x8d21 on) and leaves ~3.5 s
+            // after the last action, not on 0x383c. (A2Core PR #4, Artezianec.)
             var replies = new List<byte[]> { GamePackets.RequestAck(header) };
-            if (header == 0x383a)
-            {
-                if (!inCombat)
-                {
-                    inCombat = true;
-                    replies.Add(GamePackets.CombatState(playerKey, true));
-                    replies.AddRange(MapEventCombatStarted(now));
-                }
-                combatUntil = now + CombatTimeoutMs;
-            }
+            if (header == 0x383a && inCombat) combatUntil = now + CombatTimeoutMs;
             return replies;
         }
         if (header == 0x3602 && plain.Length >= 10) return [GamePackets.Ping(BitConverter.ToUInt64(plain, 2), now)];
@@ -532,6 +524,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         ExitSharedWorld();
         resources = null;
         targets = null;
+        DropCombatState();
         selected = null;
         StaffRole = null;
         spawn = null;
@@ -1891,7 +1884,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
 
     // ---------- Casts and combat (tools/starter_casts.py) ----------
 
-    public sealed record CastRequest(int SkillId, int ClientActionUid, int ChangeToggle, int TargetKey, double Yaw, Vector3d Location);
+    public sealed record CastRequest(int SkillId, int ClientActionUid, int ChangeToggle, int TargetKey, double Yaw, Vector3d Location, bool HasToggle = false);
 
     /// <summary>0x3800 cast request (writer RVA 0x8f7db28): u16 presence mask, skill, byte 2, target varint, yaw + location, optionals.</summary>
     public static CastRequest? ParseCast(byte[] body)
@@ -1914,7 +1907,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
                 if ((flags & bit) != 0 && !float.IsFinite(reader.F32())) return null;
             if ((flags & 256) != 0) reader.U64();       // client time
             if (!reader.End) return null;
-            return new CastRequest(BitConverter.ToInt32(body, 4), uid, toggle, (int)targetKey, yaw, new Vector3d(x, y, z));
+            return new CastRequest(BitConverter.ToInt32(body, 4), uid, toggle, (int)targetKey, yaw, new Vector3d(x, y, z), (flags & 8) != 0);
         }
         catch (ProtocolException)
         {
@@ -1957,7 +1950,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         var weapons = (definition?.Weapons ?? []).Where(w => w != "None").ToList();
         var accepted = definition is not null && resources is not null && !dead
             && resources.Mp >= cost.Mp && resources.Sp >= cost.Sp && resources.Hp > cost.Hp
-            && (learned.Contains(skill) || normalDodge)
+            && (learned.Contains(skill) || normalDodge || ChainStepReady(skill, now))   // a chain step on offer (GameSession.SkillChains.cs)
             && (weapons.Count == 0 || weapons.Contains(data.WeaponType(equippedWeapon) ?? ""))
             && (noCool || now >= cooldowns.GetValueOrDefault(cooldownKey));
         if (!accepted)
@@ -1965,7 +1958,8 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             // A sprint dash refused for cost or cooldown stays on the 9-byte form. The mask-first reply drops the sprint.
             if (dodging && sprinting && variant is 7 or 8 or 9)
                 return DeliverDash([GamePackets.DodgeResult(skill, 1)], variant);
-            return [GamePackets.CastReply(false, skill, request.ClientActionUid)];  // must not end another action
+            // must not end another action
+            return [dodging ? GamePackets.CastReply(false, skill, request.ClientActionUid) : CastResultFor(request, false)];
         }
         var dismount = ForceDismount().Concat(InterruptItemCast()).ToList();
         skillMoveGraceUntil = now + SkillMoveGraceMs;
@@ -2026,15 +2020,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             if (variant >= 4 && started == combatDodge) dodgeEffectAt = (actionUid, now + DodgeEffectMs);
             return dodgeReplies;   // no damage rows: nothing for CombatReplies
         }
-        var replies = new List<byte[]>
-        {
-            GamePackets.CastReply(true, skill, request.ClientActionUid),
-            resources!.Update(),
-            GamePackets.SkillStart(skill, actionUid, request.Yaw, request.Location, request.TargetKey, actorKey: playerKey, cooldown: cooldown),
-        };
-        replies.InsertRange(1, dismount);   // a cast takes the player off its ride before the skill starts
-        replies.AddRange(CombatReplies(skill, request, now));
-        return replies;
+        return AcceptedCastReplies(skill, definition!, request, cooldown, dismount, now);   // GameSession.CombatTiming.cs
     }
 
     /// <summary>Corpses: removed (0x3642 flag 3) CorpseMs after the kill; at the respawn a fresh 0x3641 at full HP.</summary>
@@ -2067,7 +2053,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
     /// Damage from an accepted cast: the target key selects a target; a self-centred cast
     /// (key 1) hits monsters within AreaRange of the cast location. 0x3804 hits, then 0x8d00 HP.
     /// </summary>
-    List<byte[]> CombatReplies(int skill, CastRequest request, long now)
+    List<byte[]> CombatReplies(int skill, CastRequest request, long now, byte actionUid = 0)
     {
         var replies = RespawnTargets(now);
         if (request.TargetKey >= SharedWorld.FirstPlayerKey && request.TargetKey != playerKey)
@@ -2087,30 +2073,8 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             // An immune NPC (a scripted abnormal) takes the hits for nothing; it still turns on its attacker.
             var hits = Combat.SkillHits(data, skill, className, level, equippedWeapon, target.Defense, rng);
             if (target.Immune) hits = hits.Select(h => h with { Amount = 0 }).ToList();
-            var seq = 0;
-            foreach (var hit in hits)
-            {
-                target.Hp = Math.Max(0, target.Hp - hit.Amount);
-                replies.Add(GamePackets.SkillHit(target.Key, playerKey, skill, hit.EffectId, hit.Amount, hit.Critical, ++seq));
-            }
-            replies.Add(GamePackets.NpcHp(target.Key, target.Hp));
-            replies.AddRange(MapEventHp(target, now));
-            if (target.Dead)
-            {
-                respawnAt[target.Key] = now + RespawnMs;  // HP 0 is the kill
-                killedNpcs.Add(target.NpcId);
-                replies.AddRange(AchieveKill(target.NpcId));
-                replies.AddRange(BossChallengeKilled(target, now));
-                InstanceKill(target, now);
-                replies.AddRange(MapEventKilled(target, now));
-                killedLevels.Add(target.Level);
-                replies.AddRange(DropLoot(target, now));
-                // Official order after HP 0: the mob's target cleared, the kill, its 0x8d21 off.
-                replies.Add(GamePackets.TargetUpdate(target.Key));
-                replies.Add(GamePackets.Kill(target.Key, skill, playerKey, ServerId, StoredName));
-                replies.AddRange(ai.Killed(target));
-            }
-            else replies.AddRange(ai.Engage(targets, target, now, playerKey, hits.Sum(h => h.Amount)));    // a hit monster chases its attacker
+            // GameSession.CombatTiming.cs: projectiles (0x3803) and their hits after the flight, the action uid, the kill.
+            replies.AddRange(HitOrFire(skill, target, hits, actionUid, now));
         }
         return replies;
     }
@@ -2466,6 +2430,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             sameLevelMove = data.GeometryMap(mapId) == data.GeometryMap(worldMap);
             sameLevelRemovals = sameLevelMove ? SameLevelRemovals() : [];
             targets = null;  // the new map's NPCs appear on 0x3622
+            DropCombatState();
             respawnAt = [];
             if (options.World is not null) ai = new NpcAi(rng, data);
         }
@@ -2621,7 +2586,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
     public const double RunThreshold = 400;
 
     /// <summary>Casts other players see: the skill start and its effects, not the caster's own replies and bars.</summary>
-    bool SharedCastPacket(byte[] packet) => Opcode(packet) is 0x3802 or 0x3804 or 0x3642 or 0x3641 or 0x8d21 or 0x8d04 or 0x382a
+    bool SharedCastPacket(byte[] packet) => Opcode(packet) is 0x3802 or 0x3803 or 0x3804 or 0x3642 or 0x3641 or 0x8d21 or 0x8d04 or 0x382a
         || Opcode(packet) == 0x3835 && QuestKey(packet, 2) != playerKey
         || Opcode(packet) == 0x8d00 && QuestKey(packet, 2) != playerKey;   // NPC HP, not this player's bars
 
@@ -2801,6 +2766,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         || dead && now >= reviveAt
         || itemCast is { } cast && now >= cast.DueMs
         || instanceExitAt is { } exit && now >= exit
+        || PendingHitsDue(now)
         || Social is { } s && worldPlayer is not null && s.DuelOf(worldPlayer) is { } duel && duel.Challenger == worldPlayer && now >= duel.NextMs
         || Social is { } s2 && worldPlayer is not null && ArenaOf(worldPlayer) is { } arena && arena.Owner == worldPlayer && (now >= arena.NextMs || arena.RespawnAt.Values.Any(r => now >= r));
 
@@ -2889,6 +2855,14 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         }
         if (dead && now >= reviveAt) replies.AddRange(Revive(now));
         if (itemCast is { } cast && now >= cast.DueMs) replies.AddRange(await CompleteItemCastAsync(now, ct));
+        if (PendingHitsDue(now))
+        {
+            // Projectile hits landing now (GameSession.CombatTiming.cs); their kills pay quests and experience as a cast's do.
+            replies.AddRange(ResolvePendingHits(now));
+            replies.AddRange(await QuestKillsAsync(ct));
+            replies.AddRange(await KillExperienceAsync(ct));
+        }
+        replies.AddRange(ChainTick(now));
         replies.AddRange(BuffTick(now));
         replies.AddRange(DropTick(now));
         replies.AddRange(MapEventTick(now));

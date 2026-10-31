@@ -529,6 +529,34 @@ public static class PlayerPackets
     }
 
     /// <summary>
+    /// 0x3803 SkillFireProjectile_NT: caster | presence u8 0 | target | skill i32 | action uid u8 (the 0x3802's) | projectile id varint
+    /// (SkillProjectile.dat row; Skill.dat SkillEffectTimeDataList ProjectileId) | target position Vec3 | remaining flight ms varint |
+    /// effect seq u32 | effect seq u8 | 00. OBSERVED (2.0.6: 20261013-144836 #15131, 43 samples; 20261019-231752 #31050, 114 samples,
+    /// NPC casters; one per projectile, its 0x3804 carries the same seq). A2Core PR #4 (Artezianec) reports the same layout for a
+    /// Ranger's arrows on the current client.
+    /// </summary>
+    public static byte[] SkillFireProjectile(int casterKey, int targetKey, int skillId, byte actionUid, int projectileId,
+        Vector3d targetPosition, int flightMs, int effectSeq) =>
+        PacketWriter.Opcode(0x3803).Varint(casterKey).U8(0).Varint(targetKey).I32(skillId).U8(actionUid).Varint(projectileId)
+            .Vec3(targetPosition).Varint(Math.Max(0, flightMs)).U32((uint)effectSeq).U8((byte)effectSeq).U8(0).ToArray();
+
+    /// <summary>
+    /// 0x380e SkillProjectileCollision_NT: caster | presence u8 (bit 1 adds the u8 01 before the last position) | target | skill i32 |
+    /// action uid | projectile id varint | position Vec3 | effect seq u32 | effect seq u8 | 00 | [01] | position Vec3. OBSERVED (2.0.6:
+    /// 20261013-144836 #15144 presence 02, 20261019-231752 #31053 presence 00 and #31098 presence 02 with target 0). CANDIDATE: what
+    /// the two positions are (the first is near the target, the second differs) and the bit's name (A2Core PR #4 calls it destroyed;
+    /// its layout, with an i32 0 and a process uid, is longer than every official sample).
+    /// </summary>
+    public static byte[] SkillProjectileCollision(int casterKey, int targetKey, int skillId, byte actionUid, int projectileId, Vector3d position,
+        int effectSeq, bool destroyed, Vector3d endPosition)
+    {
+        var w = PacketWriter.Opcode(0x380e).Varint(casterKey).U8((byte)(destroyed ? 2 : 0)).Varint(targetKey).I32(skillId).U8(actionUid)
+            .Varint(projectileId).Vec3(position).U32((uint)effectSeq).U8((byte)effectSeq).U8(0);
+        if (destroyed) w.U8(1);
+        return w.Vec3(endPosition).ToArray();
+    }
+
+    /// <summary>
     /// 0x3804 SkillEffect_NT of a player's damaging hit (switch 04, 20 samples with a player caster):
     /// target | 04 00 | caster | skill i32 | action uid | hit type varint (2) | effect id u32 | effect seq u32 |
     /// attack speed varint | damage varint | effect seq u8 | 00. OBSERVED; GamePackets.SkillHit is this form with uid 0.

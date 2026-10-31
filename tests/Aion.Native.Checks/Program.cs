@@ -506,13 +506,15 @@ var basic = data.LearnedSkills(gladiator.Class, 1).Select(s => s.SkillId).First(
 byte[] Cast(int skill, int target, Vector3d at) => new PacketWriter().U16(0x3800).U16(16).I32(skill).U8(2).Varint(target).F32(0).Vec3(at).U8(9).ToArray();
 Check(GameSession.ParseCast(Cast(basic, 1000, pos)) is { ClientActionUid: 9, TargetKey: 1000 }, "cast request parse");
 var cast = await game.HandleAsync(Cast(basic, Combat.TrainingDummyKey, pos), Now);
-Check(cast[0].SequenceEqual(GamePackets.CastReply(true, basic, 9)) && cast[2][0] == 0x02 && cast[2][1] == 0x38, "accepted cast: reply, resources, start");
+// Official order (20261013-144836 #874-#877): 0x3802 start, [0x3818 chain], the 9-byte 0x3801, 0x8d21 on; then the resources.
+Check(cast[0][0] == 0x02 && cast[0][1] == 0x38 && cast[1].SequenceEqual(GamePackets.CastResult(true, basic)) && cast[2].SequenceEqual(GamePackets.CombatState(1, true))
+      && cast[3][0] == 0x00 && cast[3][1] == 0x8d, "accepted cast: start, official 0x3801, combat on, resources");
 Check(cast.Any(b => b[0] == 0x04 && b[1] == 0x38) && cast.Any(b => b[0] == 0x00 && b[1] == 0x8d), "hit and HP update on the dummy");
 Check(game.Targets[Combat.TrainingDummyKey].Hp < 5000, "dummy took damage");
-Check((await game.HandleAsync(Cast(basic, Combat.TrainingDummyKey, pos), Now)).Single().SequenceEqual(GamePackets.CastReply(false, basic, 9)), "cooldown rejects the recast");
+Check((await game.HandleAsync(Cast(basic, Combat.TrainingDummyKey, pos), Now)).Single().SequenceEqual(GamePackets.CastResult(false, basic)), "cooldown rejects the recast");
 Check((await game.HandleAsync(Cast(999999, 1, pos), Now + 5000)).Single()[3] == 1, "unknown skill rejected");
 var bracket = await game.HandleAsync([0x3a, 0x38], Now);
-Check(bracket.Count == 2 && bracket[1].SequenceEqual(GamePackets.CombatState(1, true)), "first action enters combat");
+Check(bracket.Count == 1 && bracket[0].SequenceEqual(GamePackets.RequestAck(0x383a)), "the 0x383a bracket is only acknowledged (the cast entered combat)");
 Check((await game.TickAsync(Now + 1000)).All(b => !b.SequenceEqual(GamePackets.CombatState(1, false))), "still in combat");
 Check((await game.TickAsync(Now + 4000)).Any(b => b.SequenceEqual(GamePackets.CombatState(1, false))), "combat ends ~3.5 s after the last action");
 var dummy = game.Targets[Combat.TrainingDummyKey];
@@ -531,7 +533,43 @@ Check(game.KillExperience(1) == (long)Math.Round(data.NeedExp(1) / 25.0 * 0.9) &
       "weaker mobs give less, none 10+ levels below");
 var respawn = await game.TickAsync(Now + 100000 + GameSession.RespawnMs);
 Check(respawn.Any(b => b.SequenceEqual(GamePackets.Death(Combat.TrainingDummyKey))) && dummy.Hp == dummy.HpMax, "corpse respawns at full HP");
+// Chain skills (GameSession.SkillChains.cs; OBSERVED 20261013-144836 #875, #956-#957, #1142): Keen Strike offers Rupture Strike
+// for its 3000 ms window, Rupture Strike offers Wrathful Strike and withdraws itself, the unused step is withdrawn on expiry.
+{
+    const int keen = 11020000, rupture = 11030000, wrathful = 11040000;
+    var chainAt = Now + 100000 + GameSession.RespawnMs + 1000;
+    Check(data.Skill(rupture) is { ChainPrev: keen, ChainWindowMs: 3000 } && data.Skill(keen)?.ChainNext?.SequenceEqual([rupture]) == true,
+          "class-skills.json carries Skill.dat's chain (11020000 -> 11030000, 3000 ms)");
+    Check((await game.HandleAsync(Cast(rupture, Combat.TrainingDummyKey, pos), chainAt)).Single().SequenceEqual(GamePackets.CastResult(false, rupture)),
+          "a chain step not on offer is refused");
+    var keenCast = await game.HandleAsync(Cast(keen, Combat.TrainingDummyKey, pos), chainAt);
+    Check(keenCast.FindIndex(b => b.SequenceEqual(GamePackets.ChainSkillActiveList(keen, [rupture]))) is var offer and > 0
+          && offer < keenCast.FindIndex(b => b.SequenceEqual(GamePackets.CastResult(true, keen))), "the root cast offers its step (0x3818 before the 0x3801)");
+    var second = await game.HandleAsync(Cast(rupture, Combat.TrainingDummyKey, pos), chainAt + 500);
+    var nextOffer = second.FindIndex(b => b.SequenceEqual(GamePackets.ChainSkillActiveList(rupture, [wrathful])));
+    var withdrawn = second.FindIndex(b => b.SequenceEqual(GamePackets.ChainSkillDeactiveList([rupture])));
+    Check(nextOffer > 0 && withdrawn == nextOffer + 1 && withdrawn < second.FindIndex(b => b.SequenceEqual(GamePackets.CastResult(true, rupture))),
+          "the step casts while offered: its next step offered, itself withdrawn, then its 0x3801");
+    Check((await game.TickAsync(chainAt + 3600)).Any(b => b.SequenceEqual(GamePackets.ChainSkillDeactiveList([wrathful]))), "the unused step is withdrawn when its window closes");
+}
 Check((await game.HandleAsync([0x30, 0x36], Now)).Single().SequenceEqual(GamePackets.Logout()), "logout reply");
+// Projectiles (GameSession.CombatTiming.cs): Snipe fires its SkillProjectile row (0x3803, Skill.dat ProjectileId 140200001) in the
+// cast batch, and its hit (0x3804 presence 0x14, same seq) lands after the flight, on the tick.
+{
+    var ranger = new GameSession(data, new GameSessionOptions { TrainingDummy = true }, new Random(7));
+    await ranger.HandleAsync(Strings(0x3613, Session, "", "t", "").Concat(new byte[9]).ToArray(), Now);
+    await ranger.HandleAsync(new PacketWriter().U16(0x361b).String("Robin").U8(1).U32(5).Bytes([0x0c, 0x64]).U8(2).U8(1).U8(0).ToArray(), Now);
+    await ranger.HandleAsync(select, Now);
+    await ranger.HandleAsync(new PacketWriter().U16(0x3622).I32(1).ToArray(), Now);
+    const int snipe = 14020000;
+    Check(data.Skill(snipe)?.Damage.FirstOrDefault()?.Projectile == 140200001 && data.ProjectileSpeed(140200001) > 0, "Snipe's projectile and speed come from the client tables");
+    var shot = await ranger.HandleAsync(Cast(snipe, Combat.TrainingDummyKey, pos), Now + 1000);
+    var fired = shot.FirstOrDefault(b => Op(b) == 0x3803);
+    Check(fired is not null && shot.All(b => Op(b) != 0x3804) && BitConverter.ToInt32(fired, 2 + 1 + 1 + 2) == snipe,
+          "the cast batch carries the 0x3803 and no hit yet");
+    var arrowLanded = await ranger.TickAsync(Now + 1000 + GameSession.MaxProjectileFlightMs);
+    Check(arrowLanded.Any(b => Op(b) == 0x3804 && b[4] == 0x14), "the hit lands after the flight (0x3804 presence 0x14)");
+}
 async Task<GameSession> BarSession(int level = 1)
 {
     var session = new GameSession(data, new GameSessionOptions { CharacterLevel = level }, new Random(9));
@@ -1947,6 +1985,8 @@ Console.WriteLine($"{checks} stored game session checks passed.");
 checks = 0;
 checks += PlayerPacketChecks.Run();
 Console.WriteLine($"{checks} official other-player messages rebuilt (CharAppear, movement, combat broadcasts).");
+checks = CombatPacketChecks.Run();
+Console.WriteLine($"{checks} official combat messages rebuilt (cast result, chain prompts, projectiles, groggy).");
 checks = 0;
 var shared = new SharedWorld(data);
 async Task<GameSession> WorldSession(string name = "Player1", uint creationId = 1)

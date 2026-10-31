@@ -118,5 +118,46 @@ class NativeLevelTests(unittest.TestCase):
         self.assertEqual(state['learned_skills'], set(starter_profile(1, 1)['skills']))
 
 
+def _skill(sid, prev=0, window=0, groups=(), projectiles=()):
+    timed = [{'SkillEffectGroupId': {'Value': g}, 'ProjectileId': {'Value': p}} for g, p in zip(groups, projectiles)]
+    effects = [{'rows': [{'ID': {'Value': g * 10 + 1}, 'SkillEffectGroupId': {'Value': g}, 'EffectType': 'ESkillEffectType::Damage',
+                          'EffectValueList': ['10', '10', '1000', '1000', '1']}]} for g in groups if g]
+    return {'id': sid, 'name': str(sid), 'facts': {'SkillType': 'ESkillType::Active'}, 'relationships': {'effects': effects},
+            'raw': {'ChainSkillPrevSkillId': {'Value': prev}, 'ChainSkillAvailableTime': window,
+                    'ChainSkillActivateRate': 10000 if prev else 0, 'ChainSkillDeactivateType': 'EChainSkillDeactiveType::None',
+                    'SkillEffectTimeDataList': timed}}
+
+
+class ChainAndProjectileTests(unittest.TestCase):
+    """Chain steps and projectiles from the client Skill table (ported from A2Core PR #4 without improvised rows)."""
+
+    def test_projectile_per_time_row(self):
+        rapid = _skill(14030000, 14020000, 3000, (140300001, 140300001, 140300001, 0), (140300001, 140300002, 140300003, 0))
+        self.assertEqual([r.get('projectile') for r in class_skills.damage_rows(rapid)], [140300001, 140300002, 140300003])
+        melee = _skill(11020000, groups=(110200001,), projectiles=(0,))
+        self.assertNotIn('projectile', class_skills.damage_rows(melee)[0])
+
+    def test_chain_only_steps_merge_from_the_table(self):
+        skills = {s['id']: s for s in (_skill(11020000, groups=(110200001,), projectiles=(0,)),
+                                       _skill(11030000, 11020000, 3000, (110300001,), (0,)),
+                                       _skill(11040000, 11030000, 3000, (110400001,), (0,)),
+                                       _skill(90000000, 11020000, 3000, (1,), (0,)))}
+        cast = {'11020000': class_skills.cast_row(skills[11020000])}
+        class_skills.merge_chain_skills(cast, skills, [11020000])
+        self.assertEqual(sorted(cast), ['11020000', '11030000', '11040000'])   # an NPC skill id never joins
+        self.assertEqual(cast['11020000']['chain_next'], [11030000])
+        self.assertEqual((cast['11030000']['chain_prev'], cast['11030000']['chain_window_ms']), (11020000, 3000))
+        self.assertTrue(all(row['damage'] for row in cast.values()))
+        self.assertNotIn('chain_prev', cast['11020000'])
+
+    def test_tracked_data_has_real_chain_rows(self):
+        skills = class_skills.data()['skills']
+        self.assertEqual(skills['11030000']['chain_prev'], 11020000)
+        self.assertEqual(skills['14030000']['damage'][1]['projectile'], 140300002)
+        for sid, row in skills.items():
+            if row.get('chain_prev'):
+                self.assertIn(str(row['chain_prev']), skills, sid)
+
+
 if __name__ == '__main__':
     unittest.main()
