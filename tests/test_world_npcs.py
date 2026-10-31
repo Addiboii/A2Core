@@ -1,4 +1,7 @@
+import json
+import tempfile
 import unittest
+from pathlib import Path
 
 from tools import combat, world_npcs
 
@@ -31,6 +34,25 @@ class WorldNpcTests(unittest.TestCase):
         mask_at = 2 + len(combat.encode_varint(aggressive.key))
         self.assertEqual(combat.build_npc_appear(aggressive)[mask_at:mask_at + 2], b'\x0c\x20')  # 0x200c
         self.assertIn(combat.encode_varint(citizen.hp_max) * 2, citizen_body)
+
+    def test_skill_hits_one_per_damage_row(self):
+        skill = {'Properties': {'Data': [{'ID': {'Value': 7}, 'SkillEffectTimeDataList': [
+            {'SkillEffectGroupId': {'Value': 70}, 'ProjectileId': {'Value': 0}},
+            {'SkillEffectGroupId': {'Value': 0}, 'ProjectileId': {'Value': 0}},
+            {'SkillEffectGroupId': {'Value': 71}, 'ProjectileId': {'Value': 5}}]},
+            {'ID': {'Value': 8}, 'SkillEffectTimeDataList': [{'SkillEffectGroupId': {'Value': 80}}]}]}}
+        effect = {'Properties': {'Data': [
+            {'ID': {'Value': 701}, 'SkillEffectGroupId': {'Value': 70}, 'EffectType': 'ESkillEffectType::Damage'},
+            {'ID': {'Value': 702}, 'SkillEffectGroupId': {'Value': 70}, 'EffectType': 'ESkillEffectType::GroggyGuardDecreaseEnergy',
+             'EffectValueList': ['30']},
+            {'ID': {'Value': 711}, 'SkillEffectGroupId': {'Value': 71}, 'EffectType': 'ESkillEffectType::Damage'},
+            {'ID': {'Value': 801}, 'SkillEffectGroupId': {'Value': 80}, 'EffectType': 'ESkillEffectType::Heal'}]}}
+        with tempfile.TemporaryDirectory() as folder:
+            paths = [Path(folder) / 'skill.json', Path(folder) / 'effect.json']
+            for path, table in zip(paths, (skill, effect)):
+                path.write_text(json.dumps(table), encoding='utf-8')
+            hits = world_npcs.skill_hits({7, 8}, *paths)
+        self.assertEqual(hits, {'7': [[701, 0, 30], [711, 5, 0]]})   # no damage row: no entry (no guessing)
 
 
 if __name__ == '__main__':

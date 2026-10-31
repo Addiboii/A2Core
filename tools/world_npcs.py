@@ -345,11 +345,42 @@ def map_targets(map_id, target_class):
     return targets
 
 
+def skill_hits(skill_ids, skill_table=SKILLDATA, effect_table=EFFECTDATA):
+    """Per NPC skill, its hits in order: one per SkillEffectTimeDataList row whose effect group has a Damage effect,
+    [damage effect id, ProjectileId, GroggyGuardDecreaseEnergy of the same group (0: none)].
+
+    Ported from A2Core PR #4 (Artezianec) without its fallback that guessed hits from effect ids (+10 per swing) when
+    the tables were missing: a skill without rows here has no entry. Timing of the rows is not in these columns."""
+    wanted = set(skill_ids)
+    skills = {row['ID']['Value']: row for row in _rows(skill_table) if row['ID']['Value'] in wanted}
+    damage, groggy = {}, {}
+    for effect in _rows(effect_table):
+        group = effect['SkillEffectGroupId']['Value']
+        kind = _enum(effect['EffectType'])
+        if kind == 'Damage' and group not in damage:
+            damage[group] = effect['ID']['Value']
+        elif kind == 'GroggyGuardDecreaseEnergy' and group not in groggy:
+            values = effect.get('EffectValueList') or []
+            groggy[group] = int(values[0]) if values and str(values[0]).lstrip('-').isdigit() else 0
+    out = {}
+    for skill_id, row in sorted(skills.items()):
+        hits = []
+        for timed in row.get('SkillEffectTimeDataList') or []:
+            group = timed['SkillEffectGroupId']['Value']
+            if group in damage:
+                hits.append([damage[group], (timed.get('ProjectileId') or {}).get('Value', 0), groggy.get(group, 0)])
+        if hits:
+            out[str(skill_id)] = hits
+    return out
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('command', choices=['build'])
     parser.parse_args()
     out = build({**MAPDATA, **field_mapdata()})
+    # skill_hits: every hit of each NPC skill the spawns use (A2Core PR #4); the server reads only npc_skills so far.
+    out['skill_hits'] = skill_hits({int(k) for k in out.get('npc_skills', {})})
     DATA.write_text(json.dumps(out, separators=(',', ':')) + '\n', encoding='utf-8')
     print({map_id: len(spawns) for map_id, spawns in out['maps'].items()}, 'spawns ->', DATA.relative_to(ROOT))
 
