@@ -135,6 +135,15 @@ public sealed partial class GameSession
         return changed.Count == 0 ? [] : await Stored(() => QuestChangesAsync(changed.Values, ct));
     }
 
+    /// <summary>EnvObjData InteractConditionList CombatPower gate; open quest / map-event UseEnvObj steps are never blocked server-side.</summary>
+    bool EnvObjCombatPowerRefused(int index, WorldObject o)
+    {
+        if (o.RequiredCombatPower <= 0 || combatPower >= o.RequiredCombatPower) return false;
+        if (questLog?.OpenUseEnvObjIds().Contains(o.Env) == true) return false;
+        if (mapEventRuns.Any(r => r.WantsObject(EventName(o)))) return false;
+        return true;
+    }
+
     /// <summary>
     /// Using a quest object (0x3636 with its key): in range, 0x3638 started; after its InteractTime
     /// (EnvObjData; 0 at once) 0x363a completed, 0x8d6d finish state, 0x363b available state, then the 0x3637 reply
@@ -160,6 +169,7 @@ public sealed partial class GameSession
         var key2 = WorldObjects.FirstKey + found;
         // A refusal carries the available state too, so the client's interaction never stays open on it.
         if (!PlayerMayUseEnvObj(found, o) || CarryRefused(o)) return [GamePackets.InteractEnvObjReply(key2, 1), GamePackets.InteractEnvObjAvailableState(key2)];
+        if (EnvObjCombatPowerRefused(found, o)) return [GamePackets.InteractEnvObjReply(key2, 1), GamePackets.InteractEnvObjAvailableState(key2)];
         if (o.Gather is not null && GatherFailReason(o) is { } gatherFail) return GatherRefusedPackets(key2, gatherFail);
         if (o.FlightRing) return FlyThroughRing(key2, now);
         if (position is { } at && Math.Sqrt(Math.Pow(at.X - o.Position[0], 2) + Math.Pow(at.Y - o.Position[1], 2)) > o.InteractRange + WorldObjects.InteractSlack)

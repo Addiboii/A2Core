@@ -23,7 +23,8 @@ public sealed record WorldObject(
     [property: JsonPropertyName("env_name")] string? EnvName = null,
     [property: JsonPropertyName("hit_limit")] int HitLimit = 0,
     [property: JsonPropertyName("hit_skills")] int[]? HitSkills = null,
-    [property: JsonPropertyName("carry")] CarryBox? Carry = null)
+    [property: JsonPropertyName("carry")] CarryBox? Carry = null,
+    [property: JsonPropertyName("required_combat_power")] int RequiredCombatPower = 0)
 {
     public Vector3d At => new(Position[0], Position[1], Position[2]);
 

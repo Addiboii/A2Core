@@ -66,7 +66,8 @@ def envobj_rows(table):
                 'hit_skills': [s['Value'] for s in row.get('HitSkillIdList') or [] if isinstance(s, dict) and s.get('Value')],
                 'long_range': str(row.get('VisibleRangeType', '')).endswith(('LongRange', 'MapRange')),
                 'finish_duration': int(row.get('FinishDuration') or 0),
-                'not_have_abnormal_group': not_have_abnormal_group(row.get('InteractConditionList'))}
+                'not_have_abnormal_group': not_have_abnormal_group(row.get('InteractConditionList')),
+                'required_combat_power': combat_power_required(row.get('InteractConditionList'))}
     return rows
 
 
@@ -74,6 +75,19 @@ def not_have_abnormal_group(conditions):
     """The abnormal group an InteractConditionList NotHaveAbnormalGroup row names (the BombBox's carried bomb, group 1196), or 0."""
     for condition in walk(conditions or []):
         if not any(isinstance(v, str) and v.split('::')[-1] == 'NotHaveAbnormalGroup' for v in condition.values()):
+            continue
+        for value in condition.values():
+            if isinstance(value, dict):
+                value = value.get('Value')
+            if isinstance(value, (int, float)) and value > 0 or isinstance(value, str) and value.isdigit():
+                return int(value)
+    return 0
+
+
+def combat_power_required(conditions):
+    """Minimum combat power from InteractConditionList CombatPower rows (Etheria rift fissures and similar), or 0."""
+    for condition in walk(conditions or []):
+        if not any(isinstance(v, str) and 'CombatPower' in v.split('::')[-1] for v in condition.values()):
             continue
         for value in condition.values():
             if isinstance(value, dict):
@@ -215,6 +229,8 @@ def objects(data, rows, wanted, gathers=None, everything=False, portals=None, ev
                 if row.get('not_have_abnormal_group'):
                     found[-1]['carry'] = {'group': row['not_have_abnormal_group'], 'despawn': row['despawn'],
                                           'finish_duration': row['finish_duration']}
+                if row.get('required_combat_power'):
+                    found[-1]['required_combat_power'] = row['required_combat_power']
     return found
 
 

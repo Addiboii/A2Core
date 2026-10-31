@@ -45,6 +45,12 @@ class WorldObjectTests(unittest.TestCase):
         self.assertEqual(placed[0]['carry'], {'group': 1196, 'despawn': True, 'finish_duration': 10000})
         self.assertNotIn('carry', placed[1])
 
+    def test_combat_power_interact_condition_is_exported(self):
+        rows = world_objects.envobj_rows({'Properties': [
+            {'ID': {'Value': 1200602}, 'Name': 'E_L1_Layer_HQ004_EtheriaCrack_1', 'Usage': 'EEnvObjectUsage::Normal',
+             'InteractConditionList': [{'ConditionType': 'EEnvObjInteractConditionType::CombatPower', 'Value': 3200}]}]})
+        self.assertEqual(rows[1200602]['required_combat_power'], 3200)
+
     def test_enter_door_with_an_unserved_target_uses_the_layer_named_after_it(self):
         dungeons = {'2': {'name': 'World_L_A_Layer_01', 'type': 'InstanceLayer'},
                     '23': {'name': 'Abyss_Reshanta_C', 'type': 'Abyss'},
