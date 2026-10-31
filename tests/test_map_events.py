@@ -71,6 +71,29 @@ class MapEventTests(unittest.TestCase):
         self.assertEqual(len(event['stages'][0]['steps']), 8)
         self.assertEqual(event['stages'][0]['steps'][7]['post'][-1]['t'], 'MapExit')
 
+    def test_renamed_spawn_entries_resolve_to_what_they_became(self):
+        spawns = {'Od_1', 'Od_2', 'Od_10', 'FE_BS_D_02_Mob_1', 'Kept', 'Twin_A_X', 'Twin_B_X'}
+        self.assertEqual(map_events.resolve_spawner('Kept', spawns), ['Kept'])
+        self.assertEqual(map_events.resolve_spawner('Od', spawns), ['Od_1', 'Od_2', 'Od_10'])
+        self.assertEqual(map_events.resolve_spawner('FE_BS_02_Mob_1', spawns), ['FE_BS_D_02_Mob_1'])
+        self.assertEqual(map_events.resolve_spawner('Twin_X', spawns), ['Twin_X'])   # ambiguous: left alone
+        self.assertEqual(map_events.resolve_spawner('Gone', spawns), ['Gone'])
+        event = {'Stages': [{'Steps': [{'PreDirectives': [
+            {'Type': 'StartSpawner', 'value_list': [{'value': 'Od, Kept'}, {'value': '0'}]},
+            {'Type': 'DespawnAll', 'value_list': [{'value': 'Kept'}, {'value': 'FE_BS_02_Mob_1'}]},
+            {'Type': 'AddAbnormal', 'value_list': [{'value': '1'}, {'value': '-1'}, {'value': 'Od'}]}]}]}]}
+        renamed = map_events.rename_spawners(event, spawns)
+        directives = event['Stages'][0]['Steps'][0]['PreDirectives']
+        self.assertEqual(directives[0]['value_list'][0]['value'], 'Od_1,Od_2,Od_10,Kept')
+        self.assertEqual(directives[1]['value_list'][1]['value'], 'FE_BS_D_02_Mob_1')
+        self.assertEqual(directives[2]['value_list'][2]['value'], 'Od')
+        self.assertEqual(renamed, {'Od': ['Od_1', 'Od_2', 'Od_10'], 'FE_BS_02_Mob_1': ['FE_BS_D_02_Mob_1']})
+
+    def test_generated_data_resolves_the_dark_broken_sword_spawns(self):
+        data = json.loads((ROOT / 'tools/data/map-events.json').read_text(encoding='utf-8'))
+        self.assertIn('FE_BS_D_02_Normal_Mob_01_1', data['deferred']['510013'])
+        self.assertEqual(data['renamed']['Event_BrokenSword_02_D_MapEvent']['FE_BS_02_Normal_Mob_01_1'], ['FE_BS_D_02_Normal_Mob_01_1'])
+
 
 if __name__ == '__main__':
     unittest.main()
