@@ -375,7 +375,7 @@ await using(var source=NpgsqlDataSource.Create(connectionString))
     Check((await store2.DungeonCooltimesAsync(first,id)).Single().DungeonId==600000,"dungeon cooltimes survive restart");
     var nativeReload=await new PostgresCharacterRepository(reopened).LoadOwnedAsync(first.AccountId,id,default);
     Check(nativeReload!.Progress.Level==12 && nativeReload.Progress.Experience==98765,"level and experience survive restart");
-    // gameplay SaveProgressAsync then map checkpoint must not reset level/exp.
+    // Core loop (Postgres): gameplay SaveProgressAsync then map checkpoint must not reset level/exp.
     var checkpointPos=JsonSerializer.SerializeToElement(new{x=-127874.0,y=-111187.0,z=25393.0});
     var checkpointSvc=new CharacterPersistenceService(new PostgresCharacterRepository(source));
     var posRev=await checkpointSvc.SavePositionAsync(first,id,nativeReload.Revision,1010,checkpointPos);

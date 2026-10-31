@@ -20,6 +20,7 @@ not in the tables; the objective value interpretations below marked CANDIDATE ar
 
     python tools/quests.py build       # writes tools/data/quests.json
     python tools/quests.py check       # spawn cross-check against tools/data/world-npcs.json
+    python tools/quests.py mark-cap    # flag quests above the live level cap (default 45)
 """
 import argparse
 import json
@@ -27,7 +28,13 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / 'tools/data/quests.json'
+HERO_CHAINS = ROOT / 'tools/data/hero-chains.json'
 TABLES = ROOT / 'research/local/quest-tables'
+DEFAULT_LEVEL_CAP = 45
+SIDE_TYPES = frozenset({'District', 'DutyMission'})
+SIDE_CAP_UNAVAILABLE_REASON = (
+    'cap_45: requires hero quest progress above live level gate (UnlockLevel 46+ / post-gate hero chain)'
+)
 NPCDATA = ROOT / 'research/local/npc-table/table-000.json'
 ENVOBJ = ROOT / 'research/local/world/gameplay-tables/table-000.json'
 LOCALIZATION = ROOT / 'research/local/catalog-localization-20261013/localization-000.json'
@@ -96,6 +103,8 @@ def objective(goal, npc_ids, item_ids, env_ids):
         out['npc'] = npc_ids.get(v[0])
         out['npc_name'] = v[0]
         if _none(v[1]):
+            pass
+        elif v[1]:
             out['talk'] = v[1]
         out['count'] = 1
     elif kind == 'CollectItem':
@@ -234,6 +243,11 @@ def convert(quests, steps, reward_rows=(), class_rewards=(), strings=(), unlocks
         if q.get('AcquireItemList'):
             quest['acquire_items'] = _items(q['AcquireItemList'], item_ids) \
                 if isinstance(q['AcquireItemList'][0], dict) else q['AcquireItemList']
+        elif acquire == 'Item':
+            av = _none(q.get('AcquireValue'))
+            if av and av in item_ids:
+                quest['acquire_item_name'] = av
+                quest['acquire_items'] = [[item_ids[av], 1]]
 
         desc = strings_row.get('ObjDescArray', [])
         quest_steps = []
@@ -303,6 +317,121 @@ def build(tables=TABLES, npc_table=NPCDATA, env_table=ENVOBJ, localization=LOCAL
     }, **result}
 
 
+def _hero_level_gate_codes(chains, cap, race_key, gate_code):
+    chain = chains[race_key]
+    gate_index = chain.index(gate_code)
+    return frozenset(chain[gate_index:])
+
+
+def _quest_step_code(step_id, quests, by_id):
+    for code, quest in quests.items():
+        for step in quest.get('steps') or []:
+            sid = step.get('id') or (quest['id'] * 100 + step['order'])
+            if sid == step_id:
+                return code
+    quest_id = step_id // 100
+    return by_id.get(quest_id)
+
+
+def side_cap_unavailable_codes(data, cap=DEFAULT_LEVEL_CAP):
+    """Side/DutyMission at UnlockLevel ≤ cap that need post-gate hero progress (live cap 45)."""
+    quests = data['quests']
+    chains = json.loads(HERO_CHAINS.read_text(encoding='utf-8'))
+    gates = {'Light': 'HQ1103010', 'Dark': 'HQ2103010'}
+    after_gate = {
+        race: _hero_level_gate_codes(chains, cap, key, gates[race])
+        for race, key in (('Light', 'light'), ('Dark', 'dark'))
+    }
+    by_id = {quest['id']: code for code, quest in quests.items()}
+
+    def race_matches(quest, race):
+        qrace = quest.get('race', 'All')
+        return qrace == 'All' or qrace == race
+
+    def direct_hero_cap(quest, race):
+        for pre in (quest.get('prerequisites') or []) + (quest.get('previous') or []):
+            parent = quests.get(pre)
+            if not parent or parent.get('type') != 'Hero':
+                continue
+            if int(parent.get('level') or 0) > cap or pre in after_gate[race]:
+                return True
+        for cond in quest.get('conditions') or []:
+            if cond.get('type') != 'ClearQuestStep':
+                continue
+            try:
+                step_id = int(cond['value'])
+            except (KeyError, TypeError, ValueError):
+                continue
+            parent_code = _quest_step_code(step_id, quests, by_id)
+            if not parent_code:
+                continue
+            parent = quests[parent_code]
+            if parent.get('type') != 'Hero':
+                continue
+            if int(parent.get('level') or 0) > cap or parent_code in after_gate[race]:
+                return True
+        return False
+
+    def side_rows(race):
+        for code, quest in quests.items():
+            if quest.get('type') not in SIDE_TYPES:
+                continue
+            if int(quest.get('level') or 99) > cap:
+                continue
+            if not (quest.get('steps') or []):
+                continue
+            if not race_matches(quest, race):
+                continue
+            yield code, quest
+
+    marked = set()
+    for race in ('Light', 'Dark'):
+        for code, quest in side_rows(race):
+            if direct_hero_cap(quest, race):
+                marked.add(code)
+        while True:
+            added = 0
+            for code, quest in side_rows(race):
+                if code in marked:
+                    continue
+                pres = (quest.get('prerequisites') or []) + (quest.get('previous') or [])
+                if any(pre in marked for pre in pres):
+                    marked.add(code)
+                    added += 1
+            if not added:
+                break
+    return sorted(marked)
+
+
+def mark_progression_cap(data, cap=DEFAULT_LEVEL_CAP):
+    """Mark quests above the live cap unavailable; keep rows in the export (not deleted)."""
+    unavailable_level = 0
+    for quest in data['quests'].values():
+        if int(quest.get('level') or 0) > cap:
+            quest['unavailable'] = True
+            quest['unavailable_reason'] = 'unlock_level_above_cap_%d' % cap
+            unavailable_level += 1
+        else:
+            quest.pop('unavailable', None)
+            quest.pop('unavailable_reason', None)
+
+    side_codes = side_cap_unavailable_codes(data, cap=cap)
+    for code in side_codes:
+        quest = data['quests'][code]
+        quest['unavailable'] = True
+        quest['unavailable_reason'] = SIDE_CAP_UNAVAILABLE_REASON
+
+    data['progression'] = {
+        'level_cap': cap,
+        'unavailable_quests': unavailable_level + len(side_codes),
+        'unavailable_above_level_cap': unavailable_level,
+        'unavailable_side_hero_gate_at_cap': len(side_codes),
+        'side_cap_unavailable_codes': side_codes,
+        'note': 'UnlockLevel above cap plus side quests gated on post-gate hero progress at cap %d' % cap,
+    }
+    return data
+
+
 def spawn_check(data, spawns=SPAWNS, map_id=1000, race='Light'):
     """Count quests of a map/race whose start/finish NPCs are among the map's spawns."""
     try:
@@ -342,13 +471,26 @@ def spawn_check(data, spawns=SPAWNS, map_id=1000, race='Light'):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('command', choices=['build', 'check'])
+    parser.add_argument('command', choices=['build', 'check', 'mark-cap'])
+    parser.add_argument('--cap', type=int, default=DEFAULT_LEVEL_CAP, help='live level cap (default 45)')
     args = parser.parse_args()
+    try:
+        from .data_json import write_data_json
+    except ImportError:
+        from data_json import write_data_json
     if args.command == 'build':
-        data = build()
-        DATA.write_text(json.dumps(data, ensure_ascii=False, separators=(',', ':')) + '\n', encoding='utf-8')
-        print('wrote %s: %d quests, %d unlocks, %d bytes' % (DATA, len(data['quests']), len(data['unlocks']),
-                                                             DATA.stat().st_size))
+        data = mark_progression_cap(build(), cap=args.cap)
+        write_data_json(DATA, data)
+        print('wrote %s: %d quests, %d unlocks, %d unavailable above cap %d, %d bytes' % (
+            DATA, len(data['quests']), len(data['unlocks']), data['progression']['unavailable_quests'], args.cap,
+            DATA.stat().st_size))
+    elif args.command == 'mark-cap':
+        data = mark_progression_cap(json.loads(DATA.read_text(encoding='utf-8')), cap=args.cap)
+        write_data_json(DATA, data)
+        prog = data['progression']
+        print('marked %d unavailable in %s (level>%d: %d, side hero gate @ cap: %d)' % (
+            prog['unavailable_quests'], DATA, args.cap, prog['unavailable_above_level_cap'],
+            prog['unavailable_side_hero_gate_at_cap']))
     else:
         data = json.loads(DATA.read_text(encoding='utf-8'))
         print(json.dumps(spawn_check(data), indent=1))

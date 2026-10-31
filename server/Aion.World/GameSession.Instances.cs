@@ -36,6 +36,12 @@ public sealed class InstanceTables
 
     public static InstanceTables Embedded => embedded.Value;
     public Instance? Of(int mapId) => byMap.GetValueOrDefault(mapId);
+    internal IEnumerable<Instance> All => byMap.Values;
+
+    /// <summary>The field map and spot of the entry trigger of the layer running the map event, or null.</summary>
+    public (int Map, Vector3d At)? EntryOfEvent(string mapEvent) =>
+        byMap.Values.FirstOrDefault(i => string.Equals(i.MapEvent, mapEvent, StringComparison.OrdinalIgnoreCase)) is { } layer
+            ? (layer.Entry.Map, new Vector3d(layer.Entry.Center[0], layer.Entry.Center[1], layer.Entry.Center[2])) : null;
 
     /// <summary>The instance whose entry trigger (a box on the field map) contains the position.</summary>
     public Instance? EntryAt(int mapId, Vector3d at) => byMap.Values.FirstOrDefault(i => i.Entry.Map == mapId
@@ -62,9 +68,10 @@ public sealed partial class GameSession
     public int InstanceKey => instanceKey;
 
     /// <summary>The player walked into an instance's entry trigger: the move into its own copy.</summary>
-    List<byte[]> InstanceTrigger(Vector3d at, long now)
+    List<byte[]> InstanceTrigger(Vector3d at, int moveOpcode, long now)
     {
         if (reloading || resources is null || dead) return [];
+        if (WalkInLayerTrigger(moveOpcode, at, now) is { Count: > 0 } walkIn) return walkIn;
         if (Instances.EntryAt(worldMap, at) is not { } instance) return DungeonTrigger(at, now);
         // The quest gate applies to stored characters (development logins keep no quest log).
         if (instance.Quest is { } code && !IsAdmin && questLog is not null && questLog.Get(code) is not { Status: QuestLog.Incomplete }) return [];
@@ -80,38 +87,66 @@ public sealed partial class GameSession
     /// under an instance layer that overlays the base map (CurrentPosition, the HQ001 way out). The events' 0x922f follow
     /// the move (OBSERVED after 0x3621).
     /// </summary>
-    List<byte[]> LeaveInstance(long now, string mode = "LastPosition")
+    List<byte[]> LeaveInstance(long now, string mode = "LastPosition", (int Map, Vector3d At)? to = null, byte? teleportEffect = null)
     {
         if (resources is null || instanceKey == 0) return [];
         var hand = Instances.Of(worldMap);
         var volume = MapEventData.Volume(worldMap);
         int map; Vector3d exit;
-        if (hand is not null) (map, exit) = (hand.Exit.Map, new Vector3d(hand.Exit.Position[0], hand.Exit.Position[1], hand.Exit.Position[2]));
+        if (to is { } given) (map, exit) = given;
+        else if (hand is not null) (map, exit) = (hand.Exit.Map, new Vector3d(hand.Exit.Position[0], hand.Exit.Position[1], hand.Exit.Position[2]));
         else if (instanceReturn is { } back) (map, exit) = back;
         else if (volume is not null) (map, exit) = (volume.Base, position ?? spawn?.Position ?? default);
         // No way out recorded: the race's starting map (Poeta for Light, Ishalgen for Dark) at its start point.
         else (map, exit) = (HomeMap, data.MapStart(HomeMap)?.Position ?? GamePackets.SpawnPosition);
-        if (hand is null && volume is { } overlay && overlay.Base == map && string.Equals(mode, "CurrentPosition", StringComparison.OrdinalIgnoreCase) && position is { } here)
+        if (to is null && hand is null && volume is { } overlay && overlay.Base == map && string.Equals(mode, "CurrentPosition", StringComparison.OrdinalIgnoreCase) && position is { } here)
             exit = here;
         var leaving = (CopyOwner ?? this).mapEventRuns.Select(r => GamePackets.MapEventLeave(r.Id)).ToList();
         HandOverCopy();
         mapEventRuns.Clear();
         pendingExit = null;
+        clearExit = null;
         instanceKey = 0;
         instanceExitAt = null;
         instanceReturn = null;
-        return [.. InstanceMove(map, exit, now), .. leaving];
+        // Back outside: the entry triggers there wait until the player has stepped out of them (a way out that lands in or
+        // next to an entry area pulled the player straight back in, 2026-10-30 HQ003 14:11:47-49).
+        dungeonTriggerNeedsOutside = true;
+        return [.. InstanceMove(map, exit, now, teleportEffect: teleportEffect), .. leaving];
     }
+
+    /// <summary>
+    /// An exit door used (EnvObjData Usage MoveMap, UsageValue the MapData teleport point: E_D0_Starter_HQ003_Warehouse_002 ->
+    /// World_D_Starter_HQ003_Exit on Ishalgen). Inside a layer or dungeon copy: out to that point (the base map's point first);
+    /// on a shared map: a teleport to it. An unknown point leaves the copy the usual way.
+    /// </summary>
+    List<byte[]> MoveMapDoor(string point, long now)
+    {
+        if (resources is null || reloading || dead) return [];
+        var preferred = instanceReturn?.Map ?? MapEventData.Volume(worldMap)?.Base ?? worldMap;
+        (int Map, Vector3d At)? dest = data.MapPoints(preferred).TryGetValue(point, out var p) ? (preferred, new Vector3d(p[0], p[1], p[2])) : null;
+        if (dest is null)
+            foreach (var (name, map, at) in data.Destinations())
+                if (string.Equals(name, point, StringComparison.OrdinalIgnoreCase)) { dest = (map, at); break; }
+        // A door out is the PCTeleport counterpart of the way in (reason 2, SeamlessDoorTeleport_heavy_out = TeleportEffect.dat 41);
+        // the seamless layer move (12 / 0x41) left the client inside the storage while the server put it on Ishalgen (2026-10-30).
+        if (instanceKey != 0) return LeaveInstance(now, to: dest, teleportEffect: DoorExitTeleportEffect);
+        return dest is { } d ? Teleport(d.Map, d.At, now) : [];
+    }
+
+    /// <summary>A door's move out of its layer: SeamlessDoorTeleport_heavy_out.</summary>
+    const byte DoorExitTeleportEffect = 41;
 
     /// <summary>A kill in an instance: the boss clears its map event and starts the way out.</summary>
     void InstanceKill(Target target, long now)
     {
         if (instanceKey == 0 || Instances.Of(worldMap) is not { } instance || !instance.Boss.Contains(target.NpcId) || instanceExitAt is not null) return;
+        clearExit ??= ClearExitOf(instance.MapEvent);
         clearedEvents.Add(instance.MapEvent);
         instanceExitAt = now + InstanceExitDelayMs;
     }
 
-    List<byte[]> InstanceTick(long now) => instanceExitAt is { } due && now >= due && !reloading ? LeaveInstance(now) : [];
+    List<byte[]> InstanceTick(long now) => instanceExitAt is { } due && now >= due && !reloading ? LeaveInstance(now, to: clearExit) : [];
 
     /// <summary>After an instance map load: MapEnvState_NT {map, u8 0, i64 0, enter 1, no states}, MapEnvSetting_NT {map, no settings, enter 1}.</summary>
     List<byte[]> MapEnvironment(int mapId) =>

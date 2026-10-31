@@ -44,10 +44,13 @@ static class MapEventChecks
         public void Message(string key, string argument) => Call($"Message {key}");
         public void Abnormal(int id, int durationMs, string target, bool remove) => Call($"Abnormal {id} {durationMs} {(target.Length == 0 ? "player" : target)} {(remove ? "remove" : "add")}");
         public void EnvObjState(string spawner, string state) => Call($"ObjState {spawner} {state}");
+        public void EnvObjChangePhase(string spawner, int phase) => Call($"ObjPhase {spawner} {phase}");
+        public void SetEnvObjCanInteract(string spawner, bool canInteract) => Call($"ObjInteract {spawner} {canInteract}");
         public void DynamicTerrain(string spawner, bool block) => Call($"Terrain {spawner} {block}");
         public void Progress(MapEventRun run) => Progressed++;
         public void Unsupported(MapEventRun run, string what) => Call($"Unsupported {what}");
         public bool QuestStepActive(int questId, int step) => QuestSteps.Contains((questId, step));
+        public bool MapEventStartAllowed(MapEventDefinition definition) => true;
         public bool NpcInCombat(string spawner) => false;
         public bool SpawnerAlive(string spawner) => !Dead.Contains(spawner);
         public bool SpawnerExists(string spawner) => Spawned.Contains(spawner);

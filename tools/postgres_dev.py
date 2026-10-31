@@ -12,6 +12,7 @@ import csv
 import glob
 import hashlib
 import json
+import locale
 import os
 from pathlib import Path
 import secrets
@@ -42,26 +43,37 @@ def literal(text):
     return "'" + str(text).replace("'", "''") + "'"
 
 
-def run(binary, args=(), *, text=None, role='aion_admin', database='aion', check=True):
+def tool_encoding(binary):
+    """psql is asked for UTF-8. initdb and pg_ctl print in the Windows ANSI code page."""
+    if not WINDOWS or binary in {'psql', 'pg_dump', 'pg_restore'}:
+        return 'utf-8'
+    return locale.getpreferredencoding(False)
+
+
+def run(binary, args=(), *, text=None, role='aion_admin', database='aion', check=True, timeout=180):
     env = os.environ.copy()
     if (HOME / 'credentials.json').exists():
         credentials = json.loads((HOME / 'credentials.json').read_text())
         env.update(PGHOST='127.0.0.1', PGPORT=str(PORT), PGUSER=role,
                    PGPASSWORD=credentials[role], PGDATABASE=database, PGCONNECT_TIMEOUT='5')
+    # Query results stay UTF-8. Connection errors on Windows may still be ANSI; those are decoded with replacement.
+    env['PGCLIENTENCODING'] = 'UTF8'
     command = [str(BIN / (binary + ('.exe' if WINDOWS else ''))), *map(str, args)]
     flags = getattr(subprocess, 'CREATE_NO_WINDOW', 0)
     if binary == 'pg_ctl':
         # A detached Windows postgres may inherit pipes and keep communicate()
         # waiting after pg_ctl exits. Use a file and DEVNULL for lifecycle calls.
-        with (HOME / 'lifecycle.log').open('w+', encoding='utf-8') as log:
+        # The child writes its console code page straight to the handle, so read the bytes back.
+        with (HOME / 'lifecycle.log').open('w+b') as log:
             process = subprocess.run(command, stdin=subprocess.DEVNULL, stdout=log,
                                      stderr=subprocess.STDOUT, env=env,
                                      creationflags=flags, timeout=45)
             log.seek(0)
-            result = subprocess.CompletedProcess(command, process.returncode, '', log.read())
+            message = log.read().decode(tool_encoding(binary), errors='replace')
+            result = subprocess.CompletedProcess(command, process.returncode, '', message)
     else:
-        result = subprocess.run(command, input=text, encoding='utf-8', capture_output=True,
-                                env=env, creationflags=flags, timeout=180)
+        result = subprocess.run(command, input=text, encoding=tool_encoding(binary), errors='replace',
+                                capture_output=True, env=env, creationflags=flags, timeout=timeout)
     if check and result.returncode:
         # SQL errors can contain input; redact generated credentials before printing.
         message = result.stderr
@@ -118,9 +130,12 @@ def setup():
         finally:
             password_file.unlink(missing_ok=True)
         with (HOME / 'data/postgresql.conf').open('a', encoding='utf-8') as config:
-            # TCP on loopback only; no Unix socket (the distribution's socket directory belongs to its own cluster).
+            # TCP on loopback only. On Linux, drop the Unix socket so this cluster does not
+            # take the distribution's socket directory. Windows builds reject that parameter.
             config.write("\n# Project-owned cluster: loopback only\nlisten_addresses='127.0.0.1'\n"
-                         f"port={PORT}\npassword_encryption='scram-sha-256'\nunix_socket_directories=''\n")
+                         f"port={PORT}\npassword_encryption='scram-sha-256'\n")
+            if not WINDOWS:
+                config.write("unix_socket_directories=''\n")
     start()
     sql("SELECT 'CREATE ROLE aion_owner NOLOGIN' WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname='aion_owner')\\gexec\n"
         "SELECT 'CREATE ROLE aion_app LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE' WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname='aion_app')\\gexec\n"
@@ -150,8 +165,10 @@ def migration_script(files):
     out = ["BEGIN; SELECT pg_advisory_xact_lock(731924001); SET LOCAL ROLE aion_owner;",
            'CREATE TABLE IF NOT EXISTS public.schema_migrations(version text PRIMARY KEY, sha256 text NOT NULL, applied_at timestamptz NOT NULL DEFAULT now());']
     for path in files:
-        body = path.read_text(encoding='utf-8')
-        version, digest = literal(path.name), literal(hashlib.sha256(path.read_bytes()).hexdigest())
+        # Hash the committed LF form. A Windows checkout may rewrite the same file as CRLF.
+        raw = path.read_bytes().replace(b'\r\n', b'\n')
+        body = raw.decode('utf-8')
+        version, digest = literal(path.name), literal(hashlib.sha256(raw).hexdigest())
         out.extend([f"DO $check$ BEGIN IF EXISTS(SELECT FROM public.schema_migrations WHERE version={version} AND sha256<>{digest}) THEN RAISE EXCEPTION 'Applied migration changed'; END IF; END $check$;",
                     f'SELECT NOT EXISTS(SELECT FROM public.schema_migrations WHERE version={version}) AS apply \\gset',
                     '\\if :apply', body,
@@ -190,7 +207,7 @@ def import_catalog(directory):
             stream.write(f"INSERT INTO catalog.{kind}(build_id,template_id,name,category,definition) SELECT {literal(build_id)},(document->>'id')::integer,document->>'name',document->>'category',document FROM incoming WHERE document->>'kind'='{kind}' ON CONFLICT DO NOTHING;\n")
         stream.write('COMMIT;\n')
     try:
-        run('psql', ['-X', '-q', '-v', 'ON_ERROR_STOP=1', '-f', path])
+        run('psql', ['-X', '-q', '-v', 'ON_ERROR_STOP=1', '-f', path], timeout=1800)
     finally:
         path.unlink(missing_ok=True)
     return {'build_id': build_id, 'counts': counts}

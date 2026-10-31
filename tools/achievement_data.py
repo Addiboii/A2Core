@@ -13,7 +13,8 @@ Output tools/data/achievements.json:
                        u: unlock achievement id, c: reset cycle (0 none, 1 daily, 2 weekly, 3 monthly, 4 yearly)}
   groups: name -> {i: id, r: race (0 all, 1 light, 2 dark), c: category name}
   group_rewards: group id -> [[complete count, item id, count], ...]
-  attendance: id -> {a: achievement id, r: race, d: days, s: season contents type, always: no start date, from/to: window (Unix ms)}
+  attendance: id -> {a: achievement id, r: race, d: days, s: season contents type, always: no start date, from/to: window (Unix ms),
+                     sg/sn: SeasonSchedule group name and season number, sgid: SeasonScheduleGroup id (the attendance command)}
   battlepass: group id -> {n: name, r: race, from/to: activation window, limit: weekly exp limit, passes: [[pass id, exp
               achievement id, premium], ...], missions: the mission achievement group name}; achievements carry p: {step: exp}
 
@@ -137,10 +138,62 @@ def build():
             'achievements': achievements, 'groups': groups, 'group_rewards': group_rewards, 'attendance': attendance, 'battlepass': battlepass}
 
 
+def merge_attendance(board_tables, achievement_tables, season_groups=None):
+    """Refresh the attendance boards from a newer client (Attendance.dat table-000, SeasonSchedule.dat table-001) and add
+    the boards' achievements that are missing (Achievement/AchievementGroup/AchievementReward/AchievementStep/Item.dat as
+    table-000..004 of the second directory), leaving every other entry as it is. Each board gets its season (sg group
+    name, sn number) for SeasonSchedule_NT and, given the SeasonScheduleGroup.dat table file, the group's id (sgid) for
+    the AccountContentsInfoList_NT season key."""
+    def rows(folder, name):
+        return json.loads((Path(folder) / name).read_text(encoding='utf-8'))['Properties']['Data']
+    data = json.loads(DATA.read_text(encoding='utf-8'))
+    seasons = {row['ID']['Value']: (row['GroupName'], int(row['SeasonNumber'])) for row in rows(board_tables, 'table-001.json')}
+    group_ids = {row['Name']: row['ID']['Value'] for row in rows(Path(season_groups).parent, Path(season_groups).name)} if season_groups else {}
+    attendance = {}
+    for row in rows(board_tables, 'table-000.json'):
+        start = int((row.get('AttendanceStartDate') or {}).get('Ticks') or 0)
+        end = int((row.get('AttendanceEndDate') or {}).get('Ticks') or 0)
+        group, number = seasons.get(row['SeasonId']['Value'], ('', 0))
+        attendance[str(row['ID']['Value'])] = {'a': row['AchievementId']['Value'], 'r': RACES.get(_enum(row['Race']), 0), 'd': int(row['AttendanceMaxDays'] or 0),
+                                               's': _enum(row['SeasonContentsType']), 'always': start == 0,
+                                               'from': _ticks_ms(start), 'to': _ticks_ms(end), 'sg': group, 'sn': number}
+        if group in group_ids:
+            attendance[str(row['ID']['Value'])]['sgid'] = group_ids[group]
+    data['attendance'] = attendance
+    wanted = {board['a'] for board in attendance.values()} - {int(key) for key in data['achievements']}
+    items = {row['Name']: row['ID']['Value'] for row in rows(achievement_tables, 'table-004.json')}
+    steps, rewards = {}, {}
+    for row in rows(achievement_tables, 'table-003.json'):
+        if row['AchievementId']['Value'] in wanted:
+            steps.setdefault(row['AchievementId']['Value'], []).append([int(row['Step']), int(row['Count'] or 1)])
+    for row in rows(achievement_tables, 'table-002.json'):
+        if row['AchievementId'] in wanted:
+            reward = [[items[i['Item']], int(i.get('Count') or 1)] for i in row.get('ItemRewards') or [] if i.get('Item') in items]
+            if reward:
+                rewards.setdefault(row['AchievementId'], {})[str(row['Step'])] = reward
+    for row in rows(achievement_tables, 'table-001.json'):
+        if row['Name'] not in data['groups']:
+            data['groups'][row['Name']] = {'i': row['ID']['Value'], 'r': RACES.get(_enum(row['Race']), 0), 'c': _enum(row['Category'])}
+    for row in rows(achievement_tables, 'table-000.json'):
+        aid = row['AchievementId']['Value']
+        if aid not in wanted:
+            continue
+        entry = {'g': row['GroupName'], 't': _enum(row['ObjType']), 'v': _values(row.get('ObjValues')), 's': sorted(steps.get(aid, [[1, 1]])),
+                 'u': row['UnlockAchievementId']['Value'], 'c': RESETS.get(_enum(row['ResetCycleType']), 0)}
+        if aid in rewards:
+            entry['r'] = rewards[aid]
+        data['achievements'][str(aid)] = entry
+    DATA.write_text(json.dumps(data, indent=2) + '\n', encoding='utf-8')
+    print(f"{len(attendance)} attendance boards, {len(wanted)} achievements added -> {DATA.relative_to(ROOT)}")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('command', choices=['build'])
-    parser.parse_args()
+    parser.add_argument('command', choices=['build', 'attendance'])
+    parser.add_argument('tables', nargs='*', help='attendance: <Attendance+SeasonSchedule tables> <Achievement/Group/Reward/Step/Item tables> [SeasonScheduleGroup table .json]')
+    args = parser.parse_args()
+    if args.command == 'attendance':
+        return merge_attendance(*args.tables)
     data = build()
     DATA.write_text(json.dumps(data, separators=(',', ':')) + '\n', encoding='utf-8')
     print(f"{len(data['achievements'])} achievements, {len(data['groups'])} groups, {len(data['group_rewards'])} group reward sets, "

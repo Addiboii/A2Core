@@ -5,7 +5,9 @@ Sources:
   SpawnInfoList records with an EnvObjIdList (unique key, positions, yaw) and TriggerActorDataMap
   (name, location, direction, Box/Sphere collision, box size, radius, height).
 - EnvObjData.dat (research/local/world/gameplay-tables/table-000.json): usage, interact time, range
-  and count, relationship (ERelationshipEntity; the official Kibelisk spawn carries 8 EnvObj_Light).
+  and count, relationship (ERelationshipEntity; the official Kibelisk spawn carries 8 EnvObj_Light), for
+  EnvObj_Destroy objects HitLimit / HitSkillIdList, and for carried-item boxes (BombBox) InteractConditionList
+  NotHaveAbnormalGroup, FinishDuration and bDespawn.
 - tools/data/quests.json: which objects UseEnvObj objectives name, which triggers EnterVolumePC names.
 
 Objects kept: every placement of an object a quest uses, of Quest-usage objects, and of gather nodes
@@ -18,7 +20,12 @@ quest names.
 """
 import argparse
 import json
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from data_json import write_data_json
+from map_events import SERVED_TYPES
 
 ROOT = Path(__file__).resolve().parents[1]
 MAPDATA = ROOT / 'research/local/all-mapdata-full'
@@ -55,8 +62,25 @@ def envobj_rows(table):
                 'interact_count': int(row.get('InteractCount') or 0), 'despawn': bool(row.get('bDespawn')),
                 'usage_value': row.get('UsageValue') if isinstance(row.get('UsageValue'), str) else None,
                 'relationship': RELATIONSHIP.get(relation, 7),
-                'long_range': str(row.get('VisibleRangeType', '')).endswith(('LongRange', 'MapRange'))}
+                'hit_limit': int(row.get('HitLimit') or 0),
+                'hit_skills': [s['Value'] for s in row.get('HitSkillIdList') or [] if isinstance(s, dict) and s.get('Value')],
+                'long_range': str(row.get('VisibleRangeType', '')).endswith(('LongRange', 'MapRange')),
+                'finish_duration': int(row.get('FinishDuration') or 0),
+                'not_have_abnormal_group': not_have_abnormal_group(row.get('InteractConditionList'))}
     return rows
+
+
+def not_have_abnormal_group(conditions):
+    """The abnormal group an InteractConditionList NotHaveAbnormalGroup row names (the BombBox's carried bomb, group 1196), or 0."""
+    for condition in walk(conditions or []):
+        if not any(isinstance(v, str) and v.split('::')[-1] == 'NotHaveAbnormalGroup' for v in condition.values()):
+            continue
+        for value in condition.values():
+            if isinstance(value, dict):
+                value = value.get('Value')
+            if isinstance(value, (int, float)) and value > 0 or isinstance(value, str) and value.isdigit():
+                return int(value)
+    return 0
 
 
 def quest_targets(quests):
@@ -92,10 +116,26 @@ def gather_sources(tables=GATHER_TABLES, catalog=CATALOG):
             for row in rows('table-010.json') if row.get('MaterialGroup') in groups}
 
 
-def party_portals(rows, dungeons):
+def door_layer(name, dungeons, served_types=SERVED_TYPES):
+    """The served instance layer a door is named after (World_L_A_Layer_01_EnterDoor -> World_L_A_Layer_01), or 0."""
+    stem = str(name or '')
+    for suffix in ('_EnterDoor', '_EnterDoor_IN'):
+        if stem.endswith(suffix):
+            stem = stem[:-len(suffix)]
+            break
+    else:
+        return 0
+    found = [int(i) for i, room in dungeons.items() if room['name'] == stem and room['type'] in served_types]
+    return found[0] if len(found) == 1 else 0
+
+
+def party_portals(rows, dungeons, served_types=SERVED_TYPES):
     """Portal EnvObj id -> the dungeons it enters. EnterDungeon / EnterInstanceLayer objects name one dungeon in
-    UsageValue (digits, or a single character whose code is the id). PartyDungeon portals name their expedition by
-    name family (E_PD_KraoCave_EnterPortal_001 -> KraoCave_Easy/Normal/Hard; two portals are misspelt)."""
+    UsageValue (digits, or a single character whose code is the id). The target must be a dungeon the server serves:
+    World_L_A_Layer_01_EnterDoor (the Dawn Legion barracks door, HQ1102010 step 2) names 23, which Dungeon.dat has as the
+    Abyss_Reshanta_C field map (level 45, never an instance); the door enters the layer its own name gives (id 2).
+    PartyDungeon portals name their expedition by name family
+    (E_PD_KraoCave_EnterPortal_001 -> KraoCave_Easy/Normal/Hard; two portals are misspelt)."""
     fixes = {'urugugucaynon': 'urugugucanyon', 'fiercehorncave': 'horncave'}
     order = {'easy': 0, 'normal': 1, 'hard': 2}
     out = {}
@@ -103,6 +143,9 @@ def party_portals(rows, dungeons):
         if row['usage'] in ('EnterDungeon', 'EnterInstanceLayer'):
             value = row.get('usage_value') or ''
             dungeon = int(value) if value.isdigit() else ord(value) if len(value) == 1 else 0
+            target = dungeons.get(str(dungeon))
+            if target is None or target['type'] not in served_types:
+                dungeon = door_layer(row.get('name'), dungeons, served_types)
             if dungeon and str(dungeon) in dungeons:
                 out[env] = [dungeon]
             continue
@@ -120,7 +163,7 @@ def party_portals(rows, dungeons):
     return out
 
 
-def objects(data, rows, wanted, gathers=None, everything=False, portals=None):
+def objects(data, rows, wanted, gathers=None, everything=False, portals=None, event_names=frozenset()):
     """Placed EnvObjs: quest objects, gather nodes and the wanted ids; <paramref>everything</paramref> keeps every placed
     object with a row (instance maps: map events name walls, wagons and doors by spawn name)."""
     gathers = gathers or {}
@@ -140,11 +183,21 @@ def objects(data, rows, wanted, gathers=None, everything=False, portals=None):
                               'position': [round(loc['X'], 1), round(loc['Y'], 1), round(loc['Z'], 1)], 'yaw': round(rot['Yaw'], 3),
                               'interact_time': row['interact_time'], 'interact_range': row['interact_range'],
                               'relationship': row['relationship']})
+                # Map events name some objects by their EnvObjData name, not the spawner's (110005: UseEnvObj
+                # E_D0_Layer_2_PrisonDoorSmall_001 is the spawner D_Starter_Layer_2_EnvObj_DoorSmall_1).
+                if row.get('name') in event_names and row['name'] != record.get('Name'):
+                    found[-1]['env_name'] = row['name']
                 if gather:
                     # [..., gather gauge, attempts]: EnvObjData InteractCount is the node's attempts (1-3; guides: three tries).
                     found[-1]['gather'] = gather + [row['interact_count'] or 3]
                 if portal:
                     found[-1]['portal'] = portal
+                # EnvObj_Destroy objects are broken by hits (server: at least one; HitSkillIdList limits the skills that count).
+                if row['relationship'] == RELATIONSHIP['EnvObj_Destroy']:
+                    if row['hit_limit'] > 1:
+                        found[-1]['hit_limit'] = row['hit_limit']
+                    if row['hit_skills']:
+                        found[-1]['hit_skills'] = row['hit_skills']
                 if row['usage'] == 'OdEnergyCube':
                     found[-1]['cube'] = True
                 # Long-range objects (EnvObjData VisibleRangeType LongRange/MapRange): an instance map sends them at entry
@@ -154,6 +207,14 @@ def objects(data, rows, wanted, gathers=None, everything=False, portals=None):
                 # Flight rings (Usage FlightRing): flying through refills the flight points (OBSERVED 2026-10-19).
                 if row['usage'] == 'FlightRing':
                     found[-1]['flight_ring'] = True
+                # Exit doors (Usage MoveMap): UsageValue names the MapData teleport point the door leads to.
+                if row['usage'] == 'MoveMap' and row.get('usage_value'):
+                    found[-1]['move_to'] = row['usage_value']
+                # Carried-item boxes (BombBox: InteractConditionList NotHaveAbnormalGroup 1196): using one gives the player that
+                # abnormal group; bDespawn hides the box until FinishDuration has passed.
+                if row.get('not_have_abnormal_group'):
+                    found[-1]['carry'] = {'group': row['not_have_abnormal_group'], 'despawn': row['despawn'],
+                                          'finish_duration': row['finish_duration']}
     return found
 
 
@@ -179,6 +240,16 @@ def triggers(data, wanted, map_events=False):
     return found
 
 
+def map_event_object_names(path=ROOT / 'tools/data/map-events.json'):
+    """Every name a map event's UseEnvObj objective lists (spawner or EnvObjData names)."""
+    try:
+        events = json.loads(Path(path).read_text(encoding='utf-8')).get('events') or {}
+    except (OSError, ValueError):
+        return frozenset()
+    return frozenset(n.strip() for node in walk(events) if node.get('t') == 'UseEnvObj' and node.get('v')
+                     for n in str(node['v'][0]).split(',') if n.strip())
+
+
 def served_instance_maps(path=ROOT / 'tools/data/map-events.json'):
     """The instance layers and dungeons with map events (tools/map_events.py): all their objects and triggers are kept."""
     try:
@@ -197,13 +268,14 @@ def build():
     except (OSError, ValueError):
         dungeon_rows = {}
     portals = party_portals(rows, dungeon_rows)
+    event_names = map_event_object_names()
     maps = {}
     for path in sorted(MAPDATA.glob('*/table-*.json')):
         if not path.stem.split('-')[-1].isdigit():
             continue
         data = json.loads(path.read_text(encoding='utf-8'))['Properties']['Data']
         instance = data.get('MapId') in instance_maps
-        placed, areas = objects(data, rows, envs, gathers, everything=instance, portals=portals), triggers(data, trigger_names, map_events=instance)
+        placed, areas = objects(data, rows, envs, gathers, everything=instance, portals=portals, event_names=event_names), triggers(data, trigger_names, map_events=instance)
         if placed or areas:
             entry = maps.setdefault(str(data['MapId']), {'objects': [], 'triggers': []})
             entry['objects'].extend(placed)
@@ -216,7 +288,7 @@ def main():
     parser.add_argument('command', choices=['build'])
     parser.parse_args()
     out = build()
-    DATA.write_text(json.dumps(out, separators=(',', ':')) + '\n', encoding='utf-8')
+    write_data_json(DATA, out)
     maps = out['maps']
     print(len(maps), 'maps,', sum(len(m['objects']) for m in maps.values()), 'objects,',
           sum(len(m['triggers']) for m in maps.values()), 'triggers ->', DATA.relative_to(ROOT))

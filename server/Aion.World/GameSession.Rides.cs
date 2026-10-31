@@ -1,4 +1,5 @@
-using Aion.Application.Gameplay;
+﻿using Aion.Application.Gameplay;
+using Aion.Core.Characters;
 using Aion.Protocol.Native;
 
 namespace Aion.World;
@@ -23,6 +24,11 @@ public sealed partial class GameSession
     public const int AllCrystals = 6;
     int defaultRide;
     int? mountedRide;
+    long mountSummonUntilMs;
+    bool rideContentsUnlocked;
+    bool? subzoneAllowsRide;
+    /// <summary>EContentsUnlockType::Ride (16): the client blocks CharGetOnRide locally until this is unlocked.</summary>
+    public const byte RideContentsUnlock = 16;
     /// <summary>Acquired rides (soul points also collect for rides not acquired yet).</summary>
     public IReadOnlyCollection<int> Rides => rides.Values.Where(r => r.Owned).Select(r => r.RideId).ToList();
     public int? MountedRide => mountedRide;
@@ -48,11 +54,89 @@ public sealed partial class GameSession
         foreach (var (type, amount) in stored.Crystals ?? new Dictionary<int, int>()) crystals[type] = amount;
         LoadBoards(stored.Boards);
         mountedRide = null;
+        rideContentsUnlocked = false;
+        subzoneAllowsRide = null;
+    }
+
+    bool OwnsAnyRide() => rides.Values.Any(r => r.Owned);
+
+    /// <summary>Include Ride (16) in 0xe257 / 0xe258 when the player owns a mount or finished the Ride quest gate.</summary>
+    public IEnumerable<byte> ExtraContentsUnlocks(IEnumerable<byte> questUnlocks)
+    {
+        if (rideContentsUnlocked || !OwnsAnyRide()) return [];
+        if (questUnlocks.Contains(RideContentsUnlock)) { rideContentsUnlocked = true; return []; }
+        return [RideContentsUnlock];
+    }
+
+    List<byte[]> UnlockRideContentsIfNeeded()
+    {
+        if (rideContentsUnlocked || !OwnsAnyRide()) return [];
+        rideContentsUnlocked = true;
+        return [GamePackets.ContentsUnlockUpdate([RideContentsUnlock])];
+    }
+
+    async Task PersistDefaultRideIfUnsetAsync(int rideId, CancellationToken ct)
+    {
+        if (defaultRide != 0 || rideId == 0 || Store is not { } store || CharacterId is not { } character || !OwnsRide(rideId)) return;
+        if (await store.SetDefaultRideAsync(character, rideId, ct)) defaultRide = rideId;
+    }
+
+    bool SubzoneAllowsRideNow()
+    {
+        if (MapId is not { } map || position is not { } at) return true;
+        return Subzones.AllowsRide(map, at);
+    }
+
+    List<byte[]> DismountIfSubzoneForbidden()
+    {
+        var allowed = SubzoneAllowsRideNow();
+        if (subzoneAllowsRide == allowed) return [];
+        subzoneAllowsRide = allowed;
+        if (allowed || mountedRide is null) return [];
+        mountedRide = null;
+        var off = RidePackets.GetOffNotice(playerKey, RidePackets.BySubzone);
+        worldPlayer?.Map?.Broadcast(worldPlayer, [off]);
+        return [off];
     }
 
     void Remember(RideRecord r) => rides[r.RideId] = new RideEntry(r.RideId, r.Level, r.SoulPoints, r.Owned);
 
-    byte[] RideInit() => RidePackets.RideInitData(defaultRide, rides.Values.ToList(), crystals, boards.Count > 0 ? boards.Values.ToList() : null);
+    byte[] RideInit()
+    {
+        var owned = rides.Values.Where(r => r.Owned).OrderBy(r => r.RideId).ToList();
+        var initDefault = defaultRide;
+        if (initDefault == 0 || !owned.Any(r => r.RideId == initDefault))
+            initDefault = owned.FirstOrDefault()?.RideId ?? 0;
+        return RidePackets.RideInitData(initDefault, owned, crystals, boards.Count > 0 ? boards.Values.ToList() : null);
+    }
+
+    /// <summary>
+    /// 0x9002/0x9003 move fields while mounting: _move_state is EMoveStateModelType, _move_substate is EMoveStateType.
+    /// Stop (0) on the model reads as on-foot idle to the client; use Run while seated even when standing still.
+    /// </summary>
+    (byte Model, byte Substate) MountMoveAckFields()
+    {
+        if (moving)
+            return (RidePackets.MoveModelRun, sprinting ? RidePackets.MoveTypeSprint : RidePackets.MoveTypeRun);
+        return (RidePackets.MoveModelRun, RidePackets.MoveTypeStop);
+    }
+
+    List<byte[]> MountAck(int ride)
+    {
+        mountedRide = ride;
+        mountSummonUntilMs = Environment.TickCount64 + 5000;
+        var (moveState, moveSubstate) = MountMoveAckFields();
+        var notice = RidePackets.GetOnNotice(playerKey, ride, moveState, moveSubstate, isSprinting: sprinting && moving);
+        worldPlayer?.Map?.Broadcast(worldPlayer, [notice]);
+        worldPlayer?.Map?.UpdateVisibility(worldPlayer, refresh: true);
+        return
+        [
+            .. InterruptItemCast(),
+            RidePackets.GetOnReply(playerKey, 0, ride, moveState, moveSubstate, isSprinting: sprinting && moving),
+            notice,
+            .. RefreshStats(),
+        ];
+    }
 
     /// <summary>The ride's board after a ride gained a level (1 = acquired): exp added, the acquire/level message's board part.</summary>
     async Task<(List<byte[]> Extra, CreatureBoard? Board)> RideBoardAsync(RideInfo info, int rideLevel, CancellationToken ct)
@@ -84,19 +168,69 @@ public sealed partial class GameSession
         if (done.Count == 0) return Fail();
         var replies = new List<byte[]> { RidePackets.OpenBoxReply(0, uid, itemId, select, count, rewards) };
         replies.AddRange(await InventoryChangesAsync(ct, IncreaseOpenRewardBox, DecreaseOpenRewardBox));
-        // Pet items are used as soon as they are acquired (Item.dat AutoUseWhenAcquire).
-        foreach (var (rewardId, _) in rewards)
-            if (Boxes.Use(rewardId) is { AutoUse: true, Effect: "GetVehicle" })
-                foreach (var key in storedItems.Where(s => s.Value.TemplateId == rewardId && s.Value.Location == "bag").Select(s => s.Key).ToList())
-                    replies.AddRange(await UseItemAsync(key, now, ct, reply: false));
+        replies.AddRange(await AutoUseAcquiredItemsAsync(rewards.Select(r => r.Item1), now, ct));
         return replies;
     }
+
+    /// <summary>Item.dat AutoUseWhenAcquire effects the server applies (GetTitle 532560065, GetWing, AscensionGrade 533900001, ...).</summary>
+    static bool AutoUsed(ItemUse use) => use is { AutoUse: true, Effect: "GetVehicle" or "GetVehicleSoul" or "GetVehicleSoulCrystal" or "GetWing" or "GetTitle"
+        or "GetSkin" or "GetSkinSet" or "GetSocialAction" or "AscensionGrade" } or { Effect: "GetDaevanionPoint" };
+
+    /// <summary>Pet souls and Daevanion crystals apply on acquire (Item.dat AutoUseWhenAcquire; morph crystals drip points).</summary>
+    async Task<List<byte[]>> AutoUseAcquiredItemsAsync(IEnumerable<int> templateIds, long now, CancellationToken ct)
+    {
+        var replies = new List<byte[]>();
+        foreach (var tid in templateIds.Distinct())
+        {
+            if (Boxes.Use(tid) is not { } use) continue;
+            if (!AutoUsed(use)) continue;
+            foreach (var key in storedItems.Where(s => s.Value.TemplateId == tid && s.Value.Location == "bag").Select(s => s.Key).ToList())
+                replies.AddRange(await UseItemAsync(key, now, ct, reply: false));
+        }
+        return replies;
+    }
+
+    /// <summary>
+    /// A GetWing item [Wing.dat id] (Item.dat, e.g. 532400002 Wing_D_Default_01_b, AutoUseWhenAcquire): used up, the wing registered
+    /// and stored, the new WingList (0x5672). Without it the HQ2101050/HQ1101020 reward wing stayed in the bag unusable.
+    /// </summary>
+    async Task<List<byte[]>?> UseWingItemAsync(INativeCharacterStore store, Guid character, ItemState row, int wing, bool reply, CancellationToken ct)
+    {
+        if (registeredWings.Contains(wing)) return null;
+        var used = await Stored(async () => await store.ConsumeItemAsync(character, row.InstanceId, row.Revision, 1, ct) ? [[]] : []);
+        if (used.Count == 0) return null;
+        await Stored(async () => await store.GrantWingAsync(character, wing, ct) ? [[]] : []);
+        registeredWings.Add(wing);
+        var replies = Used(row, reply);
+        replies.AddRange(await InventoryChangesAsync(ct, 0, DecreaseItemUse));
+        replies.Add(GamePackets.WingList(OwnedWings()));
+        return replies;
+    }
+
+    /// <summary>
+    /// An AscensionGrade item ["AscensionGrade_2"] (533900001 Ascension_Grade2_A_c_01_b, AutoUseWhenAcquire): used up; ascends when the grade is
+    /// higher. Already ascended (the quest turn-in ascends first) it is only used up, so it no longer sits in the bag unusable.
+    /// </summary>
+    async Task<List<byte[]>?> UseAscensionItemAsync(INativeCharacterStore store, Guid character, ItemState row, int grade, bool reply, CancellationToken ct)
+    {
+        var used = await Stored(async () => await store.ConsumeItemAsync(character, row.InstanceId, row.Revision, 1, ct) ? [[]] : []);
+        if (used.Count == 0) return null;
+        var replies = Used(row, reply);
+        replies.AddRange(await InventoryChangesAsync(ct, 0, DecreaseItemUse));
+        if ((selected?.Ascension ?? 1) < grade && await store.AscendAsync(character, grade, ct)) replies.AddRange(Ascend(grade));
+        return replies;
+    }
+
+    /// <summary>Auto-use items acquired before their effect was handled (a GetWing reward left in the bag), at world entry.</summary>
+    async Task<List<byte[]>> AutoUsePendingItemsAsync(long now, CancellationToken ct) =>
+        await AutoUseAcquiredItemsAsync(storedItems.Values.Where(s => s.Location == "bag" && Boxes.Use(s.TemplateId) is { } pending && pending.Effect != "GetDaevanionPoint" && AutoUsed(pending))
+            .Select(s => s.TemplateId).ToList(), now, ct);
 
     // ---------- Item use ----------
 
     /// <summary>
     /// 0x5612 ItemUse_RQ {i64 uid}. Refused (result 1) for an unknown or cooling item, or an effect
-    /// that is not implemented (skins, titles, tickets, ...).
+    /// that is not implemented; always answers 0x5613 (never leaves the request unanswered).
     /// </summary>
     async Task<List<byte[]>> UseItemAsync(long uid, long now, CancellationToken ct, bool reply = true)
     {
@@ -105,8 +239,15 @@ public sealed partial class GameSession
         var use = row is null ? null : Boxes.Use(row.TemplateId);
         if (use is { Effect: "RewardBox" }) return await OpenBoxAsync(uid, 0, 1, now, ct);
         List<byte[]> Fail() => reply ? [RidePackets.ItemUseReply(1, uid, itemId)] : [];
-        if (Store is not { } store || CharacterId is not { } character || row is null || row.Location != "bag" || use is null || resources is null || dead)
+        if (Store is not { } store || CharacterId is not { } character || row is null || row.Location != "bag" || resources is null || dead)
             return Fail();
+        var questAcquire = await TryQuestAcquireFromItemAsync(store, character, row, use, now, reply, ct);
+        if (questAcquire.Count > 0) return questAcquire;
+        if (use is null)
+        {
+            LogItemUseRefused(itemId, null, "missing_use_data");
+            return Fail();
+        }
         var cooldown = Boxes.Cooldown(row.TemplateId);
         if (cooldown.Group != "None" && now < itemCooldowns.GetValueOrDefault(cooldown.Group)) return Fail();
         var replies = use.Effect switch
@@ -122,16 +263,41 @@ public sealed partial class GameSession
             "GetTitle" when use.Values is [var titleText, ..] && int.TryParse(titleText, out var titleId) => await UseTitleItemAsync(store, character, row, titleId, reply, ct),
             "GetSkin" or "GetSkinSet" when use.Values is [{ Length: > 0 }, ..] => await UseSkinItemAsync(store, character, row, use, reply, ct),
             "GetSocialAction" when use.Values is [var emoteText, ..] && int.TryParse(emoteText, out var emote) => await UseSocialActionItemAsync(store, character, row, emote, reply, ct),
+            "GetDaevanionPoint" => await UseDaevanionPointItemAsync(store, character, row, use, reply, ct),
+            "GetWing" when use.Values is [var wingText, ..] && int.TryParse(wingText, out var wing) && wing > 0 => await UseWingItemAsync(store, character, row, wing, reply, ct),
+            "AscensionGrade" when use.Values is [var gradeText, ..] && int.TryParse(gradeText.Split('_')[^1], out var grade) && grade is >= 2 and <= 6 =>
+                await UseAscensionItemAsync(store, character, row, grade, reply, ct),
+            "GetQuest" => null,
+            _ when AgitDecoTables.Embedded.TryDecoId(row.TemplateId, out var decoId) => await UseAgitDecoItemAsync(store, character, row, decoId, reply, ct),
             _ => null,
         };
-        if (replies is null) return Fail();
-        if (cooldown.Group != "None") itemCooldowns[cooldown.Group] = now + cooldown.CooldownMs;
+        if (replies is null)
+        {
+            LogItemUseRefused(itemId, use.Effect, Boxes.ImplementsUseEffect(use.Effect) ? "handler_failed" : "unimplemented_use_effect");
+            return Fail();
+        }
+        if (cooldown.Group != "None")
+        {
+            itemCooldowns[cooldown.Group] = now + cooldown.CooldownMs;
+            MarkItemCooldownDirty();
+        }
         replies.AddRange(AchieveItemUse(itemId, use.Effect));
+        LogItemUse(itemId, use.Effect);
         return replies;
     }
 
     List<byte[]> Used(ItemState row, bool reply) =>
         reply ? [RidePackets.ItemUseReply(0, WireKey(row), row.TemplateId), RidePackets.ItemUsed(WireKey(row), row.TemplateId)] : [RidePackets.ItemUsed(WireKey(row), row.TemplateId)];
+
+    async Task<List<byte[]>?> UseAgitDecoItemAsync(INativeCharacterStore store, Guid character, ItemState row, int decoId, bool reply, CancellationToken ct)
+    {
+        if (guild is null) return null;
+        var outcome = "none";
+        await Stored(async () => { outcome = await store.GrantGuildAgitDecoAsync(character, row.InstanceId, row.Revision, decoId, ct); return []; });
+        if (outcome != "ok") return null;
+        await ReloadGuildAsync(ct);
+        return [.. Used(row, reply), .. await InventoryChangesAsync(ct, 0, 0)];
+    }
 
     /// <summary>A pet item: the ride is acquired (0x9009), or one soul point when already owned (0x900d).</summary>
     async Task<List<byte[]>?> UsePetItemAsync(INativeCharacterStore store, Guid character, ItemState row, ItemUse use, bool reply, CancellationToken ct)
@@ -149,9 +315,15 @@ public sealed partial class GameSession
             var (extra, board) = await RideBoardAsync(info, 1, ct);
             replies.Add(RidePackets.Acquired(playerKey, rideId, ride.Level, (byte)info.Type, board?.Level ?? 1, board?.Exp ?? 0));
             replies.AddRange(extra);
+            await PersistDefaultRideIfUnsetAsync(rideId, ct);
         }
+        replies.AddRange(UnlockRideContentsIfNeeded());
         replies.AddRange(await InventoryChangesAsync(ct, IncreaseItemUse, DecreaseItemUse));
-        if (!owned) replies.AddRange(RefreshStats());
+        if (!owned)
+        {
+            replies.AddRange(RefreshStats());
+            replies.Add(RideInit());
+        }
         return replies;
     }
 
@@ -266,7 +438,8 @@ public sealed partial class GameSession
                 case "FpHeal_Item": fp += Roll(e); break;
             }
         var abnormal = effects.Any(e => e.Type == "Abnormal_True");
-        if (hp == 0 && mp == 0 && fp == 0 && !(abnormal && ItemAbnormalsSupported(effects))) return null;
+        if (!ItemSkillSupported(effects) || (hp == 0 && mp == 0 && fp == 0 && !abnormal && !effects.Any(e => e.Type is "Dispel_True" or "NoEffect")))
+            return null;
         var done = await Stored(async () => await store.ConsumeItemAsync(character, row.InstanceId, row.Revision, 1, ct) ? [[]] : []);
         if (done.Count == 0) return null;
         actionUid = actionUid % 255 + 1;
@@ -280,6 +453,7 @@ public sealed partial class GameSession
         if (r.FpMax > 0) r.Fp = Math.Min(r.FpMax, r.Fp + fp);
         if (hp > 0 || mp > 0) replies.Add(r.Update());
         if (fp > 0 && r.FpMax > 0) replies.Add(GamePackets.CharPoints(playerKey, [(CharPoint.Fp, r.Fp)]));
+        if (effects.Any(e => e.Type == "Dispel_True")) replies.AddRange(DispelDebuffs(now));
         if (abnormal) replies.AddRange(ApplyItemAbnormals(skillId, effects, now));
         return replies;
     }
@@ -305,7 +479,7 @@ public sealed partial class GameSession
         return [stopped];
     }
 
-    /// <summary>A finished cast: the scroll is used up, 0x5619, then the map load at the map's home point (else its start).</summary>
+    /// <summary>A finished cast: the scroll is used up, 0x5619, then Telpo_Home - bound Kibelisk if any, else race home map.</summary>
     async Task<List<byte[]>> CompleteItemCastAsync(long now, CancellationToken ct)
     {
         if (itemCast is not { } cast || now < cast.DueMs) return [];
@@ -315,10 +489,23 @@ public sealed partial class GameSession
         if (done.Count == 0) return [RidePackets.ItemUseInterrupted(playerKey, cast.Key, cast.ItemId, 0)];
         var completed = RidePackets.ItemUseCompleted(playerKey, cast.Key, cast.ItemId);
         worldPlayer?.Map?.Broadcast(worldPlayer, [completed]);
-        var home = data.MapPoints(worldMap).Where(p => p.Key.Contains("home", StringComparison.OrdinalIgnoreCase))
+        var (targetMap, home) = TelpoHomeDestination();
+        return [completed, RidePackets.ItemUsed(cast.Key, cast.ItemId), .. await InventoryChangesAsync(ct, 0, DecreaseItemUse), .. Teleport(targetMap, home, now)];
+    }
+
+    /// <summary>Return scroll destination: latest engraved TeleportArtifact (bind point), else race starter home.</summary>
+    (int MapId, Vector3d Position) TelpoHomeDestination()
+    {
+        for (var i = engraved.Count - 1; i >= 0; i--)
+        {
+            if (Kibelisks.TryPlacement(engraved[i], out var mapId, out var at))
+                return (mapId, at);
+        }
+        var raceHome = HomeMap;
+        var point = data.MapPoints(raceHome).Where(p => p.Key.Contains("home", StringComparison.OrdinalIgnoreCase))
             .Select(p => (Vector3d?)new Vector3d(p.Value[0], p.Value[1], p.Value[2])).FirstOrDefault()
-            ?? data.MapStart(worldMap)?.Position ?? position ?? GamePackets.SpawnPosition;
-        return [completed, RidePackets.ItemUsed(cast.Key, cast.ItemId), .. await InventoryChangesAsync(ct, 0, DecreaseItemUse), .. Teleport(worldMap, home, now)];
+            ?? data.MapStart(raceHome)?.Position ?? GamePackets.SpawnPosition;
+        return (raceHome, point);
     }
 
     // ---------- Rides ----------
@@ -336,8 +523,9 @@ public sealed partial class GameSession
         var paid = Paid(rideId, soulsBefore, info.NeedSoul);
         Remember(ride);
         var (extra, board) = await RideBoardAsync(info, 1, ct);
+        await PersistDefaultRideIfUnsetAsync(rideId, ct);
         return [RidePackets.AcquireReply(playerKey, 0), .. paid, RidePackets.Acquired(playerKey, rideId, ride.Level, (byte)info.Type, board?.Level ?? 1, board?.Exp ?? 0),
-            .. extra, .. RefreshStats()];
+            .. extra, .. RefreshStats(), .. UnlockRideContentsIfNeeded()];
     }
 
     /// <summary>0x9013 RideLevelUp_RQ {i32 ride}: an acquired ride levels up for VehicleLevel NeedSoulCount soul points.</summary>
@@ -361,11 +549,12 @@ public sealed partial class GameSession
     /// <summary>0x9001 CharGetOnRide_RQ {i32 ride} (0: the default ride): an owned ride is mounted and shown to others.</summary>
     List<byte[]> GetOnRide(int requested)
     {
+        if (resources is null || dead || !SubzoneAllowsRideNow())
+            return [RidePackets.GetOnReply(playerKey, 1, requested)];
         var ride = requested != 0 ? requested : defaultRide != 0 ? defaultRide : Rides.FirstOrDefault();
-        if (resources is null || dead || !OwnsRide(ride)) return [RidePackets.GetOnReply(playerKey, 1, requested)];
-        mountedRide = ride;
-        worldPlayer?.Map?.Broadcast(worldPlayer, [RidePackets.GetOnNotice(playerKey, ride, sprinting: sprinting)]);
-        return [.. InterruptItemCast(), RidePackets.GetOnReply(playerKey, 0, ride, sprinting: sprinting)];
+        if (!OwnsRide(ride)) return [RidePackets.GetOnReply(playerKey, 1, requested)];
+        // Live client retries 0x9001 while WaitGetOnComplete; always re-ack (never toggle dismount on repeat).
+        return MountAck(ride);
     }
 
     /// <summary>0x9004 CharGetOffRide_RQ {bool by swap}.</summary>
@@ -373,8 +562,11 @@ public sealed partial class GameSession
     {
         if (mountedRide is null) return [RidePackets.GetOffReply(playerKey, 1)];
         mountedRide = null;
-        worldPlayer?.Map?.Broadcast(worldPlayer, [RidePackets.GetOffNotice(playerKey, RidePackets.ByClient, bySwap)]);
-        return [RidePackets.GetOffReply(playerKey, 0)];
+        mountSummonUntilMs = 0;
+        var off = RidePackets.GetOffNotice(playerKey, RidePackets.ByClient, bySwap);
+        worldPlayer?.Map?.Broadcast(worldPlayer, [off]);
+        worldPlayer?.Map?.UpdateVisibility(worldPlayer, refresh: true);
+        return [RidePackets.GetOffReply(playerKey, 0), off, .. RefreshStats()];
     }
 
     /// <summary>The server takes the player off its ride (a cast, death): 0x9006 to the player and those nearby.</summary>
@@ -382,9 +574,11 @@ public sealed partial class GameSession
     {
         if (mountedRide is null) return [];
         mountedRide = null;
+        mountSummonUntilMs = 0;
         var off = RidePackets.GetOffNotice(playerKey, RidePackets.ByServer);
         worldPlayer?.Map?.Broadcast(worldPlayer, [off]);
-        return [off];
+        worldPlayer?.Map?.UpdateVisibility(worldPlayer, refresh: true);
+        return [off, .. RefreshStats()];
     }
 
     /// <summary>0x900a CharRideDefaultSet_RQ {i32 ride}: stored, answered 0x900b.</summary>
@@ -395,11 +589,16 @@ public sealed partial class GameSession
         var done = await Stored(async () => await store.SetDefaultRideAsync(character, ride, ct) ? [[]] : []);
         if (done.Count == 0) return [RidePackets.DefaultSetReply(playerKey, 1, ride)];
         defaultRide = ride;
-        return [RidePackets.DefaultSetReply(playerKey, 0, ride)];
+        return [RidePackets.DefaultSetReply(playerKey, 0, ride), RidePackets.DefaultSetNotice(playerKey, 0, ride)];
     }
 
     /// <summary>What a player who starts seeing this one also needs: the ride it sits on.</summary>
-    public IEnumerable<byte[]> AppearExtras() => mountedRide is { } ride ? [RidePackets.GetOnNotice(playerKey, ride)] : [];
+    public IEnumerable<byte[]> AppearExtras()
+    {
+        if (mountedRide is not { } ride) return [];
+        var (moveState, moveSubstate) = MountMoveAckFields();
+        return [RidePackets.GetOnNotice(playerKey, ride, moveState, moveSubstate, isSprinting: sprinting && moving)];
+    }
 
     // EIncreaseReason / EDecreaseReason (usmap).
     const byte IncreaseItemUse = 9, IncreaseOpenRewardBox = 31, DecreaseItemUse = 14, DecreaseOpenRewardBox = 37;

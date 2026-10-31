@@ -1,0 +1,355 @@
+{
+  "source": "Achievement.dat groups (season missions); tools/abyss_data.py defaults (AbyssLimit.dat pending)",
+  "season_key": "G1",
+  "season": {
+    "from_ms": 1784098800000,
+    "to_ms": 1800342000000
+  },
+  "maps": [
+    20,
+    22,
+    23
+  ],
+  "items": {
+    "abyss_point": 930100003,
+    "entry_stone": 930100019
+  },
+  "entry": {
+    "weekly_grant_ms": 25200000,
+    "pool_cap_ms": 108000000,
+    "reset_weekday": 2,
+    "reset_hour_utc": 7
+  },
+  "ap_weekly_cap": 1200000,
+  "ranks": [
+    {
+      "grade": 1,
+      "min_rank_points": 0
+    },
+    {
+      "grade": 2,
+      "min_rank_points": 500
+    },
+    {
+      "grade": 3,
+      "min_rank_points": 1500
+    },
+    {
+      "grade": 4,
+      "min_rank_points": 3500
+    },
+    {
+      "grade": 5,
+      "min_rank_points": 7000
+    },
+    {
+      "grade": 6,
+      "min_rank_points": 12000
+    },
+    {
+      "grade": 7,
+      "min_rank_points": 20000
+    },
+    {
+      "grade": 8,
+      "min_rank_points": 35000
+    }
+  ],
+  "kill": {
+    "ap_by_grade": {
+      "1": 100,
+      "2": 120,
+      "3": 140,
+      "4": 160,
+      "5": 180,
+      "6": 200,
+      "7": 220,
+      "8": 240
+    },
+    "ap_default": 100,
+    "rank_points_by_grade": {
+      "1": 8,
+      "2": 11,
+      "3": 14,
+      "4": 17,
+      "5": 20,
+      "6": 23,
+      "7": 26,
+      "8": 29
+    },
+    "rank_points_default": 10
+  },
+  "mission_groups": [
+    "Group_Season_G1_L_Abyss",
+    "Group_Season_G1_D_Abyss"
+  ],
+  "airspaces": [
+    {
+      "id": 101,
+      "name": "Garzykan_Fortress",
+      "map_id": 20
+    },
+    {
+      "id": 102,
+      "name": "Garzykan_Observatory",
+      "map_id": 20
+    },
+    {
+      "id": 103,
+      "name": "Roah_Fortress",
+      "map_id": 22
+    }
+  ],
+  "airspace_battles": [
+    {
+      "id": 1,
+      "state": 0,
+      "airspace_ids": [
+        101,
+        102,
+        103
+      ]
+    }
+  ],
+  "siege_schedule": {
+    "cycle_ms": 604800000,
+    "anchor_ms": 1784098800000,
+    "apply_ms": 86400000,
+    "battle_ms": 3600000,
+    "end_ms": 600000,
+    "tick_ms": 1000,
+    "presence_points": 1,
+    "pvp_kill_points": 100,
+    "pvp_hit_points": 5
+  },
+  "siege_rewards": {
+    "winner_ap": 5000,
+    "participant_ap": 1000
+  },
+  "artifacts": [
+    {
+      "artifact_id": 1100204,
+      "env_obj_id": 1100204,
+      "map_id": 20,
+      "name": "E_AR1_L_ArtifactDungeonPortal_01_1",
+      "occupying_race": 1
+    },
+    {
+      "artifact_id": 1100205,
+      "env_obj_id": 1100205,
+      "map_id": 20,
+      "name": "E_AR1_L_ArtifactDungeonPortal_02_1",
+      "occupying_race": 1
+    },
+    {
+      "artifact_id": 1100206,
+      "env_obj_id": 1100206,
+      "map_id": 20,
+      "name": "E_AR1_L_ArtifactDungeonPortal_03_1",
+      "occupying_race": 1
+    },
+    {
+      "artifact_id": 1100207,
+      "env_obj_id": 1100207,
+      "map_id": 20,
+      "name": "E_AR1_D_ArtifactDungeonPortal_01_1",
+      "occupying_race": 2
+    },
+    {
+      "artifact_id": 1100208,
+      "env_obj_id": 1100208,
+      "map_id": 20,
+      "name": "E_AR1_D_ArtifactDungeonPortal_02_1",
+      "occupying_race": 2
+    },
+    {
+      "artifact_id": 1100209,
+      "env_obj_id": 1100209,
+      "map_id": 20,
+      "name": "E_AR1_D_ArtifactDungeonPortal_03_1",
+      "occupying_race": 2
+    },
+    {
+      "artifact_id": 1100467,
+      "env_obj_id": 1100467,
+      "map_id": 22,
+      "name": "E_AR3_RR_L_ArtifactDungeonPortal_01",
+      "occupying_race": 1
+    },
+    {
+      "artifact_id": 1100468,
+      "env_obj_id": 1100468,
+      "map_id": 22,
+      "name": "E_AR3_STI_L_ArtifactDungeonPortal_01",
+      "occupying_race": 1
+    },
+    {
+      "artifact_id": 1100469,
+      "env_obj_id": 1100469,
+      "map_id": 22,
+      "name": "E_AR3_WSA_L_ArtifactDungeonPortal_01",
+      "occupying_race": 1
+    },
+    {
+      "artifact_id": 1100470,
+      "env_obj_id": 1100470,
+      "map_id": 22,
+      "name": "E_AR3_RR_D_ArtifactDungeonPortal_01",
+      "occupying_race": 2
+    },
+    {
+      "artifact_id": 1100471,
+      "env_obj_id": 1100471,
+      "map_id": 22,
+      "name": "E_AR3_STI_D_ArtifactDungeonPortal_01",
+      "occupying_race": 2
+    },
+    {
+      "artifact_id": 1100472,
+      "env_obj_id": 1100472,
+      "map_id": 22,
+      "name": "E_AR3_WSA_D_ArtifactDungeonPortal_01",
+      "occupying_race": 2
+    },
+    {
+      "artifact_id": 1201496,
+      "env_obj_id": 1201496,
+      "map_id": 154011,
+      "name": "E_L2_Garrison_D1_AbyssArtifactCore_01_1",
+      "occupying_race": 0
+    },
+    {
+      "artifact_id": 1201497,
+      "env_obj_id": 1201497,
+      "map_id": 154011,
+      "name": "E_L2_Garrison_D1_AbyssArtifactCore_01_2",
+      "occupying_race": 0
+    },
+    {
+      "artifact_id": 1201498,
+      "env_obj_id": 1201498,
+      "map_id": 154011,
+      "name": "E_L2_Garrison_D1_AbyssArtifactCore_01_3",
+      "occupying_race": 0
+    },
+    {
+      "artifact_id": 1201499,
+      "env_obj_id": 1201499,
+      "map_id": 154011,
+      "name": "E_L2_Garrison_D1_AbyssArtifactCore_01_4",
+      "occupying_race": 0
+    },
+    {
+      "artifact_id": 1201500,
+      "env_obj_id": 1201500,
+      "map_id": 154011,
+      "name": "E_L2_Garrison_D1_AbyssArtifactCore_01_5",
+      "occupying_race": 0
+    },
+    {
+      "artifact_id": 1201501,
+      "env_obj_id": 1201501,
+      "map_id": 154011,
+      "name": "E_L2_Garrison_D1_AbyssArtifactCore_01_6",
+      "occupying_race": 0
+    }
+  ],
+  "rifts": [
+    {
+      "rift_id": 1100077,
+      "env_obj_id": 1100077,
+      "map_id": 111002,
+      "name": "FE_SA_D_A_2_Envobj_Rift_01_Wave1",
+      "wave": 1,
+      "position": [
+        -128184.3,
+        -16122.5,
+        23624.4
+      ]
+    },
+    {
+      "rift_id": 1100077,
+      "env_obj_id": 1100077,
+      "map_id": 111003,
+      "name": "FE_SA_D_A_3_Envobj_Rift_01_Wave1",
+      "wave": 1,
+      "position": [
+        -179693.5,
+        -112523.9,
+        39688.6
+      ]
+    },
+    {
+      "rift_id": 1100077,
+      "env_obj_id": 1100077,
+      "map_id": 500005,
+      "name": "FE_SA_L_A_3_Envobj_Rift_01_Wave1",
+      "wave": 1,
+      "position": [
+        -40520.0,
+        -33387.6,
+        6246.3
+      ]
+    },
+    {
+      "rift_id": 1100077,
+      "env_obj_id": 1100077,
+      "map_id": 500006,
+      "name": "FE_SA_L_A_Envobj_Rift_01_BossWave",
+      "wave": 1,
+      "position": [
+        -38045.6,
+        -63368.7,
+        8063.5
+      ]
+    },
+    {
+      "rift_id": 1100077,
+      "env_obj_id": 1100077,
+      "map_id": 500021,
+      "name": "FE_SA_L_A_2_Envobj_Rift_01_BossWave",
+      "wave": 1,
+      "position": [
+        181078.6,
+        10024.6,
+        36566.9
+      ]
+    },
+    {
+      "rift_id": 1100077,
+      "env_obj_id": 1100077,
+      "map_id": 500033,
+      "name": "IN_SA_L_1_Envobj_Rift_01_Wave1",
+      "wave": 1,
+      "position": [
+        34.0,
+        2516.1,
+        14.1
+      ]
+    },
+    {
+      "rift_id": 1100077,
+      "env_obj_id": 1100077,
+      "map_id": 510015,
+      "name": "FE_SA_D_A_1_Envobj_Rift_01_Wave1",
+      "wave": 1,
+      "position": [
+        163289.0,
+        -51478.1,
+        12320.0
+      ]
+    },
+    {
+      "rift_id": 1100077,
+      "env_obj_id": 1100077,
+      "map_id": 510028,
+      "name": "IN_SA_D_1_Envobj_Rift_01_Wave1",
+      "wave": 1,
+      "position": [
+        34.0,
+        2516.1,
+        14.1
+      ]
+    }
+  ]
+}

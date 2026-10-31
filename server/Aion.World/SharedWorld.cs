@@ -22,6 +22,9 @@ public sealed class SharedWorld(GameData data)
     int lastKey;
 
     public WorldLock Lock { get; } = new();
+
+    /// <summary>The server's daily gather counter (1,000 successful gathers per game day since Oct 28 2026).</summary>
+    public GatherDailyLimiter GatherLimiter { get; } = new();
     public GameData Data => data;
 
     public int AllocateKey() => FirstPlayerKey + Interlocked.Increment(ref lastKey);
@@ -34,7 +37,11 @@ public sealed class SharedWorld(GameData data)
     {
         var key = (long)instance << 32 | (uint)mapId;
         if (!maps.TryGetValue(key, out var map))
+        {
             maps[key] = map = new MapInstance(mapId, Combat.MapTargets(data, mapId), new NpcAi(new Random(), data)) { Instance = instance };
+            if (instance != 0 && MapEventTables.Embedded.DungeonOfMap(mapId) is { } room)
+                Patch20261028.ScaleBossHp(map.Targets.Values, MapEventTables.Embedded.DungeonIdOfMap(mapId), room);
+        }
         return map;
     }
 
@@ -50,12 +57,19 @@ public sealed class SharedWorld(GameData data)
     public MapInstance? LoadedMap(int mapId) => maps.GetValueOrDefault((uint)mapId);
 
     double expRate = 1, dropRate = 1;
-    /// <summary>Event boosts (scheduled events): multipliers for kill experience and loot rolls on this host.</summary>
+    /// <summary>Event boosts (scheduled events): multipliers for quest experience on this host.</summary>
     public double ExpRate { get => Volatile.Read(ref expRate); set => Volatile.Write(ref expRate, Math.Clamp(value, 0.1, 10)); }
     public double DropRate { get => Volatile.Read(ref dropRate); set => Volatile.Write(ref dropRate, Math.Clamp(value, 0.1, 10)); }
 
     /// <summary>Parties, invitations, trades and duels (use under the gate).</summary>
     public SocialState Social { get; } = new();
+
+    /// <summary>Fortress siege schedule, applications, live battle and ownership (AirspaceBattle).</summary>
+    public AirspaceSiege Airspace { get; } = new();
+
+    /// <summary>Daily/weekly reset cursors and world-scoped rollover (legion attendance, weekly contribution).</summary>
+    public ContentResetCoordinator Resets { get; } = new();
+    public bool ResetsLoaded { get; set; }
 
     /// <summary>Every player in the world on this host (any map), by entity key. Use under the gate.</summary>
     public Dictionary<int, WorldPlayer> Online { get; } = [];
@@ -64,6 +78,13 @@ public sealed class SharedWorld(GameData data)
         Online.Values.FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase));
 
     public WorldPlayer? FindOnline(Guid character) => Online.Values.FirstOrDefault(p => p.CharacterId == character);
+
+    /// <summary>Notifies every connected player that the push-reward list changed (0xe34a, no body).</summary>
+    public void BroadcastPushRewardChanged()
+    {
+        var packet = GameSession.PushRewardChangedPacket();
+        foreach (var player in Online.Values) player.Send([packet]);
+    }
 }
 
 /// <summary>A player as the shared world knows it. Fields are read and written under the world gate; the outbox is thread-safe.</summary>
@@ -84,6 +105,20 @@ public sealed class WorldPlayer(GameSession session, int key)
     public required Func<byte[]> Appear { get; init; }
     /// <summary>Keys of the other players this player currently sees.</summary>
     public HashSet<int> Seeing { get; } = [];
+    Vector3d? visibilityAnchor;
+    long visibilityAtMs;
+    /// <summary>Visibility pairs are O(n²); refresh after meaningful movement or once per second.</summary>
+    public bool NeedsVisibilityRefresh(Vector3d at, long nowMs)
+    {
+        if (visibilityAnchor is not { } anchor || nowMs - visibilityAtMs >= 1000
+            || (at.X - anchor.X) * (at.X - anchor.X) + (at.Y - anchor.Y) * (at.Y - anchor.Y) >= 2_000_000)
+        {
+            visibilityAnchor = at;
+            visibilityAtMs = nowMs;
+            return true;
+        }
+        return false;
+    }
     public ConcurrentQueue<byte[]> Outbox { get; } = new();
 
     /// <summary>Queues messages for this player and wakes its connection, so they go out now rather than at its next 50 ms tick.</summary>

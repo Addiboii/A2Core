@@ -111,7 +111,7 @@ def main():
             def page_assets(page):
                 return re.findall(rb'(?:src|href)="(/assets/[^"]+)"', page)
             status, page, headers = request('/')
-            check(status == 200 and b' Account</title>' in page and page_assets(page), 'account page')
+            check(status == 200 and (b' Account</title>' in page or b'Sign in</title>' in page) and page_assets(page), 'account page')
             check("frame-ancestors 'none'" in headers.get('Content-Security-Policy', ''), 'browser security headers')
             check(all(request(a.decode())[0] == 200 for a in page_assets(page)), 'page resources')
             check(b'<script>' not in page and b'<style' not in page, 'no inline scripts or styles')

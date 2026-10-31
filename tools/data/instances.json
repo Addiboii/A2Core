@@ -1,14 +1,41 @@
 {
-  "source": "MapData TriggerActorDataMap (FuncType EnterInstanceLayer) and point names, QuestData ClearMapEvent; research/local/instance-ai-20261016/notes.txt. Hand-entered per served instance layer.",
+  "source": "MapData TriggerActorDataMap (FuncType EnterInstanceLayer) and point names, QuestData ClearMapEvent; research/local/instance-ai-20261016/notes.txt. Hand-entered per served instance layer. Party expeditions (Krao Cave and others) use map-events.json dungeons and portals, not this file.",
   "instances": {
     "100002": {
       "name": "World_L_Starter_InstanceLayer_2",
       "map_event": "World_L_Starter_InstanceLayer_2_MapEvent",
-      "entry": {"map": 1000, "trigger": "L_Starter_InstanceLayer_2_Trigger_LayerEntrance", "center": [11060, -38630, 21418], "size": [1000, 1000, 2000]},
-      "arrival": [10976, -38649, 21416],
-      "exit": {"map": 1000, "point": "L_Starter_InstanceLayer2_Exit", "position": [9495, -40719, 20832]},
+      "entry": {
+        "map": 1000,
+        "trigger": "L_Starter_InstanceLayer_2_Trigger_LayerEntrance",
+        "center": [
+          11060,
+          -38630,
+          21418
+        ],
+        "size": [
+          1000,
+          1000,
+          2000
+        ]
+      },
+      "arrival": [
+        10976,
+        -38649,
+        21416
+      ],
+      "exit": {
+        "map": 1000,
+        "point": "L_Starter_InstanceLayer2_Exit",
+        "position": [
+          9495,
+          -40719,
+          20832
+        ]
+      },
       "quest": "HQ1101070",
-      "boss": [2701128]
+      "boss": [
+        2701128
+      ]
     }
   }
 }

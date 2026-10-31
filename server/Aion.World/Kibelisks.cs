@@ -1,5 +1,7 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Aion.Protocol.Native;
 
 namespace Aion.World;
 
@@ -33,5 +35,31 @@ public static class Kibelisks
     });
 
     public static IReadOnlyList<KibeliskPlacement> OnMap(int mapId) =>
-        maps.Value.GetValueOrDefault(mapId.ToString(System.Globalization.CultureInfo.InvariantCulture)) ?? [];
+        maps.Value.GetValueOrDefault(mapId.ToString(CultureInfo.InvariantCulture)) ?? [];
+
+    static readonly Lazy<Dictionary<int, (int MapId, KibeliskPlacement Placement)>> byArtifact = new(() =>
+    {
+        var index = new Dictionary<int, (int, KibeliskPlacement)>();
+        foreach (var (mapKey, placements) in maps.Value)
+        {
+            if (!int.TryParse(mapKey, NumberStyles.Integer, CultureInfo.InvariantCulture, out var mapId)) continue;
+            foreach (var placement in placements)
+                index[placement.ArtifactId] = (mapId, placement);
+        }
+        return index;
+    });
+
+    /// <summary>World map and stand position for a bound TeleportArtifact id (from teleport-artifacts.json).</summary>
+    public static bool TryPlacement(int artifactId, out int mapId, out Vector3d position)
+    {
+        if (byArtifact.Value.TryGetValue(artifactId, out var hit))
+        {
+            mapId = hit.MapId;
+            position = new Vector3d(hit.Placement.Position[0], hit.Placement.Position[1], hit.Placement.Position[2]);
+            return true;
+        }
+        mapId = 0;
+        position = default;
+        return false;
+    }
 }

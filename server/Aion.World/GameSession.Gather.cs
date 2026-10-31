@@ -91,9 +91,37 @@ public sealed partial class GameSession
         }
         if (Store is { } store && CharacterId is { } character)
             await Stored(async () => { await store.SaveMasteryAsync(character, "gather", 0, gatherLevel, gatherExp, ct); return []; });
-        if (leveled) replies.Add(GatherLevelUpdate());
+        if (leveled)
+        {
+            replies.Add(GatherLevelUpdate());
+            replies.AddRange(await QuestMasteryAutoAcquireAsync(ct));
+        }
         return replies;
     }
+
+    /// <summary>
+    /// Patch of Oct 28 2026: gathering needs character level 45 and the server pays 1,000 successful gathers per game day.
+    /// Stored characters only (development logins keep gathering for tests); <paramref name="take"/> counts the gather against the day.
+    /// </summary>
+    bool GatherRefused(long now, bool take)
+    {
+        if (Store is null) return false;
+        if (Patch20261028.GatherBlock(level) is not null) return true;
+        if (options.World?.GatherLimiter is not { } limiter) return false;
+        return take ? !limiter.TryTake(now) : !limiter.HasRoom(now);
+    }
+
+    /// <summary>ESlotRestrictIconType sent as 0x3639 _reason when a gather is refused (OBSERVED), or null when allowed.</summary>
+    int? GatherFailReason(WorldObject node)
+    {
+        if (Store is null) return null;
+        if (Patch20261028.GatherBlock(level) is not null) return GamePackets.EnvObjGatherFailReason.LackLevel;
+        if (node.Gather is { } g && g.Length >= 5 && g[4] > gatherLevel) return GamePackets.EnvObjGatherFailReason.LackMasteryLevel;
+        return null;
+    }
+
+    List<byte[]> GatherRefusedPackets(int objectKey, int reason) =>
+        [GamePackets.InteractEnvObjInterrupted(objectKey, reason, playerKey), GamePackets.InteractEnvObjAvailableState(objectKey)];
 
     bool Gathered(int index, long now)
     {
@@ -123,9 +151,24 @@ public sealed partial class GameSession
             foreach (var t in turns) w.U8(t.Result).Bool(false).Varint(0).I32(t.SuccessBefore).I32(t.SuccessAfter).I32(t.FailBefore).I32(t.FailAfter);
             return w.Bool(false).ToArray();
         }
-        if (index < 0 || index >= objects.Count || objects[index].Gather is not { } node || Gathered(index, now)) return [Reply(1, 0, false, [])];
+        byte[] GatherCompletedFail(long[] gatherNode) =>
+            PacketWriter.Opcode(GatherCompletedNt).U16(1).Varint(key).I32((int)gatherNode[0]).I32(0).I32(0).I32(0).I32(0).ToArray();
+
+        List<byte[]> GatherStartAborted(long[] gatherNode)
+        {
+            var replies = new List<byte[]> { Reply(1, 0, false, []) };
+            replies.Add(GatherCompletedFail(gatherNode));
+            return replies;
+        }
+
+        if (index < 0 || index >= objects.Count || objects[index].Gather is not { } node)
+            return [Reply(1, 0, false, [])];
+        if (Gathered(index, now)) return GatherStartAborted(node);
+        var keyInt = (int)key;
+        if (GatherFailReason(objects[index]) is { } fail)
+            return [Reply(1, 0, false, []), ..GatherRefusedPackets(keyInt, fail)];
+        if (GatherRefused(now, take: false)) return GatherStartAborted(node);
         // The node's GatherSource MasteryLevel (the fifth gather value) gates it.
-        if (node.Length >= 5 && node[4] > gatherLevel) return [Reply(1, 0, false, [])];
         var target = node.Length >= 6 && node[5] > 0 ? (int)node[5] : GatherBasicGain;
         var attempts = gatherAttempts.TryGetValue(index, out var left) ? left : node.Length >= 7 && node[6] > 0 ? (int)node[6] : 3;
         var turns = GatherTurns(target, node.Length >= 5 ? (int)node[4] : 1);
@@ -167,6 +210,8 @@ public sealed partial class GameSession
     {
         var g = node.Gather!;
         int key = WorldObjects.FirstKey + index, item = (int)g[0], count = (int)g[1];
+        if (GatherRefused(now, take: true))
+            return [PacketWriter.Opcode(GatherCompletedNt).U16(1).Varint(key).I32(item).I32(0).I32(0).I32(0).I32(0).ToArray()];
         var bonus = g.Length >= 4 && g[2] > 0 && GatherBonusRoll() == 0 ? ((int)g[2], (int)g[3]) : (0, 0);
         var rewards = new List<(int, long)> { (item, count) };
         if (bonus.Item1 > 0) rewards.Add((bonus.Item1, bonus.Item2));

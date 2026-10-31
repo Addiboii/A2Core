@@ -8,20 +8,32 @@ public sealed class Target
     public required int Key { get; init; }
     public required string Name { get; init; }
     public int Hp { get; set; }
-    public required int HpMax { get; init; }
+    public required int HpMax { get; set; }
     public int Defense { get; init; }
     public Vector3d Position { get; set; }
     public int NpcId { get; init; }
+    /// <summary>A player's summon (Skill.dat Spawn): the summoner's key, else 0.</summary>
+    public int OwnerKey { get; init; }
+    /// <summary>The summoner as the appear names it (_parent_desc): the client tags the summon "[Owner]".</summary>
+    public CharDescWire? OwnerDesc { get; init; }
     public int Level { get; init; } = 1;
     public double Direction { get; set; }
     public int Relationship { get; set; } = 6;   // ERelationshipEntity (6 Monster); map events change it
     /// <summary>Held by a scripted abnormal (stun, hold, stone): it neither moves nor attacks until released.</summary>
     public bool Held { get; set; }
+    /// <summary>Silenced by an abnormal: it uses its basic attack only (no special skills).</summary>
+    public bool Silenced { get; set; }
+    /// <summary>Slowed by an abnormal (1/10000 of its speed; 10000 is rooted): it moves that much slower, a rooted one only attacks in reach.</summary>
+    public int SlowPermille { get; set; }
+    /// <summary>Thrown, pulled or lifted by a skill until this time (ms): it moves and attacks no more than a held one (NpcAi).</summary>
+    public long DisplacedUntil { get; set; }
     /// <summary>Immune through a scripted abnormal: the players' hits land for nothing.</summary>
     public bool Immune { get; set; }
     /// <summary>Its spawn height was put on the ground (navmesh floor or terrain) once the map's geometry was loaded.</summary>
     public bool Snapped { get; set; }
     public bool Aggressive { get; init; }        // NpcData AggroType Aggro_A
+    /// <summary>Map-event AskNpc steps: the client needs a non-aggressive appear even when NpcData says Aggro_A.</summary>
+    public bool AppearNonAggressive { get; set; }
     public double WalkSpeed { get; init; }       // units per second
     public double RunSpeed { get; init; }
     public int Radius { get; init; }             // CollisionCylinderRadius
@@ -47,6 +59,19 @@ public sealed class Target
     public NpcRoute? Route { get; init; }
     /// <summary>Walking its route now (the appear says move_state Walk).</summary>
     public bool Walking { get; set; }
+    /// <summary>Accumulated stagger gauge damage toward <see cref="StaggerGaugeMax"/> (shared map state).</summary>
+    public int StaggerGauge { get; set; }
+    /// <summary>Gauge capacity; 0 until first stagger hit (then default 100).</summary>
+    public int StaggerGaugeMax { get; set; }
+    /// <summary>Unix ms while the target is in Stagger (EAbnormalEffectType), after the gauge breaks.</summary>
+    public long StaggerUntil { get; set; }
+    /// <summary>Class skill id that spawned this PC summon (Spiritmaster 16100000…); 0 for ordinary NPCs.</summary>
+    public int SummonSourceSkill { get; set; }
+    public string SubType { get; init; } = "NormalMonster";
+    public int Grade { get; init; } = 3;
+    /// <summary>Boss groggy guard (0 = none); sent with 0xe005 UpdateGroggyInfo_NT.</summary>
+    public int GroggyMax { get; set; }
+    public int GroggyEnergy { get; set; }
 
     public bool Dead => Hp <= 0;
     /// <summary>The corpse was removed (0x3642) and the NPC waits for its respawn.</summary>
@@ -55,10 +80,11 @@ public sealed class Target
     /// <summary>Monster-family ERelationshipEntity values.</summary>
     public bool Hostile => Relationship is 6 or 11 or 16 or 17 or 18 or 19 or 20 or 21;
 
-    public NpcAppearance Appearance() => new(Key, NpcId, Position, Direction, Hp, HpMax, Level, Relationship, Aggressive, Dead,
+    public NpcAppearance Appearance() => new(Key, NpcId, Position, Direction, Hp, HpMax, Level, Relationship, AppearNonAggressive ? false : Aggressive, Dead,
         UniqueKey, SocialAction, SocialStart, Walking && !Dead,
         MoveState: Air ? NpcAppearance.FlyingOnAirStop : (byte)0, MoveSubstate: Air ? (byte)2 : (byte)0,
-        Abnormals: AirMonster ? [new AbnormalWire(1, AirPassiveAbnormal, -1, PermanentExpiry, CasterKey: Key, RangeBase: Position)] : null);
+        Abnormals: AirMonster ? [new AbnormalWire(1, AirPassiveAbnormal, -1, PermanentExpiry, CasterKey: Key, RangeBase: Position)] : null,
+        ParentKey: OwnerKey, Parent: OwnerDesc);
 }
 
 public sealed record Hit(int Amount, bool Critical, int EffectId);
@@ -88,22 +114,34 @@ public static class Combat
     }
 
     public static IReadOnlyList<Hit> SkillHits(GameData data, int skillId, string? className, int level, int? weaponItem,
-        int targetDefense, Random rng, bool pvp = false)
+        int targetDefense, Random rng, bool pvp = false, int extraFixing = 0, WeaponStats? weaponOverride = null,
+        int amplifyAllBp = 0, int defensePierceBp = 0)
     {
         var definition = data.Skill(skillId);
         if (definition is null) return [];
-        var weapon = data.WeaponStatsOf(weaponItem);
-        var fixing = data.BaseStats(className, level).GetValueOrDefault("FixingDamage");
+        return RowHits(data, definition.Damage, className, level, weaponItem, targetDefense, rng, pvp, extraFixing, weaponOverride, amplifyAllBp, defensePierceBp);
+    }
+
+    /// <summary>The hits of explicit Damage rows (a trap's detonation group), by the same model as <see cref="SkillHits"/>.</summary>
+    public static IReadOnlyList<Hit> RowHits(GameData data, IEnumerable<DamageRow> rows, string? className, int level, int? weaponItem,
+        int targetDefense, Random rng, bool pvp = false, int extraFixing = 0, WeaponStats? weaponOverride = null,
+        int amplifyAllBp = 0, int defensePierceBp = 0)
+    {
+        var weapon = weaponOverride ?? data.WeaponStatsOf(weaponItem);
+        var fixing = data.BaseStats(className, level).GetValueOrDefault("FixingDamage") + extraFixing;
         var criticalChance = Math.Min(CriticalCap, weapon.Critical / 1000.0);
+        var mitigatedDefense = Math.Max(0, (int)((long)targetDefense * (10_000 - Math.Clamp(defensePierceBp, 0, 10_000)) / 10_000));
+        var amplify = (10_000 + amplifyAllBp) / 10_000.0;
         var hits = new List<Hit>();
-        foreach (var row in definition.Damage)
+        foreach (var row in rows)
         {
             var (flat, ratio) = pvp && row.Pvp is { } p ? (p.Flat, p.Ratio) : (row.Flat, row.Ratio);
             var attack = rng.Next(Math.Min(weapon.Min, weapon.Max), Math.Max(weapon.Min, weapon.Max) + 1) + fixing;
             double raw = Roll(flat, rng) + attack * Roll(ratio, rng) / 10000.0;
             var critical = rng.NextDouble() < criticalChance;
             if (critical) raw *= CriticalMultiplier;
-            var amount = Math.Max(1, (int)Math.Round(raw * DefenseScale / (DefenseScale + Math.Max(0, targetDefense))));
+            raw *= amplify;
+            var amount = Math.Max(1, (int)Math.Round(raw * DefenseScale / (DefenseScale + mitigatedDefense)));
             hits.Add(new Hit(amount, critical, row.EffectId));
         }
         return hits;
@@ -166,16 +204,27 @@ public static class Combat
     /// <summary>When this host started (Unix ms): the start of the NPCs' looping idle animations (official: ~their spawn time).</summary>
     public static readonly long StartedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 
+    /// <summary>
+    /// The first NPC key of a map. Small maps (dungeons, story layers) get their own block (20,000 + (map % 70) * 1,000, under
+    /// the players' 100,000), so that consecutive maps do not reuse a key. Live 2026-10-30: the lake cave boss (220018, key 2000) died
+    /// right before the move into the Ascension Subspace (200005), where Ashar was key 2000 as well. The client still finished the
+    /// boss's death on that key after the load and never showed Ashar, although the server sent NpcAppear for him and no later death.
+    /// Big field maps keep 2000.
+    /// </summary>
+    public static int NpcKeyBase(int mapId, int spawnCount) => spawnCount <= SmallMapSpawns ? SmallMapFirstKey + mapId % SmallMapBlocks * SmallMapSpawns : FirstNpcKey;
+    public const int SmallMapFirstKey = 20_000, SmallMapSpawns = 1_000, SmallMapBlocks = 70;
+
     /// <summary>Every NPC spawn of a map from the client's MapData (tools/world_npcs.py).</summary>
     public static Dictionary<int, Target> MapTargets(GameData data, int mapId)
     {
         var targets = new Dictionary<int, Target>();
         var spawns = data.Spawns(mapId);
+        var keyBase = NpcKeyBase(mapId, spawns.Count);
         for (var index = 0; index < spawns.Count; index++)
         {
             var spawn = spawns[index];
             var hp = HpFor(spawn);
-            var key = FirstNpcKey + index;
+            var key = keyBase + index;
             targets[key] = new Target
             {
                 Key = key, Name = spawn.Name, Hp = hp, HpMax = hp, Position = new Vector3d(spawn.Position[0], spawn.Position[1], spawn.Position[2]),
@@ -184,7 +233,9 @@ public static class Combat
                 Function = spawn.Function, Aggro = spawn.Aggro, Skills = spawn.Skills ?? [], NoRotation = spawn.NoRotation,
                 UniqueKey = spawn.UniqueKey, SocialAction = spawn.SocialAction, SocialStart = spawn.SocialAction != 0 ? StartedAt : 0, Route = spawn.Route,
                 Air = spawn.Air, AirMonster = spawn.Air && spawn.SubType.EndsWith("Monster", StringComparison.Ordinal), DamageScale = DamageScale(spawn.SubType, spawn.Grade),
+                SubType = spawn.SubType, Grade = spawn.Grade,
             };
+            NpcAi.InitGroggy(targets[key]);
         }
         return targets;
     }

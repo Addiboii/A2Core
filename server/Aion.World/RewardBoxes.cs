@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 
 namespace Aion.World;
 
-/// <summary>A usable item's effect (Item.dat UseEffect): RewardBox, GetVehicle or GetVehicleSoul, AutoUseWhenAcquire, values.</summary>
+/// <summary>A usable item's effect (Item.dat UseEffect): RewardBox, GetVehicle or GetVehicleSoul, GetDaevanionPoint, AutoUseWhenAcquire, values.</summary>
 public sealed record ItemUse(string Effect, bool AutoUse, IReadOnlyList<string> Values);
 
 /// <summary>An item's use timing (Item.dat): cooldown, cooldown group, cast time (0: instant).</summary>
@@ -58,6 +58,7 @@ public sealed class RewardBoxes
         [property: JsonPropertyName("max")] int Max);
 
     sealed record BoxFile(
+        [property: JsonPropertyName("handled_use_effects")] string[]? HandledUseEffects,
         [property: JsonPropertyName("uses")] Dictionary<string, JsonElement[]> Uses,
         [property: JsonPropertyName("cool")] Dictionary<string, JsonElement[]> Cool,
         [property: JsonPropertyName("skills")] Dictionary<string, string[][]> Skills,
@@ -82,6 +83,23 @@ public sealed class RewardBoxes
             ? new AbnormalInfo(a.Group, a.Effects.Select(e => (e[0].GetInt32(), e[1].GetString()!, (IReadOnlyList<string>)e.Skip(2).Select(v => v.GetString()!).ToList())).ToList())
             : null;
 
+    /// <summary>The abnormal ids of a SkillAbnormal group.</summary>
+    public IEnumerable<int> AbnormalsInGroup(int group) =>
+        file.Abnormals.Where(a => a.Value.Group == group && int.TryParse(a.Key, out _)).Select(a => int.Parse(a.Key, System.Globalization.CultureInfo.InvariantCulture)).Order();
+
+    /// <summary>CANDIDATE: debuffs for dispel scrolls — negative StatChange or CC/Dot effect types in SkillAbnormalEffect rows.</summary>
+    public bool Debuff(int abnormalId)
+    {
+        if (Abnormal(abnormalId) is not { } info) return false;
+        foreach (var (_, type, values) in info.Effects)
+        {
+            if (type is "StatChange" && values.Count >= 2 && int.TryParse(values[1], out var stat) && stat < 0) return true;
+            if (type.Contains("Dot_", StringComparison.Ordinal) || type is "Stun" or "Sleep" or "Fear" or "Silence" or "Bind" or "Stone" or "Paralysis" or "Blind")
+                return true;
+        }
+        return false;
+    }
+
     RewardBoxes(BoxFile file) => this.file = file;
 
     static readonly Lazy<RewardBoxes> embedded = new(() =>
@@ -92,6 +110,21 @@ public sealed class RewardBoxes
     });
 
     public static RewardBoxes Embedded => embedded.Value;
+
+    static readonly HashSet<string> defaultHandled =
+    [
+        "RewardBox", "GetVehicle", "GetVehicleSoul", "GetVehicleSoulCrystal", "Fix_VehicleCreatureLevel", "Skill",
+        "Telpo_Home", "GetKina", "GetNonBindingKina", "GetTitle", "GetSkin", "GetSkinSet", "GetSocialAction",
+        "GetDaevanionPoint", "GetQuest", "GetWing", "AscensionGrade",
+    ];
+
+    /// <summary>Whether the server has an item-use handler for this Item.dat UseEffect (boxes.json handled_use_effects).</summary>
+    public bool ImplementsUseEffect(string effect)
+    {
+        if (file.HandledUseEffects is { Length: > 0 } handled)
+            return handled.Contains(effect);
+        return defaultHandled.Contains(effect);
+    }
 
     static string Key(int id) => id.ToString(System.Globalization.CultureInfo.InvariantCulture);
 

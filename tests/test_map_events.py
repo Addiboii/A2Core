@@ -61,6 +61,16 @@ class MapEventTests(unittest.TestCase):
         self.assertEqual(seal['quest_gate'], [['EQ1810001', 1]])
         self.assertEqual(seal['reward_light'][0], [930100001, 15000])
 
+    def test_dark_starter_layer_2_and_3_events_have_quest_step_start(self):
+        data = json.loads((ROOT / 'tools/data/map-events.json').read_text(encoding='utf-8'))
+        for name, step in (
+            ('World_D_Starter_Layer_2_MapEvent', '210109001'),
+            ('World_D_Starter_Layer_3_MapEvent', '210110001'),
+        ):
+            start = data['events'][name]['start']
+            self.assertEqual(start, [[{'t': 'IncompleteQuestStep', 'v': [step]}]])
+        self.assertIn('D_Starter_Layer_3_StartPoint', data['points']['110006'])
+
     def test_generated_data_serves_the_poeta_layers(self):
         data = json.loads((ROOT / 'tools/data/map-events.json').read_text(encoding='utf-8'))
         self.assertIn(100010, data['served_maps'])

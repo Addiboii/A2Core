@@ -63,6 +63,8 @@ public static class SocialOpcodes
         PartyDisbandRq = PartyBase + 1066, PartyDisbandRs = PartyBase + 1067, PartyDisbandNt = PartyBase + 1068,
         PartySetTargetByBossNt = PartyBase + 1069, PartyDisconnectMemberNt = PartyBase + 1070, PartyReconnectMemberNt = PartyBase + 1071,
         PartyMemberItemLootingNt = PartyBase + 1072, PartyMemberItemLootingFailNt = PartyBase + 1073,
+        ForceMemberItemLootingNt = 0x3aae, ForceMemberItemLootingFailNt = 0x3aaf,
+        ForceCreateRq = 0x3a8a, ForceCreateRs = 0x3a8b, ForceJoinRq = 0x3abd, ForceJoinRs = 0x3abe,
         PartyRecommendRq = PartyBase + 1077, PartyRecommendRs = PartyBase + 1078,
         PartyInviteCancelRq = PartyBase + 1079, PartyInviteCancelRs = PartyBase + 1080, PartyInviteCancelNt = PartyBase + 1081;
 
@@ -221,6 +223,10 @@ public sealed record PartyMemberStatus
 public sealed record PartyRecentMember(long CharDbId, long UpdateTime, int ServerId, string Nickname, byte Class = 1, int Level = 1,
     int ConquerorLevel = 0, bool Logined = false);
 
+/// <summary>DevPacketData_Common_PartyRecommendCharInfo (CANDIDATE layout from usmap).</summary>
+public sealed record PartyRecommendCandidate(long DbId, int BornServerId, int CurrentServerId, string Nickname, int PcId = 1,
+    string GuildName = "", int GuildEmblemId = 0, int Level = 1, int ConquerorLevel = 0, bool Logined = true);
+
 /// <summary>DevPacketData_Common_ExchangeItem: an item of the own offer (item uid, count).</summary>
 public sealed record ExchangeItem(long ItemKey, long Count);
 
@@ -273,7 +279,7 @@ public static class SocialPackets
 
     /// <summary>Common_EquipItemDetail in the layout of the observed Common_Item detail (GamePackets.WriteItem).</summary>
     static void WriteEquipDetail(PacketWriter w, EquipDetail d) =>
-        w.U8(d.EnchantLevel).I32(0).I32(0).U8(0).I32(0).I32(d.ItemLevel).Bool(false).U8(d.EquipSlot)
+        w.U8(d.EnchantLevel).I32(0).I32(d.EnchantBonusProb).U8(d.SurpassEnchantLevel).I32(d.SurpassEnchantBonusProb).I32(d.ItemLevel).Bool(false).U8(d.EquipSlot)
             .Varint(1).Zeros(7).I64(d.SoulBindOwner).U8(d.SoulBindCount)
             .Varint(3).Zeros(12)
             .Zeros(7).U8(0);
@@ -420,6 +426,21 @@ public static class SocialPackets
             .I32(s.Level).I32(s.ConquerorLevel).I32(s.EquipItemLevel).String(s.GuildName).I32(s.GuildEmblemId)
             .Bool(s.CanTakeDropItem).I64(s.CombatPower).U8(s.NetworkLatency).ToArray();
 
+    /// <summary>PartyMemberItemLooting_NT (0x9228): a member received a distributed item.</summary>
+    public static byte[] PartyMemberItemLooting(string nickname, int serverId, int dropItemId) =>
+        Op(SocialOpcodes.PartyMemberItemLootingNt).String(nickname).I32(serverId).I32(dropItemId).ToArray();
+
+    /// <summary>ForceMemberItemLooting_NT (0x3AAE): alliance member received distributed loot.</summary>
+    public static byte[] ForceMemberItemLooting(string nickname, int serverId, int dropItemId) =>
+        Op(SocialOpcodes.ForceMemberItemLootingNt).String(nickname).I32(serverId).I32(dropItemId).ToArray();
+
+    /// <summary>ForceCreate_RS (0x3A8B): result, force key.</summary>
+    public static byte[] ForceCreateReply(int result, long forceKey) =>
+        Op(SocialOpcodes.ForceCreateRs).U16(result).I64(forceKey).ToArray();
+
+    /// <summary>ForceJoin_RS (0x3ABE).</summary>
+    public static byte[] ForceJoinReply(int result) => Op(SocialOpcodes.ForceJoinRs).U16(result).ToArray();
+
     /// <summary>PartyDisband_RS (0x921e).</summary>
     public static byte[] PartyDisbandReply(int result) => Op(SocialOpcodes.PartyDisbandRs).Result(result).ToArray();
     /// <summary>PartyDisband_NT (0x921f): to every member when the party ends.</summary>
@@ -443,6 +464,16 @@ public static class SocialPackets
 
     /// <summary>PartyLeave_NT (late run 0x9327, alternative 0x9244; CANDIDATE opcode): to the member who left / was removed.</summary>
     public static byte[] PartyLeaveNotice(long partyKey, PartyUpdateReason reason) => Op(SocialOpcodes.PartyLeaveNt).I64(partyKey).U8((byte)reason).ToArray();
+
+    /// <summary>PartyRecommend_RS (0x9228): result, recommend type, candidates.</summary>
+    public static byte[] PartyRecommendReply(int result, int recommendType, IReadOnlyList<PartyRecommendCandidate> candidates)
+    {
+        var w = Op(SocialOpcodes.PartyRecommendRs).U16(result).I32(recommendType).Varint(candidates.Count);
+        foreach (var c in candidates)
+            w.I64(c.DbId).ServerId(c.BornServerId).ServerId(c.CurrentServerId).String(c.Nickname).I32(c.PcId)
+                .String(c.GuildName).I32(c.GuildEmblemId).I32(c.Level).I32(c.ConquerorLevel).Bool(c.Logined);
+        return w.ToArray();
+    }
 
     /// <summary>PartyRecentMember_RS (0xe339): result and recent party members.</summary>
     public static byte[] PartyRecentMembers(int result, IReadOnlyList<PartyRecentMember> members)
@@ -656,6 +687,10 @@ public static class SocialRequests
     /// <summary>PartyCreate_RQ {distribution, join type, special distribution, grade} (u8 enums).</summary>
     public static PartySettingsRequest? ParsePartyCreate(ReadOnlyMemory<byte> message) =>
         Try(message, r => new PartySettingsRequest(r.U8(), r.U8(), r.U8(), r.U8()));
+
+    /// <summary>PartyRecommend_RQ: recommend type (i32) and optional candidate list (ignored for search).</summary>
+    public static int? ParsePartyRecommendType(ReadOnlyMemory<byte> message) =>
+        FirstValue(message, [.. KeyWidths.Select(f => (Read<int>)(r => f(r)))]);
 
     /// <summary>PartyInfoUpdate_RQ {distribution, special distribution, grade, join type}.</summary>
     public static PartySettingsRequest? ParsePartyInfoUpdate(ReadOnlyMemory<byte> message) =>

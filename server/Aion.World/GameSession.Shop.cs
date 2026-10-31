@@ -8,11 +8,20 @@ namespace Aion.World;
 /// <summary>NPC shops from tools/data/shops.json (tools/shop_data.py): merchant -> shop, goods per race, Kina prices, sell prices.</summary>
 public sealed class ShopTables
 {
+    public sealed record RandomOffer([property: JsonPropertyName("id")] int Id, [property: JsonPropertyName("item")] int Item,
+        [property: JsonPropertyName("count")] int Count, [property: JsonPropertyName("price")] long Price,
+        [property: JsonPropertyName("currency")] int Currency, [property: JsonPropertyName("level")] int Level);
+    public sealed record RandomCategory([property: JsonPropertyName("refresh_ms")] long RefreshMs, [property: JsonPropertyName("slots")] int Slots,
+        [property: JsonPropertyName("offers")] RandomOffer[] Offers);
+    sealed record RandomShopsFile([property: JsonPropertyName("categories")] Dictionary<string, RandomCategory> Categories);
     sealed record ShopFile(
         [property: JsonPropertyName("npcs")] Dictionary<string, string> Npcs,
         [property: JsonPropertyName("shops")] Dictionary<string, Dictionary<string, string[]>> Shops,
         [property: JsonPropertyName("goods")] Dictionary<string, long[]> Goods,
-        [property: JsonPropertyName("sell")] Dictionary<string, long> Sell);
+        [property: JsonPropertyName("sell")] Dictionary<string, long> Sell,
+        [property: JsonPropertyName("coin_shops")] Dictionary<string, string>? CoinShops,
+        [property: JsonPropertyName("guild_shops")] string[]? GuildShops,
+        [property: JsonPropertyName("random_shops")] RandomShopsFile? RandomShops);
 
     readonly ShopFile file;
     ShopTables(ShopFile file) => this.file = file;
@@ -28,18 +37,39 @@ public sealed class ShopTables
 
     public bool IsMerchant(int npcId) => file.Npcs.ContainsKey(Key(npcId));
 
+    public string? ShopName(int npcId) => file.Npcs.GetValueOrDefault(Key(npcId));
+
+    public bool IsGuildMerchant(int npcId) =>
+        file.Npcs.TryGetValue(Key(npcId), out var shop) && file.GuildShops?.Contains(shop) == true;
+
+    public string? CoinShopName(int dataId) => file.CoinShops?.GetValueOrDefault(Key(dataId));
+
+    public RandomCategory? GetRandomCategory(int category) =>
+        file.RandomShops?.Categories.GetValueOrDefault(Key(category));
+
     public sealed record GoodsRow(int ItemId, int Bundle, long Price, int Level, int Currency, int Limit, int LimitTarget, int LimitPeriod);
+
+    GoodsRow? Row(int goodsId) => file.Goods.TryGetValue(Key(goodsId), out var g) && g.Length >= 8
+        ? new GoodsRow((int)g[0], (int)g[1], g[2], (int)g[3], (int)g[4], (int)g[5], (int)g[6], (int)g[7]) : null;
+
+    /// <summary>A goods row from GameShopGoods (export omits real-money currencies).</summary>
+    public GoodsRow? RowByGoodsId(int goodsId) => Row(goodsId);
+
+    /// <summary>A goods row listed in a named shop for a race.</summary>
+    public GoodsRow? GoodsInShop(string shop, int race, int goodsId) =>
+        file.Shops.TryGetValue(shop, out var races) && races.TryGetValue(Key(race), out var list) && list.Contains(Key(goodsId)) ? Row(goodsId) : null;
 
     /// <summary>A goods row the merchant sells to a race; null otherwise.</summary>
     public GoodsRow? Goods(int npcId, int race, int goodsId) =>
-        file.Npcs.TryGetValue(Key(npcId), out var shop) && file.Shops.TryGetValue(shop, out var races) && races.TryGetValue(Key(race), out var list)
-        && list.Contains(Key(goodsId)) && file.Goods.TryGetValue(Key(goodsId), out var g) && g.Length >= 8
-            ? new GoodsRow((int)g[0], (int)g[1], g[2], (int)g[3], (int)g[4], (int)g[5], (int)g[6], (int)g[7]) : null;
+        file.Npcs.TryGetValue(Key(npcId), out var shop) ? GoodsInShop(shop, race, goodsId) : null;
 
     /// <summary>The limited goods a merchant sells to a race.</summary>
     public IEnumerable<(int GoodsId, GoodsRow Row)> LimitedGoods(int npcId, int race) =>
-        file.Npcs.TryGetValue(Key(npcId), out var shop) && file.Shops.TryGetValue(shop, out var races) && races.TryGetValue(Key(race), out var list)
-            ? list.Select(id => (Id: int.Parse(id, System.Globalization.CultureInfo.InvariantCulture), Row: Goods(npcId, race, int.Parse(id, System.Globalization.CultureInfo.InvariantCulture))))
+        file.Npcs.TryGetValue(Key(npcId), out var shop) ? LimitedGoodsInShop(shop, race) : [];
+
+    public IEnumerable<(int GoodsId, GoodsRow Row)> LimitedGoodsInShop(string shop, int race) =>
+        file.Shops.TryGetValue(shop, out var races) && races.TryGetValue(Key(race), out var list)
+            ? list.Select(id => (Id: int.Parse(id, System.Globalization.CultureInfo.InvariantCulture), Row: GoodsInShop(shop, race, int.Parse(id, System.Globalization.CultureInfo.InvariantCulture))))
                 .Where(x => x.Row is { Limit: > 0 }).Select(x => (x.Id, x.Row!))
             : [];
 
@@ -47,17 +77,7 @@ public sealed class ShopTables
     /// The reset period a purchase counts in (GlobalSetting npc_shop_limited_goods_reset_time 57600 s KST = 07:00 UTC,
     /// weekly on reset_week 3 = Wednesday CANDIDATE, monthly on day 1): "all", a day, "w" + the week's first day, or a month.
     /// </summary>
-    public static string Period(int kind, DateTimeOffset now)
-    {
-        var day = now.UtcDateTime.AddHours(-7).Date;
-        return kind switch
-        {
-            1 => day.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
-            2 => "w" + day.AddDays(-(((int)day.DayOfWeek - (int)DayOfWeek.Wednesday + 7) % 7)).ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
-            3 => day.ToString("yyyy-MM", System.Globalization.CultureInfo.InvariantCulture),
-            _ => "all",
-        };
-    }
+    public static string Period(int kind, DateTimeOffset now) => ContentResetSchedule.PeriodKey(kind, now);
 
     /// <summary>Kina per unit for selling an item, or null when it cannot be sold.</summary>
     public long? SellPrice(int itemId) => file.Sell.TryGetValue(Key(itemId), out var price) ? price : null;
@@ -141,9 +161,13 @@ public sealed partial class GameSession
                         bought.Add((goods, r.Count));
             }
         }
+        DebugShop($"ShopOpen_RQ npcKey={key} ok={ok} limitedPurchased={bought.Count}");
         var w = PacketWriter.Opcode(ShopOpenRs).U16(ok ? 0 : 1).Varint(key).Varint(bought.Count);
         foreach (var (goods, count) in bought) w.I32(goods).I32(count);
-        return [w.I64(now).ToArray()];
+        var replies = new List<byte[]> { w.I64(now).ToArray() };
+        if (ok && npc is not null && Shops.IsGuildMerchant(npc.NpcId) && Store is { } gStore && CharacterId is { } gChar)
+            replies.Add(GuildShopOpenNotice((int)key, now, gStore, gChar));
+        return replies;
     }
 
     /// <summary>The first layout that reads the whole body: (NPC key, entries) or null.</summary>
@@ -182,6 +206,7 @@ public sealed partial class GameSession
         }
         if (request is not { } req) return [Reply(1, openShop ?? 0)];
         var npcKey = targets?.ContainsKey(req.Npc) == true ? req.Npc : openShop ?? req.Npc;
+        DebugShop($"ShopBuy_RQ npcKey={npcKey} lines={ShopEntriesSummary(entries)}");
         if (Store is not { } store || CharacterId is not { } character || targets?.TryGetValue(npcKey, out var npc) != true || entries.Count == 0)
             return [Reply(1, npcKey)];
         var rewards = new List<(int, long)>();
@@ -190,9 +215,11 @@ public sealed partial class GameSession
         var at = DateTimeOffset.FromUnixTimeMilliseconds(now);
         foreach (var (goodsId, count) in entries)
         {
-            if (count < 1 || count > 10_000 || Shops.Goods(npc!.NpcId, profileRace, (int)goodsId) is not { } g || level < g.Level) return [Reply(1, npcKey)];
-            rewards.Add((g.ItemId, g.Bundle * count));
-            prices[g.Currency] = prices.GetValueOrDefault(g.Currency) + g.Price * count;
+            if (count < 1 || count > PacketSecurity.MaxShopLineCount || Shops.Goods(npc!.NpcId, profileRace, (int)goodsId) is not { } g || level < g.Level) return [Reply(1, npcKey)];
+            if (!PacketSecurity.TryMultiply(g.Bundle, count, out var bundleTotal) || !PacketSecurity.TryMultiply(g.Price, count, out var linePrice)) return [Reply(1, npcKey)];
+            rewards.Add((g.ItemId, bundleTotal));
+            if (!PacketSecurity.TryAdd(prices.GetValueOrDefault(g.Currency), linePrice, out var sum)) return [Reply(1, npcKey)];
+            prices[g.Currency] = sum;
             if (g.Limit > 0) limits.Add((g.LimitTarget, (int)goodsId, ShopTables.Period(g.LimitPeriod, at), (int)count, g.Limit));
         }
         var costs = new List<(Guid, long, int)>();
@@ -203,7 +230,12 @@ public sealed partial class GameSession
             costs.AddRange(stacks);
         }
         var done = await Stored(async () => await store.ShopBuyAsync(character, costs, rewards, limits, ct) ? [[]] : []);
-        if (done.Count == 0) return [Reply(limits.Count > 0 ? 3 : 1, npcKey)];
+        if (done.Count == 0)
+        {
+            DebugShop($"ShopBuy_RS npcKey={npcKey} result={(limits.Count > 0 ? 3 : 1)} (failed)");
+            return [Reply(limits.Count > 0 ? 3 : 1, npcKey)];
+        }
+        DebugShop($"ShopBuy_RS npcKey={npcKey} result=0 rewards={string.Join(',', rewards.Select(r => $"{r.Item1}x{r.Item2}"))}");
         return [Reply(0, npcKey), .. await InventoryChangesAsync(ct, IncreaseShopBuy, DecreaseShopBuy)];
     }
 
@@ -220,6 +252,7 @@ public sealed partial class GameSession
         }
         if (request is not { } req) return [Reply(1, openShop ?? 0)];
         var npcKey = targets?.ContainsKey(req.Npc) == true ? req.Npc : openShop ?? req.Npc;
+        DebugShop($"ShopSell_RQ npcKey={npcKey} lines={ShopEntriesSummary(entries)}");
         if (Store is not { } store || CharacterId is not { } character || targets?.TryGetValue(npcKey, out var npc) != true || !Shops.IsMerchant(npc!.NpcId) || entries.Count == 0)
             return [Reply(1, npcKey)];
         foreach (var (key, count) in entries)

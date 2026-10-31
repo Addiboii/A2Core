@@ -1,0 +1,15 @@
+{
+  "source": "GodstoneCombine.dat CANDIDATE (MetaBot odds)",
+  "grades": {
+    "1": {
+      "material_count": 3,
+      "success_pct": 11,
+      "reward_grade": 2
+    },
+    "2": {
+      "material_count": 3,
+      "success_pct": 4,
+      "reward_grade": 3
+    }
+  }
+}

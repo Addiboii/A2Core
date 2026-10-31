@@ -1,0 +1,491 @@
+{
+  "source": "ContentsTicket.dat via build(), or pin stub when research/local is absent",
+  "tickets": {
+    "4": {
+      "name": "Contents_Ticket_PartyDungeon_CANDIDATE",
+      "max_count": 30,
+      "reset": 2,
+      "dungeon_types": [
+        "Party"
+      ]
+    }
+  },
+  "affixes": {},
+  "expeditions": {
+    "600063": {
+      "group": "Arkanis_G_Group",
+      "levels": [
+        {
+          "level": 0,
+          "dungeon_id": 600063,
+          "name": "Arkanis_G_01",
+          "affixes": []
+        },
+        {
+          "level": 1,
+          "dungeon_id": 600065,
+          "name": "Arkanis_G_03",
+          "affixes": []
+        },
+        {
+          "level": 2,
+          "dungeon_id": 600068,
+          "name": "Arkanis_G_06",
+          "affixes": []
+        },
+        {
+          "level": 3,
+          "dungeon_id": 610062,
+          "name": "Arkanis_G_09",
+          "affixes": []
+        }
+      ]
+    },
+    "600061": {
+      "group": "Arkanis_Group",
+      "levels": [
+        {
+          "level": 0,
+          "dungeon_id": 600061,
+          "name": "Arkanis_Easy",
+          "affixes": []
+        }
+      ]
+    },
+    "600071": {
+      "group": "BakronIsland_Group",
+      "levels": [
+        {
+          "level": 0,
+          "dungeon_id": 600071,
+          "name": "BakronIsland_Easy",
+          "affixes": []
+        }
+      ]
+    },
+    "600072": {
+      "group": "BakronIsland_N_Group",
+      "levels": [
+        {
+          "level": 0,
+          "dungeon_id": 600072,
+          "name": "BakronIsland_Normal",
+          "affixes": []
+        },
+        {
+          "level": 1,
+          "dungeon_id": 600073,
+          "name": "BakronIsland_Hard",
+          "affixes": []
+        }
+      ]
+    },
+    "600141": {
+      "group": "BlueBreathIsle_Group",
+      "levels": [
+        {
+          "level": 0,
+          "dungeon_id": 600141,
+          "name": "BlueBreathIsle_Easy",
+          "affixes": []
+        }
+      ]
+    },
+    "600142": {
+      "group": "BlueBreathIsle_N_Group",
+      "levels": [
+        {
+          "level": 0,
+          "dungeon_id": 600142,
+          "name": "BlueBreathIsle_Normal",
+          "affixes": []
+        },
+        {
+          "level": 1,
+          "dungeon_id": 600143,
+          "name": "BlueBreathIsle_Hard",
+          "affixes": []
+        }
+      ]
+    },
+    "600121": {
+      "group": "CradleNihility_Group",
+      "levels": [
+        {
+          "level": 0,
+          "dungeon_id": 600121,
+          "name": "CradleNihility_Easy",
+          "affixes": []
+        }
+      ]
+    },
+    "600122": {
+      "group": "CradleNihility_N_Group",
+      "levels": [
+        {
+          "level": 0,
+          "dungeon_id": 600122,
+          "name": "CradleNihility_Normal",
+          "affixes": []
+        },
+        {
+          "level": 1,
+          "dungeon_id": 600123,
+          "name": "CradleNihility_Hard",
+          "affixes": []
+        }
+      ]
+    },
+    "600151": {
+      "group": "DaevaCitadel_Group",
+      "levels": [
+        {
+          "level": 0,
+          "dungeon_id": 600151,
+          "name": "DaevaCitadel_Easy",
+          "affixes": []
+        }
+      ]
+    },
+    "600152": {
+      "group": "DaevaCitadel_N_Group",
+      "levels": [
+        {
+          "level": 0,
+          "dungeon_id": 600152,
+          "name": "DaevaCitadel_Normal",
+          "affixes": []
+        },
+        {
+          "level": 1,
+          "dungeon_id": 600153,
+          "name": "DaevaCitadel_Hard",
+          "affixes": []
+        }
+      ]
+    },
+    "600041": {
+      "group": "DeadDramataNest_Group",
+      "levels": [
+        {
+          "level": 0,
+          "dungeon_id": 600041,
+          "name": "DeadDramataNest_Easy",
+          "affixes": []
+        }
+      ]
+    },
+    "600042": {
+      "group": "DeadDramataNest_N_Group",
+      "levels": [
+        {
+          "level": 0,
+          "dungeon_id": 600042,
+          "name": "DeadDramataNest_Normal",
+          "affixes": []
+        },
+        {
+          "level": 1,
+          "dungeon_id": 610044,
+          "name": "DeadDramataNest_Hard",
+          "affixes": []
+        }
+      ]
+    },
+    "600053": {
+      "group": "DeusCenter_G_Group",
+      "levels": [
+        {
+          "level": 0,
+          "dungeon_id": 600053,
+          "name": "DeusCenter_G_01",
+          "affixes": []
+        },
+        {
+          "level": 1,
+          "dungeon_id": 600055,
+          "name": "DeusCenter_G_03",
+          "affixes": []
+        },
+        {
+          "level": 2,
+          "dungeon_id": 600058,
+          "name": "DeusCenter_G_06",
+          "affixes": []
+        },
+        {
+          "level": 3,
+          "dungeon_id": 610052,
+          "name": "DeusCenter_G_09",
+          "affixes": []
+        }
+      ]
+    },
+    "600051": {
+      "group": "DeusCenter_Group",
+      "levels": [
+        {
+          "level": 0,
+          "dungeon_id": 600051,
+          "name": "DeusCenter_Easy",
+          "affixes": []
+        }
+      ]
+    },
+    "600031": {
+      "group": "Draupnir_Group",
+      "levels": [
+        {
+          "level": 0,
+          "dungeon_id": 600031,
+          "name": "Draupnir_Easy",
+          "affixes": []
+        }
+      ]
+    },
+    "600032": {
+      "group": "Draupnir_N_Group",
+      "levels": [
+        {
+          "level": 0,
+          "dungeon_id": 600032,
+          "name": "Draupnir_Normal",
+          "affixes": []
+        },
+        {
+          "level": 1,
+          "dungeon_id": 600033,
+          "name": "Draupnir_Hard",
+          "affixes": []
+        }
+      ]
+    },
+    "610070": {
+      "group": "FafniteGully_G_Group",
+      "levels": [
+        {
+          "level": 0,
+          "dungeon_id": 610070,
+          "name": "FafniteGully_G_01",
+          "affixes": []
+        },
+        {
+          "level": 1,
+          "dungeon_id": 610071,
+          "name": "FafniteGully_G_02",
+          "affixes": []
+        },
+        {
+          "level": 2,
+          "dungeon_id": 610072,
+          "name": "FafniteGully_G_03",
+          "affixes": []
+        },
+        {
+          "level": 3,
+          "dungeon_id": 610073,
+          "name": "FafniteGully_G_04",
+          "affixes": []
+        }
+      ]
+    },
+    "600021": {
+      "group": "Fire_Temple_Group",
+      "levels": [
+        {
+          "level": 0,
+          "dungeon_id": 600021,
+          "name": "Fire_Temple_Easy",
+          "affixes": []
+        }
+      ]
+    },
+    "600022": {
+      "group": "Fire_Temple_N_Group",
+      "levels": [
+        {
+          "level": 0,
+          "dungeon_id": 600022,
+          "name": "Fire_Temple_Normal",
+          "affixes": []
+        },
+        {
+          "level": 1,
+          "dungeon_id": 600023,
+          "name": "Fire_Temple_Hard",
+          "affixes": []
+        }
+      ]
+    },
+    "600091": {
+      "group": "HornCave_Group",
+      "levels": [
+        {
+          "level": 0,
+          "dungeon_id": 600091,
+          "name": "HornCave_Easy",
+          "affixes": []
+        }
+      ]
+    },
+    "600092": {
+      "group": "HornCave_N_Group",
+      "levels": [
+        {
+          "level": 0,
+          "dungeon_id": 600092,
+          "name": "HornCave_Normal",
+          "affixes": []
+        },
+        {
+          "level": 1,
+          "dungeon_id": 600093,
+          "name": "HornCave_Hard",
+          "affixes": []
+        }
+      ]
+    },
+    "600002": {
+      "group": "KraoCave_Group",
+      "levels": [
+        {
+          "level": 0,
+          "dungeon_id": 600002,
+          "name": "KraoCave_Easy",
+          "affixes": []
+        }
+      ]
+    },
+    "600001": {
+      "group": "KraoCave_N_Group",
+      "levels": [
+        {
+          "level": 0,
+          "dungeon_id": 600001,
+          "name": "KraoCave_Normal",
+          "affixes": []
+        },
+        {
+          "level": 1,
+          "dungeon_id": 600004,
+          "name": "KraoCave_Hard",
+          "affixes": []
+        }
+      ]
+    },
+    "610020": {
+      "group": "MirrorHeart_G_Group",
+      "levels": [
+        {
+          "level": 0,
+          "dungeon_id": 610020,
+          "name": "MirrorHeart_G_01",
+          "affixes": []
+        },
+        {
+          "level": 1,
+          "dungeon_id": 610021,
+          "name": "MirrorHeart_G_02",
+          "affixes": []
+        },
+        {
+          "level": 2,
+          "dungeon_id": 610022,
+          "name": "MirrorHeart_G_03",
+          "affixes": []
+        },
+        {
+          "level": 3,
+          "dungeon_id": 610023,
+          "name": "MirrorHeart_G_04",
+          "affixes": []
+        }
+      ]
+    },
+    "600131": {
+      "group": "PhantomsHall_Group",
+      "levels": [
+        {
+          "level": 0,
+          "dungeon_id": 600131,
+          "name": "PhantomsHall_Easy",
+          "affixes": []
+        }
+      ]
+    },
+    "600132": {
+      "group": "PhantomsHall_N_Group",
+      "levels": [
+        {
+          "level": 0,
+          "dungeon_id": 600132,
+          "name": "PhantomsHall_Normal",
+          "affixes": []
+        },
+        {
+          "level": 1,
+          "dungeon_id": 600133,
+          "name": "PhantomsHall_Hard",
+          "affixes": []
+        }
+      ]
+    },
+    "610010": {
+      "group": "SunkenTemple_G_Group",
+      "levels": [
+        {
+          "level": 0,
+          "dungeon_id": 610010,
+          "name": "SunkenTemple_G_01",
+          "affixes": []
+        },
+        {
+          "level": 1,
+          "dungeon_id": 610011,
+          "name": "SunkenTemple_G_02",
+          "affixes": []
+        },
+        {
+          "level": 2,
+          "dungeon_id": 610012,
+          "name": "SunkenTemple_G_03",
+          "affixes": []
+        },
+        {
+          "level": 3,
+          "dungeon_id": 610013,
+          "name": "SunkenTemple_G_04",
+          "affixes": []
+        }
+      ]
+    },
+    "600011": {
+      "group": "Urugugu_Canyon_Group",
+      "levels": [
+        {
+          "level": 0,
+          "dungeon_id": 600011,
+          "name": "Urugugu_Canyon_Easy",
+          "affixes": []
+        }
+      ]
+    },
+    "600012": {
+      "group": "Urugugu_Canyon_N_Group",
+      "levels": [
+        {
+          "level": 0,
+          "dungeon_id": 600012,
+          "name": "Urugugu_Canyon_Normal",
+          "affixes": []
+        },
+        {
+          "level": 1,
+          "dungeon_id": 600013,
+          "name": "Urugugu_Canyon_Hard",
+          "affixes": []
+        }
+      ]
+    }
+  }
+}

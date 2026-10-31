@@ -18,6 +18,12 @@ public sealed partial class GameSession
 
     bool StreamsNpcs => targets is { Count: > StreamNpcsAbove };
 
+    bool QuestForcesNpcStream(Target t) =>
+        questLog?.OpenKillNpcIds().Contains(t.NpcId) == true && !t.Dead
+        || questLog?.OpenTalkNpcIds().Contains(t.NpcId) == true
+        || questLog?.OpenClearMapEventEntryNpcIds().Contains(t.NpcId) == true
+        || mapEventRuns.Any(r => !r.Finished && r.OpenAskNpcIds().Contains(t.NpcId));
+
     /// <summary>World entry: every NPC on a small map, the near ones on a big map.</summary>
     List<byte[]> NpcsAtEntry(Vector3d at)
     {
@@ -27,9 +33,15 @@ public sealed partial class GameSession
         {
             seenNpcs.UnionWith(targets.Keys);
             // A removed corpse stays out of sight until its respawn (0x3641 then).
-            return targets.Values.Where(t => !t.CorpseRemoved).Select(t => GamePackets.NpcAppear(Grounded(t).Appearance())).ToList();
+            return targets.Values.Where(t => !t.CorpseRemoved).Select(t => GamePackets.NpcAppear(QuestGatedAppear(Grounded(t)))).ToList();
         }
-        return NpcVisibility(at);
+        var replies = NpcVisibility(at);
+        foreach (var t in targets.Values.Where(t => !t.CorpseRemoved && QuestForcesNpcStream(t) && !seenNpcs.Contains(t.Key)))
+        {
+            seenNpcs.Add(t.Key);
+            replies.Add(GamePackets.NpcAppear(QuestGatedAppear(Grounded(t))));
+        }
+        return replies;
     }
 
     /// <summary>
@@ -51,7 +63,10 @@ public sealed partial class GameSession
     /// <summary>NPCs coming into view appear, those far away are removed (big maps only).</summary>
     List<byte[]> NpcVisibility(Vector3d at)
     {
-        if (targets is null || !StreamsNpcs) return [];
+        if (targets is null) return [];
+        // A small map sends everyone once. A map event that revives someone far away still has to appear again
+        // when the player walks up: the client drops the far appear, and this map never streams.
+        if (!StreamsNpcs) return RevealUnseen(at);
         var replies = new List<byte[]>();
         // The NPCs seen (to forget) and those placed near enough to come into view (SpatialGrid), in key order.
         var candidates = new SortedSet<int>(seenNpcs);
@@ -64,13 +79,37 @@ public sealed partial class GameSession
             if (!seen && !t.CorpseRemoved && d2 <= NpcViewRange * NpcViewRange)
             {
                 seenNpcs.Add(t.Key);
-                replies.Add(GamePackets.NpcAppear(Grounded(t).Appearance()));
+                replies.Add(GamePackets.NpcAppear(QuestGatedAppear(Grounded(t))));
             }
             else if (seen && d2 > NpcForgetRange * NpcForgetRange)
             {
+                // Quest objectives keep their NPCs streamed until done (kill credit, talk, layer entry on big maps).
+                if (QuestForcesNpcStream(t)) continue;
                 seenNpcs.Remove(t.Key);
                 replies.Add(GamePackets.Death(t.Key, 1));
             }
+            else if (!seen && !t.CorpseRemoved && QuestForcesNpcStream(t))
+            {
+                seenNpcs.Add(t.Key);
+                replies.Add(GamePackets.NpcAppear(QuestGatedAppear(Grounded(t))));
+            }
+        }
+        return replies;
+    }
+
+    /// <summary>An NPC a map event revived out of range: sent again once the player is close enough for the client to keep it.</summary>
+    List<byte[]> RevealUnseen(Vector3d at)
+    {
+        if (targets is null) return [];
+        var replies = new List<byte[]>();
+        foreach (var t in targets.Values)
+        {
+            if (t.Dead || t.CorpseRemoved || seenNpcs.Contains(t.Key)) continue;
+            var dx = t.Position.X - at.X;
+            var dy = t.Position.Y - at.Y;
+            if (dx * dx + dy * dy > NpcViewRange * NpcViewRange) continue;
+            seenNpcs.Add(t.Key);
+            replies.Add(GamePackets.NpcAppear(Grounded(t).Appearance()));
         }
         return replies;
     }
@@ -78,7 +117,8 @@ public sealed partial class GameSession
     /// <summary>The once-a-second visibility check from the tick (NPCs move too).</summary>
     List<byte[]> NpcVisibilityTick(long now)
     {
-        if (now < npcViewCheckAt || position is not { } at || !StreamsNpcs) return [];
+        if (now < npcViewCheckAt || position is not { } at) return [];
+        if (!StreamsNpcs && (targets is null || seenNpcs.Count >= targets.Count)) return [];
         npcViewCheckAt = now + 1000;
         return NpcVisibility(at);
     }

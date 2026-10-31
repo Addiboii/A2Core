@@ -7,6 +7,7 @@ using Aion.Application.Gameplay;
 using Aion.Core.Accounts;
 using Aion.Protocol.Native;
 using Aion.Host;
+using Aion.Host.Debug;
 using Aion.World;
 
 namespace Aion.Host.Native;
@@ -23,12 +24,14 @@ public sealed record NativeOptions
     /// "development": any client is accepted with a local account; characters are not saved.
     /// </summary>
     public string Logins { get; init; } = "accounts";
-    public int WorldId { get; init; } = 1204;
+    public int WorldId { get; init; } = DevelopmentDefaults.WorldId;
     /// <summary>Development only: seed the '$' placeholder so the client skips character creation.</summary>
     public bool IntroCharacter { get; init; }
     public int CharacterLevel { get; init; } = 1;
     /// <summary>Development logins only: the map characters enter at its start point (tools/load_test.py --map).</summary>
     public int? DevelopmentStartMap { get; init; }
+    /// <summary>Development logins only: spawn the training dummy (key 1000) for tools/load_test.py --combat.</summary>
+    public bool TrainingDummy { get; init; }
     /// <summary>Development logins only: character names allowed to use the /gm chat commands.</summary>
     public string[] DevelopmentGmNames { get; init; } = [];
     /// <summary>Ground grids (tools/TerrainProbe: &lt;dir&gt;/&lt;map id&gt;/terrain.bin); unset: research/local/terrain above the host, if any.</summary>
@@ -48,6 +51,8 @@ public sealed record NativeOptions
     public TimeSpan IdleTimeout { get; init; } = TimeSpan.FromHours(1);
     /// <summary>Bind and advertised addresses (Aion:Network, set by the host at startup).</summary>
     public NetworkOptions Network { get; init; } = new();
+    /// <summary>Resolved at host startup from <c>Aion:World</c> and <c>Aion:Debug:Enabled</c>.</summary>
+    public bool MapEventAskNpcProximityFallback { get; init; }
 
     public bool Development => string.Equals(Logins, "development", StringComparison.OrdinalIgnoreCase);
 }
@@ -66,7 +71,7 @@ public abstract class NativeListener(int port, ushort greetingTag, NativeOptions
 
     protected abstract string Name { get; }
     protected abstract byte[] HandshakeReply(RsaPublicKey key, byte[] sessionKey);
-    protected abstract Task RunAsync(NetworkStream stream, Rc4 cipher, FrameBuffer buffer, CancellationToken ct);
+    protected abstract Task RunAsync(NetworkStream stream, Rc4 cipher, FrameBuffer buffer, IPAddress? clientAddress, CancellationToken ct);
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -104,6 +109,7 @@ public abstract class NativeListener(int port, ushort greetingTag, NativeOptions
         KeepAlive(client);
         using var connection = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
         var stream = client.GetStream();
+        var clientAddress = client.Client.RemoteEndPoint is IPEndPoint ep ? ep.Address : null;
         var buffer = new FrameBuffer();
         try
         {
@@ -127,7 +133,7 @@ public abstract class NativeListener(int port, ushort greetingTag, NativeOptions
             CryptographicOperations.ZeroMemory(sessionKey);
             // The client waits for the reply before its first encrypted body; like the Python
             // server, anything framed alongside the greeting is ignored.
-            await RunAsync(stream, cipher, buffer, connection.Token);
+            await RunAsync(stream, cipher, buffer, clientAddress, connection.Token);
         }
         catch (Exception error) when (error is ProtocolException or IOException or SocketException or OperationCanceledException or ObjectDisposedException)
         {
@@ -198,7 +204,7 @@ public sealed class NativeLoginListener(NativeOptions options, IServiceProvider 
     protected override string Name => "Native login";
     protected override byte[] HandshakeReply(RsaPublicKey key, byte[] sessionKey) => NativeHandshake.LoginReply(key, sessionKey);
 
-    protected override async Task RunAsync(NetworkStream stream, Rc4 cipher, FrameBuffer buffer, CancellationToken ct)
+    protected override async Task RunAsync(NetworkStream stream, Rc4 cipher, FrameBuffer buffer, IPAddress? clientAddress, CancellationToken ct)
     {
         var session = new LoginSession(new LoginSessionOptions
         {
@@ -214,7 +220,11 @@ public sealed class NativeLoginListener(NativeOptions options, IServiceProvider 
         {
             foreach (var body in buffer.Drain())
             {
-                var step = await session.HandleAsync(cipher.Crypt(body), DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), ct);
+                var nowMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                var plain = cipher.Crypt(body);
+                NativePlaytestDebug.LogLoginPacket(outbound: false, plain, nowMs);
+                var step = await session.HandleAsync(plain, nowMs, ct);
+                foreach (var reply in step.Replies) NativePlaytestDebug.LogLoginPacket(outbound: true, reply, nowMs);
                 await SendAsync(stream, step.Replies, ct);
                 if (step.Close is { } reason)
                 {
@@ -245,7 +255,7 @@ public sealed class NativeLoginListener(NativeOptions options, IServiceProvider 
         }
         // The login port's character list (0x390b) shows a per-server character count.
         var owned = (await characters.ListAsync(new VerifiedAccount(grant.AccountId), ct)).Where(c => c.WorldId == grant.WorldId)
-            .Select(c => (c.Name, c.Level, c.Race)).ToList();
+            .Select(c => (c.Name, c.Level, c.Race, (ulong)Math.Max(0, c.LastPlayedUnixMs))).ToList();
         return new LoginGrant(grant.WireAccountId.ToString(System.Globalization.CultureInfo.InvariantCulture), grantId, owned);
     }
 }
@@ -259,23 +269,30 @@ public sealed class NativeGameListener(NativeOptions options, IServiceProvider s
     : NativeListener(options.GamePort ?? 0, NativeHandshake.GameGreeting, options, logger)
 {
     static readonly TimeSpan TickInterval = TimeSpan.FromMilliseconds(50);
+    /// <summary>Extra client frames in one TCP read are dropped (logged on the session) instead of starving the tick loop.</summary>
+    const int MaxClientFramesPerTick = 64;
     protected override string Name => "Native game";
     protected override byte[] HandshakeReply(RsaPublicKey key, byte[] sessionKey) => NativeHandshake.GameReply(key, sessionKey);
 
-    protected override async Task RunAsync(NetworkStream stream, Rc4 cipher, FrameBuffer buffer, CancellationToken ct)
+    protected override async Task RunAsync(NetworkStream stream, Rc4 cipher, FrameBuffer buffer, IPAddress? clientAddress, CancellationToken ct)
     {
         var intro = Options.Development && Options.IntroCharacter
             ? LoginPackets.PreGeneratedIntro(LoginPackets.DefaultWorlds[0].Id, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()) : null;
         // Map event notes (unsupported directives, objectives finished by timeout) go to the host log.
         GameSession.MapEventLog ??= text => Logger.LogInformation("Map event: {Text}", text);
-        var session = new GameSession(GameData.Embedded, new GameSessionOptions
+        var gameData = services.GetRequiredService<GameData>();
+        var session = new GameSession(gameData, new GameSessionOptions
         {
-            CharacterLevel = Options.CharacterLevel, IntroCharacter = intro, WorldId = Options.WorldId,
+            CharacterLevel = Options.CharacterLevel, IntroCharacter = intro, WorldId = Options.WorldId, LevelCap = gameData.MaxLevel,
             StaffRole = services.GetService<GmPolicy>()?.StaffRole,
             Builder = services.GetService<BuilderCommands>(), Terrain = services.GetService<TerrainStore>(), Nav = services.GetService<NavMeshStore>(),
             World = services.GetService<SharedWorld>(), DevelopmentMap = Options.Development ? Options.DevelopmentStartMap : null,
+            TrainingDummy = Options.Development && Options.TrainingDummy,
             WorldRace = services.GetService<WorldChoices>() is { } choices ? choices.Race : null,
+            AutoResurrectMsOverride = Options.Development ? GameSession.ReviveDelayMs : null,
+            MapEventAskNpcProximityFallback = Options.MapEventAskNpcProximityFallback,
         }, new Random());
+        session.ConnectionLog = text => Logger.LogInformation("Native game {Message}", text);
         // With a shared world, sessions take turns (WorldTurn): world work alone, map work in parallel per map;
         // storage calls run outside the turn (TurnStore).
         var world = services.GetService<SharedWorld>();
@@ -334,6 +351,7 @@ public sealed class NativeGameListener(NativeOptions options, IServiceProvider s
                     ticked = [.. ticked, GamePackets.Clock(now)];
                 }
                 if (trace is not null) foreach (var packet in ticked) trace.RecordReply(packet);
+                session.RecordOutboundPackets(ticked, now);
                 await SendAsync(stream, ticked, ct);
                 // The trace every minute as well as at the end: a live session can be read while the player is still in.
                 if (trace is not null && Environment.TickCount64 - traceWrittenAt > 60_000)
@@ -347,8 +365,12 @@ public sealed class NativeGameListener(NativeOptions options, IServiceProvider s
                     Logger.LogInformation("Native game closed: {Reason}", closing);
                     return;
                 }
-                foreach (var body in buffer.Drain())
+                var incoming = buffer.Drain();
+                if (incoming.Count > MaxClientFramesPerTick) session.RecordPacketFrameBurst(incoming.Count, MaxClientFramesPerTick);
+                for (var frameIndex = 0; frameIndex < incoming.Count; frameIndex++)
                 {
+                    if (frameIndex >= MaxClientFramesPerTick) break;
+                    var body = incoming[frameIndex];
                     var plain = cipher.Crypt(body);
                     var header = plain.Length >= 2 ? plain[0] | plain[1] << 8 : -1;
                     if (!Options.Development)
@@ -359,6 +381,8 @@ public sealed class NativeGameListener(NativeOptions options, IServiceProvider s
                             session.Store = await AuthenticateAsync(plain, ct);
                             if (session.Store is { } opened && turn is not null) session.Store = TurnStore.Wrap(opened, turn);
                             if (session.Store is null) { Logger.LogInformation("Native game closed: rejected"); return; }
+                            if (services.GetService<IPlatformSecondaryAuth>() is { } platformAuth)
+                                await platformAuth.RememberClientAsync(clientAddress, session.Store.AccountId, ct);
                             authenticated = true;
                         }
                         else if (!authenticated && header != 0x3602) { Logger.LogInformation("Native game closed: required"); return; }
@@ -366,28 +390,60 @@ public sealed class NativeGameListener(NativeOptions options, IServiceProvider s
                     trace?.Record(plain);
                     var errorsBefore = session.PersistenceErrors.Count;
                     var mapRequest = GameSession.IsMapRequest(plain);
-                    var replies = await InTurnAsync(() => session.HandleAsync(plain, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), ct), () => mapRequest);
+                    var replies = await InTurnAsync(() => session.HandleClientPacketSafeAsync(plain, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), ct), () => mapRequest);
                     // A request the store refused (constraint, missing row): which one and why (it was silent before).
                     if (session.PersistenceErrors.Count > errorsBefore)
-                        Logger.LogWarning("Native game request 0x{Opcode:x4} refused by the store: {Errors}", header,
-                            string.Join(", ", session.PersistenceErrors.Skip(errorsBefore)));
+                    {
+                        foreach (var err in session.PersistenceErrors.Skip(errorsBefore))
+                        {
+                            if (err.StartsWith("PostgresException ", StringComparison.Ordinal))
+                            {
+                                var parts = err.Split(' ', 3, StringSplitOptions.None);
+                                Logger.LogWarning(
+                                    "Native game request 0x{Opcode:x4} refused by the store: PostgresException SqlState={SqlState} MessageText={MessageText}",
+                                    header, parts.Length > 1 ? parts[1] : "", parts.Length > 2 ? parts[2] : "");
+                            }
+                            else
+                                Logger.LogWarning("Native game request 0x{Opcode:x4} refused by the store: {Errors}", header, err);
+                        }
+                    }
                     if (trace is not null) foreach (var packet in replies) trace.RecordReply(packet);
+                    var handledAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                    session.RecordOutboundPackets(replies, handledAt);
                     await SendAsync(stream, replies, ct);
+                    if (header is >= RidePackets.RideInit and <= RidePackets.GetOffNt)
+                    {
+                        Logger.LogInformation("Native game ride request 0x{Opcode:x4} ({Length}B): {Body}", header, plain.Length,
+                            Convert.ToHexString(plain));
+                        foreach (var packet in replies)
+                            if (packet.Length >= 2 && BitConverter.ToUInt16(packet, 0) is >= RidePackets.RideInit and <= RidePackets.GetOffNt)
+                                Logger.LogInformation("Native game ride reply 0x{Opcode:x4} ({Length}B): {Body}",
+                                    BitConverter.ToUInt16(packet, 0), packet.Length, Convert.ToHexString(packet));
+                    }
                     if (header == session.EquipOpcode && unanswered.Add(-header))
                         Logger.LogInformation("Native game equip request opcode 0x{Opcode:x4} ({Length} bytes)", header, plain.Length);
                     if (header == 0x3613 && session.Store is not null)
-                        Logger.LogInformation("Native game login: admin flag {Admin}", session.IsAdmin);
+                        Logger.LogInformation("Native game login: admin flag {Admin}", session.LobbyAdmin);
                     // GM research: the client's BuilderCmd_RQ (0x362E) in full, other unanswered opcodes once each.
                     // Quest and NPC-interaction requests (never seen from the client yet): log their bodies.
-                    // Also the movement requests whose layouts are still unknown (glide buoyancy 0x3708/0x3709, wind paths 0x3712/0x3713) and the
+                    // Also the movement requests whose layouts are still unknown (wind paths 0x3712/0x3713) and the
                     // dungeon-room / unknown requests seen live (0x9100, 0x910b, 0x9700).
-                    if (header is 0xe240 or 0xe242 or (>= 0x4000 and <= 0x40ff) or 0x8d0a or 0x8d0c or 0x8d0e or 0x8d2b or 0x8c02 or 0x8c04 or 0x9230 or 0x5622 or 0x3830 or 0xe28f or (>= 0x8a00 and <= 0x8a40) or (>= 0x8d30 and <= 0x8d3f) or (>= 0x8d6e and <= 0x8d7d) or 0x3636
-                        or 0x3708 or 0x3709 or 0x3712 or 0x3713 or (>= 0x9000 and <= 0x91ff) or 0x9700 or 0x383f or 0x3841 or 0x3843 or (>= 0xe030 and <= 0xe03f) && unanswered.Add(header + 0x10000))
+                    if (header is 0xe240 or 0xe242 or (>= 0x4000 and <= 0x40ff) or 0x8d0a or 0x8d0c or 0x8d0e or 0x8d2b or 0x8c02 or 0x8c04 or 0x9230 or 0x9236 or 0x5622 or 0x5624 or 0x3830 or 0xe28f or (>= 0x8a00 and <= 0x8ab6) or (>= 0x8d30 and <= 0x8d3f) or (>= 0x8d6e and <= 0x8d7d) or 0x3636
+                        or 0x3712 or 0x3713 or 0x9700 or 0x383f or 0x3841 or 0x3843 or (>= 0xe030 and <= 0xe03f) && unanswered.Add(header + 0x10000))
                         Logger.LogInformation("Native game quest/NPC request 0x{Opcode:x4}: {Body}", header, Convert.ToHexString(plain.AsSpan(0, Math.Min(plain.Length, 64))));
+                    if (header is >= 0x9000 and <= 0x91ff && replies.Count == 0 && !GameSession.SilentRequests.Contains(header) && unanswered.Add(header + 0x30000))
+                        Logger.LogInformation("Native game unhandled ride opcode 0x{Opcode:x4} ({Length} bytes): {Body}", header, plain.Length,
+                            Convert.ToHexString(plain.AsSpan(0, Math.Min(plain.Length, 64))));
                     // Friends/party/trade/duel and object requests: layouts are usmap guesses, so the first of each is logged in full.
                     if ((GameSession.IsSocialRequest(header) || header is 0x3636 or 0x363d) && unanswered.Add(header + 0x20000))
                         Logger.LogInformation("Native game social/object request 0x{Opcode:x4} -> {Replies} replies: {Body}", header, replies.Count,
                             Convert.ToHexString(plain.AsSpan(0, Math.Min(plain.Length, 128))));
+                    // Hotbar / Skill Order window (0x5601-0x560f QuickSlot* and ContextSkill* requests, 0x5607 stack edit, 0x5609 reset):
+                    // every client request in the run is logged with its body, handled or not, as the layouts are still partly unseen.
+                    if (header is >= 0x5601 and <= 0x560f)
+                        Logger.LogInformation("Native game quick-slot request 0x{Opcode:x4} ({Length} bytes) -> {Replies} replies, request {Body}, first reply {Reply}", header, plain.Length, replies.Count,
+                            Convert.ToHexString(plain.AsSpan(0, Math.Min(plain.Length, 64))),
+                            replies.Count > 0 ? Convert.ToHexString(replies[0].AsSpan(0, Math.Min(replies[0].Length, 24))) : "none");
                     if (header == 0x362E)
                         Logger.LogInformation("Native game BuilderCmd_RQ ({Length} bytes): {Body}", plain.Length,
                             Convert.ToHexString(plain.AsSpan(0, Math.Min(plain.Length, 1024))));
@@ -429,6 +485,7 @@ public sealed class NativeGameListener(NativeOptions options, IServiceProvider s
             // was written at a logout or at the deploy restart, which took the host's whole 30 s shutdown timeout).
             try { if (trace?.Write() is { } written) Logger.LogInformation("Client trace written: {Path}", written); }
             catch (Exception error) { Logger.LogWarning("Client trace not written: {Error}", error.Message); }
+            Logger.LogInformation("Native game disconnect last packets: {Trace}", session.PacketTrace.FormatRecent());
             try
             {
                 if (present is not null) presence.Leave(present, session);
@@ -444,7 +501,9 @@ public sealed class NativeGameListener(NativeOptions options, IServiceProvider s
             // Save on disconnect, then close the world session.
             try
             {
-                await session.CheckpointAsync(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), force: true, CancellationToken.None);
+                var nowMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                await session.FlushDeferredPersistenceAsync(nowMs, CancellationToken.None);
+                await session.CheckpointAsync(nowMs, force: true, CancellationToken.None);
                 if (session.PersistenceErrors.Count > 0)
                     Logger.LogWarning("Native game persistence errors: {Errors}", string.Join(",", session.PersistenceErrors));
             }
@@ -472,6 +531,7 @@ public sealed class NativeGameListener(NativeOptions options, IServiceProvider s
             return null;
         }
         return new ServiceNativeCharacterStore(opened.Token, who, sessions, services.GetRequiredService<IWireCharacterRepository>(),
-            services.GetRequiredService<IGameplayStore>(), services.GetRequiredService<CharacterPersistenceService>());
+            services.GetRequiredService<IGameplayStore>(), services.GetRequiredService<CharacterPersistenceService>(),
+            services.GetRequiredService<IAccountQunaBalance>());
     }
 }

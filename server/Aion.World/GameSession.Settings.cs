@@ -33,7 +33,9 @@ public sealed partial class GameSession
     readonly SortedSet<int> earnedEmotes = [];
     bool sealStoneOn;
     long sealStoneItem;
-    int[] potionSlots = [0, 0];
+    /// <summary>The official default auto-potion (OBSERVED 0x5648 "01 01 b314991f 00000000": HP group, Life Potion 530126003).</summary>
+    public const int DefaultAutoPotion = 530126003;
+    int[] potionSlots = [DefaultAutoPotion, 0];
     readonly SortedSet<int> autoUseItems = [];
     PresetSetting presets = new([], []);
     Dictionary<int, RestoreCount> restoreCounts = [];
@@ -52,7 +54,7 @@ public sealed partial class GameSession
         earnedEmotes.UnionWith(Read<int[]>("social_actions") ?? []);
         var seal = Read<SealStoneSetting>("seal_stone");
         (sealStoneOn, sealStoneItem) = (seal?.On ?? false, seal?.Item ?? 0);
-        potionSlots = Read<int[]>("potion_auto_use") is [var a, var b] ? [a, b] : [0, 0];
+        potionSlots = Read<int[]>("potion_auto_use") is [var a, var b] ? [a, b] : [DefaultAutoPotion, 0];
         autoUseItems.Clear();
         autoUseItems.UnionWith(Read<int[]>("item_auto_use") ?? []);
         presets = Read<PresetSetting>("presets") ?? new([], []);
@@ -112,7 +114,11 @@ public sealed partial class GameSession
         return [PacketWriter.Opcode(on ? SealStoneActivateRs : SealStoneDeactivateRs).U16(0).ToArray(), status];
     }
 
-    /// <summary>RegisterSealStoneAutoUse_RQ {item uid i64}: a bag item (0 clears) -> RS {u16, uid}, BroadcastSealStoneChange_NT {key, item id}.</summary>
+    /// <summary>
+    /// RegisterSealStoneAutoUse_RQ {item uid i64}: a bag item (0 clears) -> RS {u16, uid}, BroadcastSealStoneChange_NT {key, item id}.
+    /// INFERRED: slotting a stack also turns the toggle on (SealStoneStatusChange_NT), so a slotted stack is spent without a
+    /// separate ActivateSealStone_RQ.
+    /// </summary>
     async Task<List<byte[]>> RegisterSealStoneAsync(long uid, CancellationToken ct)
     {
         var itemId = 0;
@@ -122,19 +128,24 @@ public sealed partial class GameSession
             itemId = row.TemplateId;
         }
         sealStoneItem = uid;
+        var turnOn = uid != 0 && !sealStoneOn;
+        if (turnOn) sealStoneOn = true;
         await SaveSettingAsync("seal_stone", new SealStoneSetting(sealStoneOn, uid), ct);
         var change = PacketWriter.Opcode(SealStoneBroadcastNt).Varint(playerKey).I32(itemId).ToArray();
-        worldPlayer?.Map?.Broadcast(worldPlayer, [change]);
-        return [PacketWriter.Opcode(SealStoneRegisterRs).U16(0).I64(uid).ToArray(), change];
+        List<byte[]> shown = [change];
+        if (turnOn) shown.Add(PacketWriter.Opcode(SealStoneStatusNt).Varint(playerKey).Bool(true).ToArray());
+        worldPlayer?.Map?.Broadcast(worldPlayer, shown);
+        return [PacketWriter.Opcode(SealStoneRegisterRs).U16(0).I64(uid).ToArray(), .. shown];
     }
 
     int SealStoneItemId => sealStoneItem != 0 && storedItems.TryGetValue(sealStoneItem, out var row) ? row.TemplateId : 0;
 
     // ---------- Auto-potion and auto-use items ----------
 
-    byte[] PotionAutoUseList() => potionSlots is [0, 0]
-        ? PacketWriter.Opcode(PotionAutoUseListNt).Varint(0).ToArray()
-        : PacketWriter.Opcode(PotionAutoUseListNt).Varint(1).U8(1).I32(potionSlots[0]).I32(potionSlots[1]).ToArray();
+    // The HP group record is always sent, as officially: with an empty list the client has no auto-potion group, so the X slot
+    // refuses drops and never sends SetAutoUsePotionItem_RQ 0x5649 (2026-10-30 logs: no 0x5649 at all).
+    byte[] PotionAutoUseList() =>
+        PacketWriter.Opcode(PotionAutoUseListNt).Varint(1).U8(1).I32(potionSlots[0]).I32(potionSlots[1]).ToArray();
 
     byte[] ItemAutoUseList()
     {
@@ -190,7 +201,9 @@ public sealed partial class GameSession
     int PresetNo(int type) => presets.Numbers.GetValueOrDefault(type, 1);
 
     Dictionary<int, long> EquippedSlots() =>
-        storedItems.Values.Where(i => i.Location == "equipment" && i.Slot is not null).ToDictionary(i => i.Slot!.Value, i => i.WireId);
+        storedItems.Values.Where(i => i.Location == "equipment" && i.Slot is not null)
+            .GroupBy(i => i.Slot!.Value)
+            .ToDictionary(g => g.Key, g => g.Last().WireId);
 
     /// <summary>
     /// PresetInfo_NT in the official order (OBSERVED 904 B): equip no + [{no, [{i64 item, u8 slot}]}], arcana no + presets,

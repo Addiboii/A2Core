@@ -12,20 +12,16 @@ public sealed partial class GameSession
 {
     static byte[] Observed(ushort opcode, string hex) => [.. PacketWriter.Opcode(opcode).ToArray(), .. Convert.FromHexString(hex)];
 
-    /// <summary>The observed constants of the entry burst (none depends on the character but the world-chat time).</summary>
-    static List<byte[]> EntryConstants(long now) =>
+    /// <summary>The observed constants of the entry burst (none depends on the character but the world-chat time, the account contents and the membership).</summary>
+    static List<byte[]> EntryConstants(long now, byte[] accountContents, byte[] subscribeList) =>
     [
         Observed(0xe263, "023f005300"),            // TradeServerInfo_NT
-        Observed(0x5682, "00002300"),              // PrevSeasonMissionInfo_NT
-        Observed(0x5633, "00"),                    // GodstoneList_NT
-        Observed(0xe22e, "05010000020000030000040000050000"),   // DaevanionPointUpdate_NT: five point types at 0
-        Observed(0xe226, "00"),                    // DaevanionBoardInfo_NT
         Observed(0xe224, "02010202"),              // ContentsControl_NT
         Observed(0xe32a, "0301dc05000000000000000000000002dc05000000000000000000000003dc050000000000000000000000"),   // ArenaRanking_NT: Single/Team/Strategy at 1500
-        Observed(0xe33b, "00"),                    // SubscribeList_NT
+        subscribeList,                             // SubscribeList_NT (`00` without a membership)
         Observed(0xe33e, "00"),                    // ? (0xe33e)
         Observed(0x6103, "00"),                    // ? (0x6103)
-        Observed(0x56b6, "00"),                    // AccountContentsInfoList_NT
+        accountContents,                           // AccountContentsInfoList_NT (`00` without keyed attendance seasons)
         Observed(0xe25c, "014b01"),                // ContentsFeatureOnOffListByAdmin_NT
         Observed(0xe251, "00"),                    // BMShopTutorialInfo_NT
         Observed(0xe200, "00002392ffffffffff000000"),   // MessageCardInitData_NT

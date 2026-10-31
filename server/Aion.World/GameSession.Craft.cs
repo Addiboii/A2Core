@@ -9,16 +9,35 @@ namespace Aion.World;
 public sealed class CraftTables
 {
     public sealed record Recipe(int Id, string Worktable, int Race, int Mastery, bool Auto, int Product, int ProductCount,
-        IReadOnlyList<(int Item, int Count)> Components, long Fee, int Curve);
+        IReadOnlyList<(int Item, int Count)> Components, long Fee, int Curve, int ComboRecipeId = 0, int ComboActivation = 0);
+
+    /// <summary>A reward rolled on top of the product: critical success (CriticalSuccess*) or a failed try (FailReward*), probability /1e8.</summary>
+    public sealed record ConversionReward(int Probability, int Item, int Count);
+
+    /// <summary>
+    /// A Substance Morph recipe. Alternates: pick-one materials (MultiSelectComponent group); Replacements: per component, the
+    /// items that may stand in for it. Limits: every (target 1 character, 2 account, 3 server; count) the recipe has, per
+    /// LimitPeriod (1 daily, 2 weekly, 3 monthly); UseType/UseCount: ConversionCount counted per try (1) or per success (2).
+    /// </summary>
+    public sealed record ConversionRecipe(int Race, int Product, int ProductCount, IReadOnlyList<(int Item, int Count)> Components,
+        IReadOnlyList<(int Item, int Count)> Alternates, long Fee, int Rate, int LimitTarget, int LimitPeriod, int LimitCount,
+        IReadOnlyList<(int Target, int Count)>? ExtraLimits = null, int UseType = 0, int UseCount = 0, ConversionReward? Critical = null,
+        ConversionReward? FailReward = null, IReadOnlyDictionary<int, IReadOnlyList<(int Item, int Count)>>? Replacements = null)
+    {
+        public IReadOnlyList<(int Target, int Count)> Limits =>
+            ExtraLimits is { Count: > 0 } ? ExtraLimits : LimitTarget > 0 && LimitCount > 0 ? [(LimitTarget, LimitCount)] : [];
+    }
 
     sealed record CraftFile(
         [property: JsonPropertyName("recipes")] Dictionary<string, JsonElement[]> Recipes,
         [property: JsonPropertyName("conversions")] Dictionary<string, int[]> Conversions,
+        [property: JsonPropertyName("conversion_recipes")] Dictionary<string, JsonElement[]>? ConversionRecipes = null,
         [property: JsonPropertyName("rate_curves")] int[][]? RateCurves = null,
         [property: JsonPropertyName("craft_mastery")] long[]? CraftMastery = null,
         [property: JsonPropertyName("gather_mastery")] long[]? GatherMastery = null);
 
     readonly Dictionary<int, Recipe> recipes;
+    readonly Dictionary<int, ConversionRecipe> conversionRecipes;
     readonly Dictionary<string, int[]> conversions;
     readonly int[][] rateCurves;
     readonly long[] craftMastery, gatherMastery;
@@ -37,9 +56,33 @@ public sealed class CraftTables
     public long GatherMasteryNeed(int level) => level >= 1 && level <= gatherMastery.Length ? gatherMastery[level - 1] : 0;
     public const int MaxMastery = 100;
 
+    /// <summary>A conversion_recipes row of crafts.json (tools/craft_data.py); the optional 11th element holds the extras.</summary>
+    internal static ConversionRecipe ConversionRow(JsonElement[] r)
+    {
+        static List<(int, int)> Pairs(JsonElement arr) => arr.EnumerateArray().Select(c => (c[0].GetInt32(), c[1].GetInt32())).ToList();
+        var plain = new ConversionRecipe(r[0].GetInt32(), r[1].GetInt32(), r[2].GetInt32(), Pairs(r[3]), Pairs(r[4]), r[5].GetInt64(), r[6].GetInt32(),
+            r[7].GetInt32(), r[8].GetInt32(), r[9].GetInt32());
+        if (r.Length < 11 || r[10].ValueKind != JsonValueKind.Object) return plain;
+        var extras = r[10];
+        static ConversionReward? Reward(JsonElement extras, string name) =>
+            extras.TryGetProperty(name, out var v) ? new ConversionReward(v[0].GetInt32(), v[1].GetInt32(), v[2].GetInt32()) : null;
+        return plain with
+        {
+            ExtraLimits = extras.TryGetProperty("limits", out var limits) ? limits.EnumerateArray().Select(l => (l[0].GetInt32(), l[1].GetInt32())).ToList() : null,
+            UseType = extras.TryGetProperty("use", out var use) ? use[0].GetInt32() : 0,
+            UseCount = use.ValueKind == JsonValueKind.Array ? use[1].GetInt32() : 0,
+            Critical = Reward(extras, "crit"),
+            FailReward = Reward(extras, "fail"),
+            Replacements = extras.TryGetProperty("replace", out var replace)
+                ? replace.EnumerateObject().ToDictionary(o => int.Parse(o.Name, System.Globalization.CultureInfo.InvariantCulture), o => (IReadOnlyList<(int, int)>)Pairs(o.Value))
+                : null,
+        };
+    }
+
     CraftTables(CraftFile file)
     {
         conversions = file.Conversions;
+        conversionRecipes = (file.ConversionRecipes ?? []).ToDictionary(p => int.Parse(p.Key, System.Globalization.CultureInfo.InvariantCulture), p => ConversionRow(p.Value));
         rateCurves = file.RateCurves ?? [];
         craftMastery = file.CraftMastery ?? [];
         gatherMastery = file.GatherMastery ?? [];
@@ -48,7 +91,8 @@ public sealed class CraftTables
             var r = p.Value;
             return new Recipe(int.Parse(p.Key, System.Globalization.CultureInfo.InvariantCulture), r[0].GetString()!, r[1].GetInt32(), r[2].GetInt32(),
                 r[3].GetInt32() == 1, r[4].GetInt32(), r[5].GetInt32(), r[6].EnumerateArray().Select(c => (c[0].GetInt32(), c[1].GetInt32())).ToList(),
-                r[7].GetInt64(), r[8].GetInt32());
+                r[7].GetInt64(), r[8].GetInt32(),
+                r.Length > 9 ? r[9].GetInt32() : 0, r.Length > 10 ? r[10].GetInt32() : 0);
         });
     }
 
@@ -60,6 +104,7 @@ public sealed class CraftTables
 
     public static CraftTables Embedded => embedded.Value;
     public Recipe? Of(int id) => recipes.GetValueOrDefault(id);
+    public ConversionRecipe? Conversion(int id) => conversionRecipes.GetValueOrDefault(id);
 
     /// <summary>The recipes a character knows: automatic ones of its race up to its mastery of the recipe's worktable.</summary>
     public IEnumerable<Recipe> Known(int race, Func<string, int> masteryOf) => recipes.Values.Where(r => r.Auto && r.Race == race && r.Mastery <= masteryOf(r.Worktable)).OrderBy(r => r.Id);
@@ -151,7 +196,11 @@ public sealed partial class GameSession
         craftMastery[category] = (lvl, exp);
         if (Store is { } store && CharacterId is { } character)
             await Stored(async () => { await store.SaveMasteryAsync(character, "craft", category, lvl, exp, ct); return []; });
-        if (leveled) replies.AddRange([CraftLevelUpdate(category, lvl, exp), CraftRecipeList()]);
+        if (leveled)
+        {
+            replies.AddRange([CraftLevelUpdate(category, lvl, exp), CraftRecipeList()]);
+            replies.AddRange(await QuestMasteryAutoAcquireAsync(ct));
+        }
         return replies;
     }
 
@@ -164,7 +213,9 @@ public sealed partial class GameSession
         else return [];
         if (Store is { } store && CharacterId is { } character)
             await Stored(async () => { await store.SaveMasteryAsync(character, kind, category, newLevel, 0, ct); return []; });
-        return kind == "craft" ? [CraftLevelUpdate(category, newLevel, 0), CraftRecipeList()] : [GatherLevelUpdate()];
+        var replies = kind == "craft" ? new List<byte[]> { CraftLevelUpdate(category, newLevel, 0), CraftRecipeList() } : [GatherLevelUpdate()];
+        replies.AddRange(await QuestMasteryAutoAcquireAsync(ct));
+        return replies;
     }
 
     async Task<List<byte[]>> CraftAsync(byte[] plain, CancellationToken ct)
@@ -178,8 +229,9 @@ public sealed partial class GameSession
             recipeId = r.I32();
         }
         catch (ProtocolException) { return []; }
-        byte[] Reply(int result, bool success) => PacketWriter.Opcode(CraftStartRs).U16(result).Varint(worktable).I32(recipeId)
-            .Bool(success).Bool(false).Bool(false).Bool(false).Varint(0).Varint(0).Varint(0).Varint(0).I32(0).I32(0).I32(0)
+        byte[] Reply(int result, bool success, bool failReward = false, bool combo = false, bool comboSuccess = false) =>
+            PacketWriter.Opcode(CraftStartRs).U16(result).Varint(worktable).I32(recipeId)
+            .Bool(success).Bool(failReward).Bool(combo).Bool(comboSuccess).Varint(0).Varint(0).Varint(0).Varint(0).I32(0).I32(0).I32(0)
             .U8(0).I32(0).Varint(0).Varint(0).U8(0).I32(0).Varint(0).Varint(0).ToArray();
         if (Crafts.Of(recipeId) is not { } recipe || recipe.Race != profileRace || !recipe.Auto || recipe.Mastery > CraftLevelOf(recipe.Worktable)) return [Reply(1, false)];
         if (targets?.TryGetValue((int)worktable, out var table) != true || table!.Function != recipe.Worktable
@@ -195,16 +247,39 @@ public sealed partial class GameSession
             if (CostStacks(KinaItemId, recipe.Fee) is not { } fee) return [Reply(3, false)];
             costs.AddRange(fee);
         }
-        // The success rate at the mastery gap (player mastery over the recipe's; CraftRecipeRate curve).
-        var success = CraftRoll() < Crafts.Rate(recipe, CraftLevelOf(recipe.Worktable) - recipe.Mastery);
+        var gap = CraftLevelOf(recipe.Worktable) - recipe.Mastery;
+        var outcome = ResolveCraftOutcome(recipe, gap, CraftRoll, CraftRoll);
         if (Store is { } store && CharacterId is { } character)
         {
-            var done = await Stored(async () => await store.ShopBuyAsync(character, costs, success ? [(recipe.Product, recipe.ProductCount)] : [], [], ct) ? [[]] : []);
+            List<(int Item, long Count)> goods = outcome.GrantsProduct ? [(outcome.Product, outcome.ProductCount)] : [];
+            var done = await Stored(async () => await store.ShopBuyAsync(character, costs, goods, [], ct) ? [[]] : []);
             if (done.Count == 0) return [Reply(1, false)];
         }
-        return [Reply(0, success), .. await InventoryChangesAsync(ct, IncreaseCraftItem, DecreaseCraftItem),
-            PacketWriter.Opcode(CraftCompletedNt).U16(0).Varint(worktable).Bool(true).ToArray(),
+        var achieve = new List<byte[]>();
+        if (outcome.GrantsProduct)
+        {
+            achieve.AddRange(AchieveCraft(recipe.Worktable, CraftLevelOf(recipe.Worktable)));
+            if (outcome.ComboSuccess) achieve.AddRange(Achieve("CraftComboSuccess", 1, e => e.Values.Length == 0 || e.Has(recipeId.ToString(System.Globalization.CultureInfo.InvariantCulture))));
+        }
+        return [Reply(0, outcome.Success, combo: outcome.ComboAttempt, comboSuccess: outcome.ComboSuccess), .. await InventoryChangesAsync(ct, IncreaseCraftItem, DecreaseCraftItem),
+            PacketWriter.Opcode(CraftCompletedNt).U16(0).Varint(worktable).Bool(outcome.GrantsProduct).ToArray(),
             .. await CraftMasteryExpAsync(CraftCategories.GetValueOrDefault(recipe.Worktable), ct),
-            .. success ? AchieveCraft(recipe.Worktable, CraftLevelOf(recipe.Worktable)) : []];
+            .. achieve];
+    }
+
+    /// <summary>Normal success, optional Splendent combo chain (CraftRecipe ComboRecipe + ComboProbability from dat).</summary>
+    internal readonly record struct CraftOutcome(bool Success, bool GrantsProduct, int Product, long ProductCount, bool ComboAttempt, bool ComboSuccess);
+
+    internal static CraftOutcome ResolveCraftOutcome(CraftTables.Recipe recipe, int masteryGap, Func<int> successRoll, Func<int> comboRoll)
+    {
+        var success = successRoll() < CraftTables.Embedded.Rate(recipe, masteryGap);
+        if (!success) return new(false, false, recipe.Product, recipe.ProductCount, false, false);
+        if (recipe.ComboRecipeId <= 0 || recipe.ComboActivation <= 0 || Crafts.Of(recipe.ComboRecipeId) is not { } comboRecipe)
+            return new(true, true, recipe.Product, recipe.ProductCount, false, false);
+        if (comboRoll() >= recipe.ComboActivation)
+            return new(true, true, recipe.Product, recipe.ProductCount, false, false);
+        var comboSuccess = comboRoll() < Crafts.Rate(comboRecipe, masteryGap);
+        if (!comboSuccess) return new(false, false, recipe.Product, recipe.ProductCount, true, false);
+        return new(true, true, comboRecipe.Product, comboRecipe.ProductCount, true, true);
     }
 }

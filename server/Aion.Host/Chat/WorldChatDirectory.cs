@@ -22,6 +22,12 @@ public sealed class WorldChatDirectory(WorldPresence presence, IWireCharacterRep
         return found;
     }
 
+    public ChatCharacter? CurrentOfAccount(Guid account)
+    {
+        var mine = presence.All.Where(e => e.AccountId == account && e.Session.InWorld).ToList();
+        return mine is [{ Session.CharacterId: Guid id }] ? Current(id, account) : null;
+    }
+
     public ChatCharacter? Current(Guid character, Guid account)
     {
         var entry = presence.FindCharacter(character);
@@ -29,7 +35,8 @@ public sealed class WorldChatDirectory(WorldPresence presence, IWireCharacterRep
         var session = entry.Session;
         // CharacterName is the stored name (WorldPresence is keyed by it); the shown name adds the staff tag.
         return session.CharacterName is { Length: > 0 } name
-            ? new ChatCharacter(character, name, CharacterNames.Display(name, session.StaffRole), session.Guild?.Id ?? 0)
+            ? new ChatCharacter(character, name, CharacterNames.Display(name, session.StaffRole), session.Guild?.Id ?? 0,
+                session.ProfileRace)
             : null;
     }
 }

@@ -76,7 +76,11 @@ public sealed record OtherCharacter
     public int Level { get; init; } = 1;
     public int ConquerorLevel { get; init; }
     public int EquipItemLevel { get; init; }
+    /// <summary>Mounted VehicleList id (_ride_data_id); written when non-zero (usmap tail).</summary>
+    public int RideDataId { get; init; }
+    public int VesselKey { get; init; }
     public int TeleportEffectId { get; init; }
+    public int DefaultRideDataId { get; init; }
     public byte[] CustomizingData { get; init; } = [];
     /// <summary>ECharacterVoiceType 0..3.</summary>
     public int VoiceType { get; init; }
@@ -191,10 +195,15 @@ public static class PlayerPackets
         w.I64(c.DbId).U8(c.Stats.Count);
         foreach (var (type, value) in c.Stats) GamePackets.Stat(w, type, value);
         w.I32(c.Level).I32(c.ConquerorLevel).I32(c.EquipItemLevel);
+        if (c.RideDataId != 0 || c.VesselKey != 0)
+        {
+            w.I32(c.RideDataId).I32(c.VesselKey);
+        }
         if (c.TeleportEffectId != 0) w.I32(c.TeleportEffectId);
         w.Bytes(c.CustomizingData);
         if (c.VoiceType != 0) w.U8(c.VoiceType);
         if (c.SealstoneItemId != 0) w.I32(c.SealstoneItemId);
+        if (c.DefaultRideDataId != 0) w.I32(c.DefaultRideDataId);
         return w.I64(c.CombatPower).U8(c.DieType).Bool(c.PeaceShowWeapon).ToArray();
     }
 
@@ -348,6 +357,14 @@ public static class PlayerPackets
         if (deadReckoning) w.Bool(true);
         return w.ToArray();
     }
+
+    /// <summary>0x3726 CharGlideBuoyancyOn_NT (dev 0x3683 + 0xa3): key | buoyance mode u8 | springboard i64 | dead reckoning bool.</summary>
+    public static byte[] GlideBuoyancyOn(int key, byte buoyanceMode, long springboardId, bool deadReckoning = true) =>
+        PacketWriter.Opcode(0x3726).Varint(key).U8(buoyanceMode).I64(springboardId).Bool(deadReckoning).ToArray();
+
+    /// <summary>0x3727 CharGlideBuoyancyOff_NT (dev 0x3684 + 0xa3): key | dead reckoning bool.</summary>
+    public static byte[] GlideBuoyancyOff(int key, bool deadReckoning = true) =>
+        PacketWriter.Opcode(0x3727).Varint(key).Bool(deadReckoning).ToArray();
 
     // ---------- Swimming (CANDIDATE: usmap field order with the glide/flight optional-field convention; no official sample:
     // nobody swam near the recorder on 2026-10-19). Live opcodes = dev struct index + 0xa3: 0x3736-0x373b. ----------
@@ -529,6 +546,68 @@ public static class PlayerPackets
     }
 
     /// <summary>
+    /// 0x3803 SkillFireProjectile_NT, OBSERVED (official Ranger 2026-10-30, 7 samples): caster | mask u8 0 | target |
+    /// skill i32 | action uid u8 (the 0x3802's) | _skill_projectile_id varint | target position Vec3 | _remain_time_ms varint |
+    /// effect seq u32 | effect seq u8 | 00. The projectile id is the SkillProjectile.dat row the client draws: e1 9d f3 42 =
+    /// 140300001 and e2 9d f3 42 = 140300002 for Rapid Fire's two arrows, c1 90 ed 42 = 140200001 for Snipe; an id with no row
+    /// draws nothing. One per arrow; the arrow's 0x3804 carries the same seq.
+    /// e.g. 03 38 f8 02 00 ee af 03 b0 14 d6 00 5d e1 9d f3 42 [pos] de 02 01 00 00 00 01 00
+    /// </summary>
+    public static byte[] SkillFireProjectile(int casterKey, int targetKey, int skillId, byte actionUid, int projectileId,
+        Vector3d targetPosition, int flightMs, int effectSeq) =>
+        PacketWriter.Opcode(0x3803).Varint(casterKey).U8(0).Varint(targetKey).I32(skillId).U8(actionUid).Varint(projectileId)
+            .Vec3(targetPosition).Varint(Math.Max(0, flightMs)).U32((uint)effectSeq).U8((byte)effectSeq).U8(0).ToArray();
+
+    /// <summary>
+    /// 0x3804 of a projectile hit, OBSERVED (official Ranger 2026-10-30, Snipe and Rapid Fire): target | 14 00 | caster | skill |
+    /// uid | hit type | effect id u32 | effect seq u32 | attack speed | damage | seq u8 | 01 | 00. Mask bit 0x02 adds the
+    /// _plotter (block / hard hit / attack angle flags) after the hit type, e.g. 16 00 ... 02 80 00 01 cb14a053 ... in an earlier
+    /// capture; a plain hit has none. CANDIDATE: the order of the seq and the 01 (both samples have seq 1).
+    /// </summary>
+    public static byte[] ProjectileEffect(int targetKey, int casterKey, int skillId, byte actionUid, int effectId, int effectSeq, int damage,
+        int attackSpeed = 10000, int hitType = 2)
+    {
+        if (effectSeq is < 0 or > 255) throw new ArgumentOutOfRangeException(nameof(effectSeq));
+        return PacketWriter.Opcode(0x3804).Varint(targetKey).U8(0x14).U8(0).Varint(casterKey).I32(skillId).U8(actionUid)
+            .Varint(hitType).U32((uint)effectId).U32((uint)effectSeq).Varint(attackSpeed).Varint(damage).U8((byte)effectSeq).U8(1).U8(0).ToArray();
+    }
+
+    /// <summary>
+    /// 0x3804 SkillEffect_NT of an NPC's damaging hit (switch 06, usmap DevPacketData_GameServer_SkillEffect_NT):
+    /// target | 06 | presence u8 (bit1 plotter, bit2 damage) | caster | skill | action uid | hit type varint |
+    /// [SkillEffectDamagePlotter when bit1] | effect id u32 | effect seq u32 | attack speed | damage | effect seq u8 | 00.
+    /// OBSERVED plotter bytes include 02 00 02 (weapon block) and 42 00 00 (perfect block at damage 1).
+    /// </summary>
+    public static byte[] NpcSkillEffect(int targetKey, int actorKey, int skillId, byte actionUid, int effectId, int effectSeq, int damage,
+        int attackSpeed = 10000, int hitType = 2, bool includePlotter = true)
+    {
+        if (effectSeq is < 0 or > 255) throw new ArgumentOutOfRangeException(nameof(effectSeq));
+        var mask = (byte)(0x04 | (includePlotter ? 0x02 : 0));
+        var w = PacketWriter.Opcode(0x3804).Varint(targetKey).U8(6).U8(mask).Varint(actorKey).I32(skillId).U8(actionUid).Varint(hitType);
+        if (includePlotter) w.U8(0).U8(0).U8(2);
+        return w.U32((uint)effectId).U32((uint)effectSeq).Varint(attackSpeed).Varint(damage).U8((byte)effectSeq).U8(0).ToArray();
+    }
+
+    /// <summary>
+    /// 0x3809 SkillCastingStart_NT (dev 0x36B3 + 0x156): caster begins a cast-time skill before 0x3802 SkillStart_NT.
+    /// </summary>
+    public static byte[] SkillCastingStart(int actorKey, int skillId, int targetKey, double yaw, Vector3d location, int castingMs, int attackSpeed = 10000)
+    {
+        return PacketWriter.Opcode(0x3809).Varint(actorKey).I32(skillId).I32(1).U8(2).Varint(targetKey).F32(yaw).Vec3(location)
+            .Varint(castingMs).U8(0).I32(0).Varint(attackSpeed).Varint(0).ToArray();
+    }
+
+    /// <summary>
+    /// 0x380e SkillProjectileCollision_NT (dev 0x36B8 + 0x156): projectile destroyed on the victim (mask 02 destroyed).
+    /// </summary>
+    public static byte[] SkillProjectileCollision(int casterKey, int targetKey, int skillId, byte actionUid, int projectileId, Vector3d position,
+        int effectSeq, long processUid = 0)
+    {
+        return PacketWriter.Opcode(0x380e).Varint(casterKey).U8(2).Varint(targetKey).I32(skillId).U8(actionUid).Varint(projectileId)
+            .Vec3(position).I32(0).I32(effectSeq).Varint(processUid).U8(0).U8(1).Vec3(position).ToArray();
+    }
+
+    /// <summary>
     /// 0x3804 SkillEffect_NT of a player's damaging hit (switch 04, 20 samples with a player caster):
     /// target | 04 00 | caster | skill i32 | action uid | hit type varint (2) | effect id u32 | effect seq u32 |
     /// attack speed varint | damage varint | effect seq u8 | 00. OBSERVED; GamePackets.SkillHit is this form with uid 0.
@@ -545,6 +624,28 @@ public static class PlayerPackets
     public static byte[] AbnormalAdd(int key, IReadOnlyList<AbnormalWire> abnormals) =>
         WriteAbnormals(PacketWriter.Opcode(0x382a).Varint(key), abnormals).ToArray();
 
+    /// <summary>
+    /// 0x382b AbnormalChange_NT: key | Common_Abnormal | show_msg (packed bool). OBSERVED official 2026-10-30 (259):
+    /// 2b 38 df 4b 13 25 71 dc 5f 08 b8 0b 00 00 ... (mask 0x13, uid 37, abnormal 140500081, 3000 ms).
+    /// </summary>
+    public static byte[] AbnormalChange(int key, AbnormalWire abnormal, bool showMsg = false)
+    {
+        var w = PacketWriter.Opcode(0x382b).Varint(key);
+        WriteAbnormal(w, abnormal);
+        return w.Bool(showMsg).ToArray();
+    }
+
+    /// <summary>
+    /// 0x382d ImmuneAbnormal_NT (old catalogue 0x36D6, +0x157 like 0x382a-0x382c and 0x3832): key | count | effect id i32.
+    /// Official sends it (38 in one Ranger fight); the id array is the usmap's, written like 0x3818's (CANDIDATE).
+    /// </summary>
+    public static byte[] ImmuneAbnormal(int key, IReadOnlyList<int> effectIds)
+    {
+        var w = PacketWriter.Opcode(0x382d).Varint(key).Varint(effectIds.Count);
+        foreach (var id in effectIds) w.I32(id);
+        return w.ToArray();
+    }
+
     /// <summary>0x382c AbnormalRemoveList_NT: key | count | {u8 mask 0, uid varint, EAbnormalExpireReason u8}. OBSERVED (dispel fields never present).</summary>
     public static byte[] AbnormalRemove(int key, IReadOnlyList<(int Uid, byte Reason)> removed)
     {
@@ -559,6 +660,35 @@ public static class PlayerPackets
     /// </summary>
     public static byte[] MoveReject(ushort opcode, int key, Vector3d position, int reason = 1) =>
         PacketWriter.Opcode(opcode).Varint(key).U8(0).U8(0).Vec3(position).I32(reason).ToArray();
+
+    /// <summary>EAbnormalMoveType (usmap): how an abnormal moves its owner.</summary>
+    public const byte MovePush = 0, MoveKnockback = 1, MovePull = 2, MoveKnockbackInstant = 3, MoveKnockdownInstant = 4;
+    /// <summary>ETerrainType (usmap) of the ground the move starts and ends on (the server has no per-point terrain: Ground).</summary>
+    public const byte TerrainGround = 1;
+
+    /// <summary>
+    /// 0x3814 Abnormal_Move_Start_NT (old catalogue 0x36bd, +0x157): key | caster key | effect id i32 | goal Vec3 | move time ms i32 |
+    /// EAbnormalMoveType u8 | start terrain u8 | end terrain u8. The usmap's fields with the keys as varints like the other NTs;
+    /// the wire form was never captured (CANDIDATE).
+    /// </summary>
+    public static byte[] AbnormalMoveStart(int key, int casterKey, int effectId, Vector3d goal, int moveTimeMs, byte moveType) =>
+        PacketWriter.Opcode(0x3814).Varint(key).Varint(casterKey).I32(effectId).Vec3(goal).I32(moveTimeMs).U8(moveType).U8(TerrainGround).U8(TerrainGround).ToArray();
+
+    /// <summary>0x3815 Abnormal_Move_Stop_NT: key | stop position Vec3 | EAbnormalMoveType u8 | end terrain u8 (CANDIDATE, as 0x3814).</summary>
+    public static byte[] AbnormalMoveStop(int key, Vector3d stop, byte moveType) =>
+        PacketWriter.Opcode(0x3815).Varint(key).Vec3(stop).U8(moveType).U8(TerrainGround).ToArray();
+
+    /// <summary>0x3816 Abnormal_Move_Instant_NT: key | caster key | effect id i32 | goal Vec3 | EAbnormalMoveType u8 | start terrain u8 | end terrain u8 (CANDIDATE).</summary>
+    public static byte[] AbnormalMoveInstant(int key, int casterKey, int effectId, Vector3d goal, byte moveType) =>
+        PacketWriter.Opcode(0x3816).Varint(key).Varint(casterKey).I32(effectId).Vec3(goal).U8(moveType).U8(TerrainGround).U8(TerrainGround).ToArray();
+
+    /// <summary>0x3847 SkillCooltimeUpdate_NT (old catalogue 0x36f0, +0x157): count | {skill group id i32, cooltime ms i32}. Usmap layout, array written like 0x382d's (CANDIDATE).</summary>
+    public static byte[] SkillCooltimeUpdate(IReadOnlyList<(int Group, int Ms)> groups)
+    {
+        var w = PacketWriter.Opcode(0x3847).Varint(groups.Count);
+        foreach (var (group, ms) in groups) w.I32(group).I32(ms);
+        return w.ToArray();
+    }
 
     /// <summary>0x364b MoveSpeedUpdate_NT: key | u8 count | {u16 stat, i32 value} (stat 205 observed: 150, 1000, 1150, 0). OBSERVED.</summary>
     public static byte[] MoveSpeedUpdate(int key, IReadOnlyList<(int Type, int Value)> stats)

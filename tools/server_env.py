@@ -57,13 +57,15 @@ def environment(args, credentials):
         'Aion__Native__LoginPort': PORTS['login'],
         'Aion__Native__GamePort': PORTS['game'],
         'Aion__Native__Logins': 'accounts',
+        'Aion__Progression__LevelCap': '45',
         'Aion__Native__MaxConnections': args.max_connections,
         'Aion__ChatPort': PORTS['chat'],
         'Aion__Platform__Port': PORTS['bootstrap'],
         'Aion__Platform__FixtureDirectory': data / 'bootstrap/keys',
         'Aion__Platform__PolicyFile': data / 'bootstrap/policy/app-policy.json',
-        # Policy custom_data switches of the game (its key table, read from the client 2026-10-18). The title screen's
-        # Security Settings button is governed by SecondaryAuthCheckType (value CANDIDATE until a launch confirms).
+        # Policy custom_data switches of the game (its key table, read from the client 2026-10-18). SecondaryAuthCheckType
+        # 'OTP' makes the title screen show the NC account menu (Security Settings, Manage Account, Credits) that the
+        # official Steam title does not show; 'None' is also the host's default. TOTP is checked at the account login.
         # SteamShowOnlySteamLogin=true is NOT set: it moves the client to the Steam token login route
         # (sessions/v1.0/login_sessions;token); the bootstrap answers it with the login session object, which the client
         # rejected on 2026-10-18 (200, then "failed to login"), so the reply shape is still unknown.

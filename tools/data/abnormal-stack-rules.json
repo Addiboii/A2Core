@@ -1,0 +1,1489 @@
+{
+  "source": "boxes.json defaults (AbnormalTable.dat not present)",
+  "abnormals": {
+    "200": {
+      "group": 200,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "306": {
+      "group": 306,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "1726": {
+      "group": 1726,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "20014": {
+      "group": 20014,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "20015": {
+      "group": 20015,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "20016": {
+      "group": 20015,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "20017": {
+      "group": 20015,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "20018": {
+      "group": 20015,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "20020": {
+      "group": 20020,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "30020": {
+      "group": 30020,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "160020": {
+      "group": 1196,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "160030": {
+      "group": 1196,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "10000005": {
+      "group": 10000005,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "10000017": {
+      "group": 10000017,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "10000030": {
+      "group": 10000030,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "10000100": {
+      "group": 10000100,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "10000101": {
+      "group": 10000101,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "10000102": {
+      "group": 10000102,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "10001010": {
+      "group": 10001010,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "10001011": {
+      "group": 10001011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "10001012": {
+      "group": 10001012,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "12000041": {
+      "group": 100,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "12000051": {
+      "group": 100,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "12000151": {
+      "group": 12000151,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "12000161": {
+      "group": 12000161,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "12000231": {
+      "group": 12000231,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "12000241": {
+      "group": 12000241,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "12000253": {
+      "group": 12000253,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "12000257": {
+      "group": 12150005,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "12000276": {
+      "group": 12000276,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "12000391": {
+      "group": 12000391,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "12000392": {
+      "group": 12000392,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "12000401": {
+      "group": 12000401,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "12000402": {
+      "group": 12000402,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "12000403": {
+      "group": 12000403,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "12381101": {
+      "group": 100,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "15015205": {
+      "group": 180,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "15019501": {
+      "group": 15019501,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "15019504": {
+      "group": 15019504,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "15019505": {
+      "group": 15019505,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "15019506": {
+      "group": 15019506,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "15019508": {
+      "group": 15019508,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "16004901": {
+      "group": 16004901,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "16044811": {
+      "group": 16044811,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "16056801": {
+      "group": 16056801,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "16056802": {
+      "group": 16056802,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "18017800": {
+      "group": 18017800,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "18020001": {
+      "group": 18020001,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "18020003": {
+      "group": 18020003,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "18023003": {
+      "group": 18023003,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "18042011": {
+      "group": 18042011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "18042012": {
+      "group": 18042012,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "18042911": {
+      "group": 18042911,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "18045551": {
+      "group": 18045551,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "18045553": {
+      "group": 18045553,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "18045554": {
+      "group": 18045554,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "18045557": {
+      "group": 18045553,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "18045558": {
+      "group": 18045551,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "18045559": {
+      "group": 18045559,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "18064903": {
+      "group": 18064903,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "18080207": {
+      "group": 18043361,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "18085001": {
+      "group": 18085001,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "18085003": {
+      "group": 18085003,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "19000009": {
+      "group": 19000009,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "19000077": {
+      "group": 19000077,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "19004401": {
+      "group": 19004401,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "19004421": {
+      "group": 19004421,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "19004431": {
+      "group": 19004431,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "19004441": {
+      "group": 19004441,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "19004461": {
+      "group": 19004461,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "19004471": {
+      "group": 19004471,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "19004481": {
+      "group": 19004481,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "19004491": {
+      "group": 19004491,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "19004511": {
+      "group": 19004511,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "19004521": {
+      "group": 19004521,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "19004531": {
+      "group": 19004531,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "19004541": {
+      "group": 19004541,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "19004542": {
+      "group": 19004542,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "19004543": {
+      "group": 19004543,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "19004551": {
+      "group": 19004551,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "19004552": {
+      "group": 19004552,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "19005061": {
+      "group": 19005061,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "19006001": {
+      "group": 19006001,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "19006011": {
+      "group": 19006011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "19006021": {
+      "group": 19006021,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "19006101": {
+      "group": 19006101,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "19105021": {
+      "group": 19105021,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "19801701": {
+      "group": 19801701,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "19803501": {
+      "group": 19803501,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "19991402": {
+      "group": 180,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "20111011": {
+      "group": 20111011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "20111021": {
+      "group": 20111011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "20112011": {
+      "group": 20112011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "21101011": {
+      "group": 21101011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "21101031": {
+      "group": 21101011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "21101051": {
+      "group": 21101011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "21101071": {
+      "group": 21101011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "21106011": {
+      "group": 21101011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "21106031": {
+      "group": 21101011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "21106051": {
+      "group": 21101011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "21106071": {
+      "group": 21101011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "21111031": {
+      "group": 21101011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "21111091": {
+      "group": 21101011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "21116031": {
+      "group": 21101011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "21116091": {
+      "group": 21101011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "21601011": {
+      "group": 21601011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "21601031": {
+      "group": 21601011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "21601051": {
+      "group": 21601011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "21601071": {
+      "group": 21601011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "21604011": {
+      "group": 21601011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "21604031": {
+      "group": 21601011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "21604051": {
+      "group": 21601011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "21604071": {
+      "group": 21601011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "21607011": {
+      "group": 21601011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "21607031": {
+      "group": 21601011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "21607051": {
+      "group": 21601011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "21607071": {
+      "group": 21601011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "21610011": {
+      "group": 21601011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "21610031": {
+      "group": 21601011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "21610051": {
+      "group": 21601011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "21610071": {
+      "group": 21601011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "21613011": {
+      "group": 21601011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "21613031": {
+      "group": 21601011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "21613051": {
+      "group": 21601011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "21613071": {
+      "group": 21601011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "21616011": {
+      "group": 21601011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "21616031": {
+      "group": 21601011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "21616051": {
+      "group": 21601011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "21616071": {
+      "group": 21601011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "21619031": {
+      "group": 21601011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "21619091": {
+      "group": 21601011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "21628031": {
+      "group": 21601011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "21628091": {
+      "group": 21601011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "21634031": {
+      "group": 21601011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "21634091": {
+      "group": 21601011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "22101031": {
+      "group": 22101031,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "22101041": {
+      "group": 22101031,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "22101051": {
+      "group": 22101051,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "22101061": {
+      "group": 22101051,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "22104011": {
+      "group": 22104011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "22104021": {
+      "group": 22104021,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "22104031": {
+      "group": 22104021,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "22120011": {
+      "group": 22120011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "22121011": {
+      "group": 22121011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "23101011": {
+      "group": 23101011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "27002011": {
+      "group": 21101011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "27002021": {
+      "group": 21101011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "27002031": {
+      "group": 21101011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "27002041": {
+      "group": 21101011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "27002051": {
+      "group": 21101011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "27002061": {
+      "group": 21101011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "27002071": {
+      "group": 21101011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "27003011": {
+      "group": 21601011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "27003031": {
+      "group": 21601011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "27003041": {
+      "group": 21601011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "27003051": {
+      "group": 21601011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "27003061": {
+      "group": 21601011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "27003071": {
+      "group": 21601011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "27003081": {
+      "group": 21601011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "27003091": {
+      "group": 21601011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "27003101": {
+      "group": 21601011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "27003111": {
+      "group": 21601011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "27003121": {
+      "group": 21601011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "27003131": {
+      "group": 21601011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "27003141": {
+      "group": 21601011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "27003151": {
+      "group": 21601011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "27003161": {
+      "group": 21601011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "27003171": {
+      "group": 21601011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "27003181": {
+      "group": 21601011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "27003191": {
+      "group": 21601011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "27004011": {
+      "group": 21101011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "27004021": {
+      "group": 27004021,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "27004031": {
+      "group": 21601011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "27004041": {
+      "group": 21601011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "27004061": {
+      "group": 22101031,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "27004071": {
+      "group": 21601011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "27004081": {
+      "group": 21601011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "27004091": {
+      "group": 21601011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "27004101": {
+      "group": 21601011,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "27004111": {
+      "group": 27004111,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "27004121": {
+      "group": 27004121,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "29004011": {
+      "group": 234,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "42000101": {
+      "group": 192,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "42000701": {
+      "group": 192,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "42000801": {
+      "group": 192,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "42000901": {
+      "group": 192,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "42001001": {
+      "group": 192,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "42001101": {
+      "group": 192,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "42001201": {
+      "group": 192,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "42001401": {
+      "group": 192,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "42001501": {
+      "group": 192,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "42001601": {
+      "group": 192,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "42001701": {
+      "group": 192,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "43000101": {
+      "group": 191,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "44000101": {
+      "group": 199,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "44000201": {
+      "group": 199,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "44000301": {
+      "group": 199,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "44000401": {
+      "group": 199,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "44000501": {
+      "group": 199,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "45001001": {
+      "group": 197,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "45002001": {
+      "group": 197,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "45003001": {
+      "group": 197,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "45003501": {
+      "group": 197,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "45004001": {
+      "group": 197,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "45005001": {
+      "group": 197,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "45006001": {
+      "group": 197,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "45006501": {
+      "group": 197,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "49003001": {
+      "group": 198,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "49005001": {
+      "group": 198,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "49005011": {
+      "group": 198,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "49005021": {
+      "group": 198,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    },
+    "49005031": {
+      "group": 198,
+      "overlap_count": 1,
+      "overlap_time": "Renew",
+      "replace": "Replace",
+      "source": "boxes.json"
+    }
+  }
+}

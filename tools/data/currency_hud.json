@@ -1,0 +1,203 @@
+{
+  "source": "AION2 usmap ECurrencyCategory + table struct names (CurrencyInfoTableItem, GnbCurrencyTableItem, ItemTableCurrencyInfo)",
+  "quna_item_id": 535300006,
+  "kina_item_id": 930100001,
+  "gnb_bar_slots": [
+    {
+      "index": 0,
+      "ecurrency_category": "GameCashPending",
+      "source": "RefreshCurrency_NT group 145 and/or HTTP pending_balance",
+      "ecurrency_category_id": 103
+    },
+    {
+      "index": 1,
+      "ecurrency_category": "Mileage",
+      "source": "RefreshCurrency_NT group 158 and GET balances?currency_group_id=158",
+      "ecurrency_category_id": 6
+    },
+    {
+      "index": 2,
+      "ecurrency_category": "GoldCombined",
+      "source": "ItemDepotList_RS 0x5611 bag stacks item 930100001 (not CharPoint 0x8d00)",
+      "ecurrency_category_id": 93
+    },
+    {
+      "index": 3,
+      "ecurrency_category": "GameCash",
+      "source": "ItemDepotList_RS 0x5611 bag stacks item 535300006; GNB bar wiring TBD (no official capture with Quna owned)",
+      "ecurrency_category_id": 7
+    }
+  ],
+  "gnb_quna": {
+    "client_strings": [
+      "CurrencyInfo_GameCash_desc_long",
+      "UI_GNB_TOOLTIP_GAMECASH_PENDING_DESC"
+    ],
+    "currency_info_table_field": "CurrencyInfoTableItem.CurrencyCategory",
+    "gnb_table": "GnbCurrencyTableItem.CurrencyList (ECurrencyCategory entries shown on GNB)",
+    "item_currency_field": "ItemTableCurrencyInfo.CurrencyCategory (EItemType.Currency rows in Item.dat)",
+    "ecurrency_category_game_cash": 7,
+    "ecurrency_category_mileage": 6,
+    "ecurrency_category_gold_combined": 93
+  },
+  "refresh_currency_nt": {
+    "packet": "DevPacketData_GameServer_RefreshCurrency_NT (wire 0x3bd1)",
+    "fields": "_currency_group_id i32, _balance_list map i32->i64",
+    "map_key_primary": "ECurrencyCategory GameCash (7) / Mileage (6) in usmap _balance_list",
+    "map_key_http_only": "virtual_currency/me/balances currency_id 109 (group 145 GameCash) and 110 (group 158 Mileage) — not the same numeric namespace as ECurrencyCategory",
+    "platform_http": {
+      "game_cash_group_id": 145,
+      "game_cash_virtual_currency_id": 109,
+      "mileage_group_id": 158,
+      "mileage_virtual_currency_id": 110,
+      "balance_amount_format": "F6 decimal strings (50000.000000); matches NC virtual_currency/v2.0/me/balances captures",
+      "consistency_note": "ShopQunaBalanceService.JsonBody maps group 145→currency_id 109 and group 158→110; RefreshCurrency_NT uses ECurrencyCategory 7/6 when emitted (e.g. after inventory spend), not 109/110"
+    }
+  },
+  "server_behavior": {
+    "item_depot_list_0x5611": "Includes bag stacks for 535300006 (GameCash item) and 930100001 (kinah), same as pre-#271 09fd30c",
+    "world_entry_refresh_currency_nt": "Not sent at world entry (official entry captures show no 0x3bd1; prior group-145 key-7 push was speculative)",
+    "gnb_quna_display": "Deferred until Fiddler/pcap of a character that owns Quna on live"
+  },
+  "gnb_investigation": {
+    "usmap_mapping": "research/local/tooling/mappings/AION2-5.3.2.0-2.0.6.0.usmap",
+    "hud_widgets": {
+      "AionWidget_GNB": "P_CurrencyList → AionWidget_CurrencyList (bHUDWidget) → AionWidget_CurrencyListSlot P_RTxt_Value",
+      "GnbCurrencyTableItem": "CurrencyList: array<ECurrencyCategory> defines slot order",
+      "ItemTableCurrencyInfo": "CurrencyCategory enum on currency item rows (535300006 → GameCash)"
+    },
+    "server_currency_packets": {
+      "RefreshCurrency_NT": "DevPacketData_GameServer_RefreshCurrency_NT — only NC wallet packet with _balance_list; no AccountCash_NT / _game_cash field in usmap",
+      "CharPointUpdate_NT": "ECharPointType Hp/Mp/Ap/Sp/Op/Fp only — no GameCash char point",
+      "AccountCurrencyLimit_*": "0x3c09–0x3c0b dungeon reward caps (_reward_count), unrelated to GNB Quna display"
+    },
+    "client_symbols": {
+      "GetGameCash": "usmap name table (Blueprint); likely reads RefreshCurrency map and/or currency item stacks",
+      "TradeGameCash": "player trade path, separate from GNB"
+    },
+    "eitem_container_type": {
+      "kInventory": 1,
+      "kStorage": 2,
+      "kServerMoney": 3,
+      "note": "Wire InventoryItem.AccountStorage=3 aligns with kServerMoney; kinah (930100001) displays from bag container 1 today. account_storage DB rows are not emitted in 0x5611 Layout yet."
+    },
+    "request_log_build_b2e52f5": {
+      "virtual_currency_balances": "11× group 145 = 50000, group 158 = 0; client never queried currency_group_id=1",
+      "platform_503_before_fix": [
+        "GET /local-api-gate/account/v1.0/me/Country (2×)",
+        "GET /local-api-gate/profileimage/v1.0/game_profile_images/10001 (24×)"
+      ],
+      "reverted_speculation": "Extra RefreshCurrency group 1 and pending map keys 102/103 — not supported by client HTTP log"
+    }
+  },
+  "ecurrency_category": {
+    "0": "None",
+    "1": "Gold",
+    "2": "CoinGuild",
+    "3": "AbyssPoint",
+    "4": "CoinBattlePass",
+    "5": "CoinReserved1",
+    "6": "Mileage",
+    "7": "GameCash",
+    "9": "Cash",
+    "10": "CoinEvent1",
+    "11": "CoinEvent2",
+    "12": "CoinEvent3",
+    "13": "CoinEvent4",
+    "14": "CoinEvent5",
+    "15": "CoinEvent6",
+    "16": "CoinEvent7",
+    "17": "CoinEvent8",
+    "18": "CoinEvent9",
+    "19": "CoinEvent10",
+    "20": "CoinEvent11",
+    "21": "CoinEvent12",
+    "22": "CoinEvent13",
+    "23": "CoinEvent14",
+    "24": "CoinEvent15",
+    "25": "CoinEvent16",
+    "26": "CoinEvent17",
+    "27": "CoinEvent18",
+    "28": "CoinEvent19",
+    "29": "CoinEvent20",
+    "31": "CoinEvent21",
+    "32": "CoinEvent22",
+    "33": "CoinEvent23",
+    "34": "CoinEvent24",
+    "35": "CoinEvent25",
+    "36": "CoinEvent26",
+    "37": "CoinEvent27",
+    "38": "CoinEvent28",
+    "39": "CoinEvent29",
+    "40": "CoinEvent30",
+    "41": "CoinEvent31",
+    "42": "CoinEvent32",
+    "43": "CoinEvent33",
+    "44": "CoinEvent34",
+    "45": "CoinEvent35",
+    "46": "CoinEvent36",
+    "47": "CoinEvent37",
+    "48": "CoinEvent38",
+    "49": "CoinEvent39",
+    "50": "CoinEvent40",
+    "51": "CoinQuestRefresh",
+    "52": "CoinQuestReset",
+    "54": "DivineShard",
+    "55": "CoinQuest1",
+    "56": "CoinQuest2",
+    "57": "CoinQuest3",
+    "58": "CoinQuest4",
+    "59": "CoinQuest5",
+    "60": "CoinQuest6",
+    "61": "Medal1",
+    "62": "Medal2",
+    "63": "Medal3",
+    "64": "Medal4",
+    "65": "Medal5",
+    "66": "EssenceGuild",
+    "67": "CoinQuest7",
+    "68": "DaevanionPoint",
+    "69": "SkinDyeCommon",
+    "70": "SkinDyePremium",
+    "71": "CoinEnchant",
+    "72": "ConvenientCraft",
+    "79": "CoinDungeon1",
+    "80": "SoulCrystalAll",
+    "81": "SoulCrystalIntellect",
+    "82": "SoulCrystalFeral",
+    "83": "SoulCrystalNature",
+    "84": "SoulCrystalTrans",
+    "85": "SoulCrystalSpecial",
+    "86": "CoinArena",
+    "87": "CraftFee",
+    "88": "DaevanionPointConquest",
+    "89": "DaevanionPointBattle",
+    "90": "Season02Crystal01",
+    "91": "CoinSeason2",
+    "92": "CoinBattlePass2",
+    "93": "GoldCombined",
+    "94": "GoldNonbinding",
+    "95": "GameCashBinding",
+    "96": "GameCashNonbinding",
+    "97": "Season03Crystal01",
+    "98": "CoinSeason3",
+    "99": "CoinSeason4",
+    "100": "CoinBattlePass3",
+    "102": "GameCashActivating",
+    "103": "GameCashPending",
+    "104": "CoinBattlePass4",
+    "105": "CoinSeason5",
+    "106": "CoinOnboarding1",
+    "107": "CoinOnboarding2",
+    "108": "CoinOnboarding3",
+    "109": "ExchangeTicket01",
+    "110": "ExchangeTicket02",
+    "111": "ExchangeTicket03",
+    "112": "ExchangeTicket04",
+    "113": "ExchangeTicket05",
+    "114": "CoinOnboarding4",
+    "115": "CoinBattlePassEncore1",
+    "116": "CoinTrialDungeon",
+    "117": "Max"
+  }
+}

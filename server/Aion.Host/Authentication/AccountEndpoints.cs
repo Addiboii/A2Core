@@ -13,12 +13,15 @@ public static class AccountEndpoints
     /// only admins create accounts (POST /api/admin/accounts).</param>
     public static void MapAccountEndpoints(this WebApplication app, bool registration = true)
     {
-        app.MapPost("/api/client-launches", async (HttpContext context, IClientHandoff handoff, CancellationToken ct) =>
+        app.MapPost("/api/client-launches", async (HttpContext context, IClientHandoff handoff, IAccountAuthentication auth, CancellationToken ct) =>
         {
-            var launch = await handoff.AuthorizeLaunchAsync(Bearer(context), 1204, ct);
+            var token = Bearer(context);
+            var launch = await handoff.AuthorizeLaunchAsync(token, 1204, ct);
             if (launch is null) return Results.Unauthorized();
             // A client started without a launch code redeems the launch its own address asked for.
             context.RequestServices.GetService<Aion.Host.Platform.LaunchPairing>()?.Register(context.Connection.RemoteIpAddress, launch.Authorization, launch.ExpiresAt);
+            if (await auth.AuthenticateAsync(token, ct) is { } account && context.RequestServices.GetService<IPlatformSecondaryAuth>() is { } platform)
+                await platform.RememberClientAsync(context.Connection.RemoteIpAddress, account.AccountId, ct);
             return Results.Ok(launch);
         }).RequireRateLimiting("account-entry");
         app.MapPost("/api/accounts/register", async (Credentials input, IAccountAuthentication auth, CancellationToken ct) =>
@@ -48,14 +51,23 @@ public static class AccountEndpoints
             return Results.Json(new { created = true }, statusCode: 201);
         }).RequireRateLimiting("admin");
 
-        app.MapPost("/api/accounts/login", async (Credentials input, IAccountAuthentication auth, CancellationToken ct) =>
+        app.MapPost("/api/accounts/login", async (Credentials input, IAccountAuthentication auth, ITotpAuthentication totp, CancellationToken ct) =>
         {
             if (input.Username is null || input.Password is null) return Results.Unauthorized();
             // "Keep me signed in" (the staff dashboard): a 30-day session instead of the standard 8 hours.
             var session = input.Remember == true
                 ? await auth.SignInAsync(input.Username, input.Password, TimeSpan.FromDays(30), ct)
                 : await auth.SignInAsync(input.Username, input.Password, ct);
-            return session is null ? Results.Unauthorized() : Results.Ok(session);
+            if (session is null) return Results.Unauthorized();
+            if (!await totp.IsEnabledAsync(session.AccountId, ct)) return Results.Ok(session);
+            await auth.SignOutAsync(session.Token, ct);
+            var challenge = await totp.BeginLoginAsync(session.AccountId, ct);
+            return challenge is null ? Results.Unauthorized() : Results.Ok(new
+            {
+                requiresTotp = true,
+                challengeToken = challenge.ChallengeToken,
+                expiresAt = challenge.ExpiresAt,
+            });
         }).RequireRateLimiting("account-entry");
 
         app.MapPost("/api/accounts/logout", async (HttpContext context, IAccountAuthentication auth, CancellationToken ct) =>

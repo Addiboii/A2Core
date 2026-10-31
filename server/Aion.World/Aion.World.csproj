@@ -7,6 +7,7 @@
   </PropertyGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Aion.Native.Checks" />
+    <InternalsVisibleTo Include="Aion.World.Tests" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../Aion.Protocol/Aion.Protocol.csproj" />
@@ -16,18 +17,37 @@
          tools/class_skills.py, tools/world_npcs.py, tools/map_geometry.py, tools/map_points.py and tools/dev_menu.py; one copy, shared with the Python tools. -->
     <EmbeddedResource Include="../../tools/data/starter-skills.json" LogicalName="starter-skills.json" />
     <EmbeddedResource Include="../../tools/data/class-skills.json" LogicalName="class-skills.json" />
+    <EmbeddedResource Include="../../tools/data/pc-summons.json" LogicalName="pc-summons.json" />
+    <EmbeddedResource Include="../../tools/data/elemental-summons.json" LogicalName="elemental-summons.json" />
+    <EmbeddedResource Include="../../tools/data/pc-traps.json" LogicalName="pc-traps.json" />
+    <EmbeddedResource Include="../../tools/data/pc-zones.json" LogicalName="pc-zones.json" />
+    <EmbeddedResource Include="../../tools/data/skill-areas.json" LogicalName="skill-areas.json" />
     <EmbeddedResource Include="../../tools/data/items.json" LogicalName="items.json" />
+    <EmbeddedResource Include="../../tools/data/item-stat-wire.json" LogicalName="item-stat-wire.json" />
     <EmbeddedResource Include="../../tools/data/decompose.json" LogicalName="decompose.json" />
     <EmbeddedResource Include="../../tools/data/achievements.json" LogicalName="achievements.json" />
+    <EmbeddedResource Include="../../tools/data/abyss.json" LogicalName="abyss.json" />
+    <EmbeddedResource Include="../../tools/data/pvp.json" LogicalName="pvp.json" />
     <EmbeddedResource Include="../../tools/data/collections.json" LogicalName="collections.json" />
     <EmbeddedResource Include="../../tools/data/bosschallenge.json" LogicalName="bosschallenge.json" />
     <EmbeddedResource Include="../../tools/data/boxes.json" LogicalName="boxes.json" />
     <EmbeddedResource Include="../../tools/data/levels.json" LogicalName="levels.json" />
+    <EmbeddedResource Include="../../tools/data/resurrect.json" LogicalName="resurrect.json" />
     <EmbeddedResource Include="../../tools/data/loot.json" LogicalName="loot.json" />
     <EmbeddedResource Include="../../tools/data/shops.json" LogicalName="shops.json" />
+    <EmbeddedResource Include="../../tools/data/platform_goods.json" LogicalName="platform_goods.json" />
+    <EmbeddedResource Include="../../tools/data/trade.json" LogicalName="trade.json" />
     <EmbeddedResource Include="../../tools/data/enchant.json" LogicalName="enchant.json" />
+    <EmbeddedResource Include="../../tools/data/exceed_enchant.json" LogicalName="exceed_enchant.json" />
+    <EmbeddedResource Include="../../tools/data/godstones.json" LogicalName="godstones.json" />
+    <EmbeddedResource Include="../../tools/data/daevanion.json" LogicalName="daevanion.json" />
+    <EmbeddedResource Include="../../tools/data/godstone_combine.json" LogicalName="godstone_combine.json" />
+    <EmbeddedResource Include="../../tools/data/item-sets.json" LogicalName="item-sets.json" />
+    <EmbeddedResource Include="../../tools/data/item-stats.json" LogicalName="item-stats.json" />
     <EmbeddedResource Include="../../tools/data/instances.json" LogicalName="instances.json" />
     <EmbeddedResource Include="../../tools/data/crafts.json" LogicalName="crafts.json" />
+    <EmbeddedResource Include="../../tools/data/guilds.json" LogicalName="guilds.json" />
+    <EmbeddedResource Include="../../tools/data/agit_deco.json" LogicalName="agit_deco.json" />
     <EmbeddedResource Include="../../tools/data/world-npcs.json" LogicalName="world-npcs.json" />
     <EmbeddedResource Include="../../tools/data/map-bases.json" LogicalName="map-bases.json" />
     <EmbeddedResource Include="../../tools/data/map-points.json" LogicalName="map-points.json" />
@@ -37,7 +57,14 @@
     <EmbeddedResource Include="../../tools/data/subzones.json" LogicalName="subzones.json" />
     <EmbeddedResource Include="../../tools/data/world-objects.json" LogicalName="world-objects.json" />
     <EmbeddedResource Include="../../tools/data/map-events.json" LogicalName="map-events.json" />
+    <EmbeddedResource Include="../../tools/data/expedition.json" LogicalName="expedition.json" />
+    <EmbeddedResource Include="../../tools/data/resets.json" LogicalName="resets.json" />
     <EmbeddedResource Include="../../tools/data/titles.json" LogicalName="titles.json" />
     <EmbeddedResource Include="../../tools/data/skins.json" LogicalName="skins.json" />
+    <EmbeddedResource Include="../../tools/data/skin_extraction.json" LogicalName="skin_extraction.json" />
+    <EmbeddedResource Include="../../tools/data/item-decompose-skins.json" LogicalName="item-decompose-skins.json" />
+    <EmbeddedResource Include="../../tools/data/player-ap-pools.json" LogicalName="player-ap-pools.json" />
+    <EmbeddedResource Include="../../tools/data/skill-effect-conditions.json" LogicalName="skill-effect-conditions.json" />
+    <EmbeddedResource Include="../../tools/data/abnormal-stack-rules.json" LogicalName="abnormal-stack-rules.json" />
   </ItemGroup>
 </Project>

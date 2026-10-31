@@ -143,9 +143,10 @@ public sealed record LayerVolume(
     [property: JsonPropertyName("zmin")] double ZMin,
     [property: JsonPropertyName("zmax")] double ZMax)
 {
-    /// <summary>Point in the polygon (even-odd), ignoring height.</summary>
+    /// <summary>Point in the polygon (even-odd) within [ZMin, ZMax].</summary>
     public bool Contains(Vector3d at)
     {
+        if (at.Z < ZMin || at.Z > ZMax) return false;
         var inside = false;
         for (int i = 0, j = Points.Length - 1; i < Points.Length; j = i++)
         {
@@ -155,6 +156,9 @@ public sealed record LayerVolume(
         return inside;
     }
 }
+
+/// <summary>Quest-gated instance layer walk-in on a field map (indexed bbox + polygon).</summary>
+public sealed record WalkInLayer(int LayerMap, int DungeonId, LayerVolume Volume, double XMin, double YMin, double XMax, double YMax);
 
 /// <summary>A Teleport.dat row: its map and the MapData teleport actor's location (null for PlayerStart: the map's arrival point).</summary>
 public sealed record TeleportTarget(
@@ -180,6 +184,7 @@ public sealed class MapEventTables
     readonly File file;
     readonly Dictionary<int, int> dungeonByMap = [];
     readonly HashSet<int> served;
+    readonly Dictionary<int, WalkInLayer[]> walkInByBase;
 
     MapEventTables(File file)
     {
@@ -187,6 +192,29 @@ public sealed class MapEventTables
         foreach (var name in file.Events.Keys) file.Events[name].Name = name;
         foreach (var (id, room) in file.Dungeons) dungeonByMap.TryAdd(room.Map, int.Parse(id, CultureInfo.InvariantCulture));
         served = [.. file.ServedMaps];
+        var walkIn = new Dictionary<int, List<WalkInLayer>>();
+        // Layers entered by talking to an EnterInstanceLayer NPC (NpcEntries) are not walk-in: Maard at Munihelle Forest
+        // (HQ2101030 step 3) opens World_D_Starter_HQ001 by his dialog; walking into the layer's volume must not start it.
+        // Generic rule: the client names an explicit entry for most layers; only layers with none are walk-in by volume.
+        //  - an EnterInstanceLayer NPC (NpcEntries): his dialog opens the layer;
+        //  - a base-map EnterInstanceLayer trigger actor (Entries): DungeonTrigger enters on its own (smaller) shape;
+        //  - a placed EnvObj with Usage EnterInstanceLayer/EnterDungeon (world-objects portal): using it enters
+        //    (HQ2101040 step 5: E_D1_HQ_SearchEffect_001 opens World_D_Starter_HQ004; the lake volume must not).
+        var npcEntered = file.NpcEntries.Values.Select(e => e.Dungeon).Where(d => d != 0).ToHashSet();
+        npcEntered.UnionWith(file.Entries.Values.SelectMany(l => l).Select(e => e.Dungeon).Where(d => d != 0));
+        foreach (var (key, vol) in file.Volumes)
+        {
+            var layerMap = int.Parse(key, CultureInfo.InvariantCulture);
+            var dungeonId = dungeonByMap.GetValueOrDefault(layerMap);
+            if (dungeonId == 0 || npcEntered.Contains(dungeonId) || Dungeon(dungeonId) is not { QuestGate: { Length: > 0 } }) continue;
+            if (WorldObjects.ObjectsOn(vol.Base).Any(o => o.Portal is { } portal && portal.Contains(dungeonId))) continue;
+            var xs = vol.Points.Select(p => p[0]);
+            var ys = vol.Points.Select(p => p[1]);
+            var entry = new WalkInLayer(layerMap, dungeonId, vol, xs.Min(), ys.Min(), xs.Max(), ys.Max());
+            if (!walkIn.TryGetValue(vol.Base, out var list)) walkIn[vol.Base] = list = [];
+            list.Add(entry);
+        }
+        walkInByBase = walkIn.ToDictionary(p => p.Key, p => p.Value.ToArray());
     }
 
     static readonly Lazy<MapEventTables> embedded = new(() =>
@@ -204,6 +232,10 @@ public sealed class MapEventTables
     public IReadOnlyList<MapEventDefinition> EventsOn(int mapId) =>
         served.Contains(mapId) ? (file.Maps.GetValueOrDefault(K(mapId)) ?? []).Select(n => file.Events[n]).ToList() : [];
     public bool Serves(int mapId) => served.Contains(mapId);
+    internal IReadOnlyCollection<int> ServedMaps => served;
+    internal IEnumerable<KeyValuePair<string, NpcEntry>> AllNpcEntries => file.NpcEntries;
+    internal IEnumerable<KeyValuePair<string, DungeonEntry[]>> AllEntries => file.Entries;
+    internal IEnumerable<KeyValuePair<string, TeleportTarget>> AllTeleports => file.Teleports ?? [];
 
     /// <summary>ERelationshipEntity (usmap): the names ChangeRelationshipEntity directives and abnormal effects use, to the wire byte.</summary>
     static readonly Dictionary<string, int> relationships = new(StringComparer.OrdinalIgnoreCase)
@@ -222,10 +254,41 @@ public sealed class MapEventTables
     /// <summary>The dungeon whose map this is (served or not), or null for a field map.</summary>
     public DungeonInfo? DungeonOfMap(int mapId) => dungeonByMap.TryGetValue(mapId, out var id) ? Dungeon(id) : null;
     public int DungeonIdOfMap(int mapId) => dungeonByMap.GetValueOrDefault(mapId);
+    /// <summary>Every dungeon of the export, by id.</summary>
+    public IEnumerable<KeyValuePair<string, DungeonInfo>> AllDungeons => file.Dungeons;
     public IReadOnlyList<DungeonEntry> EntriesOn(int baseMap) => file.Entries.GetValueOrDefault(K(baseMap)) ?? [];
+    /// <summary>The field map and centre of the trigger or portal that opens the dungeon, or null (an NPC or a door opens it).</summary>
+    public (int BaseMap, Vector3d At)? EntryTriggerOf(int dungeonId)
+    {
+        foreach (var (key, entries) in file.Entries)
+            if (entries.FirstOrDefault(e => e.Dungeon == dungeonId) is { Center: [var x, var y, var z] })
+                return (int.Parse(key, CultureInfo.InvariantCulture), new Vector3d(x, y, z));
+        return null;
+    }
     public NpcEntry? EntryNpc(int npcId) => file.NpcEntries.GetValueOrDefault(K(npcId));
+
+    /// <summary>Field NPCs whose EnterInstanceLayer opens the given map event (layer dungeon).</summary>
+    public IEnumerable<int> FieldEntryNpcIds(string mapEventName)
+    {
+        if (Event(mapEventName) is not { Map: var eventMap }) yield break;
+        foreach (var (key, entry) in file.NpcEntries)
+        {
+            if (!int.TryParse(key, NumberStyles.Integer, CultureInfo.InvariantCulture, out var npcId)) continue;
+            if (Dungeon(entry.Dungeon) is not { Map: var dMap }) continue;
+            if (dMap == eventMap || EventsOn(dMap).Any(e => string.Equals(e.Name, mapEventName, StringComparison.OrdinalIgnoreCase)))
+                yield return npcId;
+        }
+    }
     public IReadOnlyDictionary<string, double[]> Points(int mapId) => file.Points.GetValueOrDefault(K(mapId)) ?? new Dictionary<string, double[]>();
     public LayerVolume? Volume(int mapId) => file.Volumes.GetValueOrDefault(K(mapId));
+
+    /// <summary>Instance layers whose volume overlays <paramref name="baseMap"/> (walk-in entry on the field map).</summary>
+    public IEnumerable<(int LayerMap, LayerVolume Volume)> VolumesOverBase(int baseMap) =>
+        file.Volumes.Select(kv => (LayerMap: int.Parse(kv.Key, CultureInfo.InvariantCulture), Volume: kv.Value)).Where(p => p.Volume.Base == baseMap);
+
+    /// <summary>Quest-gated walk-in layers on a shared field map (pre-indexed).</summary>
+    public ReadOnlySpan<WalkInLayer> WalkInOn(int baseMap) => walkInByBase.GetValueOrDefault(baseMap) ?? [];
+
     /// <summary>A Teleport.dat name a PCTeleport uses that is not a point of its own map: the target map and location.</summary>
     public TeleportTarget? Teleport(string name) => file.Teleports?.GetValueOrDefault(name);
     /// <summary>A PCTeleport effect name's TeleportEffect.dat id (the 0x3621 effect byte), 0 when unknown or empty.</summary>
@@ -268,11 +331,32 @@ public interface IMapEventHost
     /// <summary>AddAbnormal / RemoveAbnormal on the player (empty target) or a spawner's NPCs; duration in ms, -1 for the run.</summary>
     void Abnormal(int id, int durationMs, string target, bool remove);
     void EnvObjState(string spawner, string state);
+    void EnvObjChangePhase(string spawner, int phase);
+    void SetEnvObjCanInteract(string spawner, bool canInteract);
     void DynamicTerrain(string spawner, bool block);
     void Progress(MapEventRun run);
     void Unsupported(MapEventRun run, string what);
 
+    /// <summary>
+    /// The step is starting. A kill or talk target that should already be in the world (not waiting for a later
+    /// StartSpawner, not removed by EndSpawner) is brought back if it is dead, and a kill target that is not
+    /// attackable is made so. The story quests share this runner, so a script whose spawn name does not match
+    /// the placed actor still has something to fight or talk to.
+    /// </summary>
+    void EnsureStep(MapEventStep step, int[] goals) { }
+
+    /// <summary>How many of these spawn names are already dead in this run (the player broke the stone before its step).</summary>
+    int CountDead(string[] names) => 0;
+
+    /// <summary>A UseEnvObj spawner was already consumed on this layer (early firewood before its step opened).</summary>
+    bool EnvObjectUsed(string spawnName) => false;
+
+    /// <summary>Verbose script tracing for starter HQ001 (live stall diagnosis).</summary>
+    void ScriptBeat(MapEventRun run, string kind, string detail, long now) { }
+
     bool QuestStepActive(int questId, int step);
+    /// <summary>When an event's exported start list is empty: whether it may join at map entry (quest step, field phase, etc.).</summary>
+    bool MapEventStartAllowed(MapEventDefinition definition);
     bool NpcInCombat(string spawner);
     /// <summary>Any NPC of the spawner alive now.</summary>
     bool SpawnerAlive(string spawner);
@@ -338,13 +422,41 @@ public sealed class MapEventRun
     public int[] Goals { get; private set; }
     public int[] Variables { get; }
     public bool Finished => Status is Complete or Expired;
+
+    /// <summary>The script is done (DungeonClear, or the last step's objectives met) but its closing directives (Delay, MapExit)
+    /// still run: the quest step the clear pays moves past the event's start condition, and dropping the run then lost the
+    /// MapExit (HQ004 left the player behind the layer wall until the instance fallback, live 2026-10-30).</summary>
+    public bool WindingDown => (Finished || stepObjectivesDone) && sequences.Any(s => !s.Done);
+
+    /// <summary>DungeonClear directive: the script is done; quest ClearMapEvent pays on the next flush (step may advance before MapExit).</summary>
+    public void MarkDungeonClear(long now)
+    {
+        if (Status is Complete or Expired) return;
+        Status = Complete;
+        Goals = [];
+        Host.Progress(this);
+    }
     public MapEventStage? Stage => StageIndex < Definition.Stages.Length ? Definition.Stages[StageIndex] : null;
     public MapEventStep? Step => Stage is { } stage && StepIndex < stage.Steps.Length ? stage.Steps[StepIndex] : null;
     public int StageOrder => Stage?.Id ?? 0;
     public int StepOrder => Step?.Id ?? 0;
+    /// <summary>
+    /// The step as the client reads it in 0x922e / 0x922d: its 1-based place within the stage, not the script's step id. LIVE
+    /// 2026-10-30 (HQ003, stage 2 = steps 3, 4, 5): sending id 3 showed Desc_5 ("Check the Prison Compound Map", the third
+    /// step of the stage) while the server waited on step 3's trigger, so F on the note did nothing.
+    /// </summary>
+    public int WireStep => Step is null ? 0 : StepIndex + 1;
     /// <summary>Objectives of the current step still open (for markers and area checks).</summary>
     public IEnumerable<(int Index, MapEventObjective Objective)> Open =>
-        Step is { } step ? step.Objectives.Select((o, i) => (i, o)).Where(x => Goals[x.i] < x.o.Count) : [];
+        Step is { } step ? step.Objectives.Select((o, i) => (i, o)).Where(x => x.i < Goals.Length && Goals[x.i] < x.o.Count) : [];
+
+    /// <summary>KillNpc NPC ids on the current step that still need progress (scripted immunity must not block them).</summary>
+    public IEnumerable<int> OpenKillNpcIds() =>
+        Open.Where(x => x.Objective.Type == "KillNpc" && x.Objective.Npcs is { Length: > 0 } npcs).SelectMany(x => x.Objective.Npcs!);
+
+    /// <summary>AskNpc / CloseNpc NPC ids on the current step (quest-style streaming and markers on large maps).</summary>
+    public IEnumerable<int> OpenAskNpcIds() =>
+        Open.Where(x => x.Objective.Type is "AskNpc" or "CloseNpc" && x.Objective.Npcs is { Length: > 0 } npcs).SelectMany(x => x.Objective.Npcs!);
 
     public void Start(long now)
     {
@@ -360,6 +472,12 @@ public sealed class MapEventRun
         stepObjectivesDone = false;
         stepSerial++;
         Array.Fill(fallbackAt, 0);
+        CreditDead(now);
+        CreditUsedEnv(now);
+        Host.EnsureStep(step, Goals);
+        Host.ScriptBeat(this, "step-begin", $"stage={StageOrder} step={StepOrder} objectives={step.Objectives.Length}", now);
+        if (step.Objectives.Any(o => o.Type is "AskNpc" or "CloseNpc"))
+            Host.Progress(this);
         for (var i = 0; i < step.Objectives.Length; i++)
         {
             var o = step.Objectives[i];
@@ -389,7 +507,11 @@ public sealed class MapEventRun
             if (Goals[i] >= o.Count || !matches(o)) continue;
             Goals[i] = whole ? o.Count : Math.Min(o.Count, Goals[i] + amount);
             changed = true;
-            if (Goals[i] >= o.Count) ObjectiveDone(o, now);
+            if (Goals[i] >= o.Count)
+            {
+                Host.ScriptBeat(this, "objective-done", $"{o.Type} {o.Value(0)} goal={i} goals=[{string.Join(',', Goals)}]", now);
+                ObjectiveDone(o, now);
+            }
         }
         if (changed)
         {
@@ -404,10 +526,80 @@ public sealed class MapEventRun
     {
         if (objective.Key is { Length: > 0 } key) doneKeys.Add(key);
         if (objective.Post is { Length: > 0 } post) sequences.Add(new Sequence(post, stepSerial));
+        // CoastalCave corpse/tablet steps pair UseEnvObj with CloseNote on the same step; the client reads the note during
+        // the interaction (no separate ShowNote directive). Without crediting CloseNote here the step sat until the 30 s fallback.
+        if (objective.Type != "UseEnvObj" || Step is not { } step) return;
+        for (var i = 0; i < step.Objectives.Length; i++)
+        {
+            var o = step.Objectives[i];
+            if (o.Type != "CloseNote" || i >= Goals.Length || Goals[i] >= o.Count) continue;
+            if (o.Value(0) is { Length: > 0 } note) Host.ShowNote(note);
+            Goals[i] = o.Count;
+            Host.ScriptBeat(this, "objective-done", $"{o.Type} {o.Value(0)} goal={i} paired-with UseEnvObj", now);
+            if (o.Key is { Length: > 0 } noteKey) doneKeys.Add(noteKey);
+            if (o.Post is { Length: > 0 } notePost) sequences.Add(new Sequence(notePost, stepSerial));
+        }
     }
 
-    static bool NameMatches(string name, string spawnName) =>
-        string.Equals(name, spawnName, StringComparison.OrdinalIgnoreCase) || spawnName.StartsWith(name + "_", StringComparison.OrdinalIgnoreCase);
+    internal static bool NameMatches(string name, string spawnName)
+    {
+        if (string.Equals(name, spawnName, StringComparison.OrdinalIgnoreCase)) return true;
+        if (spawnName.StartsWith(name + "_", StringComparison.OrdinalIgnoreCase)) return true;
+        // Phase-two firewood placements keep the _001_2 spawner name (Dark starter HQ001, OBSERVED map data gap).
+        if (name.EndsWith("_002", StringComparison.OrdinalIgnoreCase))
+        {
+            var phaseOneSecond = name[..^4] + "_001_2";
+            if (string.Equals(spawnName, phaseOneSecond, StringComparison.OrdinalIgnoreCase)
+                || spawnName.StartsWith(phaseOneSecond + "_", StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+        return false;
+    }
+
+    /// <summary>Any step of the event uses this env spawner on a UseEnvObj objective.</summary>
+    public static bool ReferencesUseEnvObj(MapEventDefinition definition, string spawnName) =>
+        definition.Stages.SelectMany(s => s.Steps).SelectMany(st => st.Objectives)
+            .Any(o => o.Type == "UseEnvObj" && o.Names.Any(n => NameMatches(n, spawnName)));
+
+    /// <summary>
+    /// A kill the player already landed, before this step opened, fills the step. The stone in the forest can die
+    /// during the earlier pack; Elvida still asks for it, and waiting for another blow leaves the quest stuck.
+    /// Shared npc ids (two waves of the same monster) are not counted here: only the objective's own spawn names.
+    /// </summary>
+    void CreditDead(long now)
+    {
+        var step = Step!;
+        var changed = false;
+        for (var i = 0; i < step.Objectives.Length; i++)
+        {
+            var o = step.Objectives[i];
+            if (o.Type != "KillNpc" || Goals[i] >= o.Count || o.Names.Length == 0) continue;
+            var dead = Host.CountDead(o.Names);
+            if (dead <= 0) continue;
+            Goals[i] = Math.Min(o.Count, Goals[i] + dead);
+            changed = true;
+            if (Goals[i] >= o.Count) ObjectiveDone(o, now);
+        }
+        if (changed) Host.Progress(this);
+    }
+
+    /// <summary>Firewood destroyed before UseEnvObj step opens: count it when the step begins (same idea as CreditDead).</summary>
+    void CreditUsedEnv(long now)
+    {
+        var step = Step!;
+        var changed = false;
+        for (var i = 0; i < step.Objectives.Length; i++)
+        {
+            var o = step.Objectives[i];
+            if (o.Type != "UseEnvObj" || Goals[i] >= o.Count) continue;
+            if (!o.Names.Any(Host.EnvObjectUsed)) continue;
+            Goals[i] = o.Count;
+            changed = true;
+            Host.ScriptBeat(this, "objective-credit-early", $"UseEnvObj {o.Value(0)} index={i}", now);
+            ObjectiveDone(o, now);
+        }
+        if (changed) Host.Progress(this);
+    }
 
     static bool Names(MapEventObjective o, string spawnName) => o.Names.Any(n => NameMatches(n, spawnName));
 
@@ -435,15 +627,25 @@ public sealed class MapEventRun
     public bool WantsObject(string spawnName) =>
         !Finished && Step is { } step && step.Objectives.Where((o, i) => i < Goals.Length && Goals[i] < o.Count && o.Type == "UseEnvObj" && Names(o, spawnName)).Any();
 
+    /// <summary>Whether this spawner name appears on any UseEnvObj objective of the run (open or not yet reached).</summary>
+    public bool ReferencesUseEnvObj(string spawnName) =>
+        Definition.Stages.SelectMany(s => s.Steps).SelectMany(st => st.Objectives)
+            .Any(o => o.Type == "UseEnvObj" && Names(o, spawnName));
+
     /// <summary>Where the player stands: EnterVolumePC (trigger names) and EnterSubZone objectives.</summary>
     public bool PositionAt(Func<string, bool> insideTrigger, Func<string, bool> insideSubzone, long now) =>
         Apply(o => o.Type == "EnterVolumePC" ? insideTrigger(o.Value(0)) : o.Type == "EnterSubZone" && insideSubzone(o.Value(0)), now);
 
     public bool CombatStarted(long now) => Apply(o => o.Type == "PCCombatStart", now);
 
-    public bool NpcArrived(string spawnName, string route, long now) =>
-        Apply(o => o.Type == "NpcArriveWaypoint" && NameMatches(o.Value(0), spawnName)
-                   && (o.Value(1).Length == 0 || string.Equals(o.Value(1), route, StringComparison.OrdinalIgnoreCase)), now);
+    public bool NpcArrived(string spawnName, string route, long now)
+    {
+        var ok = Apply(o => o.Type == "NpcArriveWaypoint" && NameMatches(o.Value(0), spawnName)
+                             && (o.Value(1).Length == 0 || string.Equals(o.Value(1), route, StringComparison.OrdinalIgnoreCase)), now);
+        if (ok && Definition.Name.Contains("Starter_HQ001", StringComparison.OrdinalIgnoreCase))
+            Host.ScriptBeat(this, "npc-arrive", $"{spawnName} route={route}", now);
+        return ok;
+    }
 
     /// <summary>An NPC's HP changed: HpRemaining objectives (percent) naming it.</summary>
     public bool HpChanged(int npcId, string spawnName, int percent, long now) =>
@@ -568,6 +770,17 @@ public sealed class MapEventRun
 
     // ---------- Conditions ----------
 
+    /// <summary>Whether an event's start conditions hold without starting a run (dungeon entry checks).</summary>
+    public static bool StartHolds(MapEventDefinition definition, IMapEventHost host, long now)
+    {
+        if (definition.Start is { Length: > 0 } start)
+        {
+            var probe = new MapEventRun(definition, 0, host, now);
+            return probe.Holds(start, now);
+        }
+        return host.MapEventStartAllowed(definition);
+    }
+
     /// <summary>Groups are alternatives, their members all hold (CANDIDATE; the data has single-member groups almost everywhere).</summary>
     public bool Holds(MapEventCondition[][]? groups, long now) => groups is not { Length: > 0 } || groups.Any(g => g.All(c => Condition(c, now)));
 
@@ -613,6 +826,8 @@ public sealed class MapEventRun
 
     void Execute(MapEventDirective d, long now, int fired = 0)
     {
+        if (Definition.Name.Contains("Starter_HQ001", StringComparison.OrdinalIgnoreCase))
+            Host.ScriptBeat(this, "directive", $"{d.Type} id={d.Id} v0={d.Value(0)} step={StepOrder}", now);
         switch (d.Type)
         {
             case "StartSpawner": foreach (var name in Split(d.Value(0))) Host.Spawn(name, d.Int(1)); break;
@@ -658,7 +873,9 @@ public sealed class MapEventRun
             case "SetValue": SetVariable(d.Int(0) - 1, d.Int(1), false); break;
             case "AddValue": SetVariable(d.Int(0) - 1, d.Int(1), true); break;
             case "StartFocusCamera": Host.FocusCamera(d.Value(0), d.Value(2)); break;
-            case "CameraShake": case "PlayAct": case "ChangeBT": case "NpcMoveforSeamlessCutscene": case "SetEnvObjCanInteract": case "EnvObjChangePhase": case "NpcChangePhase":
+            case "EnvObjChangePhase": Host.EnvObjChangePhase(d.Value(0), d.Int(1)); break;
+            case "SetEnvObjCanInteract": Host.SetEnvObjCanInteract(d.Value(0), d.Flag(1)); break;
+            case "CameraShake": case "PlayAct": case "ChangeBT": case "NpcMoveforSeamlessCutscene": case "NpcChangePhase":
                 break;   // client-side presentation, or NPC details the server does not model; the event goes on
             default: Host.Unsupported(this, $"directive {d.Type} {d.Value(0)}"); break;
         }
