@@ -21,6 +21,12 @@ Joined here:
   actor's location (null for PlayerStart: the server uses the map's arrival point).
 - TeleportEffect.dat (research/local/teleport-effect-20261019): the PCTeleport effect names (value 1: Teleport_NoEffect,
   TeleportEffect_Dungeon_0005, ...) -> row id, the teleport effect byte of PrepareEnterMap (0x3621).
+- Renamed spawn entries (CANDIDATE): a Start/End/KillSpawner or DespawnAll name its map's MapData lacks is mapped to
+  what the entry became, when that is unambiguous: numbered entries <name>_1, <name>_2 ... (build 26262663 split the
+  party dungeons' Od gathering spots, BakronIsland_EnvObj_OdSmall -> _1.._5), or one entry that has a single extra
+  name token (the Dark Broken Sword events' FE_BS_02_Normal_Mob_01_1 -> FE_BS_D_02_Normal_Mob_01_1). The event files
+  kept the old names; unresolved, the directive would do nothing and the entry would spawn at map load. The
+  rewritten names are listed under "renamed" (event -> {old name: [entries]}).
 
 Usage: python tools/map_events.py build
 """
@@ -58,6 +64,8 @@ SERVED_TYPES = ('InstanceLayer', 'Quest', 'Ascension', 'Party', 'Seal', 'Awaken'
                 'AbyssArtifact', 'Growth', 'Guild', 'PersonalAgit')
 # Spawner directives: the named spawn entries wait for their directive instead of spawning at map load.
 SPAWNER_DIRECTIVES = ('StartSpawner',)
+# Directives whose values name spawn entries (value indexes), for renamed entries.
+SPAWNER_NAME_VALUES = {'StartSpawner': (0,), 'EndSpawner': (0,), 'KillSpawner': (0,), 'DespawnAll': (0, 1)}
 
 
 def decode(raw: bytes) -> dict:
@@ -308,6 +316,49 @@ def directive_spawners(event):
     return names
 
 
+def resolve_spawner(name, spawns):
+    """A spawn entry name -> the map's entries it stands for: itself when the map has it, else its numbered entries
+    (<name>_<n>), else the one entry with a single extra name token; unresolved names stay as they are."""
+    if name in spawns:
+        return [name]
+    numbered = [s for s in spawns if s.startswith(name + '_') and s[len(name) + 1:].isdigit()]
+    if numbered:
+        return sorted(numbered, key=lambda s: int(s[len(name) + 1:]))
+    parts = name.split('_')
+    inserted = [s for s in spawns if len(s.split('_')) == len(parts) + 1
+                and any(s.split('_')[:i] + s.split('_')[i + 1:] == parts for i in range(len(parts) + 1))]
+    return inserted if len(inserted) == 1 else [name]
+
+
+def rename_spawners(event, spawns):
+    """Rewrite the event's spawner directive names its map lacks (resolve_spawner); returns {old name: [entries]}."""
+    renamed = {}
+    for node in _walk(event):
+        if not isinstance(node, dict) or node.get('Type') not in SPAWNER_NAME_VALUES or not node.get('value_list'):
+            continue
+        values = node['value_list']
+        for index in SPAWNER_NAME_VALUES[node['Type']]:
+            if index >= len(values):
+                continue
+            text = values[index].get('value') if isinstance(values[index], dict) else values[index]
+            names = _names(text)
+            resolved = [entry for n in names for entry in resolve_spawner(n, spawns)]
+            if resolved == names:
+                continue
+            for n in names:
+                if resolve_spawner(n, spawns) != [n]:
+                    renamed[n] = resolve_spawner(n, spawns)
+            if isinstance(values[index], dict):
+                values[index]['value'] = ','.join(resolved)
+            else:
+                values[index] = ','.join(resolved)
+    return renamed
+
+
+def spawn_names(data):
+    return {record['Name'] for record in data.get('SpawnInfoList') or [] if record.get('Name')}
+
+
 def map_facts(data):
     """Teleport points, the instance-layer volume and the spawn entry names of a decoded MapData."""
     points = {}
@@ -320,8 +371,7 @@ def map_facts(data):
         volume = {'base': value['BaseMapId'], 'points': [[round(p['X'], 1), round(p['Y'], 1)] for p in value.get('Points') or []],
                   'zmin': value.get('HeightMin', 0), 'zmax': value.get('HeightMax', 0)}
         break
-    spawns = {record['Name'] for record in data.get('SpawnInfoList') or [] if record.get('Name')}
-    return points, volume, spawns
+    return points, volume, spawn_names(data)
 
 
 def entry_triggers(data, map_id):
@@ -351,10 +401,16 @@ def build(raw=RAW, dungeon_table=DUNGEONS, npc_table=NPCDATA, served_types=SERVE
             else:
                 del npc_entries[npc_id]
     paths = mapdata_paths()
-    events, by_map, deferred = {}, {}, {}
+    events, by_map, deferred, renamed, map_spawns = {}, {}, {}, {}, {}
     for path in sorted(Path(raw).glob('*.dat')):
         event = decode(path.read_bytes())
         name = event.get('Name') or path.stem
+        map_id = event.get('MapID')
+        if map_id in paths:
+            if map_id not in map_spawns:
+                map_spawns[map_id] = spawn_names(json.loads(paths[map_id].read_text(encoding='utf-8'))['Properties']['Data'])
+            if changed := rename_spawners(event, map_spawns[map_id]):
+                renamed[name] = dict(sorted(changed.items()))
         events[name] = convert(event, names)
         by_map.setdefault(event.get('MapID'), []).append(name)
         deferred.setdefault(event.get('MapID'), set()).update(directive_spawners(event))
@@ -401,6 +457,7 @@ def build(raw=RAW, dungeon_table=DUNGEONS, npc_table=NPCDATA, served_types=SERVE
         'deferred': spawners,
         'teleports': teleports,
         'teleport_effects': effects,
+        'renamed': dict(sorted(renamed.items())),
     }
 
 

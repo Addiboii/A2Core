@@ -6,4518 +6,4518 @@
    "1": {
     "FixingDamage": 6,
     "Defense": 10,
-    "HPMax": 100
+    "HPMax": 133
    },
    "2": {
     "FixingDamage": 7,
     "Defense": 20,
-    "HPMax": 200
+    "HPMax": 266
    },
    "3": {
     "FixingDamage": 8,
     "Defense": 30,
-    "HPMax": 300
+    "HPMax": 399
    },
    "4": {
     "FixingDamage": 10,
     "Defense": 40,
-    "HPMax": 401
+    "HPMax": 533
    },
    "5": {
     "FixingDamage": 11,
     "Defense": 50,
-    "HPMax": 502
+    "HPMax": 667
    },
    "6": {
     "FixingDamage": 12,
     "Defense": 60,
-    "HPMax": 603
+    "HPMax": 801
    },
    "7": {
     "FixingDamage": 13,
     "Defense": 70,
-    "HPMax": 704
+    "HPMax": 935
    },
    "8": {
     "FixingDamage": 15,
     "Defense": 80,
-    "HPMax": 806
+    "HPMax": 1070
    },
    "9": {
     "FixingDamage": 16,
     "Defense": 90,
-    "HPMax": 908
+    "HPMax": 1205
    },
    "10": {
     "FixingDamage": 17,
     "Defense": 100,
-    "HPMax": 1010
+    "HPMax": 1340
    },
    "11": {
     "FixingDamage": 18,
     "Defense": 110,
-    "HPMax": 1112
+    "HPMax": 1475
    },
    "12": {
     "FixingDamage": 20,
     "Defense": 120,
-    "HPMax": 1214
+    "HPMax": 1610
    },
    "13": {
     "FixingDamage": 21,
     "Defense": 130,
-    "HPMax": 1316
+    "HPMax": 1745
    },
    "14": {
     "FixingDamage": 22,
     "Defense": 140,
-    "HPMax": 1419
+    "HPMax": 1881
    },
    "15": {
     "FixingDamage": 23,
     "Defense": 150,
-    "HPMax": 1522
+    "HPMax": 2017
    },
    "16": {
     "FixingDamage": 25,
     "Defense": 160,
-    "HPMax": 1625
+    "HPMax": 2153
    },
    "17": {
     "FixingDamage": 26,
     "Defense": 170,
-    "HPMax": 1728
+    "HPMax": 2289
    },
    "18": {
     "FixingDamage": 27,
     "Defense": 180,
-    "HPMax": 1832
+    "HPMax": 2426
    },
    "19": {
     "FixingDamage": 28,
     "Defense": 190,
-    "HPMax": 1936
+    "HPMax": 2563
    },
    "20": {
     "FixingDamage": 30,
     "Defense": 200,
-    "HPMax": 2040
+    "HPMax": 2700
    },
    "21": {
     "FixingDamage": 31,
     "Defense": 210,
-    "HPMax": 2144
+    "HPMax": 2837
    },
    "22": {
     "FixingDamage": 32,
     "Defense": 220,
-    "HPMax": 2248
+    "HPMax": 2974
    },
    "23": {
     "FixingDamage": 33,
     "Defense": 230,
-    "HPMax": 2352
+    "HPMax": 3111
    },
    "24": {
     "FixingDamage": 35,
     "Defense": 240,
-    "HPMax": 2457
+    "HPMax": 3249
    },
    "25": {
     "FixingDamage": 36,
     "Defense": 250,
-    "HPMax": 2562
+    "HPMax": 3387
    },
    "26": {
     "FixingDamage": 37,
     "Defense": 260,
-    "HPMax": 2667
+    "HPMax": 3525
    },
    "27": {
     "FixingDamage": 38,
     "Defense": 270,
-    "HPMax": 2772
+    "HPMax": 3663
    },
    "28": {
     "FixingDamage": 40,
     "Defense": 280,
-    "HPMax": 2878
+    "HPMax": 3802
    },
    "29": {
     "FixingDamage": 41,
     "Defense": 290,
-    "HPMax": 2984
+    "HPMax": 3941
    },
    "30": {
     "FixingDamage": 42,
     "Defense": 300,
-    "HPMax": 3090
+    "HPMax": 4080
    },
    "31": {
     "FixingDamage": 43,
     "Defense": 310,
-    "HPMax": 3196
+    "HPMax": 4220
    },
    "32": {
     "FixingDamage": 45,
     "Defense": 320,
-    "HPMax": 3302
+    "HPMax": 4360
    },
    "33": {
     "FixingDamage": 46,
     "Defense": 330,
-    "HPMax": 3408
+    "HPMax": 4500
    },
    "34": {
     "FixingDamage": 47,
     "Defense": 340,
-    "HPMax": 3515
+    "HPMax": 4641
    },
    "35": {
     "FixingDamage": 48,
     "Defense": 350,
-    "HPMax": 3622
+    "HPMax": 4782
    },
    "36": {
     "FixingDamage": 50,
     "Defense": 360,
-    "HPMax": 3729
+    "HPMax": 4923
    },
    "37": {
     "FixingDamage": 51,
     "Defense": 370,
-    "HPMax": 3836
+    "HPMax": 5064
    },
    "38": {
     "FixingDamage": 52,
     "Defense": 380,
-    "HPMax": 3944
+    "HPMax": 5206
    },
    "39": {
     "FixingDamage": 53,
     "Defense": 390,
-    "HPMax": 4052
+    "HPMax": 5348
    },
    "40": {
     "FixingDamage": 55,
     "Defense": 400,
-    "HPMax": 4160
+    "HPMax": 5490
    },
    "41": {
     "FixingDamage": 56,
     "Defense": 410,
-    "HPMax": 4268
+    "HPMax": 5632
    },
    "42": {
     "FixingDamage": 57,
     "Defense": 420,
-    "HPMax": 4376
+    "HPMax": 5774
    },
    "43": {
     "FixingDamage": 58,
     "Defense": 430,
-    "HPMax": 4484
+    "HPMax": 5916
    },
    "44": {
     "FixingDamage": 60,
     "Defense": 440,
-    "HPMax": 4593
+    "HPMax": 6059
    },
    "45": {
     "FixingDamage": 61,
     "Defense": 450,
-    "HPMax": 4702
+    "HPMax": 6202
    },
    "46": {
     "FixingDamage": 62,
     "Defense": 460,
-    "HPMax": 4811
+    "HPMax": 6311
    },
    "47": {
     "FixingDamage": 63,
     "Defense": 470,
-    "HPMax": 4920
+    "HPMax": 6420
    },
    "48": {
     "FixingDamage": 65,
     "Defense": 480,
-    "HPMax": 5030
+    "HPMax": 6530
    },
    "49": {
     "FixingDamage": 66,
     "Defense": 490,
-    "HPMax": 5140
+    "HPMax": 6640
    },
    "50": {
     "FixingDamage": 67,
     "Defense": 500,
-    "HPMax": 5250
+    "HPMax": 6750
    },
    "51": {
     "FixingDamage": 68,
     "Defense": 510,
-    "HPMax": 5360
+    "HPMax": 6860
    },
    "52": {
     "FixingDamage": 70,
     "Defense": 520,
-    "HPMax": 5470
+    "HPMax": 6970
    },
    "53": {
     "FixingDamage": 71,
     "Defense": 530,
-    "HPMax": 5580
+    "HPMax": 7080
    },
    "54": {
     "FixingDamage": 72,
     "Defense": 540,
-    "HPMax": 5691
+    "HPMax": 7191
    },
    "55": {
     "FixingDamage": 73,
     "Defense": 550,
-    "HPMax": 5802
+    "HPMax": 7302
    },
    "56": {
     "FixingDamage": 75,
     "Defense": 560,
-    "HPMax": 5913
+    "HPMax": 7413
    },
    "57": {
     "FixingDamage": 76,
     "Defense": 570,
-    "HPMax": 6024
+    "HPMax": 7524
    },
    "58": {
     "FixingDamage": 77,
     "Defense": 580,
-    "HPMax": 6136
+    "HPMax": 7636
    },
    "59": {
     "FixingDamage": 78,
     "Defense": 590,
-    "HPMax": 6248
+    "HPMax": 7748
    },
    "60": {
     "FixingDamage": 80,
     "Defense": 600,
-    "HPMax": 6360
+    "HPMax": 7860
    },
    "61": {
     "FixingDamage": 81,
     "Defense": 610,
-    "HPMax": 6472
+    "HPMax": 7972
    },
    "62": {
     "FixingDamage": 82,
     "Defense": 620,
-    "HPMax": 6584
+    "HPMax": 8084
    },
    "63": {
     "FixingDamage": 83,
     "Defense": 630,
-    "HPMax": 6696
+    "HPMax": 8196
    },
    "64": {
     "FixingDamage": 85,
     "Defense": 640,
-    "HPMax": 6809
+    "HPMax": 8309
    },
    "65": {
     "FixingDamage": 86,
     "Defense": 650,
-    "HPMax": 6922
+    "HPMax": 8422
    },
    "66": {
     "FixingDamage": 87,
     "Defense": 660,
-    "HPMax": 7035
+    "HPMax": 8535
    },
    "67": {
     "FixingDamage": 88,
     "Defense": 670,
-    "HPMax": 7148
+    "HPMax": 8648
    },
    "68": {
     "FixingDamage": 90,
     "Defense": 680,
-    "HPMax": 7262
+    "HPMax": 8762
    },
    "69": {
     "FixingDamage": 91,
     "Defense": 690,
-    "HPMax": 7376
+    "HPMax": 8876
    },
    "70": {
     "FixingDamage": 92,
     "Defense": 700,
-    "HPMax": 7490
+    "HPMax": 8990
    },
    "71": {
     "FixingDamage": 93,
     "Defense": 710,
-    "HPMax": 7604
+    "HPMax": 9104
    },
    "72": {
     "FixingDamage": 95,
     "Defense": 720,
-    "HPMax": 7718
+    "HPMax": 9218
    },
    "73": {
     "FixingDamage": 96,
     "Defense": 730,
-    "HPMax": 7832
+    "HPMax": 9332
    },
    "74": {
     "FixingDamage": 97,
     "Defense": 740,
-    "HPMax": 7947
+    "HPMax": 9447
    },
    "75": {
     "FixingDamage": 98,
     "Defense": 750,
-    "HPMax": 8062
+    "HPMax": 9562
    },
    "76": {
     "FixingDamage": 100,
     "Defense": 760,
-    "HPMax": 8177
+    "HPMax": 9677
    },
    "77": {
     "FixingDamage": 101,
     "Defense": 770,
-    "HPMax": 8292
+    "HPMax": 9792
    },
    "78": {
     "FixingDamage": 102,
     "Defense": 780,
-    "HPMax": 8408
+    "HPMax": 9908
    },
    "79": {
     "FixingDamage": 103,
     "Defense": 790,
-    "HPMax": 8524
+    "HPMax": 10024
    },
    "80": {
     "FixingDamage": 105,
     "Defense": 800,
-    "HPMax": 8640
+    "HPMax": 10140
    },
    "81": {
     "FixingDamage": 106,
     "Defense": 810,
-    "HPMax": 8756
+    "HPMax": 10256
    },
    "82": {
     "FixingDamage": 107,
     "Defense": 820,
-    "HPMax": 8872
+    "HPMax": 10372
    },
    "83": {
     "FixingDamage": 108,
     "Defense": 830,
-    "HPMax": 8988
+    "HPMax": 10488
    },
    "84": {
     "FixingDamage": 110,
     "Defense": 840,
-    "HPMax": 9105
+    "HPMax": 10605
    },
    "85": {
     "FixingDamage": 111,
     "Defense": 850,
-    "HPMax": 9222
+    "HPMax": 10722
    },
    "86": {
     "FixingDamage": 112,
     "Defense": 860,
-    "HPMax": 9339
+    "HPMax": 10839
    },
    "87": {
     "FixingDamage": 113,
     "Defense": 870,
-    "HPMax": 9456
+    "HPMax": 10956
    },
    "88": {
     "FixingDamage": 115,
     "Defense": 880,
-    "HPMax": 9574
+    "HPMax": 11074
    },
    "89": {
     "FixingDamage": 116,
     "Defense": 890,
-    "HPMax": 9692
+    "HPMax": 11192
    },
    "90": {
     "FixingDamage": 117,
     "Defense": 900,
-    "HPMax": 9810
+    "HPMax": 11310
    },
    "91": {
     "FixingDamage": 118,
     "Defense": 910,
-    "HPMax": 9928
+    "HPMax": 11428
    },
    "92": {
     "FixingDamage": 120,
     "Defense": 920,
-    "HPMax": 10046
+    "HPMax": 11546
    },
    "93": {
     "FixingDamage": 121,
     "Defense": 930,
-    "HPMax": 10164
+    "HPMax": 11664
    },
    "94": {
     "FixingDamage": 122,
     "Defense": 940,
-    "HPMax": 10283
+    "HPMax": 11783
    },
    "95": {
     "FixingDamage": 123,
     "Defense": 950,
-    "HPMax": 10402
+    "HPMax": 11902
    },
    "96": {
     "FixingDamage": 125,
     "Defense": 960,
-    "HPMax": 10521
+    "HPMax": 12021
    },
    "97": {
     "FixingDamage": 126,
     "Defense": 970,
-    "HPMax": 10640
+    "HPMax": 12140
    },
    "98": {
     "FixingDamage": 127,
     "Defense": 980,
-    "HPMax": 10760
+    "HPMax": 12260
    },
    "99": {
     "FixingDamage": 128,
     "Defense": 990,
-    "HPMax": 10880
+    "HPMax": 12380
    },
    "100": {
     "FixingDamage": 130,
     "Defense": 1000,
-    "HPMax": 11000
+    "HPMax": 12500
    }
   },
   "Templar": {
    "1": {
     "FixingDamage": 6,
     "Defense": 10,
-    "HPMax": 100
+    "HPMax": 133
    },
    "2": {
     "FixingDamage": 7,
     "Defense": 20,
-    "HPMax": 200
+    "HPMax": 266
    },
    "3": {
     "FixingDamage": 8,
     "Defense": 30,
-    "HPMax": 300
+    "HPMax": 399
    },
    "4": {
     "FixingDamage": 10,
     "Defense": 40,
-    "HPMax": 401
+    "HPMax": 533
    },
    "5": {
     "FixingDamage": 11,
     "Defense": 50,
-    "HPMax": 502
+    "HPMax": 667
    },
    "6": {
     "FixingDamage": 12,
     "Defense": 60,
-    "HPMax": 603
+    "HPMax": 801
    },
    "7": {
     "FixingDamage": 13,
     "Defense": 70,
-    "HPMax": 704
+    "HPMax": 935
    },
    "8": {
     "FixingDamage": 15,
     "Defense": 80,
-    "HPMax": 806
+    "HPMax": 1070
    },
    "9": {
     "FixingDamage": 16,
     "Defense": 90,
-    "HPMax": 908
+    "HPMax": 1205
    },
    "10": {
     "FixingDamage": 17,
     "Defense": 100,
-    "HPMax": 1010
+    "HPMax": 1340
    },
    "11": {
     "FixingDamage": 18,
     "Defense": 110,
-    "HPMax": 1112
+    "HPMax": 1475
    },
    "12": {
     "FixingDamage": 20,
     "Defense": 120,
-    "HPMax": 1214
+    "HPMax": 1610
    },
    "13": {
     "FixingDamage": 21,
     "Defense": 130,
-    "HPMax": 1316
+    "HPMax": 1745
    },
    "14": {
     "FixingDamage": 22,
     "Defense": 140,
-    "HPMax": 1419
+    "HPMax": 1881
    },
    "15": {
     "FixingDamage": 23,
     "Defense": 150,
-    "HPMax": 1522
+    "HPMax": 2017
    },
    "16": {
     "FixingDamage": 25,
     "Defense": 160,
-    "HPMax": 1625
+    "HPMax": 2153
    },
    "17": {
     "FixingDamage": 26,
     "Defense": 170,
-    "HPMax": 1728
+    "HPMax": 2289
    },
    "18": {
     "FixingDamage": 27,
     "Defense": 180,
-    "HPMax": 1832
+    "HPMax": 2426
    },
    "19": {
     "FixingDamage": 28,
     "Defense": 190,
-    "HPMax": 1936
+    "HPMax": 2563
    },
    "20": {
     "FixingDamage": 30,
     "Defense": 200,
-    "HPMax": 2040
+    "HPMax": 2700
    },
    "21": {
     "FixingDamage": 31,
     "Defense": 210,
-    "HPMax": 2144
+    "HPMax": 2837
    },
    "22": {
     "FixingDamage": 32,
     "Defense": 220,
-    "HPMax": 2248
+    "HPMax": 2974
    },
    "23": {
     "FixingDamage": 33,
     "Defense": 230,
-    "HPMax": 2352
+    "HPMax": 3111
    },
    "24": {
     "FixingDamage": 35,
     "Defense": 240,
-    "HPMax": 2457
+    "HPMax": 3249
    },
    "25": {
     "FixingDamage": 36,
     "Defense": 250,
-    "HPMax": 2562
+    "HPMax": 3387
    },
    "26": {
     "FixingDamage": 37,
     "Defense": 260,
-    "HPMax": 2667
+    "HPMax": 3525
    },
    "27": {
     "FixingDamage": 38,
     "Defense": 270,
-    "HPMax": 2772
+    "HPMax": 3663
    },
    "28": {
     "FixingDamage": 40,
     "Defense": 280,
-    "HPMax": 2878
+    "HPMax": 3802
    },
    "29": {
     "FixingDamage": 41,
     "Defense": 290,
-    "HPMax": 2984
+    "HPMax": 3941
    },
    "30": {
     "FixingDamage": 42,
     "Defense": 300,
-    "HPMax": 3090
+    "HPMax": 4080
    },
    "31": {
     "FixingDamage": 43,
     "Defense": 310,
-    "HPMax": 3196
+    "HPMax": 4220
    },
    "32": {
     "FixingDamage": 45,
     "Defense": 320,
-    "HPMax": 3302
+    "HPMax": 4360
    },
    "33": {
     "FixingDamage": 46,
     "Defense": 330,
-    "HPMax": 3408
+    "HPMax": 4500
    },
    "34": {
     "FixingDamage": 47,
     "Defense": 340,
-    "HPMax": 3515
+    "HPMax": 4641
    },
    "35": {
     "FixingDamage": 48,
     "Defense": 350,
-    "HPMax": 3622
+    "HPMax": 4782
    },
    "36": {
     "FixingDamage": 50,
     "Defense": 360,
-    "HPMax": 3729
+    "HPMax": 4923
    },
    "37": {
     "FixingDamage": 51,
     "Defense": 370,
-    "HPMax": 3836
+    "HPMax": 5064
    },
    "38": {
     "FixingDamage": 52,
     "Defense": 380,
-    "HPMax": 3944
+    "HPMax": 5206
    },
    "39": {
     "FixingDamage": 53,
     "Defense": 390,
-    "HPMax": 4052
+    "HPMax": 5348
    },
    "40": {
     "FixingDamage": 55,
     "Defense": 400,
-    "HPMax": 4160
+    "HPMax": 5490
    },
    "41": {
     "FixingDamage": 56,
     "Defense": 410,
-    "HPMax": 4268
+    "HPMax": 5632
    },
    "42": {
     "FixingDamage": 57,
     "Defense": 420,
-    "HPMax": 4376
+    "HPMax": 5774
    },
    "43": {
     "FixingDamage": 58,
     "Defense": 430,
-    "HPMax": 4484
+    "HPMax": 5916
    },
    "44": {
     "FixingDamage": 60,
     "Defense": 440,
-    "HPMax": 4593
+    "HPMax": 6059
    },
    "45": {
     "FixingDamage": 61,
     "Defense": 450,
-    "HPMax": 4702
+    "HPMax": 6202
    },
    "46": {
     "FixingDamage": 62,
     "Defense": 460,
-    "HPMax": 4811
+    "HPMax": 6311
    },
    "47": {
     "FixingDamage": 63,
     "Defense": 470,
-    "HPMax": 4920
+    "HPMax": 6420
    },
    "48": {
     "FixingDamage": 65,
     "Defense": 480,
-    "HPMax": 5030
+    "HPMax": 6530
    },
    "49": {
     "FixingDamage": 66,
     "Defense": 490,
-    "HPMax": 5140
+    "HPMax": 6640
    },
    "50": {
     "FixingDamage": 67,
     "Defense": 500,
-    "HPMax": 5250
+    "HPMax": 6750
    },
    "51": {
     "FixingDamage": 68,
     "Defense": 510,
-    "HPMax": 5360
+    "HPMax": 6860
    },
    "52": {
     "FixingDamage": 70,
     "Defense": 520,
-    "HPMax": 5470
+    "HPMax": 6970
    },
    "53": {
     "FixingDamage": 71,
     "Defense": 530,
-    "HPMax": 5580
+    "HPMax": 7080
    },
    "54": {
     "FixingDamage": 72,
     "Defense": 540,
-    "HPMax": 5691
+    "HPMax": 7191
    },
    "55": {
     "FixingDamage": 73,
     "Defense": 550,
-    "HPMax": 5802
+    "HPMax": 7302
    },
    "56": {
     "FixingDamage": 75,
     "Defense": 560,
-    "HPMax": 5913
+    "HPMax": 7413
    },
    "57": {
     "FixingDamage": 76,
     "Defense": 570,
-    "HPMax": 6024
+    "HPMax": 7524
    },
    "58": {
     "FixingDamage": 77,
     "Defense": 580,
-    "HPMax": 6136
+    "HPMax": 7636
    },
    "59": {
     "FixingDamage": 78,
     "Defense": 590,
-    "HPMax": 6248
+    "HPMax": 7748
    },
    "60": {
     "FixingDamage": 80,
     "Defense": 600,
-    "HPMax": 6360
+    "HPMax": 7860
    },
    "61": {
     "FixingDamage": 81,
     "Defense": 610,
-    "HPMax": 6472
+    "HPMax": 7972
    },
    "62": {
     "FixingDamage": 82,
     "Defense": 620,
-    "HPMax": 6584
+    "HPMax": 8084
    },
    "63": {
     "FixingDamage": 83,
     "Defense": 630,
-    "HPMax": 6696
+    "HPMax": 8196
    },
    "64": {
     "FixingDamage": 85,
     "Defense": 640,
-    "HPMax": 6809
+    "HPMax": 8309
    },
    "65": {
     "FixingDamage": 86,
     "Defense": 650,
-    "HPMax": 6922
+    "HPMax": 8422
    },
    "66": {
     "FixingDamage": 87,
     "Defense": 660,
-    "HPMax": 7035
+    "HPMax": 8535
    },
    "67": {
     "FixingDamage": 88,
     "Defense": 670,
-    "HPMax": 7148
+    "HPMax": 8648
    },
    "68": {
     "FixingDamage": 90,
     "Defense": 680,
-    "HPMax": 7262
+    "HPMax": 8762
    },
    "69": {
     "FixingDamage": 91,
     "Defense": 690,
-    "HPMax": 7376
+    "HPMax": 8876
    },
    "70": {
     "FixingDamage": 92,
     "Defense": 700,
-    "HPMax": 7490
+    "HPMax": 8990
    },
    "71": {
     "FixingDamage": 93,
     "Defense": 710,
-    "HPMax": 7604
+    "HPMax": 9104
    },
    "72": {
     "FixingDamage": 95,
     "Defense": 720,
-    "HPMax": 7718
+    "HPMax": 9218
    },
    "73": {
     "FixingDamage": 96,
     "Defense": 730,
-    "HPMax": 7832
+    "HPMax": 9332
    },
    "74": {
     "FixingDamage": 97,
     "Defense": 740,
-    "HPMax": 7947
+    "HPMax": 9447
    },
    "75": {
     "FixingDamage": 98,
     "Defense": 750,
-    "HPMax": 8062
+    "HPMax": 9562
    },
    "76": {
     "FixingDamage": 100,
     "Defense": 760,
-    "HPMax": 8177
+    "HPMax": 9677
    },
    "77": {
     "FixingDamage": 101,
     "Defense": 770,
-    "HPMax": 8292
+    "HPMax": 9792
    },
    "78": {
     "FixingDamage": 102,
     "Defense": 780,
-    "HPMax": 8408
+    "HPMax": 9908
    },
    "79": {
     "FixingDamage": 103,
     "Defense": 790,
-    "HPMax": 8524
+    "HPMax": 10024
    },
    "80": {
     "FixingDamage": 105,
     "Defense": 800,
-    "HPMax": 8640
+    "HPMax": 10140
    },
    "81": {
     "FixingDamage": 106,
     "Defense": 810,
-    "HPMax": 8756
+    "HPMax": 10256
    },
    "82": {
     "FixingDamage": 107,
     "Defense": 820,
-    "HPMax": 8872
+    "HPMax": 10372
    },
    "83": {
     "FixingDamage": 108,
     "Defense": 830,
-    "HPMax": 8988
+    "HPMax": 10488
    },
    "84": {
     "FixingDamage": 110,
     "Defense": 840,
-    "HPMax": 9105
+    "HPMax": 10605
    },
    "85": {
     "FixingDamage": 111,
     "Defense": 850,
-    "HPMax": 9222
+    "HPMax": 10722
    },
    "86": {
     "FixingDamage": 112,
     "Defense": 860,
-    "HPMax": 9339
+    "HPMax": 10839
    },
    "87": {
     "FixingDamage": 113,
     "Defense": 870,
-    "HPMax": 9456
+    "HPMax": 10956
    },
    "88": {
     "FixingDamage": 115,
     "Defense": 880,
-    "HPMax": 9574
+    "HPMax": 11074
    },
    "89": {
     "FixingDamage": 116,
     "Defense": 890,
-    "HPMax": 9692
+    "HPMax": 11192
    },
    "90": {
     "FixingDamage": 117,
     "Defense": 900,
-    "HPMax": 9810
+    "HPMax": 11310
    },
    "91": {
     "FixingDamage": 118,
     "Defense": 910,
-    "HPMax": 9928
+    "HPMax": 11428
    },
    "92": {
     "FixingDamage": 120,
     "Defense": 920,
-    "HPMax": 10046
+    "HPMax": 11546
    },
    "93": {
     "FixingDamage": 121,
     "Defense": 930,
-    "HPMax": 10164
+    "HPMax": 11664
    },
    "94": {
     "FixingDamage": 122,
     "Defense": 940,
-    "HPMax": 10283
+    "HPMax": 11783
    },
    "95": {
     "FixingDamage": 123,
     "Defense": 950,
-    "HPMax": 10402
+    "HPMax": 11902
    },
    "96": {
     "FixingDamage": 125,
     "Defense": 960,
-    "HPMax": 10521
+    "HPMax": 12021
    },
    "97": {
     "FixingDamage": 126,
     "Defense": 970,
-    "HPMax": 10640
+    "HPMax": 12140
    },
    "98": {
     "FixingDamage": 127,
     "Defense": 980,
-    "HPMax": 10760
+    "HPMax": 12260
    },
    "99": {
     "FixingDamage": 128,
     "Defense": 990,
-    "HPMax": 10880
+    "HPMax": 12380
    },
    "100": {
     "FixingDamage": 130,
     "Defense": 1000,
-    "HPMax": 11000
+    "HPMax": 12500
    }
   },
   "Ranger": {
    "1": {
     "FixingDamage": 6,
     "Defense": 10,
-    "HPMax": 100
+    "HPMax": 122
    },
    "2": {
     "FixingDamage": 7,
     "Defense": 20,
-    "HPMax": 200
+    "HPMax": 244
    },
    "3": {
     "FixingDamage": 8,
     "Defense": 30,
-    "HPMax": 300
+    "HPMax": 366
    },
    "4": {
     "FixingDamage": 10,
     "Defense": 40,
-    "HPMax": 401
+    "HPMax": 489
    },
    "5": {
     "FixingDamage": 11,
     "Defense": 50,
-    "HPMax": 502
+    "HPMax": 612
    },
    "6": {
     "FixingDamage": 12,
     "Defense": 60,
-    "HPMax": 603
+    "HPMax": 735
    },
    "7": {
     "FixingDamage": 13,
     "Defense": 70,
-    "HPMax": 704
+    "HPMax": 858
    },
    "8": {
     "FixingDamage": 15,
     "Defense": 80,
-    "HPMax": 806
+    "HPMax": 982
    },
    "9": {
     "FixingDamage": 16,
     "Defense": 90,
-    "HPMax": 908
+    "HPMax": 1106
    },
    "10": {
     "FixingDamage": 17,
     "Defense": 100,
-    "HPMax": 1010
+    "HPMax": 1230
    },
    "11": {
     "FixingDamage": 18,
     "Defense": 110,
-    "HPMax": 1112
+    "HPMax": 1354
    },
    "12": {
     "FixingDamage": 20,
     "Defense": 120,
-    "HPMax": 1214
+    "HPMax": 1478
    },
    "13": {
     "FixingDamage": 21,
     "Defense": 130,
-    "HPMax": 1316
+    "HPMax": 1602
    },
    "14": {
     "FixingDamage": 22,
     "Defense": 140,
-    "HPMax": 1419
+    "HPMax": 1727
    },
    "15": {
     "FixingDamage": 23,
     "Defense": 150,
-    "HPMax": 1522
+    "HPMax": 1852
    },
    "16": {
     "FixingDamage": 25,
     "Defense": 160,
-    "HPMax": 1625
+    "HPMax": 1977
    },
    "17": {
     "FixingDamage": 26,
     "Defense": 170,
-    "HPMax": 1728
+    "HPMax": 2102
    },
    "18": {
     "FixingDamage": 27,
     "Defense": 180,
-    "HPMax": 1832
+    "HPMax": 2228
    },
    "19": {
     "FixingDamage": 28,
     "Defense": 190,
-    "HPMax": 1936
+    "HPMax": 2354
    },
    "20": {
     "FixingDamage": 30,
     "Defense": 200,
-    "HPMax": 2040
+    "HPMax": 2480
    },
    "21": {
     "FixingDamage": 31,
     "Defense": 210,
-    "HPMax": 2144
+    "HPMax": 2606
    },
    "22": {
     "FixingDamage": 32,
     "Defense": 220,
-    "HPMax": 2248
+    "HPMax": 2732
    },
    "23": {
     "FixingDamage": 33,
     "Defense": 230,
-    "HPMax": 2352
+    "HPMax": 2858
    },
    "24": {
     "FixingDamage": 35,
     "Defense": 240,
-    "HPMax": 2457
+    "HPMax": 2985
    },
    "25": {
     "FixingDamage": 36,
     "Defense": 250,
-    "HPMax": 2562
+    "HPMax": 3112
    },
    "26": {
     "FixingDamage": 37,
     "Defense": 260,
-    "HPMax": 2667
+    "HPMax": 3239
    },
    "27": {
     "FixingDamage": 38,
     "Defense": 270,
-    "HPMax": 2772
+    "HPMax": 3366
    },
    "28": {
     "FixingDamage": 40,
     "Defense": 280,
-    "HPMax": 2878
+    "HPMax": 3494
    },
    "29": {
     "FixingDamage": 41,
     "Defense": 290,
-    "HPMax": 2984
+    "HPMax": 3622
    },
    "30": {
     "FixingDamage": 42,
     "Defense": 300,
-    "HPMax": 3090
+    "HPMax": 3750
    },
    "31": {
     "FixingDamage": 43,
     "Defense": 310,
-    "HPMax": 3196
+    "HPMax": 3878
    },
    "32": {
     "FixingDamage": 45,
     "Defense": 320,
-    "HPMax": 3302
+    "HPMax": 4006
    },
    "33": {
     "FixingDamage": 46,
     "Defense": 330,
-    "HPMax": 3408
+    "HPMax": 4134
    },
    "34": {
     "FixingDamage": 47,
     "Defense": 340,
-    "HPMax": 3515
+    "HPMax": 4263
    },
    "35": {
     "FixingDamage": 48,
     "Defense": 350,
-    "HPMax": 3622
+    "HPMax": 4392
    },
    "36": {
     "FixingDamage": 50,
     "Defense": 360,
-    "HPMax": 3729
+    "HPMax": 4522
    },
    "37": {
     "FixingDamage": 51,
     "Defense": 370,
-    "HPMax": 3836
+    "HPMax": 4652
    },
    "38": {
     "FixingDamage": 52,
     "Defense": 380,
-    "HPMax": 3944
+    "HPMax": 4783
    },
    "39": {
     "FixingDamage": 53,
     "Defense": 390,
-    "HPMax": 4052
+    "HPMax": 4914
    },
    "40": {
     "FixingDamage": 55,
     "Defense": 400,
-    "HPMax": 4160
+    "HPMax": 5045
    },
    "41": {
     "FixingDamage": 56,
     "Defense": 410,
-    "HPMax": 4268
+    "HPMax": 5176
    },
    "42": {
     "FixingDamage": 57,
     "Defense": 420,
-    "HPMax": 4376
+    "HPMax": 5307
    },
    "43": {
     "FixingDamage": 58,
     "Defense": 430,
-    "HPMax": 4484
+    "HPMax": 5438
    },
    "44": {
     "FixingDamage": 60,
     "Defense": 440,
-    "HPMax": 4593
+    "HPMax": 5570
    },
    "45": {
     "FixingDamage": 61,
     "Defense": 450,
-    "HPMax": 4702
+    "HPMax": 5702
    },
    "46": {
     "FixingDamage": 62,
     "Defense": 460,
-    "HPMax": 4811
+    "HPMax": 5811
    },
    "47": {
     "FixingDamage": 63,
     "Defense": 470,
-    "HPMax": 4920
+    "HPMax": 5920
    },
    "48": {
     "FixingDamage": 65,
     "Defense": 480,
-    "HPMax": 5030
+    "HPMax": 6030
    },
    "49": {
     "FixingDamage": 66,
     "Defense": 490,
-    "HPMax": 5140
+    "HPMax": 6140
    },
    "50": {
     "FixingDamage": 67,
     "Defense": 500,
-    "HPMax": 5250
+    "HPMax": 6250
    },
    "51": {
     "FixingDamage": 68,
     "Defense": 510,
-    "HPMax": 5360
+    "HPMax": 6360
    },
    "52": {
     "FixingDamage": 70,
     "Defense": 520,
-    "HPMax": 5470
+    "HPMax": 6470
    },
    "53": {
     "FixingDamage": 71,
     "Defense": 530,
-    "HPMax": 5580
+    "HPMax": 6580
    },
    "54": {
     "FixingDamage": 72,
     "Defense": 540,
-    "HPMax": 5691
+    "HPMax": 6691
    },
    "55": {
     "FixingDamage": 73,
     "Defense": 550,
-    "HPMax": 5802
+    "HPMax": 6802
    },
    "56": {
     "FixingDamage": 75,
     "Defense": 560,
-    "HPMax": 5913
+    "HPMax": 6913
    },
    "57": {
     "FixingDamage": 76,
     "Defense": 570,
-    "HPMax": 6024
+    "HPMax": 7024
    },
    "58": {
     "FixingDamage": 77,
     "Defense": 580,
-    "HPMax": 6136
+    "HPMax": 7136
    },
    "59": {
     "FixingDamage": 78,
     "Defense": 590,
-    "HPMax": 6248
+    "HPMax": 7248
    },
    "60": {
     "FixingDamage": 80,
     "Defense": 600,
-    "HPMax": 6360
+    "HPMax": 7360
    },
    "61": {
     "FixingDamage": 81,
     "Defense": 610,
-    "HPMax": 6472
+    "HPMax": 7472
    },
    "62": {
     "FixingDamage": 82,
     "Defense": 620,
-    "HPMax": 6584
+    "HPMax": 7584
    },
    "63": {
     "FixingDamage": 83,
     "Defense": 630,
-    "HPMax": 6696
+    "HPMax": 7696
    },
    "64": {
     "FixingDamage": 85,
     "Defense": 640,
-    "HPMax": 6809
+    "HPMax": 7809
    },
    "65": {
     "FixingDamage": 86,
     "Defense": 650,
-    "HPMax": 6922
+    "HPMax": 7922
    },
    "66": {
     "FixingDamage": 87,
     "Defense": 660,
-    "HPMax": 7035
+    "HPMax": 8035
    },
    "67": {
     "FixingDamage": 88,
     "Defense": 670,
-    "HPMax": 7148
+    "HPMax": 8148
    },
    "68": {
     "FixingDamage": 90,
     "Defense": 680,
-    "HPMax": 7262
+    "HPMax": 8262
    },
    "69": {
     "FixingDamage": 91,
     "Defense": 690,
-    "HPMax": 7376
+    "HPMax": 8376
    },
    "70": {
     "FixingDamage": 92,
     "Defense": 700,
-    "HPMax": 7490
+    "HPMax": 8490
    },
    "71": {
     "FixingDamage": 93,
     "Defense": 710,
-    "HPMax": 7604
+    "HPMax": 8604
    },
    "72": {
     "FixingDamage": 95,
     "Defense": 720,
-    "HPMax": 7718
+    "HPMax": 8718
    },
    "73": {
     "FixingDamage": 96,
     "Defense": 730,
-    "HPMax": 7832
+    "HPMax": 8832
    },
    "74": {
     "FixingDamage": 97,
     "Defense": 740,
-    "HPMax": 7947
+    "HPMax": 8947
    },
    "75": {
     "FixingDamage": 98,
     "Defense": 750,
-    "HPMax": 8062
+    "HPMax": 9062
    },
    "76": {
     "FixingDamage": 100,
     "Defense": 760,
-    "HPMax": 8177
+    "HPMax": 9177
    },
    "77": {
     "FixingDamage": 101,
     "Defense": 770,
-    "HPMax": 8292
+    "HPMax": 9292
    },
    "78": {
     "FixingDamage": 102,
     "Defense": 780,
-    "HPMax": 8408
+    "HPMax": 9408
    },
    "79": {
     "FixingDamage": 103,
     "Defense": 790,
-    "HPMax": 8524
+    "HPMax": 9524
    },
    "80": {
     "FixingDamage": 105,
     "Defense": 800,
-    "HPMax": 8640
+    "HPMax": 9640
    },
    "81": {
     "FixingDamage": 106,
     "Defense": 810,
-    "HPMax": 8756
+    "HPMax": 9756
    },
    "82": {
     "FixingDamage": 107,
     "Defense": 820,
-    "HPMax": 8872
+    "HPMax": 9872
    },
    "83": {
     "FixingDamage": 108,
     "Defense": 830,
-    "HPMax": 8988
+    "HPMax": 9988
    },
    "84": {
     "FixingDamage": 110,
     "Defense": 840,
-    "HPMax": 9105
+    "HPMax": 10105
    },
    "85": {
     "FixingDamage": 111,
     "Defense": 850,
-    "HPMax": 9222
+    "HPMax": 10222
    },
    "86": {
     "FixingDamage": 112,
     "Defense": 860,
-    "HPMax": 9339
+    "HPMax": 10339
    },
    "87": {
     "FixingDamage": 113,
     "Defense": 870,
-    "HPMax": 9456
+    "HPMax": 10456
    },
    "88": {
     "FixingDamage": 115,
     "Defense": 880,
-    "HPMax": 9574
+    "HPMax": 10574
    },
    "89": {
     "FixingDamage": 116,
     "Defense": 890,
-    "HPMax": 9692
+    "HPMax": 10692
    },
    "90": {
     "FixingDamage": 117,
     "Defense": 900,
-    "HPMax": 9810
+    "HPMax": 10810
    },
    "91": {
     "FixingDamage": 118,
     "Defense": 910,
-    "HPMax": 9928
+    "HPMax": 10928
    },
    "92": {
     "FixingDamage": 120,
     "Defense": 920,
-    "HPMax": 10046
+    "HPMax": 11046
    },
    "93": {
     "FixingDamage": 121,
     "Defense": 930,
-    "HPMax": 10164
+    "HPMax": 11164
    },
    "94": {
     "FixingDamage": 122,
     "Defense": 940,
-    "HPMax": 10283
+    "HPMax": 11283
    },
    "95": {
     "FixingDamage": 123,
     "Defense": 950,
-    "HPMax": 10402
+    "HPMax": 11402
    },
    "96": {
     "FixingDamage": 125,
     "Defense": 960,
-    "HPMax": 10521
+    "HPMax": 11521
    },
    "97": {
     "FixingDamage": 126,
     "Defense": 970,
-    "HPMax": 10640
+    "HPMax": 11640
    },
    "98": {
     "FixingDamage": 127,
     "Defense": 980,
-    "HPMax": 10760
+    "HPMax": 11760
    },
    "99": {
     "FixingDamage": 128,
     "Defense": 990,
-    "HPMax": 10880
+    "HPMax": 11880
    },
    "100": {
     "FixingDamage": 130,
     "Defense": 1000,
-    "HPMax": 11000
+    "HPMax": 12000
    }
   },
   "Assassin": {
    "1": {
     "FixingDamage": 6,
     "Defense": 10,
-    "HPMax": 100
+    "HPMax": 122
    },
    "2": {
     "FixingDamage": 7,
     "Defense": 20,
-    "HPMax": 200
+    "HPMax": 244
    },
    "3": {
     "FixingDamage": 8,
     "Defense": 30,
-    "HPMax": 300
+    "HPMax": 366
    },
    "4": {
     "FixingDamage": 10,
     "Defense": 40,
-    "HPMax": 401
+    "HPMax": 489
    },
    "5": {
     "FixingDamage": 11,
     "Defense": 50,
-    "HPMax": 502
+    "HPMax": 612
    },
    "6": {
     "FixingDamage": 12,
     "Defense": 60,
-    "HPMax": 603
+    "HPMax": 735
    },
    "7": {
     "FixingDamage": 13,
     "Defense": 70,
-    "HPMax": 704
+    "HPMax": 858
    },
    "8": {
     "FixingDamage": 15,
     "Defense": 80,
-    "HPMax": 806
+    "HPMax": 982
    },
    "9": {
     "FixingDamage": 16,
     "Defense": 90,
-    "HPMax": 908
+    "HPMax": 1106
    },
    "10": {
     "FixingDamage": 17,
     "Defense": 100,
-    "HPMax": 1010
+    "HPMax": 1230
    },
    "11": {
     "FixingDamage": 18,
     "Defense": 110,
-    "HPMax": 1112
+    "HPMax": 1354
    },
    "12": {
     "FixingDamage": 20,
     "Defense": 120,
-    "HPMax": 1214
+    "HPMax": 1478
    },
    "13": {
     "FixingDamage": 21,
     "Defense": 130,
-    "HPMax": 1316
+    "HPMax": 1602
    },
    "14": {
     "FixingDamage": 22,
     "Defense": 140,
-    "HPMax": 1419
+    "HPMax": 1727
    },
    "15": {
     "FixingDamage": 23,
     "Defense": 150,
-    "HPMax": 1522
+    "HPMax": 1852
    },
    "16": {
     "FixingDamage": 25,
     "Defense": 160,
-    "HPMax": 1625
+    "HPMax": 1977
    },
    "17": {
     "FixingDamage": 26,
     "Defense": 170,
-    "HPMax": 1728
+    "HPMax": 2102
    },
    "18": {
     "FixingDamage": 27,
     "Defense": 180,
-    "HPMax": 1832
+    "HPMax": 2228
    },
    "19": {
     "FixingDamage": 28,
     "Defense": 190,
-    "HPMax": 1936
+    "HPMax": 2354
    },
    "20": {
     "FixingDamage": 30,
     "Defense": 200,
-    "HPMax": 2040
+    "HPMax": 2480
    },
    "21": {
     "FixingDamage": 31,
     "Defense": 210,
-    "HPMax": 2144
+    "HPMax": 2606
    },
    "22": {
     "FixingDamage": 32,
     "Defense": 220,
-    "HPMax": 2248
+    "HPMax": 2732
    },
    "23": {
     "FixingDamage": 33,
     "Defense": 230,
-    "HPMax": 2352
+    "HPMax": 2858
    },
    "24": {
     "FixingDamage": 35,
     "Defense": 240,
-    "HPMax": 2457
+    "HPMax": 2985
    },
    "25": {
     "FixingDamage": 36,
     "Defense": 250,
-    "HPMax": 2562
+    "HPMax": 3112
    },
    "26": {
     "FixingDamage": 37,
     "Defense": 260,
-    "HPMax": 2667
+    "HPMax": 3239
    },
    "27": {
     "FixingDamage": 38,
     "Defense": 270,
-    "HPMax": 2772
+    "HPMax": 3366
    },
    "28": {
     "FixingDamage": 40,
     "Defense": 280,
-    "HPMax": 2878
+    "HPMax": 3494
    },
    "29": {
     "FixingDamage": 41,
     "Defense": 290,
-    "HPMax": 2984
+    "HPMax": 3622
    },
    "30": {
     "FixingDamage": 42,
     "Defense": 300,
-    "HPMax": 3090
+    "HPMax": 3750
    },
    "31": {
     "FixingDamage": 43,
     "Defense": 310,
-    "HPMax": 3196
+    "HPMax": 3878
    },
    "32": {
     "FixingDamage": 45,
     "Defense": 320,
-    "HPMax": 3302
+    "HPMax": 4006
    },
    "33": {
     "FixingDamage": 46,
     "Defense": 330,
-    "HPMax": 3408
+    "HPMax": 4134
    },
    "34": {
     "FixingDamage": 47,
     "Defense": 340,
-    "HPMax": 3515
+    "HPMax": 4263
    },
    "35": {
     "FixingDamage": 48,
     "Defense": 350,
-    "HPMax": 3622
+    "HPMax": 4392
    },
    "36": {
     "FixingDamage": 50,
     "Defense": 360,
-    "HPMax": 3729
+    "HPMax": 4522
    },
    "37": {
     "FixingDamage": 51,
     "Defense": 370,
-    "HPMax": 3836
+    "HPMax": 4652
    },
    "38": {
     "FixingDamage": 52,
     "Defense": 380,
-    "HPMax": 3944
+    "HPMax": 4783
    },
    "39": {
     "FixingDamage": 53,
     "Defense": 390,
-    "HPMax": 4052
+    "HPMax": 4914
    },
    "40": {
     "FixingDamage": 55,
     "Defense": 400,
-    "HPMax": 4160
+    "HPMax": 5045
    },
    "41": {
     "FixingDamage": 56,
     "Defense": 410,
-    "HPMax": 4268
+    "HPMax": 5176
    },
    "42": {
     "FixingDamage": 57,
     "Defense": 420,
-    "HPMax": 4376
+    "HPMax": 5307
    },
    "43": {
     "FixingDamage": 58,
     "Defense": 430,
-    "HPMax": 4484
+    "HPMax": 5438
    },
    "44": {
     "FixingDamage": 60,
     "Defense": 440,
-    "HPMax": 4593
+    "HPMax": 5570
    },
    "45": {
     "FixingDamage": 61,
     "Defense": 450,
-    "HPMax": 4702
+    "HPMax": 5702
    },
    "46": {
     "FixingDamage": 62,
     "Defense": 460,
-    "HPMax": 4811
+    "HPMax": 5811
    },
    "47": {
     "FixingDamage": 63,
     "Defense": 470,
-    "HPMax": 4920
+    "HPMax": 5920
    },
    "48": {
     "FixingDamage": 65,
     "Defense": 480,
-    "HPMax": 5030
+    "HPMax": 6030
    },
    "49": {
     "FixingDamage": 66,
     "Defense": 490,
-    "HPMax": 5140
+    "HPMax": 6140
    },
    "50": {
     "FixingDamage": 67,
     "Defense": 500,
-    "HPMax": 5250
+    "HPMax": 6250
    },
    "51": {
     "FixingDamage": 68,
     "Defense": 510,
-    "HPMax": 5360
+    "HPMax": 6360
    },
    "52": {
     "FixingDamage": 70,
     "Defense": 520,
-    "HPMax": 5470
+    "HPMax": 6470
    },
    "53": {
     "FixingDamage": 71,
     "Defense": 530,
-    "HPMax": 5580
+    "HPMax": 6580
    },
    "54": {
     "FixingDamage": 72,
     "Defense": 540,
-    "HPMax": 5691
+    "HPMax": 6691
    },
    "55": {
     "FixingDamage": 73,
     "Defense": 550,
-    "HPMax": 5802
+    "HPMax": 6802
    },
    "56": {
     "FixingDamage": 75,
     "Defense": 560,
-    "HPMax": 5913
+    "HPMax": 6913
    },
    "57": {
     "FixingDamage": 76,
     "Defense": 570,
-    "HPMax": 6024
+    "HPMax": 7024
    },
    "58": {
     "FixingDamage": 77,
     "Defense": 580,
-    "HPMax": 6136
+    "HPMax": 7136
    },
    "59": {
     "FixingDamage": 78,
     "Defense": 590,
-    "HPMax": 6248
+    "HPMax": 7248
    },
    "60": {
     "FixingDamage": 80,
     "Defense": 600,
-    "HPMax": 6360
+    "HPMax": 7360
    },
    "61": {
     "FixingDamage": 81,
     "Defense": 610,
-    "HPMax": 6472
+    "HPMax": 7472
    },
    "62": {
     "FixingDamage": 82,
     "Defense": 620,
-    "HPMax": 6584
+    "HPMax": 7584
    },
    "63": {
     "FixingDamage": 83,
     "Defense": 630,
-    "HPMax": 6696
+    "HPMax": 7696
    },
    "64": {
     "FixingDamage": 85,
     "Defense": 640,
-    "HPMax": 6809
+    "HPMax": 7809
    },
    "65": {
     "FixingDamage": 86,
     "Defense": 650,
-    "HPMax": 6922
+    "HPMax": 7922
    },
    "66": {
     "FixingDamage": 87,
     "Defense": 660,
-    "HPMax": 7035
+    "HPMax": 8035
    },
    "67": {
     "FixingDamage": 88,
     "Defense": 670,
-    "HPMax": 7148
+    "HPMax": 8148
    },
    "68": {
     "FixingDamage": 90,
     "Defense": 680,
-    "HPMax": 7262
+    "HPMax": 8262
    },
    "69": {
     "FixingDamage": 91,
     "Defense": 690,
-    "HPMax": 7376
+    "HPMax": 8376
    },
    "70": {
     "FixingDamage": 92,
     "Defense": 700,
-    "HPMax": 7490
+    "HPMax": 8490
    },
    "71": {
     "FixingDamage": 93,
     "Defense": 710,
-    "HPMax": 7604
+    "HPMax": 8604
    },
    "72": {
     "FixingDamage": 95,
     "Defense": 720,
-    "HPMax": 7718
+    "HPMax": 8718
    },
    "73": {
     "FixingDamage": 96,
     "Defense": 730,
-    "HPMax": 7832
+    "HPMax": 8832
    },
    "74": {
     "FixingDamage": 97,
     "Defense": 740,
-    "HPMax": 7947
+    "HPMax": 8947
    },
    "75": {
     "FixingDamage": 98,
     "Defense": 750,
-    "HPMax": 8062
+    "HPMax": 9062
    },
    "76": {
     "FixingDamage": 100,
     "Defense": 760,
-    "HPMax": 8177
+    "HPMax": 9177
    },
    "77": {
     "FixingDamage": 101,
     "Defense": 770,
-    "HPMax": 8292
+    "HPMax": 9292
    },
    "78": {
     "FixingDamage": 102,
     "Defense": 780,
-    "HPMax": 8408
+    "HPMax": 9408
    },
    "79": {
     "FixingDamage": 103,
     "Defense": 790,
-    "HPMax": 8524
+    "HPMax": 9524
    },
    "80": {
     "FixingDamage": 105,
     "Defense": 800,
-    "HPMax": 8640
+    "HPMax": 9640
    },
    "81": {
     "FixingDamage": 106,
     "Defense": 810,
-    "HPMax": 8756
+    "HPMax": 9756
    },
    "82": {
     "FixingDamage": 107,
     "Defense": 820,
-    "HPMax": 8872
+    "HPMax": 9872
    },
    "83": {
     "FixingDamage": 108,
     "Defense": 830,
-    "HPMax": 8988
+    "HPMax": 9988
    },
    "84": {
     "FixingDamage": 110,
     "Defense": 840,
-    "HPMax": 9105
+    "HPMax": 10105
    },
    "85": {
     "FixingDamage": 111,
     "Defense": 850,
-    "HPMax": 9222
+    "HPMax": 10222
    },
    "86": {
     "FixingDamage": 112,
     "Defense": 860,
-    "HPMax": 9339
+    "HPMax": 10339
    },
    "87": {
     "FixingDamage": 113,
     "Defense": 870,
-    "HPMax": 9456
+    "HPMax": 10456
    },
    "88": {
     "FixingDamage": 115,
     "Defense": 880,
-    "HPMax": 9574
+    "HPMax": 10574
    },
    "89": {
     "FixingDamage": 116,
     "Defense": 890,
-    "HPMax": 9692
+    "HPMax": 10692
    },
    "90": {
     "FixingDamage": 117,
     "Defense": 900,
-    "HPMax": 9810
+    "HPMax": 10810
    },
    "91": {
     "FixingDamage": 118,
     "Defense": 910,
-    "HPMax": 9928
+    "HPMax": 10928
    },
    "92": {
     "FixingDamage": 120,
     "Defense": 920,
-    "HPMax": 10046
+    "HPMax": 11046
    },
    "93": {
     "FixingDamage": 121,
     "Defense": 930,
-    "HPMax": 10164
+    "HPMax": 11164
    },
    "94": {
     "FixingDamage": 122,
     "Defense": 940,
-    "HPMax": 10283
+    "HPMax": 11283
    },
    "95": {
     "FixingDamage": 123,
     "Defense": 950,
-    "HPMax": 10402
+    "HPMax": 11402
    },
    "96": {
     "FixingDamage": 125,
     "Defense": 960,
-    "HPMax": 10521
+    "HPMax": 11521
    },
    "97": {
     "FixingDamage": 126,
     "Defense": 970,
-    "HPMax": 10640
+    "HPMax": 11640
    },
    "98": {
     "FixingDamage": 127,
     "Defense": 980,
-    "HPMax": 10760
+    "HPMax": 11760
    },
    "99": {
     "FixingDamage": 128,
     "Defense": 990,
-    "HPMax": 10880
+    "HPMax": 11880
    },
    "100": {
     "FixingDamage": 130,
     "Defense": 1000,
-    "HPMax": 11000
+    "HPMax": 12000
    }
   },
   "Elementalist": {
    "1": {
     "FixingDamage": 6,
     "Defense": 10,
-    "HPMax": 100
+    "HPMax": 122
    },
    "2": {
     "FixingDamage": 7,
     "Defense": 20,
-    "HPMax": 200
+    "HPMax": 244
    },
    "3": {
     "FixingDamage": 8,
     "Defense": 30,
-    "HPMax": 300
+    "HPMax": 366
    },
    "4": {
     "FixingDamage": 10,
     "Defense": 40,
-    "HPMax": 401
+    "HPMax": 489
    },
    "5": {
     "FixingDamage": 11,
     "Defense": 50,
-    "HPMax": 502
+    "HPMax": 612
    },
    "6": {
     "FixingDamage": 12,
     "Defense": 60,
-    "HPMax": 603
+    "HPMax": 735
    },
    "7": {
     "FixingDamage": 13,
     "Defense": 70,
-    "HPMax": 704
+    "HPMax": 858
    },
    "8": {
     "FixingDamage": 15,
     "Defense": 80,
-    "HPMax": 806
+    "HPMax": 982
    },
    "9": {
     "FixingDamage": 16,
     "Defense": 90,
-    "HPMax": 908
+    "HPMax": 1106
    },
    "10": {
     "FixingDamage": 17,
     "Defense": 100,
-    "HPMax": 1010
+    "HPMax": 1230
    },
    "11": {
     "FixingDamage": 18,
     "Defense": 110,
-    "HPMax": 1112
+    "HPMax": 1354
    },
    "12": {
     "FixingDamage": 20,
     "Defense": 120,
-    "HPMax": 1214
+    "HPMax": 1478
    },
    "13": {
     "FixingDamage": 21,
     "Defense": 130,
-    "HPMax": 1316
+    "HPMax": 1602
    },
    "14": {
     "FixingDamage": 22,
     "Defense": 140,
-    "HPMax": 1419
+    "HPMax": 1727
    },
    "15": {
     "FixingDamage": 23,
     "Defense": 150,
-    "HPMax": 1522
+    "HPMax": 1852
    },
    "16": {
     "FixingDamage": 25,
     "Defense": 160,
-    "HPMax": 1625
+    "HPMax": 1977
    },
    "17": {
     "FixingDamage": 26,
     "Defense": 170,
-    "HPMax": 1728
+    "HPMax": 2102
    },
    "18": {
     "FixingDamage": 27,
     "Defense": 180,
-    "HPMax": 1832
+    "HPMax": 2228
    },
    "19": {
     "FixingDamage": 28,
     "Defense": 190,
-    "HPMax": 1936
+    "HPMax": 2354
    },
    "20": {
     "FixingDamage": 30,
     "Defense": 200,
-    "HPMax": 2040
+    "HPMax": 2480
    },
    "21": {
     "FixingDamage": 31,
     "Defense": 210,
-    "HPMax": 2144
+    "HPMax": 2606
    },
    "22": {
     "FixingDamage": 32,
     "Defense": 220,
-    "HPMax": 2248
+    "HPMax": 2732
    },
    "23": {
     "FixingDamage": 33,
     "Defense": 230,
-    "HPMax": 2352
+    "HPMax": 2858
    },
    "24": {
     "FixingDamage": 35,
     "Defense": 240,
-    "HPMax": 2457
+    "HPMax": 2985
    },
    "25": {
     "FixingDamage": 36,
     "Defense": 250,
-    "HPMax": 2562
+    "HPMax": 3112
    },
    "26": {
     "FixingDamage": 37,
     "Defense": 260,
-    "HPMax": 2667
+    "HPMax": 3239
    },
    "27": {
     "FixingDamage": 38,
     "Defense": 270,
-    "HPMax": 2772
+    "HPMax": 3366
    },
    "28": {
     "FixingDamage": 40,
     "Defense": 280,
-    "HPMax": 2878
+    "HPMax": 3494
    },
    "29": {
     "FixingDamage": 41,
     "Defense": 290,
-    "HPMax": 2984
+    "HPMax": 3622
    },
    "30": {
     "FixingDamage": 42,
     "Defense": 300,
-    "HPMax": 3090
+    "HPMax": 3750
    },
    "31": {
     "FixingDamage": 43,
     "Defense": 310,
-    "HPMax": 3196
+    "HPMax": 3878
    },
    "32": {
     "FixingDamage": 45,
     "Defense": 320,
-    "HPMax": 3302
+    "HPMax": 4006
    },
    "33": {
     "FixingDamage": 46,
     "Defense": 330,
-    "HPMax": 3408
+    "HPMax": 4134
    },
    "34": {
     "FixingDamage": 47,
     "Defense": 340,
-    "HPMax": 3515
+    "HPMax": 4263
    },
    "35": {
     "FixingDamage": 48,
     "Defense": 350,
-    "HPMax": 3622
+    "HPMax": 4392
    },
    "36": {
     "FixingDamage": 50,
     "Defense": 360,
-    "HPMax": 3729
+    "HPMax": 4522
    },
    "37": {
     "FixingDamage": 51,
     "Defense": 370,
-    "HPMax": 3836
+    "HPMax": 4652
    },
    "38": {
     "FixingDamage": 52,
     "Defense": 380,
-    "HPMax": 3944
+    "HPMax": 4783
    },
    "39": {
     "FixingDamage": 53,
     "Defense": 390,
-    "HPMax": 4052
+    "HPMax": 4914
    },
    "40": {
     "FixingDamage": 55,
     "Defense": 400,
-    "HPMax": 4160
+    "HPMax": 5045
    },
    "41": {
     "FixingDamage": 56,
     "Defense": 410,
-    "HPMax": 4268
+    "HPMax": 5176
    },
    "42": {
     "FixingDamage": 57,
     "Defense": 420,
-    "HPMax": 4376
+    "HPMax": 5307
    },
    "43": {
     "FixingDamage": 58,
     "Defense": 430,
-    "HPMax": 4484
+    "HPMax": 5438
    },
    "44": {
     "FixingDamage": 60,
     "Defense": 440,
-    "HPMax": 4593
+    "HPMax": 5570
    },
    "45": {
     "FixingDamage": 61,
     "Defense": 450,
-    "HPMax": 4702
+    "HPMax": 5702
    },
    "46": {
     "FixingDamage": 62,
     "Defense": 460,
-    "HPMax": 4811
+    "HPMax": 5811
    },
    "47": {
     "FixingDamage": 63,
     "Defense": 470,
-    "HPMax": 4920
+    "HPMax": 5920
    },
    "48": {
     "FixingDamage": 65,
     "Defense": 480,
-    "HPMax": 5030
+    "HPMax": 6030
    },
    "49": {
     "FixingDamage": 66,
     "Defense": 490,
-    "HPMax": 5140
+    "HPMax": 6140
    },
    "50": {
     "FixingDamage": 67,
     "Defense": 500,
-    "HPMax": 5250
+    "HPMax": 6250
    },
    "51": {
     "FixingDamage": 68,
     "Defense": 510,
-    "HPMax": 5360
+    "HPMax": 6360
    },
    "52": {
     "FixingDamage": 70,
     "Defense": 520,
-    "HPMax": 5470
+    "HPMax": 6470
    },
    "53": {
     "FixingDamage": 71,
     "Defense": 530,
-    "HPMax": 5580
+    "HPMax": 6580
    },
    "54": {
     "FixingDamage": 72,
     "Defense": 540,
-    "HPMax": 5691
+    "HPMax": 6691
    },
    "55": {
     "FixingDamage": 73,
     "Defense": 550,
-    "HPMax": 5802
+    "HPMax": 6802
    },
    "56": {
     "FixingDamage": 75,
     "Defense": 560,
-    "HPMax": 5913
+    "HPMax": 6913
    },
    "57": {
     "FixingDamage": 76,
     "Defense": 570,
-    "HPMax": 6024
+    "HPMax": 7024
    },
    "58": {
     "FixingDamage": 77,
     "Defense": 580,
-    "HPMax": 6136
+    "HPMax": 7136
    },
    "59": {
     "FixingDamage": 78,
     "Defense": 590,
-    "HPMax": 6248
+    "HPMax": 7248
    },
    "60": {
     "FixingDamage": 80,
     "Defense": 600,
-    "HPMax": 6360
+    "HPMax": 7360
    },
    "61": {
     "FixingDamage": 81,
     "Defense": 610,
-    "HPMax": 6472
+    "HPMax": 7472
    },
    "62": {
     "FixingDamage": 82,
     "Defense": 620,
-    "HPMax": 6584
+    "HPMax": 7584
    },
    "63": {
     "FixingDamage": 83,
     "Defense": 630,
-    "HPMax": 6696
+    "HPMax": 7696
    },
    "64": {
     "FixingDamage": 85,
     "Defense": 640,
-    "HPMax": 6809
+    "HPMax": 7809
    },
    "65": {
     "FixingDamage": 86,
     "Defense": 650,
-    "HPMax": 6922
+    "HPMax": 7922
    },
    "66": {
     "FixingDamage": 87,
     "Defense": 660,
-    "HPMax": 7035
+    "HPMax": 8035
    },
    "67": {
     "FixingDamage": 88,
     "Defense": 670,
-    "HPMax": 7148
+    "HPMax": 8148
    },
    "68": {
     "FixingDamage": 90,
     "Defense": 680,
-    "HPMax": 7262
+    "HPMax": 8262
    },
    "69": {
     "FixingDamage": 91,
     "Defense": 690,
-    "HPMax": 7376
+    "HPMax": 8376
    },
    "70": {
     "FixingDamage": 92,
     "Defense": 700,
-    "HPMax": 7490
+    "HPMax": 8490
    },
    "71": {
     "FixingDamage": 93,
     "Defense": 710,
-    "HPMax": 7604
+    "HPMax": 8604
    },
    "72": {
     "FixingDamage": 95,
     "Defense": 720,
-    "HPMax": 7718
+    "HPMax": 8718
    },
    "73": {
     "FixingDamage": 96,
     "Defense": 730,
-    "HPMax": 7832
+    "HPMax": 8832
    },
    "74": {
     "FixingDamage": 97,
     "Defense": 740,
-    "HPMax": 7947
+    "HPMax": 8947
    },
    "75": {
     "FixingDamage": 98,
     "Defense": 750,
-    "HPMax": 8062
+    "HPMax": 9062
    },
    "76": {
     "FixingDamage": 100,
     "Defense": 760,
-    "HPMax": 8177
+    "HPMax": 9177
    },
    "77": {
     "FixingDamage": 101,
     "Defense": 770,
-    "HPMax": 8292
+    "HPMax": 9292
    },
    "78": {
     "FixingDamage": 102,
     "Defense": 780,
-    "HPMax": 8408
+    "HPMax": 9408
    },
    "79": {
     "FixingDamage": 103,
     "Defense": 790,
-    "HPMax": 8524
+    "HPMax": 9524
    },
    "80": {
     "FixingDamage": 105,
     "Defense": 800,
-    "HPMax": 8640
+    "HPMax": 9640
    },
    "81": {
     "FixingDamage": 106,
     "Defense": 810,
-    "HPMax": 8756
+    "HPMax": 9756
    },
    "82": {
     "FixingDamage": 107,
     "Defense": 820,
-    "HPMax": 8872
+    "HPMax": 9872
    },
    "83": {
     "FixingDamage": 108,
     "Defense": 830,
-    "HPMax": 8988
+    "HPMax": 9988
    },
    "84": {
     "FixingDamage": 110,
     "Defense": 840,
-    "HPMax": 9105
+    "HPMax": 10105
    },
    "85": {
     "FixingDamage": 111,
     "Defense": 850,
-    "HPMax": 9222
+    "HPMax": 10222
    },
    "86": {
     "FixingDamage": 112,
     "Defense": 860,
-    "HPMax": 9339
+    "HPMax": 10339
    },
    "87": {
     "FixingDamage": 113,
     "Defense": 870,
-    "HPMax": 9456
+    "HPMax": 10456
    },
    "88": {
     "FixingDamage": 115,
     "Defense": 880,
-    "HPMax": 9574
+    "HPMax": 10574
    },
    "89": {
     "FixingDamage": 116,
     "Defense": 890,
-    "HPMax": 9692
+    "HPMax": 10692
    },
    "90": {
     "FixingDamage": 117,
     "Defense": 900,
-    "HPMax": 9810
+    "HPMax": 10810
    },
    "91": {
     "FixingDamage": 118,
     "Defense": 910,
-    "HPMax": 9928
+    "HPMax": 10928
    },
    "92": {
     "FixingDamage": 120,
     "Defense": 920,
-    "HPMax": 10046
+    "HPMax": 11046
    },
    "93": {
     "FixingDamage": 121,
     "Defense": 930,
-    "HPMax": 10164
+    "HPMax": 11164
    },
    "94": {
     "FixingDamage": 122,
     "Defense": 940,
-    "HPMax": 10283
+    "HPMax": 11283
    },
    "95": {
     "FixingDamage": 123,
     "Defense": 950,
-    "HPMax": 10402
+    "HPMax": 11402
    },
    "96": {
     "FixingDamage": 125,
     "Defense": 960,
-    "HPMax": 10521
+    "HPMax": 11521
    },
    "97": {
     "FixingDamage": 126,
     "Defense": 970,
-    "HPMax": 10640
+    "HPMax": 11640
    },
    "98": {
     "FixingDamage": 127,
     "Defense": 980,
-    "HPMax": 10760
+    "HPMax": 11760
    },
    "99": {
     "FixingDamage": 128,
     "Defense": 990,
-    "HPMax": 10880
+    "HPMax": 11880
    },
    "100": {
     "FixingDamage": 130,
     "Defense": 1000,
-    "HPMax": 11000
+    "HPMax": 12000
    }
   },
   "Sorcerer": {
    "1": {
     "FixingDamage": 6,
     "Defense": 10,
-    "HPMax": 100
+    "HPMax": 122
    },
    "2": {
     "FixingDamage": 7,
     "Defense": 20,
-    "HPMax": 200
+    "HPMax": 244
    },
    "3": {
     "FixingDamage": 8,
     "Defense": 30,
-    "HPMax": 300
+    "HPMax": 366
    },
    "4": {
     "FixingDamage": 10,
     "Defense": 40,
-    "HPMax": 401
+    "HPMax": 489
    },
    "5": {
     "FixingDamage": 11,
     "Defense": 50,
-    "HPMax": 502
+    "HPMax": 612
    },
    "6": {
     "FixingDamage": 12,
     "Defense": 60,
-    "HPMax": 603
+    "HPMax": 735
    },
    "7": {
     "FixingDamage": 13,
     "Defense": 70,
-    "HPMax": 704
+    "HPMax": 858
    },
    "8": {
     "FixingDamage": 15,
     "Defense": 80,
-    "HPMax": 806
+    "HPMax": 982
    },
    "9": {
     "FixingDamage": 16,
     "Defense": 90,
-    "HPMax": 908
+    "HPMax": 1106
    },
    "10": {
     "FixingDamage": 17,
     "Defense": 100,
-    "HPMax": 1010
+    "HPMax": 1230
    },
    "11": {
     "FixingDamage": 18,
     "Defense": 110,
-    "HPMax": 1112
+    "HPMax": 1354
    },
    "12": {
     "FixingDamage": 20,
     "Defense": 120,
-    "HPMax": 1214
+    "HPMax": 1478
    },
    "13": {
     "FixingDamage": 21,
     "Defense": 130,
-    "HPMax": 1316
+    "HPMax": 1602
    },
    "14": {
     "FixingDamage": 22,
     "Defense": 140,
-    "HPMax": 1419
+    "HPMax": 1727
    },
    "15": {
     "FixingDamage": 23,
     "Defense": 150,
-    "HPMax": 1522
+    "HPMax": 1852
    },
    "16": {
     "FixingDamage": 25,
     "Defense": 160,
-    "HPMax": 1625
+    "HPMax": 1977
    },
    "17": {
     "FixingDamage": 26,
     "Defense": 170,
-    "HPMax": 1728
+    "HPMax": 2102
    },
    "18": {
     "FixingDamage": 27,
     "Defense": 180,
-    "HPMax": 1832
+    "HPMax": 2228
    },
    "19": {
     "FixingDamage": 28,
     "Defense": 190,
-    "HPMax": 1936
+    "HPMax": 2354
    },
    "20": {
     "FixingDamage": 30,
     "Defense": 200,
-    "HPMax": 2040
+    "HPMax": 2480
    },
    "21": {
     "FixingDamage": 31,
     "Defense": 210,
-    "HPMax": 2144
+    "HPMax": 2606
    },
    "22": {
     "FixingDamage": 32,
     "Defense": 220,
-    "HPMax": 2248
+    "HPMax": 2732
    },
    "23": {
     "FixingDamage": 33,
     "Defense": 230,
-    "HPMax": 2352
+    "HPMax": 2858
    },
    "24": {
     "FixingDamage": 35,
     "Defense": 240,
-    "HPMax": 2457
+    "HPMax": 2985
    },
    "25": {
     "FixingDamage": 36,
     "Defense": 250,
-    "HPMax": 2562
+    "HPMax": 3112
    },
    "26": {
     "FixingDamage": 37,
     "Defense": 260,
-    "HPMax": 2667
+    "HPMax": 3239
    },
    "27": {
     "FixingDamage": 38,
     "Defense": 270,
-    "HPMax": 2772
+    "HPMax": 3366
    },
    "28": {
     "FixingDamage": 40,
     "Defense": 280,
-    "HPMax": 2878
+    "HPMax": 3494
    },
    "29": {
     "FixingDamage": 41,
     "Defense": 290,
-    "HPMax": 2984
+    "HPMax": 3622
    },
    "30": {
     "FixingDamage": 42,
     "Defense": 300,
-    "HPMax": 3090
+    "HPMax": 3750
    },
    "31": {
     "FixingDamage": 43,
     "Defense": 310,
-    "HPMax": 3196
+    "HPMax": 3878
    },
    "32": {
     "FixingDamage": 45,
     "Defense": 320,
-    "HPMax": 3302
+    "HPMax": 4006
    },
    "33": {
     "FixingDamage": 46,
     "Defense": 330,
-    "HPMax": 3408
+    "HPMax": 4134
    },
    "34": {
     "FixingDamage": 47,
     "Defense": 340,
-    "HPMax": 3515
+    "HPMax": 4263
    },
    "35": {
     "FixingDamage": 48,
     "Defense": 350,
-    "HPMax": 3622
+    "HPMax": 4392
    },
    "36": {
     "FixingDamage": 50,
     "Defense": 360,
-    "HPMax": 3729
+    "HPMax": 4522
    },
    "37": {
     "FixingDamage": 51,
     "Defense": 370,
-    "HPMax": 3836
+    "HPMax": 4652
    },
    "38": {
     "FixingDamage": 52,
     "Defense": 380,
-    "HPMax": 3944
+    "HPMax": 4783
    },
    "39": {
     "FixingDamage": 53,
     "Defense": 390,
-    "HPMax": 4052
+    "HPMax": 4914
    },
    "40": {
     "FixingDamage": 55,
     "Defense": 400,
-    "HPMax": 4160
+    "HPMax": 5045
    },
    "41": {
     "FixingDamage": 56,
     "Defense": 410,
-    "HPMax": 4268
+    "HPMax": 5176
    },
    "42": {
     "FixingDamage": 57,
     "Defense": 420,
-    "HPMax": 4376
+    "HPMax": 5307
    },
    "43": {
     "FixingDamage": 58,
     "Defense": 430,
-    "HPMax": 4484
+    "HPMax": 5438
    },
    "44": {
     "FixingDamage": 60,
     "Defense": 440,
-    "HPMax": 4593
+    "HPMax": 5570
    },
    "45": {
     "FixingDamage": 61,
     "Defense": 450,
-    "HPMax": 4702
+    "HPMax": 5702
    },
    "46": {
     "FixingDamage": 62,
     "Defense": 460,
-    "HPMax": 4811
+    "HPMax": 5811
    },
    "47": {
     "FixingDamage": 63,
     "Defense": 470,
-    "HPMax": 4920
+    "HPMax": 5920
    },
    "48": {
     "FixingDamage": 65,
     "Defense": 480,
-    "HPMax": 5030
+    "HPMax": 6030
    },
    "49": {
     "FixingDamage": 66,
     "Defense": 490,
-    "HPMax": 5140
+    "HPMax": 6140
    },
    "50": {
     "FixingDamage": 67,
     "Defense": 500,
-    "HPMax": 5250
+    "HPMax": 6250
    },
    "51": {
     "FixingDamage": 68,
     "Defense": 510,
-    "HPMax": 5360
+    "HPMax": 6360
    },
    "52": {
     "FixingDamage": 70,
     "Defense": 520,
-    "HPMax": 5470
+    "HPMax": 6470
    },
    "53": {
     "FixingDamage": 71,
     "Defense": 530,
-    "HPMax": 5580
+    "HPMax": 6580
    },
    "54": {
     "FixingDamage": 72,
     "Defense": 540,
-    "HPMax": 5691
+    "HPMax": 6691
    },
    "55": {
     "FixingDamage": 73,
     "Defense": 550,
-    "HPMax": 5802
+    "HPMax": 6802
    },
    "56": {
     "FixingDamage": 75,
     "Defense": 560,
-    "HPMax": 5913
+    "HPMax": 6913
    },
    "57": {
     "FixingDamage": 76,
     "Defense": 570,
-    "HPMax": 6024
+    "HPMax": 7024
    },
    "58": {
     "FixingDamage": 77,
     "Defense": 580,
-    "HPMax": 6136
+    "HPMax": 7136
    },
    "59": {
     "FixingDamage": 78,
     "Defense": 590,
-    "HPMax": 6248
+    "HPMax": 7248
    },
    "60": {
     "FixingDamage": 80,
     "Defense": 600,
-    "HPMax": 6360
+    "HPMax": 7360
    },
    "61": {
     "FixingDamage": 81,
     "Defense": 610,
-    "HPMax": 6472
+    "HPMax": 7472
    },
    "62": {
     "FixingDamage": 82,
     "Defense": 620,
-    "HPMax": 6584
+    "HPMax": 7584
    },
    "63": {
     "FixingDamage": 83,
     "Defense": 630,
-    "HPMax": 6696
+    "HPMax": 7696
    },
    "64": {
     "FixingDamage": 85,
     "Defense": 640,
-    "HPMax": 6809
+    "HPMax": 7809
    },
    "65": {
     "FixingDamage": 86,
     "Defense": 650,
-    "HPMax": 6922
+    "HPMax": 7922
    },
    "66": {
     "FixingDamage": 87,
     "Defense": 660,
-    "HPMax": 7035
+    "HPMax": 8035
    },
    "67": {
     "FixingDamage": 88,
     "Defense": 670,
-    "HPMax": 7148
+    "HPMax": 8148
    },
    "68": {
     "FixingDamage": 90,
     "Defense": 680,
-    "HPMax": 7262
+    "HPMax": 8262
    },
    "69": {
     "FixingDamage": 91,
     "Defense": 690,
-    "HPMax": 7376
+    "HPMax": 8376
    },
    "70": {
     "FixingDamage": 92,
     "Defense": 700,
-    "HPMax": 7490
+    "HPMax": 8490
    },
    "71": {
     "FixingDamage": 93,
     "Defense": 710,
-    "HPMax": 7604
+    "HPMax": 8604
    },
    "72": {
     "FixingDamage": 95,
     "Defense": 720,
-    "HPMax": 7718
+    "HPMax": 8718
    },
    "73": {
     "FixingDamage": 96,
     "Defense": 730,
-    "HPMax": 7832
+    "HPMax": 8832
    },
    "74": {
     "FixingDamage": 97,
     "Defense": 740,
-    "HPMax": 7947
+    "HPMax": 8947
    },
    "75": {
     "FixingDamage": 98,
     "Defense": 750,
-    "HPMax": 8062
+    "HPMax": 9062
    },
    "76": {
     "FixingDamage": 100,
     "Defense": 760,
-    "HPMax": 8177
+    "HPMax": 9177
    },
    "77": {
     "FixingDamage": 101,
     "Defense": 770,
-    "HPMax": 8292
+    "HPMax": 9292
    },
    "78": {
     "FixingDamage": 102,
     "Defense": 780,
-    "HPMax": 8408
+    "HPMax": 9408
    },
    "79": {
     "FixingDamage": 103,
     "Defense": 790,
-    "HPMax": 8524
+    "HPMax": 9524
    },
    "80": {
     "FixingDamage": 105,
     "Defense": 800,
-    "HPMax": 8640
+    "HPMax": 9640
    },
    "81": {
     "FixingDamage": 106,
     "Defense": 810,
-    "HPMax": 8756
+    "HPMax": 9756
    },
    "82": {
     "FixingDamage": 107,
     "Defense": 820,
-    "HPMax": 8872
+    "HPMax": 9872
    },
    "83": {
     "FixingDamage": 108,
     "Defense": 830,
-    "HPMax": 8988
+    "HPMax": 9988
    },
    "84": {
     "FixingDamage": 110,
     "Defense": 840,
-    "HPMax": 9105
+    "HPMax": 10105
    },
    "85": {
     "FixingDamage": 111,
     "Defense": 850,
-    "HPMax": 9222
+    "HPMax": 10222
    },
    "86": {
     "FixingDamage": 112,
     "Defense": 860,
-    "HPMax": 9339
+    "HPMax": 10339
    },
    "87": {
     "FixingDamage": 113,
     "Defense": 870,
-    "HPMax": 9456
+    "HPMax": 10456
    },
    "88": {
     "FixingDamage": 115,
     "Defense": 880,
-    "HPMax": 9574
+    "HPMax": 10574
    },
    "89": {
     "FixingDamage": 116,
     "Defense": 890,
-    "HPMax": 9692
+    "HPMax": 10692
    },
    "90": {
     "FixingDamage": 117,
     "Defense": 900,
-    "HPMax": 9810
+    "HPMax": 10810
    },
    "91": {
     "FixingDamage": 118,
     "Defense": 910,
-    "HPMax": 9928
+    "HPMax": 10928
    },
    "92": {
     "FixingDamage": 120,
     "Defense": 920,
-    "HPMax": 10046
+    "HPMax": 11046
    },
    "93": {
     "FixingDamage": 121,
     "Defense": 930,
-    "HPMax": 10164
+    "HPMax": 11164
    },
    "94": {
     "FixingDamage": 122,
     "Defense": 940,
-    "HPMax": 10283
+    "HPMax": 11283
    },
    "95": {
     "FixingDamage": 123,
     "Defense": 950,
-    "HPMax": 10402
+    "HPMax": 11402
    },
    "96": {
     "FixingDamage": 125,
     "Defense": 960,
-    "HPMax": 10521
+    "HPMax": 11521
    },
    "97": {
     "FixingDamage": 126,
     "Defense": 970,
-    "HPMax": 10640
+    "HPMax": 11640
    },
    "98": {
     "FixingDamage": 127,
     "Defense": 980,
-    "HPMax": 10760
+    "HPMax": 11760
    },
    "99": {
     "FixingDamage": 128,
     "Defense": 990,
-    "HPMax": 10880
+    "HPMax": 11880
    },
    "100": {
     "FixingDamage": 130,
     "Defense": 1000,
-    "HPMax": 11000
+    "HPMax": 12000
    }
   },
   "Cleric": {
    "1": {
     "FixingDamage": 6,
     "Defense": 10,
-    "HPMax": 100
+    "HPMax": 122
    },
    "2": {
     "FixingDamage": 7,
     "Defense": 20,
-    "HPMax": 200
+    "HPMax": 244
    },
    "3": {
     "FixingDamage": 8,
     "Defense": 30,
-    "HPMax": 300
+    "HPMax": 366
    },
    "4": {
     "FixingDamage": 10,
     "Defense": 40,
-    "HPMax": 401
+    "HPMax": 489
    },
    "5": {
     "FixingDamage": 11,
     "Defense": 50,
-    "HPMax": 502
+    "HPMax": 612
    },
    "6": {
     "FixingDamage": 12,
     "Defense": 60,
-    "HPMax": 603
+    "HPMax": 735
    },
    "7": {
     "FixingDamage": 13,
     "Defense": 70,
-    "HPMax": 704
+    "HPMax": 858
    },
    "8": {
     "FixingDamage": 15,
     "Defense": 80,
-    "HPMax": 806
+    "HPMax": 982
    },
    "9": {
     "FixingDamage": 16,
     "Defense": 90,
-    "HPMax": 908
+    "HPMax": 1106
    },
    "10": {
     "FixingDamage": 17,
     "Defense": 100,
-    "HPMax": 1010
+    "HPMax": 1230
    },
    "11": {
     "FixingDamage": 18,
     "Defense": 110,
-    "HPMax": 1112
+    "HPMax": 1354
    },
    "12": {
     "FixingDamage": 20,
     "Defense": 120,
-    "HPMax": 1214
+    "HPMax": 1478
    },
    "13": {
     "FixingDamage": 21,
     "Defense": 130,
-    "HPMax": 1316
+    "HPMax": 1602
    },
    "14": {
     "FixingDamage": 22,
     "Defense": 140,
-    "HPMax": 1419
+    "HPMax": 1727
    },
    "15": {
     "FixingDamage": 23,
     "Defense": 150,
-    "HPMax": 1522
+    "HPMax": 1852
    },
    "16": {
     "FixingDamage": 25,
     "Defense": 160,
-    "HPMax": 1625
+    "HPMax": 1977
    },
    "17": {
     "FixingDamage": 26,
     "Defense": 170,
-    "HPMax": 1728
+    "HPMax": 2102
    },
    "18": {
     "FixingDamage": 27,
     "Defense": 180,
-    "HPMax": 1832
+    "HPMax": 2228
    },
    "19": {
     "FixingDamage": 28,
     "Defense": 190,
-    "HPMax": 1936
+    "HPMax": 2354
    },
    "20": {
     "FixingDamage": 30,
     "Defense": 200,
-    "HPMax": 2040
+    "HPMax": 2480
    },
    "21": {
     "FixingDamage": 31,
     "Defense": 210,
-    "HPMax": 2144
+    "HPMax": 2606
    },
    "22": {
     "FixingDamage": 32,
     "Defense": 220,
-    "HPMax": 2248
+    "HPMax": 2732
    },
    "23": {
     "FixingDamage": 33,
     "Defense": 230,
-    "HPMax": 2352
+    "HPMax": 2858
    },
    "24": {
     "FixingDamage": 35,
     "Defense": 240,
-    "HPMax": 2457
+    "HPMax": 2985
    },
    "25": {
     "FixingDamage": 36,
     "Defense": 250,
-    "HPMax": 2562
+    "HPMax": 3112
    },
    "26": {
     "FixingDamage": 37,
     "Defense": 260,
-    "HPMax": 2667
+    "HPMax": 3239
    },
    "27": {
     "FixingDamage": 38,
     "Defense": 270,
-    "HPMax": 2772
+    "HPMax": 3366
    },
    "28": {
     "FixingDamage": 40,
     "Defense": 280,
-    "HPMax": 2878
+    "HPMax": 3494
    },
    "29": {
     "FixingDamage": 41,
     "Defense": 290,
-    "HPMax": 2984
+    "HPMax": 3622
    },
    "30": {
     "FixingDamage": 42,
     "Defense": 300,
-    "HPMax": 3090
+    "HPMax": 3750
    },
    "31": {
     "FixingDamage": 43,
     "Defense": 310,
-    "HPMax": 3196
+    "HPMax": 3878
    },
    "32": {
     "FixingDamage": 45,
     "Defense": 320,
-    "HPMax": 3302
+    "HPMax": 4006
    },
    "33": {
     "FixingDamage": 46,
     "Defense": 330,
-    "HPMax": 3408
+    "HPMax": 4134
    },
    "34": {
     "FixingDamage": 47,
     "Defense": 340,
-    "HPMax": 3515
+    "HPMax": 4263
    },
    "35": {
     "FixingDamage": 48,
     "Defense": 350,
-    "HPMax": 3622
+    "HPMax": 4392
    },
    "36": {
     "FixingDamage": 50,
     "Defense": 360,
-    "HPMax": 3729
+    "HPMax": 4522
    },
    "37": {
     "FixingDamage": 51,
     "Defense": 370,
-    "HPMax": 3836
+    "HPMax": 4652
    },
    "38": {
     "FixingDamage": 52,
     "Defense": 380,
-    "HPMax": 3944
+    "HPMax": 4783
    },
    "39": {
     "FixingDamage": 53,
     "Defense": 390,
-    "HPMax": 4052
+    "HPMax": 4914
    },
    "40": {
     "FixingDamage": 55,
     "Defense": 400,
-    "HPMax": 4160
+    "HPMax": 5045
    },
    "41": {
     "FixingDamage": 56,
     "Defense": 410,
-    "HPMax": 4268
+    "HPMax": 5176
    },
    "42": {
     "FixingDamage": 57,
     "Defense": 420,
-    "HPMax": 4376
+    "HPMax": 5307
    },
    "43": {
     "FixingDamage": 58,
     "Defense": 430,
-    "HPMax": 4484
+    "HPMax": 5438
    },
    "44": {
     "FixingDamage": 60,
     "Defense": 440,
-    "HPMax": 4593
+    "HPMax": 5570
    },
    "45": {
     "FixingDamage": 61,
     "Defense": 450,
-    "HPMax": 4702
+    "HPMax": 5702
    },
    "46": {
     "FixingDamage": 62,
     "Defense": 460,
-    "HPMax": 4811
+    "HPMax": 5811
    },
    "47": {
     "FixingDamage": 63,
     "Defense": 470,
-    "HPMax": 4920
+    "HPMax": 5920
    },
    "48": {
     "FixingDamage": 65,
     "Defense": 480,
-    "HPMax": 5030
+    "HPMax": 6030
    },
    "49": {
     "FixingDamage": 66,
     "Defense": 490,
-    "HPMax": 5140
+    "HPMax": 6140
    },
    "50": {
     "FixingDamage": 67,
     "Defense": 500,
-    "HPMax": 5250
+    "HPMax": 6250
    },
    "51": {
     "FixingDamage": 68,
     "Defense": 510,
-    "HPMax": 5360
+    "HPMax": 6360
    },
    "52": {
     "FixingDamage": 70,
     "Defense": 520,
-    "HPMax": 5470
+    "HPMax": 6470
    },
    "53": {
     "FixingDamage": 71,
     "Defense": 530,
-    "HPMax": 5580
+    "HPMax": 6580
    },
    "54": {
     "FixingDamage": 72,
     "Defense": 540,
-    "HPMax": 5691
+    "HPMax": 6691
    },
    "55": {
     "FixingDamage": 73,
     "Defense": 550,
-    "HPMax": 5802
+    "HPMax": 6802
    },
    "56": {
     "FixingDamage": 75,
     "Defense": 560,
-    "HPMax": 5913
+    "HPMax": 6913
    },
    "57": {
     "FixingDamage": 76,
     "Defense": 570,
-    "HPMax": 6024
+    "HPMax": 7024
    },
    "58": {
     "FixingDamage": 77,
     "Defense": 580,
-    "HPMax": 6136
+    "HPMax": 7136
    },
    "59": {
     "FixingDamage": 78,
     "Defense": 590,
-    "HPMax": 6248
+    "HPMax": 7248
    },
    "60": {
     "FixingDamage": 80,
     "Defense": 600,
-    "HPMax": 6360
+    "HPMax": 7360
    },
    "61": {
     "FixingDamage": 81,
     "Defense": 610,
-    "HPMax": 6472
+    "HPMax": 7472
    },
    "62": {
     "FixingDamage": 82,
     "Defense": 620,
-    "HPMax": 6584
+    "HPMax": 7584
    },
    "63": {
     "FixingDamage": 83,
     "Defense": 630,
-    "HPMax": 6696
+    "HPMax": 7696
    },
    "64": {
     "FixingDamage": 85,
     "Defense": 640,
-    "HPMax": 6809
+    "HPMax": 7809
    },
    "65": {
     "FixingDamage": 86,
     "Defense": 650,
-    "HPMax": 6922
+    "HPMax": 7922
    },
    "66": {
     "FixingDamage": 87,
     "Defense": 660,
-    "HPMax": 7035
+    "HPMax": 8035
    },
    "67": {
     "FixingDamage": 88,
     "Defense": 670,
-    "HPMax": 7148
+    "HPMax": 8148
    },
    "68": {
     "FixingDamage": 90,
     "Defense": 680,
-    "HPMax": 7262
+    "HPMax": 8262
    },
    "69": {
     "FixingDamage": 91,
     "Defense": 690,
-    "HPMax": 7376
+    "HPMax": 8376
    },
    "70": {
     "FixingDamage": 92,
     "Defense": 700,
-    "HPMax": 7490
+    "HPMax": 8490
    },
    "71": {
     "FixingDamage": 93,
     "Defense": 710,
-    "HPMax": 7604
+    "HPMax": 8604
    },
    "72": {
     "FixingDamage": 95,
     "Defense": 720,
-    "HPMax": 7718
+    "HPMax": 8718
    },
    "73": {
     "FixingDamage": 96,
     "Defense": 730,
-    "HPMax": 7832
+    "HPMax": 8832
    },
    "74": {
     "FixingDamage": 97,
     "Defense": 740,
-    "HPMax": 7947
+    "HPMax": 8947
    },
    "75": {
     "FixingDamage": 98,
     "Defense": 750,
-    "HPMax": 8062
+    "HPMax": 9062
    },
    "76": {
     "FixingDamage": 100,
     "Defense": 760,
-    "HPMax": 8177
+    "HPMax": 9177
    },
    "77": {
     "FixingDamage": 101,
     "Defense": 770,
-    "HPMax": 8292
+    "HPMax": 9292
    },
    "78": {
     "FixingDamage": 102,
     "Defense": 780,
-    "HPMax": 8408
+    "HPMax": 9408
    },
    "79": {
     "FixingDamage": 103,
     "Defense": 790,
-    "HPMax": 8524
+    "HPMax": 9524
    },
    "80": {
     "FixingDamage": 105,
     "Defense": 800,
-    "HPMax": 8640
+    "HPMax": 9640
    },
    "81": {
     "FixingDamage": 106,
     "Defense": 810,
-    "HPMax": 8756
+    "HPMax": 9756
    },
    "82": {
     "FixingDamage": 107,
     "Defense": 820,
-    "HPMax": 8872
+    "HPMax": 9872
    },
    "83": {
     "FixingDamage": 108,
     "Defense": 830,
-    "HPMax": 8988
+    "HPMax": 9988
    },
    "84": {
     "FixingDamage": 110,
     "Defense": 840,
-    "HPMax": 9105
+    "HPMax": 10105
    },
    "85": {
     "FixingDamage": 111,
     "Defense": 850,
-    "HPMax": 9222
+    "HPMax": 10222
    },
    "86": {
     "FixingDamage": 112,
     "Defense": 860,
-    "HPMax": 9339
+    "HPMax": 10339
    },
    "87": {
     "FixingDamage": 113,
     "Defense": 870,
-    "HPMax": 9456
+    "HPMax": 10456
    },
    "88": {
     "FixingDamage": 115,
     "Defense": 880,
-    "HPMax": 9574
+    "HPMax": 10574
    },
    "89": {
     "FixingDamage": 116,
     "Defense": 890,
-    "HPMax": 9692
+    "HPMax": 10692
    },
    "90": {
     "FixingDamage": 117,
     "Defense": 900,
-    "HPMax": 9810
+    "HPMax": 10810
    },
    "91": {
     "FixingDamage": 118,
     "Defense": 910,
-    "HPMax": 9928
+    "HPMax": 10928
    },
    "92": {
     "FixingDamage": 120,
     "Defense": 920,
-    "HPMax": 10046
+    "HPMax": 11046
    },
    "93": {
     "FixingDamage": 121,
     "Defense": 930,
-    "HPMax": 10164
+    "HPMax": 11164
    },
    "94": {
     "FixingDamage": 122,
     "Defense": 940,
-    "HPMax": 10283
+    "HPMax": 11283
    },
    "95": {
     "FixingDamage": 123,
     "Defense": 950,
-    "HPMax": 10402
+    "HPMax": 11402
    },
    "96": {
     "FixingDamage": 125,
     "Defense": 960,
-    "HPMax": 10521
+    "HPMax": 11521
    },
    "97": {
     "FixingDamage": 126,
     "Defense": 970,
-    "HPMax": 10640
+    "HPMax": 11640
    },
    "98": {
     "FixingDamage": 127,
     "Defense": 980,
-    "HPMax": 10760
+    "HPMax": 11760
    },
    "99": {
     "FixingDamage": 128,
     "Defense": 990,
-    "HPMax": 10880
+    "HPMax": 11880
    },
    "100": {
     "FixingDamage": 130,
     "Defense": 1000,
-    "HPMax": 11000
+    "HPMax": 12000
    }
   },
   "Chanter": {
    "1": {
     "FixingDamage": 6,
     "Defense": 10,
-    "HPMax": 100
+    "HPMax": 122
    },
    "2": {
     "FixingDamage": 7,
     "Defense": 20,
-    "HPMax": 200
+    "HPMax": 244
    },
    "3": {
     "FixingDamage": 8,
     "Defense": 30,
-    "HPMax": 300
+    "HPMax": 366
    },
    "4": {
     "FixingDamage": 10,
     "Defense": 40,
-    "HPMax": 401
+    "HPMax": 489
    },
    "5": {
     "FixingDamage": 11,
     "Defense": 50,
-    "HPMax": 502
+    "HPMax": 612
    },
    "6": {
     "FixingDamage": 12,
     "Defense": 60,
-    "HPMax": 603
+    "HPMax": 735
    },
    "7": {
     "FixingDamage": 13,
     "Defense": 70,
-    "HPMax": 704
+    "HPMax": 858
    },
    "8": {
     "FixingDamage": 15,
     "Defense": 80,
-    "HPMax": 806
+    "HPMax": 982
    },
    "9": {
     "FixingDamage": 16,
     "Defense": 90,
-    "HPMax": 908
+    "HPMax": 1106
    },
    "10": {
     "FixingDamage": 17,
     "Defense": 100,
-    "HPMax": 1010
+    "HPMax": 1230
    },
    "11": {
     "FixingDamage": 18,
     "Defense": 110,
-    "HPMax": 1112
+    "HPMax": 1354
    },
    "12": {
     "FixingDamage": 20,
     "Defense": 120,
-    "HPMax": 1214
+    "HPMax": 1478
    },
    "13": {
     "FixingDamage": 21,
     "Defense": 130,
-    "HPMax": 1316
+    "HPMax": 1602
    },
    "14": {
     "FixingDamage": 22,
     "Defense": 140,
-    "HPMax": 1419
+    "HPMax": 1727
    },
    "15": {
     "FixingDamage": 23,
     "Defense": 150,
-    "HPMax": 1522
+    "HPMax": 1852
    },
    "16": {
     "FixingDamage": 25,
     "Defense": 160,
-    "HPMax": 1625
+    "HPMax": 1977
    },
    "17": {
     "FixingDamage": 26,
     "Defense": 170,
-    "HPMax": 1728
+    "HPMax": 2102
    },
    "18": {
     "FixingDamage": 27,
     "Defense": 180,
-    "HPMax": 1832
+    "HPMax": 2228
    },
    "19": {
     "FixingDamage": 28,
     "Defense": 190,
-    "HPMax": 1936
+    "HPMax": 2354
    },
    "20": {
     "FixingDamage": 30,
     "Defense": 200,
-    "HPMax": 2040
+    "HPMax": 2480
    },
    "21": {
     "FixingDamage": 31,
     "Defense": 210,
-    "HPMax": 2144
+    "HPMax": 2606
    },
    "22": {
     "FixingDamage": 32,
     "Defense": 220,
-    "HPMax": 2248
+    "HPMax": 2732
    },
    "23": {
     "FixingDamage": 33,
     "Defense": 230,
-    "HPMax": 2352
+    "HPMax": 2858
    },
    "24": {
     "FixingDamage": 35,
     "Defense": 240,
-    "HPMax": 2457
+    "HPMax": 2985
    },
    "25": {
     "FixingDamage": 36,
     "Defense": 250,
-    "HPMax": 2562
+    "HPMax": 3112
    },
    "26": {
     "FixingDamage": 37,
     "Defense": 260,
-    "HPMax": 2667
+    "HPMax": 3239
    },
    "27": {
     "FixingDamage": 38,
     "Defense": 270,
-    "HPMax": 2772
+    "HPMax": 3366
    },
    "28": {
     "FixingDamage": 40,
     "Defense": 280,
-    "HPMax": 2878
+    "HPMax": 3494
    },
    "29": {
     "FixingDamage": 41,
     "Defense": 290,
-    "HPMax": 2984
+    "HPMax": 3622
    },
    "30": {
     "FixingDamage": 42,
     "Defense": 300,
-    "HPMax": 3090
+    "HPMax": 3750
    },
    "31": {
     "FixingDamage": 43,
     "Defense": 310,
-    "HPMax": 3196
+    "HPMax": 3878
    },
    "32": {
     "FixingDamage": 45,
     "Defense": 320,
-    "HPMax": 3302
+    "HPMax": 4006
    },
    "33": {
     "FixingDamage": 46,
     "Defense": 330,
-    "HPMax": 3408
+    "HPMax": 4134
    },
    "34": {
     "FixingDamage": 47,
     "Defense": 340,
-    "HPMax": 3515
+    "HPMax": 4263
    },
    "35": {
     "FixingDamage": 48,
     "Defense": 350,
-    "HPMax": 3622
+    "HPMax": 4392
    },
    "36": {
     "FixingDamage": 50,
     "Defense": 360,
-    "HPMax": 3729
+    "HPMax": 4522
    },
    "37": {
     "FixingDamage": 51,
     "Defense": 370,
-    "HPMax": 3836
+    "HPMax": 4652
    },
    "38": {
     "FixingDamage": 52,
     "Defense": 380,
-    "HPMax": 3944
+    "HPMax": 4783
    },
    "39": {
     "FixingDamage": 53,
     "Defense": 390,
-    "HPMax": 4052
+    "HPMax": 4914
    },
    "40": {
     "FixingDamage": 55,
     "Defense": 400,
-    "HPMax": 4160
+    "HPMax": 5045
    },
    "41": {
     "FixingDamage": 56,
     "Defense": 410,
-    "HPMax": 4268
+    "HPMax": 5176
    },
    "42": {
     "FixingDamage": 57,
     "Defense": 420,
-    "HPMax": 4376
+    "HPMax": 5307
    },
    "43": {
     "FixingDamage": 58,
     "Defense": 430,
-    "HPMax": 4484
+    "HPMax": 5438
    },
    "44": {
     "FixingDamage": 60,
     "Defense": 440,
-    "HPMax": 4593
+    "HPMax": 5570
    },
    "45": {
     "FixingDamage": 61,
     "Defense": 450,
-    "HPMax": 4702
+    "HPMax": 5702
    },
    "46": {
     "FixingDamage": 62,
     "Defense": 460,
-    "HPMax": 4811
+    "HPMax": 5811
    },
    "47": {
     "FixingDamage": 63,
     "Defense": 470,
-    "HPMax": 4920
+    "HPMax": 5920
    },
    "48": {
     "FixingDamage": 65,
     "Defense": 480,
-    "HPMax": 5030
+    "HPMax": 6030
    },
    "49": {
     "FixingDamage": 66,
     "Defense": 490,
-    "HPMax": 5140
+    "HPMax": 6140
    },
    "50": {
     "FixingDamage": 67,
     "Defense": 500,
-    "HPMax": 5250
+    "HPMax": 6250
    },
    "51": {
     "FixingDamage": 68,
     "Defense": 510,
-    "HPMax": 5360
+    "HPMax": 6360
    },
    "52": {
     "FixingDamage": 70,
     "Defense": 520,
-    "HPMax": 5470
+    "HPMax": 6470
    },
    "53": {
     "FixingDamage": 71,
     "Defense": 530,
-    "HPMax": 5580
+    "HPMax": 6580
    },
    "54": {
     "FixingDamage": 72,
     "Defense": 540,
-    "HPMax": 5691
+    "HPMax": 6691
    },
    "55": {
     "FixingDamage": 73,
     "Defense": 550,
-    "HPMax": 5802
+    "HPMax": 6802
    },
    "56": {
     "FixingDamage": 75,
     "Defense": 560,
-    "HPMax": 5913
+    "HPMax": 6913
    },
    "57": {
     "FixingDamage": 76,
     "Defense": 570,
-    "HPMax": 6024
+    "HPMax": 7024
    },
    "58": {
     "FixingDamage": 77,
     "Defense": 580,
-    "HPMax": 6136
+    "HPMax": 7136
    },
    "59": {
     "FixingDamage": 78,
     "Defense": 590,
-    "HPMax": 6248
+    "HPMax": 7248
    },
    "60": {
     "FixingDamage": 80,
     "Defense": 600,
-    "HPMax": 6360
+    "HPMax": 7360
    },
    "61": {
     "FixingDamage": 81,
     "Defense": 610,
-    "HPMax": 6472
+    "HPMax": 7472
    },
    "62": {
     "FixingDamage": 82,
     "Defense": 620,
-    "HPMax": 6584
+    "HPMax": 7584
    },
    "63": {
     "FixingDamage": 83,
     "Defense": 630,
-    "HPMax": 6696
+    "HPMax": 7696
    },
    "64": {
     "FixingDamage": 85,
     "Defense": 640,
-    "HPMax": 6809
+    "HPMax": 7809
    },
    "65": {
     "FixingDamage": 86,
     "Defense": 650,
-    "HPMax": 6922
+    "HPMax": 7922
    },
    "66": {
     "FixingDamage": 87,
     "Defense": 660,
-    "HPMax": 7035
+    "HPMax": 8035
    },
    "67": {
     "FixingDamage": 88,
     "Defense": 670,
-    "HPMax": 7148
+    "HPMax": 8148
    },
    "68": {
     "FixingDamage": 90,
     "Defense": 680,
-    "HPMax": 7262
+    "HPMax": 8262
    },
    "69": {
     "FixingDamage": 91,
     "Defense": 690,
-    "HPMax": 7376
+    "HPMax": 8376
    },
    "70": {
     "FixingDamage": 92,
     "Defense": 700,
-    "HPMax": 7490
+    "HPMax": 8490
    },
    "71": {
     "FixingDamage": 93,
     "Defense": 710,
-    "HPMax": 7604
+    "HPMax": 8604
    },
    "72": {
     "FixingDamage": 95,
     "Defense": 720,
-    "HPMax": 7718
+    "HPMax": 8718
    },
    "73": {
     "FixingDamage": 96,
     "Defense": 730,
-    "HPMax": 7832
+    "HPMax": 8832
    },
    "74": {
     "FixingDamage": 97,
     "Defense": 740,
-    "HPMax": 7947
+    "HPMax": 8947
    },
    "75": {
     "FixingDamage": 98,
     "Defense": 750,
-    "HPMax": 8062
+    "HPMax": 9062
    },
    "76": {
     "FixingDamage": 100,
     "Defense": 760,
-    "HPMax": 8177
+    "HPMax": 9177
    },
    "77": {
     "FixingDamage": 101,
     "Defense": 770,
-    "HPMax": 8292
+    "HPMax": 9292
    },
    "78": {
     "FixingDamage": 102,
     "Defense": 780,
-    "HPMax": 8408
+    "HPMax": 9408
    },
    "79": {
     "FixingDamage": 103,
     "Defense": 790,
-    "HPMax": 8524
+    "HPMax": 9524
    },
    "80": {
     "FixingDamage": 105,
     "Defense": 800,
-    "HPMax": 8640
+    "HPMax": 9640
    },
    "81": {
     "FixingDamage": 106,
     "Defense": 810,
-    "HPMax": 8756
+    "HPMax": 9756
    },
    "82": {
     "FixingDamage": 107,
     "Defense": 820,
-    "HPMax": 8872
+    "HPMax": 9872
    },
    "83": {
     "FixingDamage": 108,
     "Defense": 830,
-    "HPMax": 8988
+    "HPMax": 9988
    },
    "84": {
     "FixingDamage": 110,
     "Defense": 840,
-    "HPMax": 9105
+    "HPMax": 10105
    },
    "85": {
     "FixingDamage": 111,
     "Defense": 850,
-    "HPMax": 9222
+    "HPMax": 10222
    },
    "86": {
     "FixingDamage": 112,
     "Defense": 860,
-    "HPMax": 9339
+    "HPMax": 10339
    },
    "87": {
     "FixingDamage": 113,
     "Defense": 870,
-    "HPMax": 9456
+    "HPMax": 10456
    },
    "88": {
     "FixingDamage": 115,
     "Defense": 880,
-    "HPMax": 9574
+    "HPMax": 10574
    },
    "89": {
     "FixingDamage": 116,
     "Defense": 890,
-    "HPMax": 9692
+    "HPMax": 10692
    },
    "90": {
     "FixingDamage": 117,
     "Defense": 900,
-    "HPMax": 9810
+    "HPMax": 10810
    },
    "91": {
     "FixingDamage": 118,
     "Defense": 910,
-    "HPMax": 9928
+    "HPMax": 10928
    },
    "92": {
     "FixingDamage": 120,
     "Defense": 920,
-    "HPMax": 10046
+    "HPMax": 11046
    },
    "93": {
     "FixingDamage": 121,
     "Defense": 930,
-    "HPMax": 10164
+    "HPMax": 11164
    },
    "94": {
     "FixingDamage": 122,
     "Defense": 940,
-    "HPMax": 10283
+    "HPMax": 11283
    },
    "95": {
     "FixingDamage": 123,
     "Defense": 950,
-    "HPMax": 10402
+    "HPMax": 11402
    },
    "96": {
     "FixingDamage": 125,
     "Defense": 960,
-    "HPMax": 10521
+    "HPMax": 11521
    },
    "97": {
     "FixingDamage": 126,
     "Defense": 970,
-    "HPMax": 10640
+    "HPMax": 11640
    },
    "98": {
     "FixingDamage": 127,
     "Defense": 980,
-    "HPMax": 10760
+    "HPMax": 11760
    },
    "99": {
     "FixingDamage": 128,
     "Defense": 990,
-    "HPMax": 10880
+    "HPMax": 11880
    },
    "100": {
     "FixingDamage": 130,
     "Defense": 1000,
-    "HPMax": 11000
+    "HPMax": 12000
    }
   },
   "Fighter": {
    "1": {
     "FixingDamage": 6,
     "Defense": 10,
-    "HPMax": 100
+    "HPMax": 122
    },
    "2": {
     "FixingDamage": 7,
     "Defense": 20,
-    "HPMax": 200
+    "HPMax": 244
    },
    "3": {
     "FixingDamage": 8,
     "Defense": 30,
-    "HPMax": 300
+    "HPMax": 366
    },
    "4": {
     "FixingDamage": 10,
     "Defense": 40,
-    "HPMax": 401
+    "HPMax": 489
    },
    "5": {
     "FixingDamage": 11,
     "Defense": 50,
-    "HPMax": 502
+    "HPMax": 612
    },
    "6": {
     "FixingDamage": 12,
     "Defense": 60,
-    "HPMax": 603
+    "HPMax": 735
    },
    "7": {
     "FixingDamage": 13,
     "Defense": 70,
-    "HPMax": 704
+    "HPMax": 858
    },
    "8": {
     "FixingDamage": 15,
     "Defense": 80,
-    "HPMax": 806
+    "HPMax": 982
    },
    "9": {
     "FixingDamage": 16,
     "Defense": 90,
-    "HPMax": 908
+    "HPMax": 1106
    },
    "10": {
     "FixingDamage": 17,
     "Defense": 100,
-    "HPMax": 1010
+    "HPMax": 1230
    },
    "11": {
     "FixingDamage": 18,
     "Defense": 110,
-    "HPMax": 1112
+    "HPMax": 1354
    },
    "12": {
     "FixingDamage": 20,
     "Defense": 120,
-    "HPMax": 1214
+    "HPMax": 1478
    },
    "13": {
     "FixingDamage": 21,
     "Defense": 130,
-    "HPMax": 1316
+    "HPMax": 1602
    },
    "14": {
     "FixingDamage": 22,
     "Defense": 140,
-    "HPMax": 1419
+    "HPMax": 1727
    },
    "15": {
     "FixingDamage": 23,
     "Defense": 150,
-    "HPMax": 1522
+    "HPMax": 1852
    },
    "16": {
     "FixingDamage": 25,
     "Defense": 160,
-    "HPMax": 1625
+    "HPMax": 1977
    },
    "17": {
     "FixingDamage": 26,
     "Defense": 170,
-    "HPMax": 1728
+    "HPMax": 2102
    },
    "18": {
     "FixingDamage": 27,
     "Defense": 180,
-    "HPMax": 1832
+    "HPMax": 2228
    },
    "19": {
     "FixingDamage": 28,
     "Defense": 190,
-    "HPMax": 1936
+    "HPMax": 2354
    },
    "20": {
     "FixingDamage": 30,
     "Defense": 200,
-    "HPMax": 2040
+    "HPMax": 2480
    },
    "21": {
     "FixingDamage": 31,
     "Defense": 210,
-    "HPMax": 2144
+    "HPMax": 2606
    },
    "22": {
     "FixingDamage": 32,
     "Defense": 220,
-    "HPMax": 2248
+    "HPMax": 2732
    },
    "23": {
     "FixingDamage": 33,
     "Defense": 230,
-    "HPMax": 2352
+    "HPMax": 2858
    },
    "24": {
     "FixingDamage": 35,
     "Defense": 240,
-    "HPMax": 2457
+    "HPMax": 2985
    },
    "25": {
     "FixingDamage": 36,
     "Defense": 250,
-    "HPMax": 2562
+    "HPMax": 3112
    },
    "26": {
     "FixingDamage": 37,
     "Defense": 260,
-    "HPMax": 2667
+    "HPMax": 3239
    },
    "27": {
     "FixingDamage": 38,
     "Defense": 270,
-    "HPMax": 2772
+    "HPMax": 3366
    },
    "28": {
     "FixingDamage": 40,
     "Defense": 280,
-    "HPMax": 2878
+    "HPMax": 3494
    },
    "29": {
     "FixingDamage": 41,
     "Defense": 290,
-    "HPMax": 2984
+    "HPMax": 3622
    },
    "30": {
     "FixingDamage": 42,
     "Defense": 300,
-    "HPMax": 3090
+    "HPMax": 3750
    },
    "31": {
     "FixingDamage": 43,
     "Defense": 310,
-    "HPMax": 3196
+    "HPMax": 3878
    },
    "32": {
     "FixingDamage": 45,
     "Defense": 320,
-    "HPMax": 3302
+    "HPMax": 4006
    },
    "33": {
     "FixingDamage": 46,
     "Defense": 330,
-    "HPMax": 3408
+    "HPMax": 4134
    },
    "34": {
     "FixingDamage": 47,
     "Defense": 340,
-    "HPMax": 3515
+    "HPMax": 4263
    },
    "35": {
     "FixingDamage": 48,
     "Defense": 350,
-    "HPMax": 3622
+    "HPMax": 4392
    },
    "36": {
     "FixingDamage": 50,
     "Defense": 360,
-    "HPMax": 3729
+    "HPMax": 4522
    },
    "37": {
     "FixingDamage": 51,
     "Defense": 370,
-    "HPMax": 3836
+    "HPMax": 4652
    },
    "38": {
     "FixingDamage": 52,
     "Defense": 380,
-    "HPMax": 3944
+    "HPMax": 4783
    },
    "39": {
     "FixingDamage": 53,
     "Defense": 390,
-    "HPMax": 4052
+    "HPMax": 4914
    },
    "40": {
     "FixingDamage": 55,
     "Defense": 400,
-    "HPMax": 4160
+    "HPMax": 5045
    },
    "41": {
     "FixingDamage": 56,
     "Defense": 410,
-    "HPMax": 4268
+    "HPMax": 5176
    },
    "42": {
     "FixingDamage": 57,
     "Defense": 420,
-    "HPMax": 4376
+    "HPMax": 5307
    },
    "43": {
     "FixingDamage": 58,
     "Defense": 430,
-    "HPMax": 4484
+    "HPMax": 5438
    },
    "44": {
     "FixingDamage": 60,
     "Defense": 440,
-    "HPMax": 4593
+    "HPMax": 5570
    },
    "45": {
     "FixingDamage": 61,
     "Defense": 450,
-    "HPMax": 4702
+    "HPMax": 5702
    },
    "46": {
     "FixingDamage": 62,
     "Defense": 460,
-    "HPMax": 4811
+    "HPMax": 5811
    },
    "47": {
     "FixingDamage": 63,
     "Defense": 470,
-    "HPMax": 4920
+    "HPMax": 5920
    },
    "48": {
     "FixingDamage": 65,
     "Defense": 480,
-    "HPMax": 5030
+    "HPMax": 6030
    },
    "49": {
     "FixingDamage": 66,
     "Defense": 490,
-    "HPMax": 5140
+    "HPMax": 6140
    },
    "50": {
     "FixingDamage": 67,
     "Defense": 500,
-    "HPMax": 5250
+    "HPMax": 6250
    },
    "51": {
     "FixingDamage": 68,
     "Defense": 510,
-    "HPMax": 5360
+    "HPMax": 6360
    },
    "52": {
     "FixingDamage": 70,
     "Defense": 520,
-    "HPMax": 5470
+    "HPMax": 6470
    },
    "53": {
     "FixingDamage": 71,
     "Defense": 530,
-    "HPMax": 5580
+    "HPMax": 6580
    },
    "54": {
     "FixingDamage": 72,
     "Defense": 540,
-    "HPMax": 5691
+    "HPMax": 6691
    },
    "55": {
     "FixingDamage": 73,
     "Defense": 550,
-    "HPMax": 5802
+    "HPMax": 6802
    },
    "56": {
     "FixingDamage": 75,
     "Defense": 560,
-    "HPMax": 5913
+    "HPMax": 6913
    },
    "57": {
     "FixingDamage": 76,
     "Defense": 570,
-    "HPMax": 6024
+    "HPMax": 7024
    },
    "58": {
     "FixingDamage": 77,
     "Defense": 580,
-    "HPMax": 6136
+    "HPMax": 7136
    },
    "59": {
     "FixingDamage": 78,
     "Defense": 590,
-    "HPMax": 6248
+    "HPMax": 7248
    },
    "60": {
     "FixingDamage": 80,
     "Defense": 600,
-    "HPMax": 6360
+    "HPMax": 7360
    },
    "61": {
     "FixingDamage": 81,
     "Defense": 610,
-    "HPMax": 6472
+    "HPMax": 7472
    },
    "62": {
     "FixingDamage": 82,
     "Defense": 620,
-    "HPMax": 6584
+    "HPMax": 7584
    },
    "63": {
     "FixingDamage": 83,
     "Defense": 630,
-    "HPMax": 6696
+    "HPMax": 7696
    },
    "64": {
     "FixingDamage": 85,
     "Defense": 640,
-    "HPMax": 6809
+    "HPMax": 7809
    },
    "65": {
     "FixingDamage": 86,
     "Defense": 650,
-    "HPMax": 6922
+    "HPMax": 7922
    },
    "66": {
     "FixingDamage": 87,
     "Defense": 660,
-    "HPMax": 7035
+    "HPMax": 8035
    },
    "67": {
     "FixingDamage": 88,
     "Defense": 670,
-    "HPMax": 7148
+    "HPMax": 8148
    },
    "68": {
     "FixingDamage": 90,
     "Defense": 680,
-    "HPMax": 7262
+    "HPMax": 8262
    },
    "69": {
     "FixingDamage": 91,
     "Defense": 690,
-    "HPMax": 7376
+    "HPMax": 8376
    },
    "70": {
     "FixingDamage": 92,
     "Defense": 700,
-    "HPMax": 7490
+    "HPMax": 8490
    },
    "71": {
     "FixingDamage": 93,
     "Defense": 710,
-    "HPMax": 7604
+    "HPMax": 8604
    },
    "72": {
     "FixingDamage": 95,
     "Defense": 720,
-    "HPMax": 7718
+    "HPMax": 8718
    },
    "73": {
     "FixingDamage": 96,
     "Defense": 730,
-    "HPMax": 7832
+    "HPMax": 8832
    },
    "74": {
     "FixingDamage": 97,
     "Defense": 740,
-    "HPMax": 7947
+    "HPMax": 8947
    },
    "75": {
     "FixingDamage": 98,
     "Defense": 750,
-    "HPMax": 8062
+    "HPMax": 9062
    },
    "76": {
     "FixingDamage": 100,
     "Defense": 760,
-    "HPMax": 8177
+    "HPMax": 9177
    },
    "77": {
     "FixingDamage": 101,
     "Defense": 770,
-    "HPMax": 8292
+    "HPMax": 9292
    },
    "78": {
     "FixingDamage": 102,
     "Defense": 780,
-    "HPMax": 8408
+    "HPMax": 9408
    },
    "79": {
     "FixingDamage": 103,
     "Defense": 790,
-    "HPMax": 8524
+    "HPMax": 9524
    },
    "80": {
     "FixingDamage": 105,
     "Defense": 800,
-    "HPMax": 8640
+    "HPMax": 9640
    },
    "81": {
     "FixingDamage": 106,
     "Defense": 810,
-    "HPMax": 8756
+    "HPMax": 9756
    },
    "82": {
     "FixingDamage": 107,
     "Defense": 820,
-    "HPMax": 8872
+    "HPMax": 9872
    },
    "83": {
     "FixingDamage": 108,
     "Defense": 830,
-    "HPMax": 8988
+    "HPMax": 9988
    },
    "84": {
     "FixingDamage": 110,
     "Defense": 840,
-    "HPMax": 9105
+    "HPMax": 10105
    },
    "85": {
     "FixingDamage": 111,
     "Defense": 850,
-    "HPMax": 9222
+    "HPMax": 10222
    },
    "86": {
     "FixingDamage": 112,
     "Defense": 860,
-    "HPMax": 9339
+    "HPMax": 10339
    },
    "87": {
     "FixingDamage": 113,
     "Defense": 870,
-    "HPMax": 9456
+    "HPMax": 10456
    },
    "88": {
     "FixingDamage": 115,
     "Defense": 880,
-    "HPMax": 9574
+    "HPMax": 10574
    },
    "89": {
     "FixingDamage": 116,
     "Defense": 890,
-    "HPMax": 9692
+    "HPMax": 10692
    },
    "90": {
     "FixingDamage": 117,
     "Defense": 900,
-    "HPMax": 9810
+    "HPMax": 10810
    },
    "91": {
     "FixingDamage": 118,
     "Defense": 910,
-    "HPMax": 9928
+    "HPMax": 10928
    },
    "92": {
     "FixingDamage": 120,
     "Defense": 920,
-    "HPMax": 10046
+    "HPMax": 11046
    },
    "93": {
     "FixingDamage": 121,
     "Defense": 930,
-    "HPMax": 10164
+    "HPMax": 11164
    },
    "94": {
     "FixingDamage": 122,
     "Defense": 940,
-    "HPMax": 10283
+    "HPMax": 11283
    },
    "95": {
     "FixingDamage": 123,
     "Defense": 950,
-    "HPMax": 10402
+    "HPMax": 11402
    },
    "96": {
     "FixingDamage": 125,
     "Defense": 960,
-    "HPMax": 10521
+    "HPMax": 11521
    },
    "97": {
     "FixingDamage": 126,
     "Defense": 970,
-    "HPMax": 10640
+    "HPMax": 11640
    },
    "98": {
     "FixingDamage": 127,
     "Defense": 980,
-    "HPMax": 10760
+    "HPMax": 11760
    },
    "99": {
     "FixingDamage": 128,
     "Defense": 990,
-    "HPMax": 10880
+    "HPMax": 11880
    },
    "100": {
     "FixingDamage": 130,
     "Defense": 1000,
-    "HPMax": 11000
+    "HPMax": 12000
    }
   }
  },
