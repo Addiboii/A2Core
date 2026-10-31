@@ -557,6 +557,35 @@ sealed class MainForm : Form
         var signOut = new LinkLabel { AutoSize = true, Text = "Sign out", LinkColor = Accent, ActiveLinkColor = Accent, Margin = new Padding(0, S(2), 0, 0) };
         who.Controls.AddRange([signedIn, signOut]);
         stack.Controls.Add(who);
+        AddLabel("Client version", muted: true, size: 9F).Margin = new Padding(0, 0, 0, S(4));
+        var versions = ClientVersions.All(workflow.Config);
+        var versionBox = new ComboBox
+        {
+            DropDownStyle = ComboBoxStyle.DropDownList, FlatStyle = FlatStyle.Flat, Width = ContentWidth, BackColor = Input, ForeColor = Text1,
+            Font = new Font("Segoe UI", 10.5F), Margin = new Padding(0, 0, 0, S(6)), Cursor = Cursors.Hand,
+        };
+        foreach (var version in versions) versionBox.Items.Add(version.Name);
+        versionBox.SelectedIndex = Math.Max(0, versions.ToList().FindIndex(v => v.Id == workflow.Version.Id));
+        stack.Controls.Add(versionBox);
+        var versionNote = AddLabel("", muted: true, size: 9F);
+        void DescribeVersion()
+        {
+            var version = workflow.Version;
+            var folder = version.IsSteam ? ClientVersions.SteamFolder(version, workflow.Config, steam ??= Workflow.FindSteam()) : version.ClientPath ?? workflow.Settings.InstallFolder;
+            versionNote.Text = version.IsSteam
+                ? $"Game files: {folder ?? "Steam copy not found (set steamClientPath in launcher.json)"}. Used as-is: not changed, no patch paks; the server supports 2.0.6.0, so a newer client may not connect."
+                : $"Game files: {folder}";
+        }
+        DescribeVersion();
+        versionBox.SelectedIndexChanged += (_, _) =>
+        {
+            workflow.Version = versions[versionBox.SelectedIndex];
+            try { ClientVersions.SaveSelection(Path.Combine(AppContext.BaseDirectory, "launcher.json"), workflow.Config, workflow.Version.Id); }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException or System.Text.Json.JsonException) { SetStatus("The choice was not saved: " + error.Message, true); }
+            DescribeVersion();
+        };
+        var patchPaks = AddCheck("Apply client patch paks (z_A2Core_Patch-Windows_P) before launch", workflow.Settings.AllowClientPatchPaks);
+        patchPaks.Margin = new Padding(0, 0, 0, S(8));
         var play = AddButton("Play", primary: true, null, wide: true);
         play.Height = S(56); play.Font = new Font("Segoe UI Semibold", 14F);
         AcceptButton = play;
@@ -568,8 +597,7 @@ sealed class MainForm : Form
         foreach (var button in new[] { verify, repair, uninstall }) { button.Width = S(150); button.Height = S(34); }
         tools.Controls.AddRange([verify, repair, uninstall]);
         stack.Controls.Add(tools);
-        AddLabel($"Game files: {workflow.Settings.InstallFolder}", muted: true, size: 9F);
-        Control[] all = [play, verify, repair, uninstall, signOut];
+        Control[] all = [play, verify, repair, uninstall, signOut, versionBox];
 
         signOut.LinkClicked += async (_, _) =>
         {
@@ -580,6 +608,8 @@ sealed class MainForm : Form
         };
         play.Click += async (_, _) =>
         {
+            workflow.Settings.AllowClientPatchPaks = patchPaks.Checked;
+            workflow.Settings.Save();
             if ((steam ??= Workflow.FindSteam()) is not { } found) { ShowNoSteam(); return; }
             var ok = await RunAsync(async ct =>
             {
@@ -588,7 +618,7 @@ sealed class MainForm : Form
                 WindowState = FormWindowState.Minimized;
                 await game.WaitForExitAsync(CancellationToken.None);
                 // The client may hand over to child processes; wait for the whole copy to close.
-                while (Elevated.GameRunning(workflow.Settings.InstallFolder!)) await Task.Delay(2000, CancellationToken.None);
+                while (Elevated.GameRunning(workflow.GameFolder ?? workflow.Settings.InstallFolder!)) await Task.Delay(2000, CancellationToken.None);
                 WindowState = FormWindowState.Normal;
                 SetStatus("Game closed.");
             }, all);

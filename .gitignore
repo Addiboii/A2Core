@@ -42,3 +42,7 @@ launcher/**/obj/
 /research/local/tooling/*
 !/research/local/tooling/opcodes.json
 !/research/local/tooling/mappings/
+editor/**/bin/
+editor/**/obj/
+tools/**/bin/
+tools/**/obj/
