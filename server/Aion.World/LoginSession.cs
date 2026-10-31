@@ -3,7 +3,7 @@ using Aion.Protocol.Native;
 namespace Aion.World;
 
 /// <summary>An accepted 0x3905 login: the wire account, its grant GUID and its characters (race 1 Light, 2 Dark).</summary>
-public sealed record LoginGrant(string WireAccountId, Guid Grant, IReadOnlyList<(string Name, int Level, int Race)> Characters)
+public sealed record LoginGrant(string WireAccountId, Guid Grant, IReadOnlyList<(string Name, int Level, int Race, ulong LastPlayedUnixMs)> Characters)
 {
     public override string ToString() => "LoginGrant [grant redacted]";
 }
@@ -11,7 +11,7 @@ public sealed record LoginGrant(string WireAccountId, Guid Grant, IReadOnlyList<
 public sealed record LoginSessionOptions
 {
     public IReadOnlyList<WorldRow> Worlds { get; init; } = LoginPackets.DefaultWorlds;
-    public string AccountId { get; init; } = "1000001";
+    public string AccountId { get; init; } = DevelopmentDefaults.AccountSid;
     public IReadOnlyList<LoginCharacterRow> Characters { get; init; } = [];
     public string RedirectHost { get; init; } = "127.0.0.1";
     public int RedirectPort { get; init; } = 13328;
@@ -65,7 +65,7 @@ public sealed class LoginSession(LoginSessionOptions options, Func<ClientIdentit
                 // Each stored character is listed on the world of its race (else the first listed one).
                 characters = grant.Characters.Take(255)
                     .Select(c => new LoginCharacterRow((options.Worlds.FirstOrDefault(w => w.Group == c.Race) ?? options.Worlds[0]).Id,
-                        c.Name, (uint)Math.Max(1, c.Level))).ToList();
+                        c.Name, (uint)Math.Max(1, c.Level), LastPlayedUnixMs: c.LastPlayedUnixMs)).ToList();
                 races = grant.Characters.Select(c => c.Race).Where(r => r is 1 or 2).Distinct().ToList();
                 authenticated = true;
                 Authentication = "accepted";

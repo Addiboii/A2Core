@@ -8,6 +8,8 @@ EnchantEffectGroup. Rebuild with `python tools/enchant_data.py`.
 - groups: enchant group -> one row per current level 0, 1, ...: [success /10000, fail correction /10000 per failure,
   fail penalty (levels lost), Kina, [[item ID, count], ...]]. The first row with success 0 is the maximum level.
 - effects: effect group -> one row per level 1, 2, ...: [item level bonus, [[stat, value], ...]] (totals at that level).
+
+Amplify (◆ after +15) is exported separately as tools/data/exceed_enchant.json (tools/exceed_enchant_data.py).
 """
 import json
 from pathlib import Path

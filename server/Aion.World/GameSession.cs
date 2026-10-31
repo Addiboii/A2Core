@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Data.Common;
 using System.Security.Cryptography;
 using Aion.Application.Gameplay;
 using Aion.Core.Characters;
@@ -10,9 +11,11 @@ public sealed record GameSessionOptions
 {
     /// <summary>Level of development characters; a selected stored character uses its own.</summary>
     public int CharacterLevel { get; init; } = 1;
+    /// <summary>Live progression cap when constructing sessions without injected <see cref="GameData.WithLevelCap"/>.</summary>
+    public int LevelCap { get; init; } = Aion.Core.ProgressionOptions.DefaultLevelCap;
     /// <summary>The login port's '$' placeholder row, when the development launch seeds one.</summary>
     public LoginCharacterRow? IntroCharacter { get; init; }
-    public int WorldId { get; init; } = 1204;
+    public int WorldId { get; init; } = DevelopmentDefaults.WorldId;
     /// <summary>Stored accounts: the account's staff role, if any; a character carries it only when flagged staff.</summary>
     public Func<Guid, CancellationToken, Task<string?>>? StaffRole { get; init; }
     /// <summary>Builder (GM) commands from the console (0x362e); null leaves them disabled.</summary>
@@ -32,6 +35,12 @@ public sealed record GameSessionOptions
     public bool TrainingDummy { get; init; }
     /// <summary>The race of the world this wire account picked on the login port (<see cref="WorldChoices"/>); null: none known.</summary>
     public Func<string, int?>? WorldRace { get; init; }
+    /// <summary>Overrides Resurrect.dat auto-rez delay (development / tests use a short wait).</summary>
+    public int? AutoResurrectMsOverride { get; init; }
+    /// <summary>When true (default), companion/combat map-event AskNpc objectives can complete by proximity or lock-on when the client sends no talk UI.</summary>
+    public bool MapEventAskNpcProximityFallback { get; init; } = true;
+    /// <summary>Pass Shop / BM premium currency for this connection; null uses the host default from <see cref="GameSession.ConfigureShopOptions"/>.</summary>
+    public ShopOptions? Shop { get; init; }
 }
 
 /// <summary>
@@ -42,6 +51,8 @@ public sealed record GameSessionOptions
 /// </summary>
 public sealed partial class GameSession(GameData data, GameSessionOptions options, Random rng)
 {
+    readonly ShopOptions shopOptions = options.Shop ?? HostDefaultShopOptions;
+
     public const long CombatTimeoutMs = 3500;   // official 0x8d21 leave ~3.3-3.6 s after the last action
     public const long CheckpointMs = 30000;
     public const double AreaRange = 400;        // "within 4m" of the area skills' text
@@ -61,9 +72,19 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
     /// 100 ms (1500 when the flight started running, 750 while gliding); on the ground it refills 4000 a second (2000 in combat,
     /// the stat sheet's RestFPRegen/BattleFPRegen); at 0 the server starts the fall itself (0x371e to the flyer).
     /// </summary>
-    public const int FpMax = 250_000, FlyDrain = 10_000, FlySprintDrain = 15_000, GlideDrain = 7_500, FpRegenRest = 4_000, FpRegenBattle = 2_000;
+    public const int FpMax = 250_000, FlyDrainPerTick = 1000, FlySprintDrainPerTick = 1500, GlideDrainPerTick = 750, FpRegenRest = 4_000, FpRegenBattle = 2_000;
     /// <summary>Dodges: CombatDodge (learned) and NormalDodge, its variant (Skill.dat: SP 10000, same 500 ms group cooldown).</summary>
     public const int CombatDodge = 11000100, NormalDodge = 11000101, NormalDodgeSp = 10000;
+    /// <summary>
+    /// Every class has its own dodge: class prefix * 1,000,000 + 100 (Skill.dat: 11000100 Gladiator ... 16000100, 18000100, all
+    /// "Dodge", SP 30000, own group cooldown); the running dash is that id + 1. Live 2026-10-30: a class-16 character's sprint sent
+    /// 16000100, which the 11000100-only check answered as an ordinary skill, and the client dropped the sprint 14 ms later.
+    /// </summary>
+    public static bool IsCombatDodgeId(int skill) => skill % 1_000_000 == 100 && skill / 1_000_000 is >= 11 and <= 19;
+    public static bool IsDodgeId(int skill) => IsCombatDodgeId(skill) || IsCombatDodgeId(skill - 1);
+    /// <summary>This character's CombatDodge (the learned class dodge; Gladiator's id when none is learned).</summary>
+    int ClassCombatDodge => learned.FirstOrDefault(IsCombatDodgeId) is var id and > 0 ? id : CombatDodge;
+    int ClassNormalDodge => ClassCombatDodge + 1;
     /// <summary>
     /// The dodge's abnormal (OBSERVED at every official dodge and sprint dash 2026-10-19): id 200 for 300 ms on the dodger, removed
     /// with reason 7 about 200 ms later (0x382c), together with the skill's end (0x3806).
@@ -95,18 +116,30 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
     sealed class Resources(int key)
     {
         public int Hp = GamePackets.SpawnHp, HpMax = GamePackets.SpawnHpMax, Mp = MpMaxBase, MpMax = MpMaxBase;
+        public int Ap, ApMax;
         public int Sp = GamePackets.SpawnSp, SpMax = GamePackets.SpawnSp;
         /// <summary>The Diving Gauge (OP): official stat sheet OPMax 100000, OPRegen 20000 (0x3649).</summary>
         public int Op = OpMax;
         /// <summary>The player's bars as the official server sends them (0x8d00; never 0x364c).</summary>
-        public byte[] Update() => GamePackets.CharPoints(key, [(CharPoint.Mp, Mp), (CharPoint.Sp, Sp)], [(CharPoint.Hp, Hp)]);
+        public byte[] Update()
+        {
+            var ints = new List<(CharPoint, int)> { (CharPoint.Mp, Mp), (CharPoint.Sp, Sp) };
+            if (ApMax > 0) ints.Add((CharPoint.Ap, Ap));
+            return GamePackets.CharPoints(key, ints, [(CharPoint.Hp, Hp)]);
+        }
+
+        public byte[] ApUpdate() => ApMax <= 0 ? [] : GamePackets.CharPoints(key, [(CharPoint.Ap, Ap)]);
         public byte[] SpUpdate() => GamePackets.CharPoints(key, [(CharPoint.Sp, Sp)]);
         public byte[] OpUpdate() => GamePackets.CharPoints(key, [(CharPoint.Op, Op)]);
-        public byte[] FpUpdate() => GamePackets.CharPoints(key, [(CharPoint.Fp, Fp)]);
+        public byte[] FpUpdate() => GamePackets.CharPoints(key, [(CharPoint.MaxFp, FpMax), (CharPoint.Fp, Fp)]);
         /// <summary>The world-entry maxima, as the official burst before 0x3633 (OP max 100000 observed).</summary>
         public int Fp, FpMax;
-        public byte[] Maxima() => GamePackets.CharPoints(key, [(CharPoint.Mp, Mp), (CharPoint.MaxMp, MpMax), (CharPoint.MaxSp, SpMax), (CharPoint.MaxOp, OpMax), (CharPoint.Fp, Fp), (CharPoint.MaxFp, FpMax)],
-            [(CharPoint.Hp, Hp), (CharPoint.MaxHp, HpMax)]);
+        public byte[] Maxima()
+        {
+            var ints = new List<(CharPoint, int)> { (CharPoint.Mp, Mp), (CharPoint.MaxMp, MpMax), (CharPoint.MaxSp, SpMax), (CharPoint.MaxOp, OpMax), (CharPoint.Fp, Fp), (CharPoint.MaxFp, FpMax) };
+            if (ApMax > 0) { ints.Add((CharPoint.Ap, Ap)); ints.Add((CharPoint.MaxAp, ApMax)); }
+            return GamePackets.CharPoints(key, ints, [(CharPoint.Hp, Hp), (CharPoint.MaxHp, HpMax)]);
+        }
     }
 
     NpcAi ai = new(rng, data);
@@ -151,9 +184,13 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         return [GamePackets.WingList(OwnedWings())];
     }
     int profileRace = 1;
-    long sprintTickAt;
+    /// <summary>Light (1) or Dark (2) for chat and social packets.</summary>
+    public int ProfileRace => profileRace;
+    long sprintTickAt, fpTickAt;
     /// <summary>The dodge in progress: its abnormal's uid (0: none), the skill and action uid of the 0x3806 (End: sent), and when they end.</summary>
     (int Uid, int Skill, int Action, long At, bool End)? dodgeAbnormalOff;
+    /// <summary>NPC skill damage and debuffs are ignored until this time (dodge abnormal 200, DodgeAbnormalMs).</summary>
+    long dodgeInvulnUntil;
     /// <summary>
     /// Which reply the sprint's dash gets (builder DashVariant, for live tests without a deploy each; the trace shows the shape):
     /// 0 the pre-recording shape (0x3801 with mask, the full 0x8d00, 0x3802: this client ends the dash by itself but drops the sprint
@@ -199,6 +236,8 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
     readonly Dictionary<int, long> cooldowns = [];
     Dictionary<int, long> respawnAt = [];
     int actionUid;
+    int autoAttackSkill;
+    byte autoAttackActionUid;
     /// <summary>This player's entity key: 1 in a private world, unique per host in the shared one.</summary>
     readonly int playerKey = options.World?.AllocateKey() ?? 1;
     WorldPlayer? worldPlayer;
@@ -233,6 +272,8 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
     public bool IsAdmin => StaffRole is not null;
     /// <summary>Whether the account holds a staff role (staff-style names at creation and rename).</summary>
     public bool StaffAccount => accountRole is not null;
+    /// <summary>The Login_RS _is_admin flag as sent (account role and a staff character on the account).</summary>
+    public bool LobbyAdmin => accountRole is not null && lobbyStaff;
     /// <summary>After world entry (0x3622), until the connection ends.</summary>
     public bool InWorld => resources is not null;
     public int? MapId => InWorld ? worldMap : null;
@@ -248,22 +289,14 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         var header = Opcode(plain);
         if (plain.Length == 2 && header is 0x383a or 0x383c)
         {
-            // Every cast is bracketed by 0x383a/0x383c (u16 result replies). The player enters
-            // combat once and leaves ~3.5 s after the last action, not on 0x383c.
+            // Every cast is bracketed by 0x383a/0x383c (u16 result replies). The player enters combat with the accepted cast
+            // (EnterCombat) and leaves ~3.5 s after the last action, not on 0x383c.
             var replies = new List<byte[]> { GamePackets.RequestAck(header) };
-            if (header == 0x383a)
-            {
-                if (!inCombat)
-                {
-                    inCombat = true;
-                    replies.Add(GamePackets.CombatState(playerKey, true));
-                    replies.AddRange(MapEventCombatStarted(now));
-                }
-                combatUntil = now + CombatTimeoutMs;
-            }
+            if (header == 0x383a && inCombat) combatUntil = now + CombatTimeoutMs;
             return replies;
         }
         if (header == 0x3602 && plain.Length >= 10) return [GamePackets.Ping(BitConverter.ToUInt64(plain, 2), now)];
+        lastActivityMs = now;
         switch (header)
         {
             case 0x3613: return await GameLoginAsync(plain, now, ct);
@@ -280,9 +313,10 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             }
             case 0x361b: return await CreateAsync(plain, now, ct);
             case 0x361f: return await SelectAsync(plain, now, ct);
-            case 0x3622: return LoadComplete(plain, now);
+            case 0x3622: return await LoadCompleteAsync(plain, now, ct);
             case 0x3630:
                 // Logout_RQ (in-game Exit). Save first: the client disconnects on the reply.
+                await FlushDeferredPersistenceAsync(now, ct);
                 await CheckpointAsync(now, force: true, ct);
                 return [GamePackets.Logout()];
             case 0x362e: return await BuilderAsync(plain, now, ct);
@@ -290,10 +324,17 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             case CharDeleteRq when plain.Length >= 3: return await DeleteCharacterAsync(plain, now, ct);
             case CharDeleteCancelRq when plain.Length >= 3: return await CancelDeleteAsync(plain, ct);
             case CharRenameRq when plain.Length >= 4: return await RenameCharacterAsync(plain, ct);
+            case CharSlotSwapRq when plain.Length >= 4: return await SwapLobbySlotsAsync(plain, now, ct);
+            case CharCustomizingListRq when plain.Length == 2: return await CharCustomizingListAsync(ct);
         }
         if (InWorld && ClientRequest(plain, now) is { } clientReplies) return clientReplies;
+        if (InWorld && Opcode(plain) is var skinBlockOp && skinBlockOp >= 0x8d62 && skinBlockOp <= 0x8d67 && (skinBlockOp - 0x8d60) % 2 == 0)
+            return SkinBlockRefusal(plain);
         if (InWorld && await GuildRequestAsync(plain, ct) is { } guildReplies) return guildReplies;
+        if (InWorld && await PartyLootRequestAsync(plain, now, ct) is { } lootRollReplies) return lootRollReplies;
+        if (InWorld && ForceRequest(plain, now) is { } forceReplies) return forceReplies;
         if (await SocialRequestAsync(plain, now, ct) is { } socialReplies) return socialReplies;
+        if (InWorld && await TradeRequestAsync(plain, now, ct) is { Count: > 0 } tradeReplies) return tradeReplies;
         if (await EquipRequestAsync(plain, ct) is { } equipped) return equipped;
         if (PositionReport(plain) is { } reported)
         {
@@ -317,27 +358,61 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             if (itemCast is not null && castFrom is { } from && from.DistanceSquared(reported) > CastMoveTolerance * CastMoveTolerance)
                 uncovered = [.. InterruptItemCast(), .. uncovered];
             uncovered = [.. uncovered, .. NpcVisibility(reported)];
+            var wasAir = air;
             TrackAir(plain);
+            TrackFallStart(wasAir, air, reported);
+            uncovered = [.. uncovered, .. FallLandingReplies(wasAir, air, reported, now)];
             var entering = MapEventPosition(reported, now);
-            entering.AddRange(InstanceTrigger(reported, now));
+            entering.AddRange(InstanceTrigger(reported, Opcode(plain), now));
             if (worldPlayer?.Map is { } map)
             {
                 worldPlayer.Position = reported;
-                map.UpdateVisibility(worldPlayer);
+                if (worldPlayer.NeedsVisibilityRefresh(reported, now)) map.UpdateVisibility(worldPlayer);
                 map.Broadcast(worldPlayer, MovementRelay(plain, reported));
             }
-            return [.. uncovered, .. entering];
+            var abandonedHeld = AbandonQueuedHeldCast(now);
+            return await WithMapEventClearsFlushedAsync([.. abandonedHeld, .. uncovered, .. entering], ct);
         }
         switch (header)
         {
             case 0x3800:
             {
                 var cast = CastReplies(plain, now);
+                LogSkillCastFromReplies(plain, cast);
                 if (worldPlayer?.Map is { } castMap) castMap.Broadcast(worldPlayer, cast.Where(SharedCastPacket));
+                cast.AddRange(await SealStoneConsumedAsync(ct));
                 cast.AddRange(await QuestKillsAsync(ct));
                 cast.AddRange(await KillExperienceAsync(ct));
-                return cast;
+                return await WithMapEventClearsFlushedAsync(cast, ct);
             }
+            case SkillGroundReadyRq or SkillGroundStartRq or SkillGroundStopRq:
+                return await GroundSkillAsync(header, plain, now, ct);
+            // SkillChargingStart_RQ (dev 0x36C3 + 0x157): same wire as 0x3800; answered 0x381b then combat packets.
+            case SkillChargingStartRq:
+            {
+                var cast = await HandleSkillChargingStartAsync(plain, now, ct);
+                if (worldPlayer?.Map is { } chargeMap) chargeMap.Broadcast(worldPlayer, cast.Where(SharedCastPacket));
+                return await WithMapEventClearsFlushedAsync(cast, ct);
+            }
+            case SkillChargingEndRq:
+            {
+                var cast = await HandleSkillChargingEndAsync(plain, now, ct);
+                if (worldPlayer?.Map is { } releaseMap) releaseMap.Broadcast(worldPlayer, cast.Where(SharedCastPacket));
+                return await WithMapEventClearsFlushedAsync(cast, ct);
+            }
+            case SkillChargingStopRq when plain.Length == 2:
+                return HandleSkillChargingStop(plain);
+            case BasicAtkRq:
+            {
+                var cast = HandleBasicAtkRequest(plain, now);
+                if (worldPlayer?.Map is { } basicMap) basicMap.Broadcast(worldPlayer, cast.Where(SharedCastPacket));
+                cast.AddRange(await SealStoneConsumedAsync(ct));
+                return await WithMapEventClearsFlushedAsync(cast, ct);
+            }
+            case BasicAtkToggleOnRq when plain.Length == 2:
+                return HandleBasicAtkToggleOn(now);
+            case BasicAtkToggleOffRq when plain.Length == 2:
+                return HandleBasicAtkToggleOff();
             case 0x5610: return await InventoryListAsync(ct);
             // WingChange_RQ: packed is_wing_skin, i32 wing (live 2026-10-15, 7 bytes). A registered
             // wing becomes the equipped one for this connection (the equipped wing is not stored yet).
@@ -357,29 +432,48 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             case LootPackets.LootRq when plain.Length >= 4: return await LootAsync(plain, now, ct);
             case ItemMoveRq when plain.Length == 19: return await MoveItemInBagAsync(plain, ct);
             case ShopOpenRq when plain.Length >= 3: return await OpenShopAsync(plain, now, ct);
+            case CoinShopOpenRq when plain.Length >= 6: return await OpenCoinShopAsync(plain, now, ct);
+            case CoinShopBuyRq when plain.Length >= 6: return await BuyCoinShopAsync(plain, now, ct);
+            case GuildShopBuyRq when plain.Length >= 4: return await BuyGuildShopAsync(plain, now, ct);
+            case RandomShopInfoRq when plain.Length >= 6: return await RandomShopInfoAsync(plain, now, ct);
+            case RandomShopPurchaseRq when plain.Length >= 10: return await RandomShopPurchaseAsync(plain, now, ct);
+            case RandomShopRefreshRq when plain.Length >= 6: return await RandomShopRefreshAsync(plain, now, ct);
+            case RandomShopRefreshCheckRq when plain.Length >= 6: return await RandomShopRefreshCheckAsync(plain, ct);
+            case NPShopGameMoneyLimitRq when plain.Length >= 3: return await NPShopGameMoneyLimitAsync(plain, now, ct);
+            case NPShopPurchaseRq when plain.Length >= 10: return await NPShopPurchaseAsync(plain, now, ct);
+            case TrustLimitInfoRq: return TrustLimitInfo(now);
             case ItemRestoreRq when plain.Length >= 3: return await RestoreItemsAsync(plain, ct);
             case ItemEnchantRq when plain.Length >= 10: return await EnchantAsync(plain, ct);
+            case ItemExceedEnchantRq when plain.Length >= 10: return await ExceedEnchantAsync(plain, ct);
+            case ItemEnchantGodstoneRq when plain.Length >= 15: return await EnchantGodstoneAsync(plain, ct);
+            case CombineGodstoneRq when plain.Length >= 3: return await CombineGodstoneAsync(plain, ct);
             case GatherStartRq when plain.Length >= 3: return await GatherStartAsync(plain, now, ct);
             case TitleChangeRq when plain.Length >= 6: return await TitleChangeAsync(plain, ct);
-            case SkillLevelUpRq when plain.Length >= 6: return await SkillLevelUpAsync(plain, ct);
+            case SkillLevelUpRq: return await SkillLevelUpAsync(plain, ct);
             case TitleEquipRq when plain.Length >= 7: return await TitleEquipAsync(plain, ct);
             case SkinEquipRq when plain.Length >= 3: return await SkinEquipAsync(plain, ct);
+            case SkinExtractionRq when plain.Length >= 3: return await SkinExtractionAsync(plain, ct);
             case GatherStopRq when plain.Length >= 3: return GatherStop(plain);
             case CraftStartRq when plain.Length >= 7: return await CraftAsync(plain, ct);
-            case GatherStopRq when plain.Length >= 3: pendingUse = null; return [];
+            case ConversionStartRq: return await ConversionStartAsync(plain, ct);
+            case ConversionLimitListRq when plain.Length >= 2: return await ConversionLimitListAsync(plain, ct);
             case ShopBuyRq when plain.Length >= 4: return await BuyGoodsAsync(plain, now, ct);
             case ShopSellRq when plain.Length >= 4: return await SellItemsAsync(plain, ct);
             case ItemRemoveRq when plain.Length >= 4: return await RemoveItemsAsync(plain, ct);
             case ItemSortRq when plain.Length == 7: return await SortBagAsync(plain, ct);
             case QuickSlotSetRq when plain.Length >= 27: return await SetQuickSlotAsync(plain, ct);
+            case QuickSlotContextSkillRq when plain.Length >= 8: return await UpdateQuickSlotContextAsync(plain, ct);
+            case SkillCustomizingUpdateRq: return await UpdateSkillCustomizingAsync(plain, ct);
             case QuickSlotResetRq when plain.Length == 3: return await ResetQuickSlotAsync(plain[2], ct);
+            case QuickSlotContextSkillResetRq when plain.Length == 2: return await ResetQuickSlotContextAsync(ct);
             case RidePackets.OpenBoxRq when plain.Length == 15: return await OpenBoxRequestAsync(plain, now, ct);
             case RidePackets.ItemUseRq when plain.Length == 10: return await UseItemAsync(BitConverter.ToInt64(plain, 2), now, ct);
             case RidePackets.AcquireRq when plain.Length == 6: return await AcquireRideAsync(BitConverter.ToInt32(plain, 2), ct);
             case RidePackets.CrystallizeRq when plain.Length >= 3: return await CrystallizeAsync(plain, ct);
             case RidePackets.BoardRollRq when plain.Length >= 5: return await RollBoardAsync(plain, ct);
             case RidePackets.BoardLockRq when plain.Length == 6: return await LockBoardSlotAsync(plain[2], plain[3], plain[4], plain[5] != 0, ct);
-            case RidePackets.RespawnRq when plain.Length == 11: return await RespawnRequestAsync(plain[2], BitConverter.ToInt64(plain, 3), now, ct);
+            case RidePackets.RespawnRq when plain.Length >= 3:
+                return await RespawnRequestAsync(plain[2], plain.Length >= 11 ? BitConverter.ToInt64(plain, 3) : 0, now, ct);
             case RidePackets.UseRebirthRq when plain.Length == 3: return UseRebirth(plain[2] != 0, now);
             case RidePackets.LevelUpRq when plain.Length == 6: return await LevelUpRideAsync(BitConverter.ToInt32(plain, 2), ct);
             case RidePackets.GetOnRq when plain.Length == 6: return GetOnRide(BitConverter.ToInt32(plain, 2));
@@ -389,8 +483,20 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
                 return await SoulBindCompleteAsync(BitConverter.ToInt64(plain, 2), ct);
             case 0x3704 when plain.Length == 10: return SprintOn(now);
             // Glide (0x3706) and flight (0x370a) starts, sent once a wing is equipped (live 2026-10-15).
-            case 0x3706 when resources is not null && wingId != 0: return [GamePackets.GlideStartReply(playerKey)];
-            case 0x370a when resources is not null && wingId != 0: return [GamePackets.FlyStartReply(playerKey)];
+            case 0x3706 when resources is not null && wingId != 0:
+                if (!CanSpendFlightFp) return [GamePackets.GlideStartReply(playerKey, 1)];
+                air = AirState.Glide;
+                ResetFpTick(now);
+                return [GamePackets.GlideStartReply(playerKey)];
+            case 0x370a when resources is not null && wingId != 0:
+                if (!CanSpendFlightFp) return [GamePackets.FlyStartReply(playerKey, 1)];
+                air = AirState.Fly;
+                flySprint = plain.Length > 2 && (plain[2] & 1) != 0;
+                ResetFpTick(now);
+                return FlyStart();
+            case 0x3708 when plain.Length >= 11: return GlideBuoyancyOn(plain);
+            case 0x3709 when plain.Length >= 10: return GlideBuoyancyOff(plain);
+            case 0x3719 when plain.Length >= 27: return RequestAirPath(plain);
             case 0x3705 when plain.Length == 10: return SprintOff();
             // CharRestStart_RQ / CharRestStop_RQ {key varint, 0 OBSERVED "473700"}: sit down / stand up (dev 0x36A4-0x36A9,
             // usmap layouts; no official reply sample, CANDIDATE). Others see the NT.
@@ -415,24 +521,33 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
                 {
                     var target = (int)new PacketReader(plain) { Offset = 3 }.Varint();
                     selectedTarget = target;
-                    return targets?.ContainsKey(target) == true ? [GamePackets.SetMainTargetReply(target), GamePackets.TargetUpdate(target)] : [GamePackets.SetMainTargetReply(target)];
+                    var replies = new List<byte[]> { GamePackets.SetMainTargetReply(target), GamePackets.TargetUpdate(playerKey, target) };
+                    if (targets?.ContainsKey(target) == true) replies.Add(GamePackets.TargetUpdate(target));
+                    return replies;
                 }
                 catch (ProtocolException) { return []; }
             // NPC interaction (dialog) and quest requests; layouts from the usmap, never yet seen from the client.
-            case 0xe240 when QuestKey(plain, 2) is { } npcKey: return await NpcInteractionAsync(npcKey, now, ct);
+            case 0xe240 when NpcKeyFromBody(plain) is { } npcKey:
+                return await WithMapEventClearsFlushedAsync(await NpcInteractionAsync(npcKey, now, ct), ct);
+            case 0xe240:
+                LogNpcTalkRefused(0, 0, null, "unparsed_body");
+                return [];
             // InteractEnvObj_RQ {target_key, item_key, target_id} (usmap; client encoding unseen, logged).
-            case 0x3636: return await InteractEnvObjAsync(plain, now, ct);
+            case 0x3636:
+                return await WithMapEventClearsFlushedAsync(await InteractEnvObjAsync(plain, now, ct), ct);
             case CubeRewardRq: return await CubeRewardAsync(plain, now, ct);
             case PostLoadRq when plain.Length >= 3: return await LoadPostsAsync(plain, ct);
+            case PushRewardInfoRq when plain.Length == 2: return await RetrievePushRewardsAsync(now, ct);
+            case TakePushRewardRq when plain.Length >= 8: return await TakePushRewardAsync(plain, ct);
             case PostReadRq: return await MarkPostsAsync(plain, delete: false, ct);
             case PostDeleteRq: return await MarkPostsAsync(plain, delete: true, ct);
             case PostTakeRq when plain.Length >= 11: return await TakePostAsync(plain, ct);
-            case ItemDecomposeRq when plain.Length >= 4: return await DecomposeAsync(plain, ct);
-            case TakeAchievementRewardRq: return await TakeAchievementRewardAsync(plain, ct);
+            case ItemDecomposeRq when plain.Length >= 3: return await DecomposeAsync(plain, ct);
+            case TakeAchievementRewardRq: return await TakeAchievementRewardAsync(plain, now, ct);
             case TakeAchievementGroupRewardRq: return await TakeGroupRewardAsync(plain, ct);
-            case TakeAchievementRewardBatchRq: return await TakeRewardBatchAsync(plain, ct);
+            case TakeAchievementRewardBatchRq: return await TakeRewardBatchAsync(plain, now, ct);
             case AttendanceRq: return Attendance(now);
-            case TakeBattlePassRewardRq: return TakeBattlePassReward(plain, now);
+            case TakeBattlePassRewardRq or LegacyTakeBattlePassRewardRq: return await TakeBattlePassRewardAsync(plain, now, ct);
             case MatchingStartRq: return MatchingStart(plain, now);
             case MatchingStartResponseRq: return MatchingStartResponse(plain, now);
             case MatchingCancelRq: return MatchingCancel(now);
@@ -440,8 +555,28 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             case ArenaRecordRq when plain.Length >= 4: return [PacketWriter.Opcode(ArenaRecordRs).U16(0).I32(plain[2]).U8(plain[3]).Varint(0).ToArray()];
             case PeriodCollectionListRq: return PeriodCollectionListRequest(plain, now);
             case RegisterPeriodCollectionRq when plain.Length >= 11: return await RegisterCollectionAsync(plain, now, ct);
+            case DaevanionOpenNodeRq when plain.Length >= 6: return await DaevanionOpenNodeAsync(plain, ct);
+            case DaevanionCloseNodeRq when plain.Length >= 6: return await DaevanionCloseNodeAsync(plain, ct);
+            case DaevanionResetBoardRq when plain.Length >= 6: return await DaevanionResetBoardAsync(plain, ct);
+            case DaevanionOpenAllNodeRq when plain.Length >= 6: return await DaevanionOpenAllNodeAsync(plain, ct);
+            case DaevanionOpenRouteNodeRq when plain.Length >= 6: return await DaevanionOpenRouteNodeAsync(plain, ct);
             case BossChallengeEnterRq: return BossChallengeEnter(plain, now);
-            case BattlePassPurchaseRq when plain.Length >= 6: return [PacketWriter.Opcode(BattlePassPurchaseRs).U16(1).I32(BitConverter.ToInt32(plain, 2)).ToArray()];
+            case PartyDungeonEnterRq: return PartyDungeonEnter(now);
+            case DungeonRoomListRq: return DungeonRoomList(plain);
+            case DungeonRoomCreateRq: return DungeonRoomCreate(plain, now);
+            case DungeonRoomJoinRq: return DungeonRoomJoin(plain, now);
+            case DungeonRoomApplyResponseRq: return DungeonRoomApplyResponse(plain, now);
+            case DungeonRoomInviteRq: return DungeonRoomInvite(plain, now);
+            case DungeonRoomInviteResponseRq: return DungeonRoomInviteResponse(plain, now);
+            case DungeonRoomInstantJoinRq: return DungeonRoomInstantJoin(plain, now);
+            case DungeonRoomReadyRq: return DungeonRoomReady(plain);
+            case DungeonRoomEditSettingRq: return DungeonRoomEditSetting(plain);
+            case DungeonRoomLeaveRq: return DungeonRoomLeave();
+            case DungeonRoomKickMemberRq: return DungeonRoomKick(plain);
+            case DungeonRoomStartRq: return DungeonRoomStart(now);
+            case DungeonRoomRetryRq: return DungeonRoomRetry(now);
+            case DungeonRoomRetryResponseRq: return DungeonRoomRetryResponse(plain, now);
+            case BattlePassPurchaseRq or LegacyBattlePassPurchaseRq: return await BattlePassPurchaseAsync(plain, now, ct);
             case CloseNpcAchievementRq: return CloseNpcAchievement(plain);
             case CloseEnvObjAchievementRq: return CloseEnvObjAchievement(plain);
             case SkillLevelDownRq: return await SkillLevelDownAsync(plain, ct);
@@ -450,14 +585,15 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             case 0x363d when QuestKey(plain, 2) is { } stopKey:
                 if (pendingUse?.Key == stopKey) pendingUse = null;
                 return [GamePackets.InteractEnvObjStopReply(stopKey)];
-            case 0xe242 when QuestKey(plain, 2) is { } npcKey:
+            case 0xe242 when NpcKeyFromBody(plain) is { } npcKey:
                 // Once the conversation is over on the server's side (the partner removed and a map load pending, as after an
                 // NPC's layer entry) the official answer is the failure 0x3e08 with key 0 (OBSERVED #9656); the talk mode ends on it.
                 if (reloading || targets?.ContainsKey(npcKey) != true) return [GamePackets.FinishNpcInteractionReply(0, FinishNoConversation)];
-                return [GamePackets.FinishNpcInteractionReply(npcKey), .. MapEventTalked(npcKey, null, close: true, now)];
+                return await WithMapEventClearsFlushedAsync(
+                    [GamePackets.FinishNpcInteractionReply(npcKey), .. MapEventTalked(npcKey, null, close: true, now), .. await NpcInteractionFinishedAsync(npcKey, now, ct)], ct);
             // NpcConversation_RQ {npc key, func value}: the dialog choice of an EnterInstanceLayer NPC (OBSERVED reply 0x4007 before the move).
             case 0x4006 when plain.Length >= 7: return NpcConversation(plain, now);
-            case 0xe244 when QuestKey(plain, 2) is { } npcKey: return [GamePackets.KeepAliveNpcInteractionReply(npcKey, now + 300_000)];
+            case 0xe244 when NpcKeyFromBody(plain) is { } npcKey: return [GamePackets.KeepAliveNpcInteractionReply(npcKey, now + 300_000)];
             // Unrecorded client layouts (the recordings hold the server's side only; live 2026-10-18 NpcConversation_RQ carried a
             // byte before its key): the quest id or uid is the first i32 in the body that names one, wherever it sits.
             case 0x8d0a when plain.Length >= 6:
@@ -468,15 +604,22 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             // the reply is {u16 result} (CANDIDATE) then the way out as the script's MapExit sends it.
             case 0x4004: return instanceKey != 0 && !reloading ? [PacketWriter.Opcode(0x4005).U16(0).ToArray(), .. LeaveInstance(now)] : [PacketWriter.Opcode(0x4005).U16(1).ToArray()];
             case 0x930d: return instanceKey != 0 && !reloading ? [PacketWriter.Opcode(0x930e).U16(0).ToArray(), .. LeaveInstance(now)] : [PacketWriter.Opcode(0x930e).U16(1).ToArray()];
-            case 0x8d0e when plain.Length >= 6: return await QuestRewardAsync(BitConverter.ToInt32(plain, 2), ct);
+            // QuestTeleport_RQ {quest uid i32} (live 2026-10-30: 0x8d16 31000000 on the journal's "Go to the quest area?" confirm).
+            case 0x8d16 when plain.Length >= 6: return QuestTeleport(BitConverter.ToInt32(plain, 2), now);
+            case 0x8d0e when plain.Length >= 6:
+                return await QuestRewardAsync(BitConverter.ToInt32(plain, 2),
+                    plain.Length >= 10 ? BitConverter.ToInt32(plain, 6) : -1, now, ct);
             case 0x8d2b when plain.Length >= 6: return await QuestStepTalkAsync(plain, now, ct);
             // ClientObjectiveComplete_RQ {kind u8, id i32, objective index i32} (11 bytes live; the official reply mirrors it).
             case 0x9230 when plain.Length >= 11:
                 return await ClientObjectiveAsync(plain[2], BitConverter.ToInt32(plain, 3), BitConverter.ToInt32(plain, 7), now, ct);
+            // UseTeleportArtifact_RQ {i32 artifact} (usmap; live 2026-10-30 `36929B091000` from the world map's teleport confirm).
+            case 0x9236 when plain.Length >= 6: return await UseTeleportArtifactAsync(BitConverter.ToInt32(plain, 2), now, ct);
             // CutsceneComplete_RQ {cutscene name, group request key i64}: a cutscene the client was told to play ended (OBSERVED
             // live 2026-10-19 for the lake cave's exit cutscene). It finishes CompleteCutscene objectives and releases a move
             // that waited for its cutscene (a PCTeleport's value 3).
-            case 0xe334 when CutsceneComplete(plain) is { } ended: return MapEventCutsceneDone(ended.Name, ended.Key, now);
+            case 0xe334 when CutsceneComplete(plain) is { } ended:
+                return await WithMapEventClearsFlushedAsync(MapEventCutsceneDone(ended.Name, ended.Key, now), ct);
             case 0x8d40: return [GamePackets.ClientOptionReply()];
             // UpdateClientEnvSetting_RQ (dev 0x397D): the RS and the settings echoed as the NT (CANDIDATE; not yet seen from our client).
             case 0x8d42 when plain.Length > 2: return [GamePackets.ClientEnvSettingReply(), [0x44, 0x8d, .. plain.AsSpan(2)]];
@@ -493,11 +636,23 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
                 // instant game-login reply arrives, so the chat server key (Lime+0x80) stayed
                 // empty. Resending in the world dropped the connection (research/chat-and-gm.md).
                 lobbyLoginSent = true;
-                return [GamePackets.LoginCharacters([], $"{loginIdentity.AccountSid}:{loginIdentity.Guid}", "1204",
+                return [GamePackets.LoginCharacters([], $"{loginIdentity.AccountSid}:{loginIdentity.Guid}", DevelopmentDefaults.WorldIdString,
                     GamePackets.CommServerKey, now, isBornServer: true, chatEnableLevel: 0)];
+            case 0xe34f when Store is not null && !lobbyLoginSent:
+                lobbyLoginSent = true;
+                return await Stored(async () =>
+                {
+                    await EnsureExtendedCharacterSlotsAsync(ct);
+                    return
+                    [
+                        GamePackets.LoginCharacters([], $"{loginIdentity.AccountSid}:{loginIdentity.Guid}", Store.WorldId.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                            GamePackets.CommServerKey, now, isBornServer: true, chatEnableLevel: 0, extendedSlotCount: ExtendedCharacterSlotCount),
+                        GamePackets.ExtendedCharacterSlot(ExtendedCharacterSlotCount),
+                    ];
+                });
         }
         if (GamePackets.WorldEntryQueryReplies.TryGetValue(header, out var reply))
-            return header == 0x8a1c ? [reply, .. UnlockUpdateOnce()] : [reply];
+            return [reply];
         return [];
     }
 
@@ -508,13 +663,18 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
     /// </summary>
     async Task<List<byte[]>> LobbyAsync(long now, CancellationToken ct)
     {
+        await FlushDeferredPersistenceAsync(now, ct);
         await CheckpointAsync(now, force: true, ct);
         LeaveWorld();
         if (Store is null) return [GamePackets.LobbyCharacters([])];
         // The plain (uncompressed) full list. Settled live 2026-10-19 from the client recordings of the four research
         // variants: after the plain full list the player picked a character 6 s later; the compressed one made the client
         // drop the connection and log in again; the empty ones showed no characters.
-        return await Stored(async () => [GamePackets.LobbyCharacters(await LobbyCharactersAsync(ct))]);
+        return await Stored(async () =>
+        {
+            await EnsureExtendedCharacterSlotsAsync(ct);
+            return LobbyCharacterReplies(await LobbyCharactersAsync(ct));
+        });
     }
 
     /// <summary>World state ends with the character; the next selection starts it again.</summary>
@@ -530,6 +690,8 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         CharacterName = null;
         inCombat = false;
         cooldowns.Clear();
+        ClearChainState();
+        skillCustomizing.Clear();
         respawnAt = [];
         ai = new NpcAi(rng, data);
         invisible = false;
@@ -541,555 +703,6 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         reloading = false;
     }
 
-    // ---------- Quests ----------
-
-    /// <summary>Kina is an item (Item.dat Gold).</summary>
-    public const int KinaItemId = 930100001;
-    QuestLog? questLog;
-    readonly List<int> killedNpcs = [];
-    int selectedTarget;
-    long nextDevQuestUid = 1;
-
-    public QuestLog? Quests => questLog;
-
-    /// <summary>A development login (no store) gets an in-memory quest log: quest gates (map events, dungeon entries) can be exercised in checks.</summary>
-    public QuestLog DevelopmentQuestLog() => questLog ??= new QuestLog(QuestBook.Embedded, profileRace == 0 ? 1 : profileRace);
-
-    static QuestWire Wire(QuestRecord q) => new(q.QuestId, (byte)q.Status, q.Step, q.Goals, (int)q.Uid);
-
-    /// <summary>An i32 NPC key at the offset, or a varint when the body is not exactly that long (layout unconfirmed).</summary>
-    /// <summary>FinishNpcInteraction_RS result when no conversation is open any more (OBSERVED `083e 00000000` after a layer move).</summary>
-    const int FinishNoConversation = 0x3e08;
-
-    static int? QuestKey(byte[] plain, int offset)
-    {
-        if (plain.Length == offset + 4) return BitConverter.ToInt32(plain, offset);
-        try { return plain.Length > offset ? (int)new PacketReader(plain) { Offset = offset }.Varint() : null; }
-        catch (ProtocolException) { return null; }
-    }
-
-    /// <summary>
-    /// The character's quests. A character without any skips the opening quest (its objectives
-    /// are the intro map events) and starts on the quest it leads to, as the official new
-    /// character entered the world with HQ1101010 active.
-    /// </summary>
-    async Task LoadQuestsAsync(INativeCharacterStore store, Guid character, int race, CancellationToken ct)
-    {
-        questLog = new QuestLog(QuestBook.Embedded, race);
-        questLog.Load(await store.QuestsAsync(character, ct));
-        if (questLog.All.Count > 0) return;
-        var opening = race == 2 ? "HQ2100010" : "HQ1100010";
-        if (questLog.Book.Find(opening) is not { } intro) return;
-        questLog.Set(await store.SaveQuestAsync(character, QuestLog.New(opening, intro) with { Status = QuestLog.Rewarded }, ct));
-        if (intro.Next is { } next && questLog.CanAccept(next, level))
-            questLog.Set(await store.SaveQuestAsync(character, QuestLog.New(next, questLog.Book.Find(next)!), ct));
-    }
-
-    async Task<QuestRecord> SaveQuestAsync(QuestRecord record, CancellationToken ct)
-    {
-        if (Store is { } store && CharacterId is { } character) record = await store.SaveQuestAsync(character, record, ct);
-        else if (record.Uid == 0) record = record with { Uid = nextDevQuestUid++ };
-        questLog?.Set(record);
-        return record;
-    }
-
-    /// <summary>Contents unlocked by finished quests (ContentsUnlock quest gates), as unlock type bytes.</summary>
-    IEnumerable<byte> QuestUnlockTypes() =>
-        (questLog?.UnlockedContents() ?? []).Select(name => BuilderCommands.UnlockTypes.ToList().IndexOf(name)).Where(i => i > 0).Select(i => (byte)i);
-
-    /// <summary>Saves and reports changed quests (0x8d10); quests that complete by themselves pay at once.</summary>
-    async Task<List<byte[]>> QuestChangesAsync(IEnumerable<QuestRecord> changed, CancellationToken ct)
-    {
-        var replies = new List<byte[]>();
-        foreach (var record in changed)
-        {
-            // The step's goal reached first (the official pattern), then the saved state (the next step or the completion).
-            foreach (var milestone in questLog?.TakeMilestones(record.Code) ?? [])
-                if (milestone.Uid != 0) replies.Add(GamePackets.QuestProgress(Wire(milestone)));
-            var saved = await SaveQuestAsync(record, ct);
-            replies.Add(GamePackets.QuestProgress(Wire(saved)));
-            if (saved.Status == QuestLog.Complete && questLog!.Book.Find(saved.Code) is { Complete: "Auto" or "None" })
-                replies.AddRange(await QuestRewardAsync((int)saved.Uid, ct));
-        }
-        replies.AddRange(await AutoAcquireAsync(ct));
-        return replies;
-    }
-
-    /// <summary>
-    /// Quests that start by themselves (Quest.dat AcquireType Auto, 242 of them): taken when their earlier quests are done, their
-    /// map (AcquireMapId, 0 = any) is this one and their conditions hold, in rounds (HQ1101021 opens AQ1602000). Then the map's
-    /// events whose start now holds join (Dungeon_0005_MapEvent starts on HQ1101021 step 1). Before 2026-10-19 no Auto quest
-    /// was ever taken: the chain ended at the Ascension Subspace. Callers run inside Stored.
-    /// </summary>
-    async Task<List<byte[]>> AutoAcquireAsync(CancellationToken ct)
-    {
-        if (questLog is null || resources is null) return [];
-        var replies = new List<byte[]>();
-        for (var round = 0; round < 4; round++)
-        {
-            // The earlier quests must be turned in, not only complete (the chain's next starts at the reward: HQ1101021 after Ashar's talk, not at the arrival).
-            var codes = questLog.AutoAcquirable(level)
-                .Where(code => questLog.Book.Find(code) is { } quest && (quest.Map == 0 || quest.Map == worldMap) && QuestConditionsHold(quest)
-                               && (quest.Previous ?? []).Concat(quest.Prerequisites ?? []).All(p => !questLog.Book.Quests.ContainsKey(p) || questLog.Get(p) is { Status: QuestLog.Rewarded })).ToList();
-            if (codes.Count == 0) break;
-            foreach (var code in codes)
-                replies.Add(GamePackets.QuestAdd(Wire(await SaveQuestAsync(QuestLog.New(code, questLog.Book.Find(code)!), ct))));
-        }
-        if (RunsMapEvents && !reloading && mapEventsMap == worldMap) replies.AddRange(StartEligibleEvents(lastNow));
-        return replies;
-    }
-
-    /// <summary>IncompleteQuest (taken, not rewarded), ClearQuestStep (QuestStep id = quest id * 100 + order), SubZone (standing in it); the rest never hold (CloseEnvObj, the masteries, UnifiedObjectiveScore).</summary>
-    bool QuestConditionsHold(QuestDefinition quest) => (quest.Conditions ?? []).All(c => c.Type switch
-    {
-        "IncompleteQuest" => questLog?.Get(c.Value) is { Status: QuestLog.Incomplete or QuestLog.Complete },
-        "ClearQuestStep" => int.TryParse(c.Value, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var stepId)
-            && questLog?.Book.StepOf(stepId) is { } s && questLog.Book.ById.TryGetValue(s.Quest, out var code) && questLog.Get(code) is { } r && (r.Status >= QuestLog.Complete || r.Step > s.Step),
-        "SubZone" => position is { } at && Subzones.InSubzone(worldMap, c.Value, at),
-        _ => false,
-    });
-
-    async Task<List<byte[]>> QuestKillsAsync(CancellationToken ct)
-    {
-        if (questLog is null || killedNpcs.Count == 0 && clearedEvents.Count == 0) { killedNpcs.Clear(); clearedEvents.Clear(); return []; }
-        var changed = new Dictionary<string, QuestRecord>();
-        foreach (var npc in killedNpcs)
-            foreach (var record in questLog.Killed(npc, level)) changed[record.Code] = record;
-        killedNpcs.Clear();
-        foreach (var mapEvent in clearedEvents)
-            foreach (var record in questLog.ClearedMapEvent(mapEvent, level)) changed[record.Code] = record;
-        clearedEvents.Clear();
-        return await Stored(() => QuestChangesAsync(changed.Values, ct));
-    }
-
-    /// <summary>
-    /// Clicking an NPC (0xe240): the dialog opens (0xe241, five minutes). Talking counts for
-    /// AskNpc objectives here when the client sends no separate step talk (0x8d2b).
-    /// </summary>
-    async Task<List<byte[]>> NpcInteractionAsync(int npcKey, long now, CancellationToken ct)
-    {
-        var replies = new List<byte[]> { GamePackets.StartNpcInteractionReply(npcKey, now + 300_000) };
-        if (questLog is null || targets?.GetValueOrDefault(npcKey) is not { } npc) return replies;
-        replies.AddRange(await Stored(() => QuestChangesAsync(questLog.Talked(npc.NpcId, level), ct)));
-        return replies;
-    }
-
-    // ---------- World-map fog (the clouds on the M map) ----------
-
-    /// <summary>Uncovered fog groups (stored; per connection on development logins).</summary>
-    readonly SortedSet<int> fog = [];
-    long fogCheckAt;
-    public IReadOnlyCollection<int> Fog => fog;
-    public const long FogCheckMs = 500;
-
-    /// <summary>Entering a subzone uncovers its fog group: stored, then 0x56ad. Checked at most every FogCheckMs.</summary>
-    async Task<List<byte[]>> UncoverFogAsync(Vector3d at, long now, CancellationToken ct)
-    {
-        if (resources is null || now < fogCheckAt) return [];
-        fogCheckAt = now + FogCheckMs;
-        var replies = ObjectVisibility(at, now);
-        replies.AddRange(await AreaQuestsAsync(at, ct));
-        if (Subzones.GroupAt(worldMap, at) is { } group && !fog.Contains(group)) replies.AddRange(await OpenFogAsync([group], ct));
-        return replies;
-    }
-
-    // ---------- Quest objects and trigger areas ----------
-
-    /// <summary>Quest objects this client has been sent (index on the map).</summary>
-    readonly HashSet<int> shownObjects = [];
-    /// <summary>Trigger actors spawned for this player (index in the map's trigger list).</summary>
-    readonly HashSet<int> shownTriggers = [];
-    /// <summary>A map event's instance (dungeon, layer): long-range objects and every trigger actor are sent at entry (OBSERVED).</summary>
-    bool InstanceMap => instanceKey != 0 && MapEventData.Serves(worldMap);
-    /// <summary>
-    /// Objects a map event's UseEnvObj objective consumed in this layer: gone for this player (OBSERVED 2026-10-19: each phoenix egg of
-    /// HQ002 despawned 100 ms after its use, 0x3635 state 4 reason 3, and never came back; before this they could be used without end).
-    /// </summary>
-    readonly HashSet<int> usedObjects = [];
-    /// <summary>A timed interaction in progress: object index, key, when it completes.</summary>
-    (int Index, int Key, long DueMs)? pendingUse;
-
-    /// <summary>Spawns quest objects within WorldObjects.VisibleRange (0x3634) and despawns those left behind (0x3635).</summary>
-    List<byte[]> ObjectVisibility(Vector3d at, long now)
-    {
-        var replies = new List<byte[]>();
-        var objects = WorldObjects.ObjectsOn(worldMap);
-        // The objects shown (to despawn) and those placed in range (SpatialGrid), in index order.
-        var candidates = new SortedSet<int>(shownObjects);
-        candidates.UnionWith(SpatialGrid.Objects(worldMap).Near(at.X, at.Y, WorldObjects.VisibleRange));
-        var instance = InstanceMap;
-        if (instance) candidates.UnionWith(WorldObjects.LongRangeOn(worldMap));
-        foreach (var i in candidates)
-        {
-            if (i >= objects.Count) continue;
-            var o = objects[i];
-            double dx = o.Position[0] - at.X, dy = o.Position[1] - at.Y;
-            var near = (instance && o.LongRange || dx * dx + dy * dy <= WorldObjects.VisibleRange * WorldObjects.VisibleRange) && !MapEventHidden(i, o);
-            if (near && !Gathered(i, now) && !usedObjects.Contains(i) && shownObjects.Add(i))
-                replies.Add(GamePackets.EnvObjSpawn(WorldObjects.FirstKey + i, o.Env, o.At, o.Yaw, now, o.UniqueKey, (byte)o.Relationship));
-            else if (!near && shownObjects.Remove(i))
-                replies.Add(GamePackets.EnvObjDespawn(WorldObjects.FirstKey + i));
-        }
-        // Trigger actors: all of an instance map's at once (official), elsewhere within TriggerRange.
-        var triggers = WorldObjects.TriggersOn(worldMap);
-        for (var i = 0; i < triggers.Count; i++)
-        {
-            var t = triggers[i];
-            if (t.Env == 0) continue;
-            double dx = t.Position[0] - at.X, dy = t.Position[1] - at.Y;
-            var near = instance || dx * dx + dy * dy <= WorldObjects.TriggerRange * WorldObjects.TriggerRange;
-            if (near && shownTriggers.Add(i))
-                replies.Add(GamePackets.TriggerSpawn(WorldObjects.FirstTriggerKey + i, t.Env, t.At, t.Direction, now, t.Id));
-            else if (!near && shownTriggers.Remove(i))
-                replies.Add(GamePackets.EnvObjDespawn(WorldObjects.FirstTriggerKey + i));
-        }
-        return replies;
-    }
-
-    /// <summary>EnterVolumePC (trigger area, widened by the objective's value) and EnterSubZone objectives of active quests.</summary>
-    async Task<List<byte[]>> AreaQuestsAsync(Vector3d at, CancellationToken ct)
-    {
-        if (questLog is null || !questLog.OpenAreaObjectives().Any()) return [];
-        var triggers = WorldObjects.TriggersOn(worldMap);
-        bool Inside(QuestObjective o) => o.Target is { } name && (o.Type == "EnterSubZone"
-            ? Subzones.InSubzone(worldMap, name, at)
-            : triggers.Any(t => string.Equals(t.Name, name, StringComparison.OrdinalIgnoreCase) && t.Contains(at)));
-        var changed = questLog.Entered(Inside, level);
-        return changed.Count == 0 ? [] : await Stored(() => QuestChangesAsync(changed, ct));
-    }
-
-    /// <summary>
-    /// Using a quest object (0x3636 with its key): in range, 0x3638 started; after its InteractTime
-    /// (EnvObjData; 0 at once) 0x363a completed, 0x8d6d finish state, 0x363b available state, then the 0x3637 reply
-    /// (the official order of the player's own interaction, capture 20261013-144836 #10090-10093) and UseEnvObj quest
-    /// progress. Without 0x8d6d/0x363b the client kept the interaction (the gather result panel) open.
-    /// </summary>
-    async Task<List<byte[]>> UseObjectAsync(byte[] plain, long now, CancellationToken ct)
-    {
-        var objects = WorldObjects.ObjectsOn(worldMap);
-        // Entering a trigger actor's volume (the client reports it): started, completed, finish and available states, the
-        // reply (OBSERVED for every subspace trigger). The objectives themselves go by the position reports.
-        foreach (var key in EnvObjKeys(plain))
-            if (key is { } tk && tk - WorldObjects.FirstTriggerKey is var ti && ti >= 0 && ti < WorldObjects.TriggersOn(worldMap).Count)
-                return [GamePackets.InteractEnvObjStarted(tk, playerKey), GamePackets.InteractEnvObjCompleted(tk, playerKey),
-                    GamePackets.InteractEnvObjFinishState(tk), GamePackets.InteractEnvObjAvailableState(tk), GamePackets.InteractEnvObjReply(tk)];
-        int? index = null;
-        foreach (var key in EnvObjKeys(plain))
-            if (key is { } k && k - WorldObjects.FirstKey is var i && i >= 0 && i < objects.Count) { index = i; break; }
-        // No such object: refuse it, or the client waits for the reply with the player locked.
-        if (index is not { } found || Gathered(found, now) || usedObjects.Contains(found)) return [GamePackets.InteractEnvObjReply(EnvObjKeys(plain).FirstOrDefault(k => k is not null) ?? 0, 1)];
-        var o = objects[found];
-        var key2 = WorldObjects.FirstKey + found;
-        if (o.FlightRing) return FlyThroughRing(key2, now);
-        if (position is { } at && Math.Sqrt(Math.Pow(at.X - o.Position[0], 2) + Math.Pow(at.Y - o.Position[1], 2)) > o.InteractRange + WorldObjects.InteractSlack)
-            return [GamePackets.InteractEnvObjReply(key2, 1)];
-        var replies = new List<byte[]> { GamePackets.InteractEnvObjStarted(key2, playerKey) };
-        if (o.InteractTime > 0)
-        {
-            pendingUse = (found, key2, now + o.InteractTime);
-            return replies;
-        }
-        replies.AddRange(await CompleteUseAsync(found, ct, now));
-        return replies;
-    }
-
-    /// <summary>
-    /// Flying through a flight ring (EnvObjData Usage FlightRing; the client reports it as an interaction): the reply alone, the
-    /// two abnormals the official sent (18999040 for 3 s, 18999041 for 0.1 s; not in the extracted tables) and the flight points
-    /// refilled (OBSERVED capture 20261019-231752 #37632-#37639: 183000 back to 250000 within 2.6 s; ours at once).
-    /// </summary>
-    List<byte[]> FlyThroughRing(int key, long now)
-    {
-        var replies = new List<byte[]> { GamePackets.InteractEnvObjReply(key) };
-        var at = position ?? Vector3d.Zero;
-        replies.Add(PlayerPackets.AbnormalAdd(playerKey, [new AbnormalWire(++buffUid, FlightRingAbnormal, 3000, now + 3000, CasterKey: playerKey, RangeBase: at)]));
-        replies.Add(PlayerPackets.AbnormalAdd(playerKey, [new AbnormalWire(++buffUid, FlightRingAbnormal + 1, 100, now + 100, CasterKey: playerKey, RangeBase: at)]));
-        if (resources is { FpMax: > 0 } r && r.Fp < r.FpMax)
-        {
-            r.Fp = r.FpMax;
-            replies.Add(r.FpUpdate());
-        }
-        return replies;
-    }
-
-    public const int FlightRingAbnormal = 18999040;
-
-    async Task<List<byte[]>> CompleteUseAsync(int index, CancellationToken ct, long now = 0)
-    {
-        var objects = WorldObjects.ObjectsOn(worldMap);
-        if (index >= objects.Count) return [];
-        var key = WorldObjects.FirstKey + index;
-        var replies = new List<byte[]>
-        {
-            GamePackets.InteractEnvObjCompleted(key, playerKey), GamePackets.InteractEnvObjFinishState(key), GamePackets.InteractEnvObjAvailableState(key),
-            GamePackets.InteractEnvObjReply(key),
-        };
-        if (objects[index].Gather is not null) replies.AddRange(await CompleteGatherAsync(index, objects[index], now, ct));
-        if (questLog is not null)
-            replies.AddRange(await Stored(() => QuestChangesAsync(questLog.UsedObject(objects[index].Env, level), ct)));
-        var consumed = (CopyOwner ?? this).mapEventRuns.Any(r => r.WantsObject(objects[index].Name));
-        replies.AddRange(MapEventUsedObject(objects[index].Name, now));
-        if (consumed)
-        {
-            usedObjects.Add(index);
-            shownObjects.Remove(index);
-            replies.Add(GamePackets.EnvObjDespawn(key, 4, 3));
-        }
-        // A party dungeon's portal (EnvObjData Usage PartyDungeon): into the expedition.
-        if (objects[index].Portal is { Length: > 0 } portal) replies.AddRange(EnterPartyDungeon(portal, now));
-        // The expedition's reward cube (Usage OdEnergyCube): the final boss's reward, once per player per run.
-        if (objects[index].Cube) replies.AddRange(await CubeRewardAsync(null, now, ct));
-        replies.AddRange(Achieve("UseEnvObjSpawnerName", 1, e => e.Has(objects[index].Name), now));
-        replies.AddRange(Achieve("UseEnvObj", 1, e => e.Envs?.Contains(objects[index].Env) == true, now));
-        return replies;
-    }
-
-    async Task<List<byte[]>> OpenFogAsync(IReadOnlyList<int> groups, CancellationToken ct)
-    {
-        var added = groups.Where(g => !fog.Contains(g)).Distinct().Order().ToList();
-        if (Store is { } store && CharacterId is { } character && added.Count > 0)
-        {
-            var stored = await Stored(async () =>
-            {
-                var opened = await store.OpenMapFogAsync(character, added, ct);
-                return opened.Select(g => BitConverter.GetBytes(g)).ToList();
-            });
-            added = stored.Select(b => BitConverter.ToInt32(b)).ToList();
-        }
-        fog.UnionWith(added);
-        return [.. added.Select(GamePackets.AddSubzoneGroup), .. added.Count > 0 ? Achieve("EnterSubzone", added.Count) : []];
-    }
-
-    /// <summary>GM RevealMap: every fog group uncovered (stored), sent as the full list.</summary>
-    public async Task<List<byte[]>> RevealMapAsync(CancellationToken ct)
-    {
-        if (resources is null) throw new InvalidOperationException("Not in the world.");
-        await OpenFogAsync(Subzones.AllGroups, ct);
-        return [GamePackets.OpenSubzoneGroups(fog.ToList())];
-    }
-
-    // ---------- Kibelisks (teleport artifacts) ----------
-
-    /// <summary>TeleportArtifact ids the character has bound to (stored; per connection on development logins).</summary>
-    readonly List<int> engraved = [];
-    public IReadOnlyList<int> Engraved => engraved;
-
-    /// <summary>World entry: the engraved list (0x9232) and the map's Kibelisks (0x3634).</summary>
-    List<byte[]> KibeliskSpawns(int mapId, long now)
-    {
-        var replies = new List<byte[]> { GamePackets.EngravedTeleportArtifacts(engraved) };
-        var placed = Kibelisks.OnMap(mapId);
-        for (var i = 0; i < placed.Count; i++)
-        {
-            var k = placed[i];
-            replies.Add(GamePackets.EnvObjSpawn(Kibelisks.FirstKey + i, k.EnvObj, new Vector3d(k.Position[0], k.Position[1], k.Position[2]), k.Yaw, now, k.UniqueKey, k.Relationship));
-        }
-        return replies;
-    }
-
-    /// <summary>
-    /// Candidate object keys in an InteractEnvObj_RQ. The live client (2026-10-15) sends a 01 byte, then
-    /// the varint key, i64 0 and the EnvObj id; the earlier guesses (key right after the opcode) are kept after it.
-    /// </summary>
-    static int?[] EnvObjKeys(byte[] plain) =>
-        [plain.Length > 3 && plain[2] == 1 ? QuestKey(plain, 3) : null, QuestKey(plain, 2), plain.Length >= 6 ? BitConverter.ToInt32(plain, 2) : null];
-
-    /// <summary>The raw body of the last InteractEnvObj_RQ (research log).</summary>
-    public byte[]? LastEnvObjRequest { get; private set; }
-
-    /// <summary>
-    /// Binding to a Kibelisk (official order): 0x3638 started, 0x363a completed, 0x3637 reply, then
-    /// 0x9233 when newly bound and the quest progress (EngraveTeleportArtifact). The object is the
-    /// one whose key the request carries (varint or i32 after the opcode).
-    /// </summary>
-    async Task<List<byte[]>> InteractEnvObjAsync(byte[] plain, long now, CancellationToken ct)
-    {
-        LastEnvObjRequest = plain;
-        var placed = Kibelisks.OnMap(worldMap);
-        int? index = null;
-        foreach (var key in EnvObjKeys(plain))
-            if (key is { } k && k - Kibelisks.FirstKey is var i && i >= 0 && i < placed.Count) { index = i; break; }
-        if (index is not { } found) return await UseObjectAsync(plain, now, ct);
-        var kibelisk = placed[found];
-        var objectKey = Kibelisks.FirstKey + found;
-        var replies = new List<byte[]>
-        {
-            GamePackets.InteractEnvObjStarted(objectKey, playerKey), GamePackets.InteractEnvObjCompleted(objectKey, playerKey), GamePackets.InteractEnvObjReply(objectKey),
-        };
-        var added = !engraved.Contains(kibelisk.ArtifactId);
-        if (added && Store is { } store && CharacterId is { } character)
-            added = (await Stored(async () => await store.EngraveTeleportArtifactAsync(character, kibelisk.ArtifactId, ct) ? [Array.Empty<byte>()] : [])).Count == 1;
-        if (added)
-        {
-            engraved.Add(kibelisk.ArtifactId);
-            replies.Add(GamePackets.EngravedTeleportArtifactAdd(kibelisk.ArtifactId));
-            replies.AddRange(Achieve("EngraveTeleportArtifact", 1, e => e.Has(kibelisk.Artifact)));
-        }
-        if (questLog is not null)
-            replies.AddRange(await Stored(() => QuestChangesAsync(questLog.Engraved(kibelisk.Artifact, level), ct)));
-        return replies;
-    }
-
-    /// <summary>QuestStepNpcConversation_RQ: finds the quest by uid (after an optional kind byte) and counts the talk.</summary>
-    /// <summary>The first i32 in the body (any offset after the opcode) that satisfies the test; the canonical offset 2 wins when it does.</summary>
-    static int? FirstInt32(byte[] plain, Func<int, bool> fits)
-    {
-        for (var offset = 2; offset + 4 <= plain.Length; offset++)
-            if (BitConverter.ToInt32(plain, offset) is var value && fits(value)) return value;
-        return null;
-    }
-
-    async Task<List<byte[]>> QuestStepTalkAsync(byte[] plain, long now, CancellationToken ct)
-    {
-        // Kind 2: a map event's talk objective {kind, map event id, npc key, objective index} (reply OBSERVED: 02 0000 id key index).
-        // The request is unrecorded: when the fixed offsets do not name a running event and an NPC here, the first i32s that do are taken.
-        if (plain.Length >= 15 && (plain[2] == 2 || plain[3] == 2))
-        {
-            int eventId = BitConverter.ToInt32(plain, 3), talkKey = BitConverter.ToInt32(plain, 7), index = BitConverter.ToInt32(plain, 11);
-            var runs = (CopyOwner ?? this).mapEventRuns;
-            if (!runs.Any(r => r.Id == eventId) || targets?.ContainsKey(talkKey) != true)
-            {
-                eventId = FirstInt32(plain, id => runs.Any(r => r.Id == id)) ?? eventId;
-                talkKey = FirstInt32(plain, key => key > 0 && targets?.ContainsKey(key) == true) ?? talkKey;
-                index = plain[^4..] is var tail && BitConverter.ToInt32(tail, 0) is >= 0 and < 6 and var last ? last : 0;
-            }
-            return [GamePackets.QuestStepTalkReply(2, eventId, talkKey, index), .. MapEventTalked(talkKey, index, close: false, now)];
-        }
-        if (questLog is null) return [];
-        foreach (var offset in new[] { 2, 3 })
-        {
-            if (plain.Length < offset + 8 || questLog.ByUid(BitConverter.ToInt32(plain, offset)) is not { } record) continue;
-            var npcKey = BitConverter.ToInt32(plain, offset + 4);
-            var npcId = targets?.GetValueOrDefault(npcKey)?.NpcId ?? 0;
-            var replies = new List<byte[]> { GamePackets.QuestStepTalkReply(1, (int)record.Uid, npcKey) };
-            replies.AddRange(await Stored(() => QuestChangesAsync(questLog.Talked(npcId, level).Where(r => r.Code == record.Code), ct)));
-            return replies;
-        }
-        return [];
-    }
-
-    /// <summary>
-    /// The client finished an objective by itself (cutscene talk, note, fake item): kind 1 names a quest uid, kind 2 a
-    /// map event. The official reply (0x9231) came before the quest's progress (0x8d10).
-    /// </summary>
-    async Task<List<byte[]>> ClientObjectiveAsync(byte kind, int id, int index, long now, CancellationToken ct)
-    {
-        if (kind == 2) return MapEventClientObjective(id, index, now);
-        if (questLog?.ClientCompleted(id, index, level) is not { } record) return [GamePackets.ClientObjectiveReply(kind, id, index, 1)];
-        var replies = new List<byte[]> { GamePackets.ClientObjectiveReply(kind, id, index) };
-        replies.AddRange(await Stored(() => QuestChangesAsync([record], ct)));
-        return replies;
-    }
-
-    async Task<List<byte[]>> QuestAcceptAsync(int questId, int npcKey, CancellationToken ct)
-    {
-        if (questLog is null || !questLog.Book.ById.TryGetValue(questId, out var code) || !questLog.CanAccept(code, level))
-            return [GamePackets.QuestAcceptReply(questId, 0, 1)];
-        return await Stored(async () => [GamePackets.QuestAdd(Wire(await SaveQuestAsync(QuestLog.New(code, questLog.Book.Find(code)!), ct)))]);
-    }
-
-    async Task<List<byte[]>> QuestGiveUpAsync(int uid, CancellationToken ct)
-    {
-        if (questLog?.ByUid(uid) is not { Status: QuestLog.Incomplete } record) return [GamePackets.QuestGiveUpReply(uid, 1)];
-        return await Stored(async () =>
-        {
-            if (Store is { } store && CharacterId is { } character) await store.RemoveQuestAsync(character, record.Code, ct);
-            questLog.Remove(record.Code);
-            return [GamePackets.QuestGiveUpReply(uid), GamePackets.QuestRemove([uid], 5)];
-        });
-    }
-
-    /// <summary>
-    /// Pays a Complete quest (official order): experience (0x8d07), the items and Kina (0x561b,
-    /// reason 24), the reply (0x8d0f), contents it unlocks (0xe258), then its follow-up quest is
-    /// added (0x8d11). Development logins store nothing and pay nothing.
-    /// </summary>
-    async Task<List<byte[]>> QuestRewardAsync(int uid, CancellationToken ct)
-    {
-        if (questLog?.ByUid(uid) is not { Status: QuestLog.Complete } record || questLog.Book.Find(record.Code) is not { } quest)
-            return [GamePackets.QuestTakeRewardReply(uid, 1)];
-        return await Stored(async () =>
-        {
-            var unlockedBefore = QuestUnlockTypes().ToHashSet();
-            var rewards = quest.Rewards ?? new QuestRewards();
-            var items = (rewards.Items ?? []).Where(i => i.Length == 2).Select(i => ((int)i[0], i[1])).ToList();
-            if (rewards.Kina > 0) items.Insert(0, (KinaItemId, rewards.Kina));
-            var replies = new List<byte[]>();
-            if (Store is { } store && CharacterId is { } character)
-            {
-                if (await store.RewardQuestAsync(character, record.Code, rewards.Exp, items, ct) is not long total)
-                    return [GamePackets.QuestTakeRewardReply(uid, 1)];
-                // The store added the reward to the level's experience; level-ups follow (ExpUpdate, LevelUpdate, ...).
-                replies.AddRange(await GainExperienceAsync(total, rewards.Exp, ExpReasonQuest, ct));
-                replies.AddRange(await InventoryChangesAsync(ct));
-            }
-            if (AscensionQuests.Contains(record.Code) && (selected?.Ascension ?? 1) < 2
-                && (Store is not { } ascending || CharacterId is not { } ascended || await ascending.AscendAsync(ascended, 2, ct)))
-                replies.AddRange(Ascend(2));
-            questLog.Set(record with { Status = QuestLog.Rewarded });
-            replies.Add(GamePackets.QuestTakeRewardReply(uid));
-            replies.AddRange(AchieveQuest(record.Code, quest.Type));
-            var unlocked = QuestUnlockTypes().Where(t => !unlockedBefore.Contains(t)).ToArray();
-            if (unlocked.Length > 0) replies.Add(GamePackets.ContentsUnlockUpdate(unlocked));
-            if (quest.Next is { } next && questLog.CanAccept(next, level))
-                replies.Add(GamePackets.QuestAdd(Wire(await SaveQuestAsync(QuestLog.New(next, questLog.Book.Find(next)!), ct))));
-            // Quests waiting on this one (ClearQuest, ClearQuestType objectives) move on.
-            replies.AddRange(await QuestChangesAsync(questLog.Recheck(level), ct));
-            return replies;
-        });
-    }
-
-    /// <summary>
-    /// The quest whose turn-in ascends the character. OBSERVED in the 2026-10-19 recording at HQ1101020's reward (Ashar): the
-    /// flight gauge's maximum (0x8d00 type 13, 250,000), WingChange 0x5676 with the race's default wing, the stats, then the
-    /// Subspace's event and quests; the gauge then filled from 40,000 in 40,000 steps (a self skill, 5002). OURS: filled at once,
-    /// the wing list resent (0x5672; the official 0x5673/0xe295 notices are not decoded). The Dark chain's counterpart is
-    /// HQ2101050 (same Ashar turn-in, then "Spread Your Wings" HQ2101060 in the Subspace, as HQ1101021); only the Light one
-    /// ascended, so an Asmodian never got wings.
-    /// </summary>
-    public static readonly IReadOnlySet<string> AscensionQuests = new HashSet<string> { "HQ1101020", "HQ2101050" };
-
-    List<byte[]> Ascend(int grade)
-    {
-        if (selected is { } state) selected = state with { Ascension = grade };
-        wingId = GamePackets.DefaultWing(profileRace);
-        if (resources is null) return [];
-        resources.FpMax = resources.Fp = FpMax;
-        return [GamePackets.CharPoints(playerKey, [(CharPoint.MaxFp, resources.FpMax), (CharPoint.Fp, resources.Fp)]),
-                GamePackets.WingChangeNotice(playerKey, wingId, false), GamePackets.WingList(OwnedWings()), GamePackets.GlideCooltime(playerKey)];
-    }
-
-    /// <summary>Builder QuestAdd / QuestComplete / QuestCompleteStep / QuestDelete for a quest code or numeric id.</summary>
-    public async Task<(string Message, List<byte[]> Packets)> QuestCommandAsync(string command, string quest, CancellationToken ct)
-    {
-        if (questLog is null) return ("Quests need a character in the world.", []);
-        var code = questLog.Book.Find(quest) is not null ? quest
-            : int.TryParse(quest, out var id) && questLog.Book.ById.TryGetValue(id, out var byId) ? byId : null;
-        if (code is null) return ($"No quest {quest}.", []);
-        var title = questLog.Book.Find(code)!.Title ?? code;
-        switch (command)
-        {
-            case "QuestAdd":
-                if (questLog.Get(code) is not null) return ($"{code} is already in the journal.", []);
-                var added = await SaveQuestAsync(QuestLog.New(code, questLog.Book.Find(code)!), ct);
-                return ($"Added {code} \"{title}\".", [GamePackets.QuestAdd(Wire(added))]);
-            case "QuestCompleteStep":
-                return questLog.CompleteStep(code, level) is { } stepped
-                    ? ($"{code}: step done.", await QuestChangesAsync([stepped], ct)) : ($"{code} is not in progress.", []);
-            case "QuestComplete":
-                return questLog.CompleteAll(code) is { } done
-                    ? ($"{code} complete; take the reward at the NPC or with QuestReward.", await QuestChangesAsync([done], ct)) : ($"{code} is not in progress.", []);
-            case "QuestReward":
-                return questLog.Get(code) is { Status: QuestLog.Complete } complete
-                    ? ($"{code} rewarded.", await QuestRewardAsync((int)complete.Uid, ct)) : ($"{code} is not complete.", []);
-            case "QuestDelete":
-                if (questLog.Get(code) is not { } existing) return ($"{code} is not in the journal.", []);
-                if (Store is { } store && CharacterId is { } character) await store.RemoveQuestAsync(character, code, ct);
-                questLog.Remove(code);
-                return ($"Removed {code}.", [GamePackets.QuestRemove([(int)existing.Uid], 1)]);
-        }
-        return ("Unknown quest command.", []);
-    }
 
     // ---------- Sprint (Shift): 0x3704 on / 0x3705 off; SP drains while it lasts ----------
 
@@ -1098,6 +711,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         if (resources is null) return [];
         sprinting = resources.Sp > 0;
         sprintTickAt = now + SprintTickMs;
+        ResetFpTick(now);
         sprintOnAt = now;
         worldPlayer?.Map?.Broadcast(worldPlayer, [PlayerPackets.SprintOn(playerKey)]);
         // The client follows the sprint start with its own CombatDodge request (live 2026-10-20, 4 ms later), which CastReplies
@@ -1161,10 +775,13 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
     /// <summary>The dodge abnormal on this player (0x382a), scheduled for its removal with the skill's end.</summary>
     byte[] DodgeAbnormalAdd(long now, int skill, int action, long endAt, bool end = true)
     {
-        var uid = ++buffUid;
-        dodgeAbnormalOff = (uid, skill, action, endAt, end);
-        return PlayerPackets.AbnormalAdd(playerKey, [new AbnormalWire(uid, DodgeAbnormal, DodgeAbnormalMs, now + DodgeAbnormalMs,
-            CasterKey: playerKey, Level: 1, RangeBase: position ?? Vector3d.Zero)]);
+        dodgeInvulnUntil = now + DodgeAbnormalMs;
+        var replies = new List<byte[]>();
+        var buff = AddBuff(DodgeAbnormal, DodgeAbnormalMs, skill, now, replies, path: SelfAbnormalPath.Dodge);
+        dodgeAbnormalOff = (buff?.Uid ?? 0, skill, action, endAt, end);
+        return replies.Count > 0 ? replies[0]
+            : PlayerPackets.AbnormalAdd(playerKey, [new AbnormalWire(++buffUid, DodgeAbnormal, DodgeAbnormalMs, now + DodgeAbnormalMs,
+                CasterKey: playerKey, Level: 1, RangeBase: position ?? Vector3d.Zero)]);
     }
 
     /// <summary>
@@ -1177,10 +794,10 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         if (dodgeEffectAt is { } fx && now >= fx.At && resources is not null)
         {
             dodgeEffectAt = null;
-            var effect = GamePackets.SkillEffect(playerKey, playerKey, CombatDodge, fx.Action, CombatDodge * 100 + DodgeEffectOffset);
+            var effect = GamePackets.SkillEffect(playerKey, playerKey, ClassCombatDodge, fx.Action, ClassCombatDodge * 100 + DodgeEffectOffset);
             worldPlayer?.Map?.Broadcast(worldPlayer, [effect]);
             replies.Add(effect);
-            AddBuff(DodgeAfterAbnormal, DodgeAfterMs, CombatDodge, now, replies);
+            AddBuff(DodgeAfterAbnormal, DodgeAfterMs, ClassCombatDodge, now, replies, path: SelfAbnormalPath.Dodge);
             replies.Add(GamePackets.CharPoints(playerKey, [(CharPoint.Sp, resources.Sp)]));
         }
         if (dodgeAbnormalOff is { } off && now >= off.At)
@@ -1188,7 +805,11 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             dodgeAbnormalOff = null;
             var ended = new List<byte[]>();
             if (off.End) ended.Add(GamePackets.SkillEnd(playerKey, off.Skill, off.Action));
-            if (off.Uid != 0) ended.Add(PlayerPackets.AbnormalRemove(playerKey, [(off.Uid, DodgeAbnormalOffReason)]));
+            if (off.Uid != 0)
+            {
+                if (buffs.FirstOrDefault(b => b.Uid == off.Uid) is { } dodgeBuff) ended.AddRange(RemoveBuffs([dodgeBuff], DodgeAbnormalOffReason));
+                else ended.Add(PlayerPackets.AbnormalRemove(playerKey, [(off.Uid, DodgeAbnormalOffReason)]));
+            }
             worldPlayer?.Map?.Broadcast(worldPlayer, ended);
             replies.AddRange(ended);
         }
@@ -1211,6 +832,39 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         replies.Add(GamePackets.SprintOffReply(playerKey));
         return replies;
     }
+
+    void ResetFpTick(long now) => fpTickAt = now + SprintTickMs;
+
+    /// <summary>Flight FP drain every 100 ms while flying or gliding (OBSERVED: 1000 / 1500 / 750 per tick).</summary>
+    List<byte[]> FlightFpTick(long now)
+    {
+        if (resources is null || dead || resources.FpMax <= 0 || air is not (AirState.Fly or AirState.Glide)) return [];
+        if (fpTickAt <= 0) ResetFpTick(now);
+        var replies = new List<byte[]>();
+        var drained = false;
+        for (var ticks = 0; ticks < 200 && now >= fpTickAt; ticks++)
+        {
+            fpTickAt += SprintTickMs;
+            if (invincible.Sp) continue;
+            var drain = air == AirState.Glide ? GlideDrainPerTick : flySprint ? FlySprintDrainPerTick : FlyDrainPerTick;
+            resources.Fp = Math.Max(0, resources.Fp - drain);
+            drained = true;
+            if (resources.Fp == 0) break;
+        }
+        if (drained) replies.AddRange(FpWireUpdates());
+        if (resources.Fp == 0) replies.AddRange(EndFlightFromEmptyFp());
+        return replies;
+    }
+
+    /// <summary>0x8d00 FP + MaxFP and the flight gauge stats (EStat FlyCost 247 current, FPMax 298).</summary>
+    List<byte[]> FpWireUpdates()
+    {
+        if (resources is null || resources.FpMax <= 0) return [];
+        return [resources.FpUpdate(), FpStatsUpdate()];
+    }
+
+    /// <summary>Partial 0x364a with FlyCost (247) and FPMax (298) for the arc gauge.</summary>
+    byte[] FpStatsUpdate() => GamePackets.CharStatsUpdate(playerKey, [(247, resources!.Fp), (298, resources.FpMax)], resources.HpMax);
 
     /// <summary>Sprint drain on the 100 ms ticks; at 0 SP the server ends the sprint (0x3722 alone, official).</summary>
     List<byte[]> SprintTick(long now)
@@ -1246,13 +900,26 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
     /// Stored items on the wire: equipped (container 11, slot = equip slot) first, then the bag
     /// (container 1) in creation order on the free slots. Equipment (templates below 500000000,
     /// or anything equipped) carries an equip detail with its Item.dat ItemLevel.
+    /// Unassigned rows keep the slot the client already shows them in (<paramref name="shown"/>), then a
+    /// hinted slot (<paramref name="hints"/>), so one move changes only the moved items, as the official.
     /// </summary>
-    static List<InventoryItem> Layout(IReadOnlyList<ItemState> items, long owner = 0, GameData? data = null)
+    internal static List<InventoryItem> Layout(IReadOnlyList<ItemState> items, long owner = 0, GameData? data = null,
+        IReadOnlyDictionary<long, InventoryItem>? shown = null, IReadOnlyDictionary<long, int>? hints = null)
     {
         var result = new List<InventoryItem>();
         // Free slots are laid out per container: the bag (1) and the warehouse (2, location 'storage').
         var used = new Dictionary<string, HashSet<int>> { ["bag"] = [], ["storage"] = [] };
         foreach (var i in items.Where(i => i.Location is "bag" or "storage" && i.Slot is not null)) used[i.Location].Add(i.Slot!.Value);
+        var kept = new Dictionary<long, int>();
+        foreach (var i in items.Where(i => i.Location is "bag" or "storage" && i.Slot is null))
+        {
+            var container = i.Location == "storage" ? InventoryItem.Storage : InventoryItem.Bag;
+            if (shown?.GetValueOrDefault(WireKey(i)) is { } was && was.Container == container && used[i.Location].Add(was.Slot))
+                kept[WireKey(i)] = was.Slot;
+        }
+        foreach (var i in items.Where(i => i.Location is "bag" or "storage" && i.Slot is null && !kept.ContainsKey(WireKey(i))))
+            if (hints?.GetValueOrDefault(WireKey(i), -1) is >= 0 and var hint && used[i.Location].Add(hint))
+                kept[WireKey(i)] = hint;
         var next = new Dictionary<string, int> { ["bag"] = 0, ["storage"] = 0 };
         foreach (var item in items.Where(i => i.Location is "bag" or "equipment" or "storage")
                      .OrderBy(i => i.Location == "equipment" ? 0 : 1).ThenBy(i => i.Slot ?? int.MaxValue).ThenBy(i => i.WireId))
@@ -1261,17 +928,21 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             int slot;
             if (equipped) slot = item.Slot ?? 1;
             else if (item.Slot is { } fixedSlot) slot = fixedSlot;
+            else if (kept.TryGetValue(WireKey(item), out var keptSlot)) slot = keptSlot;
             else
             {
                 while (used[item.Location].Contains(next[item.Location])) next[item.Location]++;
                 used[item.Location].Add(slot = next[item.Location]);
             }
             var key = item.WireId > 0 ? item.WireId : BitConverter.ToInt64(item.InstanceId.ToByteArray(), 0) & long.MaxValue;
-            var equipment = equipped || item.TemplateId < 500_000_000;
+            var equipment = equipped || data?.Item(item.TemplateId) is not null;
             var container = equipped ? InventoryItem.Equipped : item.Location == "storage" ? InventoryItem.Storage : InventoryItem.Bag;
             result.Add(new InventoryItem(key, item.TemplateId, item.Quantity, container, slot,
                 equipment ? new EquipDetail((data?.ItemLevel(item.TemplateId) ?? 1) + Enchants.Effect(item.TemplateId, EnchantOf(item)).ItemLevel, equipped ? (byte)slot : (byte)0,
-                    (byte)EnchantOf(item), SoulBindCount(item) > 0 ? owner : 0, SoulBindCount(item)) : null));
+                    (byte)EnchantOf(item), SoulBindCount(item) > 0 ? owner : 0, SoulBindCount(item),
+                    (byte)EnchantOf(item, "surpass_enchant"), EnchantOf(item, "enchant_bonus"), EnchantOf(item, "surpass_enchant_bonus"), GodstonesOf(item),
+                    RolledWireStats(item.RolledStats),
+                    (byte)Math.Clamp(SkinExtractionUsed(item), 0, 255)) : null));
         }
         return result;
     }
@@ -1306,12 +977,15 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
 
     static long WireKey(ItemState item) => item.WireId > 0 ? item.WireId : BitConverter.ToInt64(item.InstanceId.ToByteArray(), 0) & long.MaxValue;
 
-    async Task<List<InventoryItem>> LoadInventoryAsync(INativeCharacterStore store, Guid character, CancellationToken ct)
+    async Task<List<InventoryItem>> LoadInventoryAsync(INativeCharacterStore store, Guid character, CancellationToken ct, IReadOnlyDictionary<long, int>? hints = null)
     {
         var rows = await store.InventoryAsync(character, ct);
         storedItems.Clear();
         foreach (var row in rows) storedItems[WireKey(row)] = row;
-        return Layout(rows, selected?.WireId ?? 0, data);
+        await EnsureRolledStatsAsync(store, character, ct);
+        var result = Layout(storedItems.Values.ToList(), selected?.WireId ?? 0, data, inventory, hints);
+        await RefreshAccountQunaBalanceAsync(ct);
+        return result;
     }
 
     /// <summary>The opcode of the last equip/unequip request recognised by shape (research log).</summary>
@@ -1343,7 +1017,12 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         if (moved.Count == 1)
         {
             var before = VisualItems();
-            replies.AddRange(await InventoryChangesAsync(ct));
+            // A swap puts the old piece in the bag slot the new one left.
+            Dictionary<long, int>? hints = null;
+            if (equip && inventory.GetValueOrDefault(key) is { Container: InventoryItem.Bag } from
+                && inventory.Values.FirstOrDefault(i => i.Container == InventoryItem.Equipped && i.Slot == slot && i.Key != key) is { } old)
+                hints = new() { [old.Key] = from.Slot };
+            replies.AddRange(await InventoryChangesAsync(ct, 24, 0, hints));
             // The new weapon decides weapon skills and damage; gear changes the stats.
             equippedWeapon = WeaponFromInventory();
             replies.AddRange(RefreshStats());
@@ -1367,10 +1046,9 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             {
                 var items = await LoadInventoryAsync(store, character, ct);
                 Remember(items);
-                // The weapon in equip slot 1 decides weapon skills (none equipped: no weapon).
                 equippedWeapon = WeaponFromInventory();
                 var level = EquipItemLevel();
-                return [GamePackets.ItemDepotList(items), GamePackets.ItemEquipLevelChange(level, level)];
+                return [.. InventoryDepotSyncPackets(), QunaRefreshNow()];
             });
         var weapon = data.StarterWeapon(Profile());
         if (weapon is null) return [];
@@ -1390,10 +1068,11 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
     /// The stored items against what the client has: adds, updates and removals (EItemModificationType
     /// 0/1/2) with the given EIncreaseReason / EDecreaseReason (24 kQuestReward was the only one before).
     /// </summary>
-    async Task<List<byte[]>> InventoryChangesAsync(CancellationToken ct, byte increase, byte decrease)
+    async Task<List<byte[]>> InventoryChangesAsync(CancellationToken ct, byte increase, byte decrease, IReadOnlyDictionary<long, int>? hints = null)
     {
         if (Store is not { } store || CharacterId is not { } character) return [];
-        var items = await LoadInventoryAsync(store, character, ct);
+        var beforeQuna = QunaBalance();
+        var items = await LoadInventoryAsync(store, character, ct, hints);
         var changes = new List<ItemModification>();
         var gained = new List<(int ItemId, long Count)>();
         foreach (var item in items)
@@ -1410,7 +1089,14 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         foreach (var gone in inventory.Values.Where(i => !kept.Contains(i.Key)))
             changes.Add(new ItemModification(2, gone, Decrease: decrease));
         Remember(items);
-        return changes.Count == 0 ? acquired : [GamePackets.ItemModificationList(changes), .. acquired];
+        await RefreshAccountQunaBalanceAsync(ct);
+        var quest = await SyncQuestCollectItemsAsync(ct);
+        var qunaRefresh = AppendQunaRefreshIfNeeded(beforeQuna);
+        if (changes.Count == 0)
+            return qunaRefresh.Count == 0
+                ? (quest.Count == 0 ? acquired : [.. acquired, .. quest])
+                : [.. acquired, .. quest, .. qunaRefresh];
+        return [GamePackets.ItemModificationList(changes), .. acquired, .. quest, .. qunaRefresh];
     }
 
     List<byte[]> UnlockUpdateOnce()
@@ -1433,15 +1119,21 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         if (Store is not null)
             return await Stored(async () =>
             {
+                await EnsureExtendedCharacterSlotsAsync(ct);
                 var characters = await LobbyCharactersAsync(ct);
                 var races = characters.Select(c => c.Race).Distinct().ToList();
                 accountRole = await StaffRoleAsync(Store.AccountId, ct);
                 // _server_race: the picked world's race (each world holds one race, as an official server), else the race
                 // of the account's characters (0 when none, CANDIDATE "not chosen"; a new account then saw its own race's
                 // text scrambled).
-                return [NativeFraming.CompressedEnvelope(GamePackets.LoginCharacters(characters,
-                    $"{loginIdentity.AccountSid}:{loginIdentity.Guid}", Store.WorldId.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                    GamePackets.CommServerKey, now, serverRace: worldRace ?? (races.Count == 1 ? races[0] : 0), isAdmin: accountRole is not null && lobbyStaff))];
+                return
+                [
+                    NativeFraming.CompressedEnvelope(GamePackets.LoginCharacters(characters,
+                        $"{loginIdentity.AccountSid}:{loginIdentity.Guid}", Store.WorldId.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                        GamePackets.CommServerKey, now, serverRace: worldRace ?? (races.Count == 1 ? races[0] : 0), isAdmin: LobbyAdmin,
+                        extendedSlotCount: ExtendedCharacterSlotCount)),
+                    GamePackets.ExtendedCharacterSlot(ExtendedCharacterSlotCount),
+                ];
             });
         // A '$' placeholder with the spawn position loads by itself; the origin record leaves
         // the client on the create screen.
@@ -1472,10 +1164,15 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         var deletions = await Store!.CharacterDeletionsAsync(ct);
         var renames = await Store!.LastRenamesAsync(ct);
         lobbyStaff = false;
+        var lobbyStates = new List<CharacterState>();
         foreach (var state in await Store!.LobbyAsync(ct))
         {
             if (state.Staff) lobbyStaff = true;
-            if (worldRace is { } race && state.Race != race) continue;   // a world lists only its own race's characters
+            if (worldRace is { } race && state.Race != race) continue;
+            lobbyStates.Add(state);
+        }
+        foreach (var (state, slotNo) in LobbySlotLayout(lobbyStates, LobbySlotCapacity))
+        {
             var profile = StoredProfile(state);
             // The stored equipment as others see it (a new character wears its starter weapon,
             // as in the official records of level-one starter characters).
@@ -1490,19 +1187,35 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
                 Experience = state.Progress.Experience, EquipItemLevel = worn.Sum(i => data.ItemLevel(i.TemplateId)), ZoneId = 3009,
                 Equips = equips,
                 Position = StoredCharacters.Position(state), VoiceType = state.VoiceType,
-                SlotNo = state.LobbySlot ?? throw new ArgumentException("Character has no assigned lobby slot"),
+                SlotNo = slotNo,
                 CustomizingData = state.Appearance,
+                LogoutTime = state.LobbyLogoutWireMs, RegTime = state.RegisteredUnixMs,
                 PendingDeleteTime = deletions.TryGetValue(state.Summary.CharacterId, out var deleteAt) ? deleteAt.ToUnixTimeMilliseconds() : 0,
                 LastNicknameChangeTime = renames.TryGetValue(state.Summary.CharacterId, out var renamedAt) ? renamedAt.ToUnixTimeMilliseconds() : 0,
             });
         }
-        return records;
+        // Stable list order (creation / wire id): slot moves update _slot_no only. Re-sorting by slot cleared pedestal
+        // models on the client while labels still tracked SlotNo (live 2026-10-31 after 0xe336).
+        return records.OrderBy(c => c.RegTime).ThenBy(c => c.Key).ToList();
     }
 
     StarterProfile StoredProfile(CharacterState state)
     {
         var profile = data.Profile(state.CreationId, state.Gender);
         return profile is not null && profile.Race == state.Race ? profile : throw new ArgumentException("Persisted character profile is unsupported");
+    }
+
+    /// <summary>Short label for persistence failures (native listener logs these on store refusals).</summary>
+    internal static string PersistenceErrorLabel(Exception error)
+    {
+        if (error is DbException && error.GetType().Name == "PostgresException")
+        {
+            var sqlState = error.GetType().GetProperty("SqlState")?.GetValue(error) as string;
+            var messageText = error.GetType().GetProperty("MessageText")?.GetValue(error) as string;
+            if (sqlState is not null)
+                return $"PostgresException {sqlState} {messageText ?? error.Message}";
+        }
+        return error.GetType().Name;
     }
 
     /// <summary>A storage-backed handler; failures send nothing rather than a guess.</summary>
@@ -1514,9 +1227,9 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         }
         // A database error (constraint, connection) refuses the request instead of ending the connection.
         catch (Exception error) when (error is ArgumentException or ProtocolException or InvalidOperationException or GameplayException
-                                          or System.Text.Json.JsonException or KeyNotFoundException or System.Data.Common.DbException)
+                                          or System.Text.Json.JsonException or KeyNotFoundException or DbException)
         {
-            PersistenceErrors.Add(error.GetType().Name);
+            PersistenceErrors.Add(PersistenceErrorLabel(error));
             return [];
         }
     }
@@ -1543,7 +1256,8 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             if (profile is null) return GamePackets.CreateInvalidPcData;
             var lobby = await store.LobbyAsync(ct);
             if (OtherRace(lobby, profile.Race)) return GamePackets.CreateInvalidServerRace;
-            if (lobby.Any(s => s.LobbySlot == refused.SlotNo)) return GamePackets.CreateInvalidSlot;
+            await EnsureExtendedCharacterSlotsAsync(ct);
+            if (refused.SlotNo >= LobbySlotCapacity || lobby.Any(s => s.LobbySlot == refused.SlotNo)) return GamePackets.CreateInvalidSlot;
             return GamePackets.CreateErrorInternal;
         }
         catch (Exception error) when (error is ArgumentException or InvalidOperationException or GameplayException or System.Data.Common.DbException)
@@ -1562,6 +1276,8 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
                 var request = CreateRequest(plain, strict: true) ?? throw new ArgumentException("Unsupported character creation layout");
                 var profile = data.Profile(request.CreationId, request.Gender) ?? throw new ArgumentException("Unknown creation profile");
                 if (OtherRace(await store.LobbyAsync(ct), profile.Race)) throw new ArgumentException("The other race on this server");
+                await EnsureExtendedCharacterSlotsAsync(ct);
+                if (request.SlotNo >= LobbySlotCapacity) throw new ArgumentException("Lobby slot locked");
                 var requestId = StoredCharacters.Uuid5(store.AccountId, "native-create-v1:" + Convert.ToHexStringLower(SHA256.HashData(plain)));
                 var state = await store.CreateAsync(new CreatePlayer(requestId, $"dev-v1-{request.CreationId}:{request.Gender}", request.Name,
                     request.CustomizingData, VoiceType: request.VoiceType, LobbySlot: request.SlotNo), ct);
@@ -1616,18 +1332,27 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
                 registeredWings.Clear();
                 registeredWings.UnionWith(await store.WingsAsync(state.Summary.CharacterId, ct));
                 var extras = await store.ExtrasAsync(state.Summary.CharacterId, ct);
-                LoadSkillLevels(await store.SkillsAsync(state.Summary.CharacterId, ct));
                 LoadAchievements(await store.AchievementsAsync(state.Summary.CharacterId, ct), await store.GroupRewardsTakenAsync(state.Summary.CharacterId, ct), now);
                 LoadCollections(await store.CollectionsAsync(state.Summary.CharacterId, ct));
                 LoadBossChallenges(await store.BossChallengesAsync(state.Summary.CharacterId, ct));
+                LoadExpeditionTickets(await store.ExpeditionTicketsAsync(state.Summary.CharacterId, ct));
+                LoadRewardLimits(await store.RewardLimitsAsync(state.Summary.CharacterId, ct));
+                LoadDungeonCooltimes(await store.DungeonCooltimesAsync(state.Summary.CharacterId, ct));
+                LoadAbyss(await store.AbyssAsync(state.Summary.CharacterId, ct), now);
+                await EnsureAirspaceLoadedAsync(ct);
+                await EnsureContentResetsLoadedAsync(ct);
                 LoadTitles(extras);
                 LoadSkins(extras);
                 LoadMasteries(extras);
                 await LoadRidesAsync(store, state.Summary.CharacterId, ct);
                 await LoadQuickSlotsAsync(store, state.Summary.CharacterId, ct);
-                LoadSettings(await store.CharacterSettingsAsync(state.Summary.CharacterId, ct));
+                var settings = await store.CharacterSettingsAsync(state.Summary.CharacterId, ct);
+                LoadSettings(settings);
+                LoadBuffSettings(settings, now);
+                LoadSkillCustomizing(settings);
                 await LoadBuybackAsync(store, state.Summary.CharacterId, ct);
                 await LoadGuildAsync(store, state.Summary.CharacterId, ct);
+                await LoadGodstoneCollectionAsync(store, state.Summary.CharacterId, ct);
                 await LoadQuestsAsync(store, state.Summary.CharacterId, state.Race, ct);
                 engraved.Clear();
                 engraved.AddRange(await store.TeleportArtifactsAsync(state.Summary.CharacterId, ct));
@@ -1636,6 +1361,17 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
                 await LoadSocialAsync(ct);
                 character = new Choice(state.Summary.Name, state.Gender, state.CreationId, state.Appearance, state.VoiceType);
                 level = data.ClampLevel(state.Progress.Level);
+                LoadDaevanion(await store.DaevanionAsync(state.Summary.CharacterId, ct));
+                var daevanionNodesBefore = daevanionNodes.Count;
+                EnsureStartNodes();
+                if (daevanionNodes.Count > daevanionNodesBefore)
+                {
+                    var progress = new DaevanionProgress(daevanionNodes.ToList(), daevanionUsed, daevanionBonus);
+                    await store.SaveDaevanionAsync(state.Summary.CharacterId, progress, ct);
+                }
+                className = profile.Class;
+                RefreshKitSkillLevels();
+                LoadSkillLevels(await store.SkillsAsync(state.Summary.CharacterId, ct));
                 var savedMap = state.Progress.MapId.Value;
                 // Logged out inside an instance layer: back at its exit on the field map (the copy is gone).
                 if (Instances.Of(savedMap) is { } left)
@@ -1662,7 +1398,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
                 instanceKey = IsInstanceMap(savedMap) ? playerKey : 0;
                 spawn = (savedMap, savedAt);
                 loadTicket = 1;
-                return [GamePackets.SelectCharacter((int)key, state.WireId, playerKey, profile.PcId, state.Appearance, now),
+                return [GamePackets.SelectCharacter((int)key, state.WireId, playerKey, profile.PcId, state.Appearance, now, skillCustomizing: SkillCustomizingForSelect(profile.Class, level)),
                     GamePackets.ClientEnvSetting(), GamePackets.PrepareEnterMap(loadTicket, savedMap, savedAt, now)];
             });
         }
@@ -1679,7 +1415,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             GamePackets.ClientEnvSetting(), GamePackets.PrepareEnterMap(1, devMap, devAt, now)];
     }
 
-    List<byte[]> LoadComplete(byte[] plain, long now)
+    async Task<List<byte[]>> LoadCompleteAsync(byte[] plain, long now, CancellationToken ct)
     {
         if (plain.Length < 6) return [];
         var ticket = BitConverter.ToInt32(plain, 2);
@@ -1687,11 +1423,20 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         var gender = character?.Gender ?? 1;
         var profile = data.Profile(character?.CreationId ?? 1, gender);
         // Skills follow the character level (tools/class_skills.py), not a grant list.
-        var kit = profile is null ? [] : data.LearnedSkills(profile.Class, level);
-        learned = kit.Select(k => k.SkillId).ToHashSet();
+        var kit = profile is null ? [] : data.SkillListForClient(profile.Class, level, profile);
         className = profile?.Class;
+        RefreshKitSkillLevels();
+        kitListBaselines = kit.ToDictionary(k => k.SkillId, k => k.Level);
+        if (profile is not null)
+            kit = data.WithChainVariantsOnHotbar(WithLevels(kit), profile, MasteryLevel);
+        learned = kit.Select(k => k.SkillId).ToHashSet();
         var (mapId, at) = spawn ?? (GamePackets.SpawnMapId, GamePackets.SpawnPosition);
+        if (!IsInstanceMap(mapId) && instanceKey != 0) instanceKey = 0;
+        EnsureAbyssLoaded(now);
+        var previousMap = worldMap;
         worldMap = mapId;
+        if (Abyss.IsAbyssMap(previousMap) && !OnAbyssMap) AbyssMapLeft(now);
+        if (OnAbyssMap) AbyssMapEntered(now);
         // Map geometry loads off the game loop; NPCs use it from the tick it is ready.
         var geometry = data.GeometryMap(mapId);
         // A shared map's NPC AI gets its geometry once, from the first player who enters it.
@@ -1723,20 +1468,27 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             targets = [];
             if (options.TrainingDummy) targets[Combat.TrainingDummyKey] = Combat.TrainingDummy(at);
             foreach (var (key, target) in Combat.MapTargets(data, mapId)) targets[key] = target;
+            if (instanceKey != 0 && MapEventTables.Embedded.DungeonOfMap(mapId) is { } soloRoom)
+                Patch20261028.ScaleBossHp(targets.Values, MapEventTables.Embedded.DungeonIdOfMap(mapId), soloRoom);
         }
+        LogWorldEntities();
         MapEventsPrepare();   // spawn entries a map event starts itself stay dormant
         PlaceChallengeBoss();
-        equippedWeapon = inventory.Count > 0 ? WeaponFromInventory() : data.StarterWeapon(profile);
+        if (Store is { } invStore && CharacterId is { } invChar)
+            Remember(await LoadInventoryAsync(invStore, invChar, ct));
+        equippedWeapon = Store is null ? data.StarterWeapon(profile) : WeaponFromInventory();
         // A map load in the world (teleport, revive) keeps HP/MP (it used to be a full heal); the
         // first entry after a selection starts full.
         var fresh = resources is null;
         resources = fresh ? new Resources(playerKey) : resources!;
         RefreshStats();
-        if (fresh) (resources.Hp, resources.Mp) = (resources.HpMax, resources.MpMax);
+        if (fresh) (resources.Hp, resources.Mp, resources.Ap) = (resources.HpMax, resources.MpMax, resources.ApMax);
         resourceTickMs = now;
+        ResetFpTick(now);
         var armed = EquipItemLevel();
         mountedRide = null;   // a map load (teleport, revive) leaves the ride
         ResetMovementCheck(at, now);
+        position = savedPosition = at;
         air = AirState.Ground;
         flySprint = false;
         // Flight needs an equipped wing: staff and ascended characters (grade 2+) get their race's default wing and the
@@ -1765,6 +1517,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             replies.Add(GamePackets.LastOnGroundZ(playerKey, (float)at.Z));
             replies.Add(resources.Maxima());
         }
+        RecomputeCombatPower();
         replies.Add(GamePackets.MyCharAppear(new MyCharacterAppear
             {
                 ToggleFlags = sealStoneOn ? 1 : 0,
@@ -1783,6 +1536,8 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
                 Ascension = selected?.Ascension ?? 1, DbId = selected?.WireId ?? 0,
                 WingId = wingId, Fp = resources.Fp, FpMax = resources.FpMax,
                 EquipItemLevel = armed, HighestTotalItemLevel = armed,
+                CombatPower = combatPower,
+                SubzoneId = Subzones.SubzoneIdAt(mapId, at),
             }));
         replies.Add(GamePackets.CharBarrier(playerKey));
         replies.Add(GamePackets.CharStatsUpdate(playerKey, StatSheet().Stats, resources.HpMax));
@@ -1793,14 +1548,20 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             replies.Add(RideInit());
             replies.Add(GamePackets.GlideCooltime(playerKey));
         }
-        // The class passives (weapon equip permission) right after the appearance, as the official world entry has them.
-        replies.InsertRange(replies.FindIndex(b => b[0] == 0x46 && b[1] == 0x36) + 1, PassiveAbnormals(resend: true));
+        // Respawn protection (10002) and class passives right after the own appearance (0x3633 / 0x3645).
+        var appearAt = replies.FindIndex(b => b[0] == 0x46 && b[1] == 0x36) + 1;
+        replies.InsertRange(appearAt, [.. RespawnLoadProtectAfterAppear(now), .. PassiveAbnormals(resend: true)]);
         replies.InsertRange(0, sameLevelRemovals);   // the same level's old entities go before the load reply (OBSERVED)
         sameLevelRemovals = [];
         if (shortLoad)
         {
             // After 0x364a the official layer entry sends one point update (#9684 `01 01 03 a0860100`: type 3, 100000).
             replies.Add(GamePackets.CharPoints(playerKey, [((CharPoint)3, 100000)]));
+            // The short load omits 0x8d09 QuestList; without progress the tracker stays blank on instance re-entry (HQ2101030 step 3).
+            if (questLog is not null)
+                replies.AddRange(await QuestRecheckAsync(ct));
+            if (questLog?.All.Where(q => q.Status == QuestLog.Incomplete).ToList() is { Count: > 0 } tracking)
+                foreach (var q in tracking) replies.Add(GamePackets.QuestProgress(Wire(q)));
         }
         else
         {
@@ -1810,13 +1571,24 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             // Titles and skins as the official entry lists them (both empty there: #196 0x5679 `0000`, #203 0x8d5b `000000010000`).
             replies.Add(TitleList());
             replies.Add(SkinInfo());
+            replies.Add(SeasonSchedule(now));
             replies.Add(AchievementList(now));
             replies.Add(BattlePassInfoList(now));
+            replies.AddRange(InventoryDepotSyncPackets());
             replies.Add(PeriodCollectionList(now));
             replies.Add(BossChallengeList());
-            replies.AddRange(EntryConstants(now));
+            replies.Add(BookmarkedContentList());
+            replies.Add(PartyDungeonChallengeList());
+            replies.Add(ContentsTicketsList(now));
+            replies.Add(DungeonCoolTimesList(now));
+            replies.Add(GodstoneList());
+            replies.Add(DaevanionPointUpdate());
+            replies.Add(DaevanionBoardInfo());
+            replies.AddRange(AbyssAtEntry(now));
+            replies.AddRange(EntryConstants(now, AccountContentsInfoList(now), SubscribeList(now)));
             replies.AddRange(AchieveSet("EquipItemLevel", EquipItemLevel(), now: now));
             if (fresh) { replies.AddRange(Achieve("LoginCharacter", now: now)); elapsedAchieveAt = now + 60_000; }
+            replies.AddRange(ApplyLazyPeriodicResets(now, notifyClient: true));
             replies.AddRange(CraftListsAtEntry());
         }
         if (!instanceMove && !shortLoad) replies.AddRange(MapEnvironment(mapId));   // every full map load (OBSERVED at the official world entry, map 1000 state 0)
@@ -1834,18 +1606,35 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             if (profile is not null)
             {
                 // Owned skills before the hotbar (0x5100 then 0x5600; not the usmap ordinals).
-                replies.Add(GamePackets.SkillList(WithLevels(kit)));
-                replies.Add(GamePackets.SkillOptionSlots(learned.Where(id => id >= 11_000_000 && id != CombatDodge && data.Skill(id)?.Type == "Active").Order().ToList()));
-                replies.AddRange(GamePackets.EmptyEntryLists());
+                var leveledKit = WithLevels(kit);
+                var skillList = GamePackets.SkillList(leveledKit, SkillWireOriginalLevels(leveledKit));
+                replies.Add(skillList);
+                LogSkillPointsAtEntry();
+                replies.Add(SkillPointUpdate());
+                var actives = learned.Where(id => id >= 11_000_000 && !IsDodgeId(id) && data.Skill(id)?.Type == "Active").Order().ToList();
+                replies.Add(GamePackets.SkillOptionSlots(actives, SkillOptionMap()));
+                replies.Add([0x58, 0x8d, 0x00]);
+                replies.Add(AgitDecoListAtEntry());
                 replies.AddRange(SettingsAtEntry(now));
                 // The player's saved hotbar, else the class's default bar for its level.
-                replies.Add(Hotbar(profile.DefaultBar()));
+                var hotbar = Hotbar(profile.DefaultBar());
+                replies.Add(hotbar);
+                LogSkillBarAtEntry(skillList, hotbar);
             }
-            var unlocked = GamePackets.UnlockedContents(level).Concat(QuestUnlockTypes()).Except(GamePackets.LaterUnlockedContents);
+            var questUnlocks = QuestUnlockTypes().ToList();
+            var extras = ExtraContentsUnlocks(questUnlocks).Concat(DaevanionExtraContentsUnlocks(questUnlocks));
+            var unlockTypes = GamePackets.WorldEntryContentsUnlocks(level, questUnlocks, extras);
             // The wing menu (Wing, 12) is quest-gated (HQ1101020 / HQ2101050); a winged character has it open.
-            if (wingId != 0) unlocked = unlocked.Append((byte)12);
-            replies.Add(GamePackets.ContentsUnlockList(unlocked.Distinct().Order().ToArray()));
-            if (questLog?.All.Where(q => q.Status < QuestLog.Rewarded).Select(Wire).ToList() is { Count: > 0 } open)
+            if (wingId != 0) unlockTypes = unlockTypes.Append((byte)12).Distinct().Order().ToArray();
+            if (unlockTypes.Contains(RideContentsUnlock)) rideContentsUnlocked = true;
+            if (unlockTypes.Contains(DaevanionContentsUnlock)) daevanionContentsUnlocked = true;
+            replies.Add(GamePackets.ContentsUnlockList(unlockTypes));
+            // Rewarded quests go in too (EQuestStatus 4): the client builds its acquirable list (Quest_AddedToAcquirableList,
+            // NPC markers, Alt+1) from Quest.dat PreQuest/NextQuestName against this list. Without them it took the opening
+            // HQ1100010 as never done and offered it, and never offered the next NPC-acquired story quest (HQ1101030 after HQ1101021).
+            if (questLog is not null)
+                replies.AddRange(await QuestRecheckAsync(ct));
+            if (questLog?.All.Select(Wire).ToList() is { Count: > 0 } open)
                 replies.Add(GamePackets.QuestList(open));
         }
         if (reloading)
@@ -1855,8 +1644,11 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             // closed after MoveMap without it). The short load sent no 0xe257, so nothing to undo.
             if (!shortLoad) { replies.Add(GamePackets.ContentsUnlockUpdate()); unlockUpdateSent = true; }
             reloading = false;
+            reloadStartedMs = 0;
             if (invisible) replies.Add(GamePackets.InvisibleMode(true));   // a GM stays hidden across the reload
         }
+        replies.AddRange(EnsureAliveAfterLoad());
+        replies.AddRange(ApplyQuestWorldGating(now));
         replies.AddRange(NpcsAtEntry(at));
         replies.AddRange(KibeliskSpawns(mapId, now));
         if (!shortLoad)
@@ -1868,23 +1660,29 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         shownObjects.Clear();
         shownTriggers.Clear();
         usedObjects.Clear();
+        ResetEnvObjHits();
         pendingUse = null;
         replies.AddRange(ObjectVisibility(at, now));
-        replies.AddRange(MapEventsStart(now));   // the layer's events join (0x922e) and run their first directives
+        replies.AddRange(MapEventsStart(now, resendExistingJoins: shortLoad));   // the layer's events join (0x922e) and run their first directives
+        replies.AddRange(ApplyQuestWorldGating(now));
         CharacterName = name;
         EnterSharedWorld(mapId, at);
+        subzoneAllowsRide = SubzoneAllowsRideNow();
         arrivalCheckDue = true;
+        if (fresh && selected is { } loginWho && Store is { } loginStore)
+            selected = await loginStore.RecordLoginAsync(loginWho, now, ct) ?? loginWho;
+        if (fresh) replies.AddRange(await AutoUsePendingItemsAsync(now, ct));
         return replies;
     }
 
     // ---------- Casts and combat (tools/starter_casts.py) ----------
 
-    public sealed record CastRequest(int SkillId, int ClientActionUid, int ChangeToggle, int TargetKey, double Yaw, Vector3d Location);
+    public sealed record CastRequest(int SkillId, int ClientActionUid, int ChangeToggle, bool HasChangeToggle, int TargetKey, double Yaw, Vector3d Location, int ClientActId = 0, bool HasClientActionUid = false);
 
     /// <summary>0x3800 cast request (writer RVA 0x8f7db28): u16 presence mask, skill, byte 2, target varint, yaw + location, optionals.</summary>
     public static CastRequest? ParseCast(byte[] body)
     {
-        if (body.Length < 26 || body[0] != 0x00 || body[1] != 0x38 || body[8] != 2) return null;
+        if (body.Length < 26 || !IsSkillStartWireOpcode(Opcode(body)) || body[8] != 2) return null;
         var flags = BitConverter.ToUInt16(body, 2);
         if ((flags & ~0x1ff) != 0) return null;
         var reader = new PacketReader(body) { Offset = 9 };
@@ -1895,14 +1693,15 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             if (!float.IsFinite(yaw) || !float.IsFinite(x) || !float.IsFinite(y) || !float.IsFinite(z) || targetKey < 1) return null;
             if ((flags & 1) != 0) reader.U8();          // caster direction
             if ((flags & 6) != 0) reader.U8();          // auto-use/reserved share one packed bool byte
-            int toggle = (flags & 8) != 0 ? reader.U8() : 0;
+            var hasToggle = (flags & 8) != 0;
+            int toggle = hasToggle ? reader.U8() : 0;
             int uid = (flags & 16) != 0 ? reader.U8() : 0;
-            if ((flags & 32) != 0) reader.Varint();     // client act ID
+            int actId = (flags & 32) != 0 ? (int)reader.Varint() : 0;     // client act ID (the animation the client plays)
             foreach (var bit in new[] { 64, 128 })
                 if ((flags & bit) != 0 && !float.IsFinite(reader.F32())) return null;
             if ((flags & 256) != 0) reader.U64();       // client time
             if (!reader.End) return null;
-            return new CastRequest(BitConverter.ToInt32(body, 4), uid, toggle, (int)targetKey, yaw, new Vector3d(x, y, z));
+            return new CastRequest(BitConverter.ToInt32(body, 4), uid, toggle, hasToggle, (int)targetKey, yaw, new Vector3d(x, y, z), actId, (flags & 16) != 0);
         }
         catch (ProtocolException)
         {
@@ -1910,61 +1709,162 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         }
     }
 
+    static List<byte[]> CastMalformedReply(byte[] body)
+    {
+        if (body.Length < 9 || !IsSkillStartWireOpcode(Opcode(body))) return [];
+        var skill = BitConverter.ToInt32(body, 4);
+        return [GamePackets.CastReply(false, skill, 0)];
+    }
+
+    /// <summary>
+    /// 0x3801 for a cast: the pre-#140 flags-first form for every skill. The official 9-byte form (GamePackets.CastResult)
+    /// left this client unable to cast again (live 2026-10-30: Ranger 13:35 one shot, Summoner 13:47 summon then no basic
+    /// attack request for minutes), even with the 0x3806 end; the old form kept combat working. OBSERVED official 2026-10-30: flags byte 0, result u16, skill (01 38 00 00 00 a0 ed d5 00), no uid. 0x3806 is still sent.
+    /// </summary>
+    /// <summary>0x3801 refusal for cast-not-ready; result 1 keeps attacking (#158). Official 0x1813 stopped targeting on this client.</summary>
+    internal const ushort CastNotReadyResult = 1;
+
+    int ChainRoot(int skill)
+    {
+        for (var i = 0; i < 8 && data.Skill(skill) is { ChainPrev: > 0 } step; i++) skill = step.ChainPrev;
+        return skill;
+    }
+
+    // Level/specialization variants (Ranger 14020010, 14021230) chain from a variant root; the learned family skill
+    // (last four digits zeroed, 14020000) unlocks them.
+    bool ChainRootLearned(int skill)
+    {
+        var root = ChainRoot(skill);
+        return learned.Contains(root) || learned.Contains(root / 10_000 * 10_000);
+    }
+
+    static int SkillFamilyId(int skillId) => skillId / 10_000 * 10_000;
+
+    bool SkillFamilyLearned(int skillId) => learned.Contains(skillId) || learned.Contains(SkillFamilyId(skillId));
+
+    SkillDefinition? ResolveSkillDefinition(int skillId) => data.Skill(skillId) ?? data.Skill(SkillFamilyId(skillId));
+
+    static byte[] CastReplyFor(CastRequest request, bool accepted) =>
+        GamePackets.CastReply(accepted, request.SkillId, (byte)request.ChangeToggle, request.HasChangeToggle, request.ClientActionUid, includeUid: false,
+            refusal: CastNotReadyResult);
+
+    List<byte[]> StopAutoAttackReplies(CastRequest request, int skill)
+    {
+        var replies = new List<byte[]> { CastReplyFor(request, true) };
+        if (autoAttackActionUid != 0)
+        {
+            replies.Add(GamePackets.SkillEnd(playerKey, autoAttackSkill != 0 ? autoAttackSkill : skill, autoAttackActionUid));
+            autoAttackActionUid = 0;
+        }
+        return replies;
+    }
+
     List<byte[]> CastReplies(byte[] body, long now)
     {
-        if (ParseCast(body) is not { } request) return [];
+        if (ParseCast(body) is not { } request) return CastMalformedReply(body);
+        NoteHeldCastWireReceived(now);
         var skill = request.SkillId;
+        request = WithCastLocation(request);
         // OBSERVED (official 2026-10-19: 36 dodges, 64 sprint starts; live trace 2026-10-20: the client sends 0x3704 then its
         // CombatDodge request): a dodge requested while the sprint is on starts NormalDodge 11000101 (the running dash, SP 10,000)
         // in place of CombatDodge (SP 30,000). Its replies: 0x3802, the 9-byte 0x3801 naming CombatDodge, abnormal 200 for 300 ms,
         // then 0x8d00 with the SP; 200 ms later 0x3806 ends it and 0x382c removes the abnormal.
-        var dodging = skill is CombatDodge or NormalDodge;
+        var combatDodge = ClassCombatDodge;
+        var dodging = IsDodgeId(skill);
+        if (dodging) combatDodge = IsCombatDodgeId(skill) ? skill : skill - 1;
         var variant = DashVariant;
         // Variants 6-9 change only the dash that follows a sprint. A standing dodge keeps the reply this client already completes.
         if (dodging && !sprinting && variant >= 6) variant = 0;
         // Variant 6: the sprint stands on its own. A 9-byte refusal (result 1, no skill start) so the client does not read the
         // mask-first reply as a failed dash and drop the sprint. The live question is whether the sprint run then holds on land.
         if (dodging && sprinting && variant == 6)
-            return [GamePackets.DodgeResult(CombatDodge, 1)];
+            return [GamePackets.DodgeResult(combatDodge, 1)];
         // Variant 10: no reply at all to the dodge the client sends with the sprint (6 refused it and still froze, live 2026-10-20).
         if (dodging && sprinting && variant == 10) return [];
         // Variant 9 starts CombatDodge while sprinting (official starts NormalDodge). The rest of the sprint dashes are NormalDodge.
         // OBSERVED (official 2026-10-19 and 2026-10-20): the server picks the dodge by combat state. All 36 CombatDodge starts came
         // within 8 s of the player's own attack; out of combat the dodge is NormalDodge (10,000 SP, no 0x3804 effect) whether the
         // player sprints, runs or stands (2026-10-20: shift while standing gave NormalDodge with no sprint reply at all).
-        var started = skill == CombatDodge && variant != 9 && (sprinting || !inCombat) ? NormalDodge : skill;
+        var started = skill == combatDodge && variant != 9 && (sprinting || !inCombat) ? combatDodge + 1 : skill;
         // Recovered Skill.dat cost, cooldown and weapon requirement for any learned skill.
         // NormalDodge is CombatDodge's variant: learned with it, SP 10000, the same group cooldown.
-        var normalDodge = started == NormalDodge && learned.Contains(CombatDodge);
-        var definition = normalDodge ? data.Skill(CombatDodge) is { } dodge ? dodge with { Cost = dodge.Cost with { Sp = NormalDodgeSp } } : null
-            : data.Skill(skill);
-        var cooldownKey = normalDodge ? CombatDodge : skill;
+        var normalDodge = dodging && started == combatDodge + 1 && learned.Contains(combatDodge);
+        var definition = normalDodge ? data.Skill(combatDodge) is { } dodge ? dodge with { Cost = dodge.Cost with { Sp = NormalDodgeSp } } : null
+            : ResolveSkillDefinition(skill);
+        var cooldownKey = data.CooldownGroup(normalDodge ? combatDodge : (data.Skill(skill) is not null ? skill : SkillFamilyId(skill)));
         var cost = definition?.Cost ?? new SkillCost(0, 0, 0);
         if (BuffStat("MPUseDecrease") is > 0 and var cheaper) cost = cost with { Mp = cost.Mp * Math.Max(0, 10_000 - cheaper) / 10_000 };
         var weapons = (definition?.Weapons ?? []).Where(w => w != "None").ToList();
-        var accepted = definition is not null && resources is not null && !dead
+        var chainSkill = definition is { ChainPrev: > 0 };
+        // A step's parent may itself be a chain-only step (Ranger 14040000 <- 14030000 <- 14020000): the learned root decides.
+        var chainAllowed = !chainSkill || (ChainReady(skill, now) && ChainRootLearned(skill));
+        var cooldownReady = SkillCooldown.CooldownReady(now, cooldowns, cooldownKey, noCool);
+        var meetsCastRules = definition is not null && resources is not null && !dead && chainAllowed && !CombatCastBlocked(skill)
             && resources.Mp >= cost.Mp && resources.Sp >= cost.Sp && resources.Hp > cost.Hp
-            && (learned.Contains(skill) || normalDodge)
+            && (resources.ApMax <= 0 || resources.Ap >= cost.Ap)
+            && (SkillFamilyLearned(skill) || normalDodge || chainSkill || CarriedSkill == skill)
             && (weapons.Count == 0 || weapons.Contains(data.WeaponType(equippedWeapon) ?? ""))
-            && (noCool || now >= cooldowns.GetValueOrDefault(cooldownKey));
+            && UseConditionMet(definition, now, request.TargetKey, skill);
+        var basicAuto = definition is not null && SkillCooldown.IsBasicAutoAttack(definition);
+        var toggleOff = request.HasChangeToggle && request.ChangeToggle is 0 or 2;
+        var toggleOn = request.HasChangeToggle && request.ChangeToggle == 1;
+        if (basicAuto && toggleOff)
+            return StopAutoAttackReplies(request, skill);
+        if (basicAuto && toggleOn)
+        {
+            autoAttackSkill = skill;
+            selectedTarget = request.TargetKey;
+        }
+        // Minimum gap between two accepted non-dodge casts. CheckToleranceMs (200) equals ProjectileRecastMs (200), so a
+        // zero-cooldown projectile (Tempest Shot) or a chain step was re-accepted on every client resend (~17 ms, live
+        // 2026-10-30 16:08: Tempest Shot x6 in 70 ms, Snipe->Rapid Fire->Spiral Arrow->Snipe in 33 ms). Each accept is a new
+        // SkillStart with projectiles/FX, which flooded the client (stuck FX meshes, then UE "Maximum number of UObjects").
+        // OBSERVED official: Tempest Shot re-accepted 229 ms apart at the least.
+        var castGapOk = noCool || dodging || now - lastAcceptedCastMs >= SkillCooldown.MinCastGapMs;
+        var accepted = meetsCastRules && cooldownReady && castGapOk;
         if (!accepted)
         {
+            if (!dodging && meetsCastRules && IsExactHeldCastDuplicate(request, body, now))
+                return [CastReplyFor(request, false)];
+            var queued = MaybeQueueEarlyChainCast(body, request, chainSkill, chainAllowed, castGapOk, nextCastAcceptAtMs);
+            if (!releasingSkillCharge && HasDeferredQueuedCast(now)) return queued;
+            if (queued.Count > 0) return queued;
+            LogSkillCastRefusal(request, skill, definition, meetsCastRules, chainAllowed, cooldownReady, castGapOk, cost, weapons);
             // A sprint dash refused for cost or cooldown stays on the 9-byte form. The mask-first reply drops the sprint.
             if (dodging && sprinting && variant is 7 or 8 or 9)
                 return DeliverDash([GamePackets.DodgeResult(skill, 1)], variant);
-            return [GamePackets.CastReply(false, skill, request.ClientActionUid)];  // must not end another action
+            // Right-click auto-attack-on-target: acknowledge toggle while the swing is still on lockout (no SkillStart).
+            if (basicAuto && toggleOn && meetsCastRules && !cooldownReady)
+                return [CastReplyFor(request, true)];
+            // Held-key duplicate 0x3800 (~17 ms): 0x3801 failure (no second 0x3802). Playtest 2026-10-31 #262 silent drop hid reason.
+            return [CastReplyFor(request, false)];  // must not end another action
         }
         var dismount = ForceDismount().Concat(InterruptItemCast()).ToList();
+        // The bomb thrown at a tower ends with the hit that breaks it; any other cast of it uses a charge now.
+        if (DestructibleEnvObjIndex(request.TargetKey) is null) dismount.AddRange(CarrySkillStarted(skill));
+        if (!dodging) lastAcceptedCastMs = now;
+        ScheduleNextCastAccept(now, definition!, skill, HeldCastWireKeyOf(request, body));
+        DropQueuedHeldCastSilently();
         skillMoveGraceUntil = now + SkillMoveGraceMs;
-        var cooldown = noCool ? 0 : definition!.CooldownMs;
-        cooldowns[cooldownKey] = now + cooldown;
+        var cooldown = noCool ? 0 : SkillCooldown.Reduced(SkillCooldown.EffectiveMs(definition), CoolTimeDecrease);
+        var lockout = PlayerCastLockoutMs(definition!, skill);
+        if (definition!.CooldownMs > 0 && lockout == definition.CooldownMs) lockout = cooldown;
+        if (!noCool && lockout > 0) cooldowns[cooldownKey] = now + lockout;
         // Builder SetInvincible: the flagged resources do not decrease.
         if (!invincible.Mp) resources!.Mp -= cost.Mp;
         if (!invincible.Sp) resources!.Sp -= cost.Sp;
         if (!invincible.Hp) resources!.Hp -= cost.Hp;
+        if (resources!.ApMax > 0 && cost.Ap > 0) resources.Ap = Math.Max(0, resources.Ap - cost.Ap);
         actionUid = actionUid % 255 + 1;
+        if (basicAuto)
+        {
+            autoAttackActionUid = (byte)actionUid;
+            autoAttackSkill = skill;
+        }
         if (dodging)
         {
+            // Server i-frames for every accepted dodge (variant 0 sends no abnormal 200 on the wire; the client still dashes ~300 ms).
+            dodgeInvulnUntil = now + DodgeAbnormalMs;
             // The request's location is already the dash vector (about 100 cm along the movement input, OBSERVED in the client's own
             // 0x3800 and 0x370e); the official 0x3802 echoes it with the yaw and the dodger as target.
             // BISECT (2026-10-20): the recorded extras (the 9-byte 0x3801, abnormal 200 and its 0x382c, the 0x3806 end, the standing
@@ -1982,18 +1882,18 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
                 [
                     .. dismount,
                     GamePackets.SkillStart(started, actionUid, request.Yaw, request.Location, playerKey, actorKey: playerKey, cooldown: cooldown),
-                    GamePackets.DodgeResult(CombatDodge),
+                    GamePackets.DodgeResult(combatDodge),
                     DodgeAbnormalAdd(now, started, actionUid, batchEnd),
                     GamePackets.CharPoints(playerKey, [(CharPoint.Sp, resources!.Sp)]),
                 ];
-                if (started == CombatDodge) dodgeEffectAt = (actionUid, now + delay + DodgeEffectMs);
+                if (started == combatDodge) dodgeEffectAt = (actionUid, now + delay + DodgeEffectMs);
                 return DeliverDash(dash, variant);
             }
             if (variant == 0)
             {
                 List<byte[]> bisect =
                 [
-                    GamePackets.CastReply(true, skill, request.ClientActionUid),
+                    CastReplyFor(request, true),
                     .. dismount,
                     resources!.Update(),
                     GamePackets.SkillStart(started, actionUid, request.Yaw, request.Location, playerKey, actorKey: playerKey, cooldown: cooldown),
@@ -2005,23 +1905,48 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             [
                 .. dismount,
                 GamePackets.SkillStart(started, actionUid, request.Yaw, request.Location, playerKey, actorKey: playerKey, cooldown: cooldown),
-                GamePackets.DodgeResult(CombatDodge),
+                GamePackets.DodgeResult(combatDodge),
             ];
             if (variant is 2 or >= 4) dodgeReplies.Add(DodgeAbnormalAdd(now, started, actionUid, endAt, end: variant != 2));
             else if (variant == 3) dodgeAbnormalOff = (0, started, actionUid, endAt, true);
             dodgeReplies.Add(GamePackets.CharPoints(playerKey, [(CharPoint.Sp, resources!.Sp)]));
-            if (variant >= 4 && started == CombatDodge) dodgeEffectAt = (actionUid, now + DodgeEffectMs);
+            if (variant >= 4 && started == combatDodge) dodgeEffectAt = (actionUid, now + DodgeEffectMs);
             return dodgeReplies;   // no damage rows: nothing for CombatReplies
         }
-        var replies = new List<byte[]>
-        {
-            GamePackets.CastReply(true, skill, request.ClientActionUid),
-            resources!.Update(),
-            GamePackets.SkillStart(skill, actionUid, request.Yaw, request.Location, request.TargetKey, actorKey: playerKey, cooldown: cooldown),
-        };
-        replies.InsertRange(1, dismount);   // a cast takes the player off its ride before the skill starts
-        replies.AddRange(CombatReplies(skill, request, now));
+        // Official order (2026-10-30): 0x3802 start, 0x3818/0x3819 chain, the 0x3801 accept, 0x8d21 when it starts combat,
+        // then the 0x3803 arrows.
+        var replies = new List<byte[]> { CastStartPacket(skill, (byte)actionUid, request, cooldown) };
+        replies.AddRange(ChainCasterAbnormalReplies(skill, now));
+        replies.AddRange(ChainCastReplies(skill, now));
+        replies.AddRange(ApplySkillCondGrant(skill, definition!, now, request));
+        replies.Add(GamePackets.RequestAck(0x383a));
+        replies.Add(CastReplyFor(request, true));
+        replies.AddRange(EnterCombat(now));
+        replies.Add(resources!.Update());
+        replies.InsertRange(0, dismount);   // a cast takes the player off its ride before the skill starts
+        replies.AddRange(ScheduleCombatHits(skill, request, now, (byte)actionUid));
+        replies.AddRange(CasterMoveReplies(skill, request, definition!, now));
+        replies.AddRange(AbnormalOnlyCastReplies(skill, request, definition!, now));
+        replies.AddRange(SkillEffectReplies(skill, request, definition!, now));
+        ScheduleSkillEnd(skill, (byte)actionUid, definition!, now);
+        replies.AddRange(SummonFromSkill(skill, request, now));
+        replies.AddRange(JointStrike(definition!, request, now));
+        replies.AddRange(DismissFromSkill(skill));
+        replies.AddRange(PlaceTrap(skill, request, (byte)actionUid, now));
+        replies.AddRange(PlaceZone(skill, request, (byte)actionUid, now));
         return replies;
+    }
+
+    /// <summary>
+    /// An accepted cast starts combat: 0x8d21 on right after its 0x3801 (OBSERVED official 2026-10-30, 21 8d df4b 00 01 after
+    /// the first Snipe's 0x3801); every cast and every 0x383a bracket in combat holds it for <see cref="CombatTimeoutMs"/>.
+    /// </summary>
+    List<byte[]> EnterCombat(long now)
+    {
+        combatUntil = now + CombatTimeoutMs;
+        if (inCombat) return [];
+        inCombat = true;
+        return [GamePackets.CombatState(playerKey, true), .. MapEventCombatStarted(now)];
     }
 
     /// <summary>Corpses: removed (0x3642 flag 3) CorpseMs after the kill; at the respawn a fresh 0x3641 at full HP.</summary>
@@ -2046,58 +1971,6 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             target.Hp = target.HpMax;
             target.CorpseRemoved = false;
             replies.Add(GamePackets.NpcAppear(target.Appearance()));
-        }
-        return replies;
-    }
-
-    /// <summary>
-    /// Damage from an accepted cast: the target key selects a target; a self-centred cast
-    /// (key 1) hits monsters within AreaRange of the cast location. 0x3804 hits, then 0x8d00 HP.
-    /// </summary>
-    List<byte[]> CombatReplies(int skill, CastRequest request, long now)
-    {
-        var replies = RespawnTargets(now);
-        if (request.TargetKey >= SharedWorld.FirstPlayerKey && request.TargetKey != playerKey)
-        {
-            var pvp = DuelHits(skill, request.TargetKey, now);
-            if (pvp.Count == 0) pvp = ArenaHits(skill, request.TargetKey, now);
-            if (pvp.Count == 0) pvp = FactionHits(skill, request.TargetKey, now);
-            replies.AddRange(pvp);
-        }
-        if (targets is null || targets.Count == 0 || data.Skill(skill)?.Damage is not { Length: > 0 }) return replies;
-        IEnumerable<Target> chosen = targets.TryGetValue(request.TargetKey, out var direct) ? [direct]
-            : request.TargetKey == playerKey ? targets.Values.Where(t => t.Position.DistanceSquared(request.Location) <= AreaRange * AreaRange)
-            : [];
-        foreach (var target in chosen.Where(t => t.Hostile).ToList())
-        {
-            if (target.Dead) continue;
-            // An immune NPC (a scripted abnormal) takes the hits for nothing; it still turns on its attacker.
-            var hits = Combat.SkillHits(data, skill, className, level, equippedWeapon, target.Defense, rng);
-            if (target.Immune) hits = hits.Select(h => h with { Amount = 0 }).ToList();
-            var seq = 0;
-            foreach (var hit in hits)
-            {
-                target.Hp = Math.Max(0, target.Hp - hit.Amount);
-                replies.Add(GamePackets.SkillHit(target.Key, playerKey, skill, hit.EffectId, hit.Amount, hit.Critical, ++seq));
-            }
-            replies.Add(GamePackets.NpcHp(target.Key, target.Hp));
-            replies.AddRange(MapEventHp(target, now));
-            if (target.Dead)
-            {
-                respawnAt[target.Key] = now + RespawnMs;  // HP 0 is the kill
-                killedNpcs.Add(target.NpcId);
-                replies.AddRange(AchieveKill(target.NpcId));
-                replies.AddRange(BossChallengeKilled(target, now));
-                InstanceKill(target, now);
-                replies.AddRange(MapEventKilled(target, now));
-                killedLevels.Add(target.Level);
-                replies.AddRange(DropLoot(target, now));
-                // Official order after HP 0: the mob's target cleared, the kill, its 0x8d21 off.
-                replies.Add(GamePackets.TargetUpdate(target.Key));
-                replies.Add(GamePackets.Kill(target.Key, skill, playerKey, ServerId, StoredName));
-                replies.AddRange(ai.Killed(target));
-            }
-            else replies.AddRange(ai.Engage(targets, target, now, playerKey, hits.Sum(h => h.Amount)));    // a hit monster chases its attacker
         }
         return replies;
     }
@@ -2161,6 +2034,8 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         var replies = new List<byte[]>();
         foreach (var (victim, killer) in fights.TakeNpcKills())
         {
+            if (victim.OwnerKey != 0) { replies.AddRange(fights.Killed(victim)); replies.AddRange(SummonDied(victim)); continue; }
+            if (killer.OwnerKey == playerKey) { replies.AddRange(PlayerKilledNpc(victim, 0, killer.Key, now)); continue; }
             respawnAt[victim.Key] = now + RespawnMs;
             replies.Add(GamePackets.TargetUpdate(victim.Key));
             replies.Add(GamePackets.Kill(victim.Key, 0, killer.Key, 0, ""));
@@ -2174,9 +2049,11 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
     /// An NPC hit lands on the player: combat starts, HP drops (official 0x8d00 for the player's key).
     /// At HP 0 the player dies (see Die); invincible HP holds.
     /// </summary>
-    internal List<byte[]> NpcHitsPlayer(int damage, long now, int killerKey = 0)
+    internal List<byte[]> NpcHitsPlayer(int damage, long now, int killerKey = 0, int killerSkill = 0)
     {
         if (resources is null || dead) return [];
+        if (killerSkill > 0) lastNpcHitSkill = killerSkill;
+        damage = DungeonBossDamage(damage, killerKey);
         var replies = new List<byte[]>();
         if (!inCombat)
         {
@@ -2184,87 +2061,11 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             replies.Add(GamePackets.CombatState(playerKey, true));
         }
         combatUntil = now + CombatTimeoutMs;
-        if (!invincible.Hp) resources.Hp = Math.Max(0, resources.Hp - damage);
-        replies.Add(GamePackets.NpcHp(playerKey, resources.Hp));
-        if (resources.Hp == 0) replies.AddRange(Die(killerKey, now));
+        replies.AddRange(PlayerDamageReplies(damage, killerKey, now));
         return replies;
     }
 
-    // ---------- Death ----------
-
-    bool dead;
-    long reviveAt;
-    public bool Dead => dead;
-    /// <summary>OURS: a dead player who sends no respawn request is revived at the map's respawn point after this long.</summary>
-    public const int ReviveDelayMs = 60_000;
-    Vector3d? diedAt;
-
-    /// <summary>
-    /// The player died: NPCs drop it, casts are refused, and the kill (0x8d04, the layout of the
-    /// official NPC kills; CANDIDATE for a player victim, usmap CharDie_NT has the same leading
-    /// fields) goes to the player and those nearby. The client's respawn request is not known yet
-    /// (it is logged as an unanswered opcode), so the server revives the player itself.
-    /// </summary>
-    List<byte[]> Die(int killerKey, long now)
-    {
-        dead = true;
-        diving = false;
-        if (copy is { } dungeonCopy) dungeonCopy.Deaths++;
-        reviveAt = now + ReviveDelayMs;
-        diedAt = position;
-        inCombat = false;
-        var kill = GamePackets.Kill(playerKey, 0, killerKey, ServerId, "", dieType: 2);
-        worldPlayer?.Map?.Broadcast(worldPlayer, [kill]);
-        return [.. ForceDismount(), .. ClearBuffs(), kill, GamePackets.CombatState(playerKey, false)];
-    }
-
-    /// <summary>
-    /// 0x8d22 CharRespawn_RQ {ERespawnType u8, item uid i64}: Item (3) with a resurrection item revives in
-    /// place and uses one up; otherwise the respawn point. Answered 0x8d23.
-    /// </summary>
-    async Task<List<byte[]>> RespawnRequestAsync(byte type, long itemUid, long now, CancellationToken ct)
-    {
-        if (!dead) return [RidePackets.RespawnReply(1)];
-        if (type == RidePackets.RespawnItem)
-        {
-            if (Store is not { } store || CharacterId is not { } character || !storedItems.TryGetValue(itemUid, out var row) || row.Location != "bag" || !IsRebirthItem(row.TemplateId))
-                return [RidePackets.RespawnReply(1)];
-            var used = await Stored(async () => await store.ConsumeItemAsync(character, row.InstanceId, row.Revision, 1, ct) ? [[]] : []);
-            if (used.Count == 0) return [RidePackets.RespawnReply(1)];
-            return [RidePackets.RespawnReply(0), .. await InventoryChangesAsync(ct, 0, DecreaseUseRebirthItem), .. Revive(now, inPlace: true)];
-        }
-        return [RidePackets.RespawnReply(0), .. Revive(now)];
-    }
-
-    /// <summary>0x8d24 UseRebirth_RQ {bool}: with a rebirth buff, true revives in place (0x8d26 to those nearby).</summary>
-    List<byte[]> UseRebirth(bool use, long now)
-    {
-        if (!use) return [RidePackets.UseRebirthReply(0, false)];
-        if (!dead || !CanRebirth) return [RidePackets.UseRebirthReply(1, false)];
-        var reborn = RidePackets.Reborn(playerKey);
-        worldPlayer?.Map?.Broadcast(worldPlayer, [reborn]);
-        return [RidePackets.UseRebirthReply(0, true), .. UseRebirthBuff(), reborn, .. Revive(now, inPlace: true)];
-    }
-
-    const byte DecreaseUseRebirthItem = 85;   // EDecreaseReason kUseRebirthItem
-
-    /// <summary>Revive: full HP/MP and a map load where the player fell (in place) or at the map's respawn point (else its start, else here).</summary>
-    List<byte[]> Revive(long now, bool inPlace = false)
-    {
-        dead = false;
-        if (resources is null) return [];
-        (resources.Hp, resources.Mp) = (resources.HpMax, resources.MpMax);
-        if (inPlace && diedAt is { } fell) return [resources.Update(), .. Teleport(worldMap, fell, now)];
-        // Inside a dungeon: the running stage's revival point, else the dungeon's start (the reload keeps the events).
-        var raceWord = profileRace == 2 ? "Dark" : "Light";
-        var respawn = DungeonRevivalPoint() ?? data.MapPoints(worldMap).Where(p => p.Key.Contains("respawn", StringComparison.OrdinalIgnoreCase))
-            .OrderByDescending(p => p.Key.Contains(raceWord, StringComparison.OrdinalIgnoreCase)).ThenBy(p => p.Key, StringComparer.Ordinal)
-            .Select(p => (Vector3d?)new Vector3d(p.Value[0], p.Value[1], p.Value[2])).FirstOrDefault()
-            ?? data.MapStart(worldMap)?.Position ?? position ?? spawn?.Position ?? GamePackets.SpawnPosition;
-        return [resources.Update(), .. Teleport(worldMap, respawn, now)];
-    }
-
-    // ---------- Stats ----------
+    // ---------- Stats (death: GameSession.Death.cs) ----------
 
     /// <summary>MPMax of the official 0x3649 sample (level 1); CANDIDATE: the same for every class and level.</summary>
     public const int MpMaxBase = 1500;
@@ -2276,48 +2077,72 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
 
     /// <summary>The weapon in equip slot 1; development logins (no store) keep the class starter weapon.</summary>
     int? WeaponFromInventory() =>
-        inventory.Values.FirstOrDefault(i => i.Container == InventoryItem.Equipped && i.Slot == 1)?.ItemId ?? (Store is null ? data.StarterWeapon(Profile()) : null);
+        inventory.Values.FirstOrDefault(i => i.Container == InventoryItem.Equipped && i.Slot == 1)?.ItemId
+        ?? (Store is null ? data.StarterWeapon(Profile()) : null);
 
-    /// <summary>Defense against NPC hits: PcStatLevel Defense plus the equipped items' ArmorDefense.</summary>
-    public int Defense => data.BaseStats(className, level).GetValueOrDefault("Defense") + EquippedItems().Sum(i => i.Stat("ArmorDefense")) + EnchantStat("ArmorDefense") + BuffStat("Defense")
-        + BoardStat("Defense") + TitleStat("Defense");
+    /// <summary>Defense against NPC hits: PcStatLevel Defense plus equipped items' defense stats.</summary>
+    public int Defense => data.BaseStats(className, level).GetValueOrDefault("Defense") + EquipStat("ArmorDefense") + EquipStat("Defense")
+        + EnchantStat("ArmorDefense") + EnchantStat("Defense") + ExceedStat("ArmorDefense") + ExceedStat("Defense") + BuffStat("Defense")
+        + BoardStat("Defense") + TitleStat("Defense") + SetStat("Defense") + DaevanionWireStat(52);
 
     /// <summary>The MP pool: MPMax 1500 plus buffs.</summary>
-    int MpMax => MpMaxBase + BuffStat("MPMax") + BoardStat("MPMax") + TitleStat("MPMax");
+    int MpMax => MpMaxBase + BuffStat("MPMax") + BoardStat("MPMax") + TitleStat("MPMax") + DaevanionWireStat(199);
 
     /// <summary>
-    /// The stat sheet (0x3649 / 0x364a): the official sample's values, with HPMax from PcStatLevel
-    /// plus equipped HPMax, MPMax 1500, the weapon's damage/critical/accuracy and the armour's defense.
+    /// The stat sheet (0x3649 / 0x364a): PcStatLevel bases plus gear, buffs, titles, Daevanion and the official sample defaults where still unknown.
     /// </summary>
     (IReadOnlyList<(int Type, int Value)> Stats, int HpMax) StatSheet()
     {
-        var gear = EquippedItems().ToList();
         var basis = data.BaseStats(className, level);
-        var hpMax = Math.Max(1, (basis.GetValueOrDefault("HPMax") is > 0 and var hp ? hp : GamePackets.SpawnHpMax) + gear.Sum(i => i.Stat("HPMax")) + EnchantStat("HPMax") + RideStat("HPMax")
-            + BuffStat("HPMax") + BoardStat("HPMax") + TitleStat("HPMax"));
+        var daevanion = DaevanionWireStats();
+        int D(int wire) => daevanion.GetValueOrDefault(wire);
+        var hpMax = Math.Max(1, (basis.GetValueOrDefault("HPMax") is > 0 and var hp ? hp : GamePackets.SpawnHpMax) + EquipStat("HPMax") + EnchantStat("HPMax") + ExceedStat("HPMax") + RideStat("HPMax")
+            + BuffStat("HPMax") + BoardStat("HPMax") + TitleStat("HPMax") + SetStat("HPMax") + D(193));
         var weapon = data.WeaponStatsOf(equippedWeapon);
-        var stats = GamePackets.DefaultStats.Select(s => s.Type switch
+        int WeaponStat(string name, int fallback) => Math.Max(fallback, EquipStat(name));
+        var byType = GamePackets.DefaultStats.Select(s => s.Type switch
         {
-            31 => (s.Type, weapon.Max + EnchantStat("WeaponDamage")), 33 => (s.Type, weapon.Min + EnchantStat("WeaponMinDamage")),
-            128 => (s.Type, weapon.Critical + RideStat("Critical") + BuffStat("Critical") + BoardStat("Critical") + TitleStat("Critical")),
-            318 => (s.Type, weapon.Accuracy), 193 => (s.Type, hpMax), 199 => (s.Type, MpMax), 242 => (s.Type, GamePackets.SpawnSp + BuffStat("SPMax")),
-            307 => (s.Type, Defense),
-            _ => s,
-        }).ToList();
+            31 => (Type: s.Type, Value: WeaponStat("WeaponDamage", weapon.Max) + TitleStat("FixingDamage") + EnchantStat("WeaponDamage") + ExceedStat("WeaponDamage") + D(31)),
+            33 => (Type: s.Type, Value: WeaponStat("WeaponMinDamage", weapon.Min) + TitleStat("FixingDamage") + EnchantStat("WeaponMinDamage") + ExceedStat("WeaponMinDamage") + D(33)),
+            128 => (Type: s.Type, Value: WeaponStat("Critical", weapon.Critical) + RideStat("Critical") + BuffStat("Critical") + BoardStat("Critical") + TitleStat("Critical") + SetStat("Critical") + D(128)),
+            318 => (Type: s.Type, Value: WeaponStat("WeaponAccuracy", weapon.Accuracy) + EquipStat("Accuracy") + TitleStat("Accuracy") + D(318)),
+            193 => (Type: s.Type, Value: hpMax), 199 => (Type: s.Type, Value: MpMax), 242 => (Type: s.Type, Value: GamePackets.SpawnSp + BuffStat("SPMax")),
+            307 => (Type: s.Type, Value: Defense),
+            _ => (Type: s.Type, Value: s.Value + D(s.Type)),
+        }).ToDictionary(p => p.Type, p => p.Value);
+        foreach (var (wire, value) in daevanion)
+            if (!byType.ContainsKey(wire)) byType[wire] = value;
+        foreach (var (wire, value) in ExtraSheetStats())
+            byType[wire] = value;
+        if (wingId != 0 && resources is { FpMax: > 0 })
+        {
+            byType[247] = resources.Fp;   // FlyCost: current flight time (usmap; pairs with FPMax on the gauge)
+            byType[298] = resources.FpMax;
+        }
+        var stats = byType.OrderBy(p => p.Key).Select(p => (p.Key, p.Value)).ToList();
         return (stats, hpMax);
     }
 
+    int StatWireValue(int wireType)
+    {
+        foreach (var (type, value) in StatSheet().Stats)
+            if (type == wireType) return value;
+        return 0;
+    }
+
     /// <summary>Applies the stat sheet to the pools (HP/MP clamped) and returns the updates for the client.</summary>
-    List<byte[]> RefreshStats()
+    internal List<byte[]> RefreshStats()
     {
         if (resources is null) return [];
         var (stats, hpMax) = StatSheet();
         resources.HpMax = hpMax;
         resources.MpMax = MpMax;
         resources.SpMax = GamePackets.SpawnSp + BuffStat("SPMax");
+        resources.ApMax = PlayerApPools.ApMax(data, className, level, Profile()?.Resource);
         resources.Hp = Math.Min(resources.Hp, hpMax);
         resources.Mp = Math.Min(resources.Mp, resources.MpMax);
         resources.Sp = Math.Min(resources.Sp, resources.SpMax);
+        resources.Ap = Math.Min(resources.Ap, Math.Max(0, resources.ApMax));
         return [GamePackets.CharStatsUpdate(playerKey, stats, hpMax), resources.Maxima()];
     }
 
@@ -2370,8 +2195,8 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         return [r.Update()];
     }
 
-    public (int Hp, int HpMax, int Mp, int MpMax, int Sp, int SpMax) Resource =>
-        resources is { } r ? (r.Hp, r.HpMax, r.Mp, r.MpMax, r.Sp, r.SpMax) : default;
+    public (int Hp, int HpMax, int Mp, int MpMax, int Sp, int SpMax, int Fp, int FpMax) Resource =>
+        resources is { } r ? (r.Hp, r.HpMax, r.Mp, r.MpMax, r.Sp, r.SpMax, r.Fp, r.FpMax) : default;
 
     /// <summary>Builder SetInvincible: flagged resources stay full (null leaves a flag as is).</summary>
     public List<byte[]> SetInvincible(bool? hp, bool? mp, bool? sp)
@@ -2423,15 +2248,19 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
     public List<byte[]> Teleport(int mapId, Vector3d at, long now, byte reason = 0, byte effect = 0, string cutscene = "")
     {
         if (resources is null) throw new InvalidOperationException("Not in the world.");
+        if (mapId != worldMap) LogTeleport(mapId, at, "teleport");
         BroadcastWarpLeave(effect, cutscene.Length > 0);
         // An instance layer or dungeon is a private copy (the entry set it; a staff move gets one too); elsewhere the shared map.
+        var previousInstance = instanceKey;
         instanceKey = !IsInstanceMap(mapId) ? 0 : instanceKey != 0 ? instanceKey : playerKey;
-        if (!IsInstanceMap(mapId)) { instanceExitAt = null; instanceReturn = null; }
+        if (!IsInstanceMap(mapId)) { instanceExitAt = null; instanceReturn = null; clearExit = null; ResetWalkInLayerState(); }
+        else if (mapId != worldMap) ResetWalkInLayerState();
         moveReason = reason;
         moveEffect = effect;
         diving = false;
         surfaceZ = null;
         var ending = new List<byte[]>();
+        if (mapId != worldMap || instanceKey != previousInstance) ending.AddRange(DropCarried(ExpireEventFunction));
         if (mapId != worldMap)
         {
             HandOverCopy();   // a party copy's scripts stay with the players still inside
@@ -2446,13 +2275,18 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             // 0x3647 reason 1 for the rest after the burst). Live 2026-10-18: without it the base map's Robin stood in the layer.
             sameLevelMove = data.GeometryMap(mapId) == data.GeometryMap(worldMap);
             sameLevelRemovals = sameLevelMove ? SameLevelRemovals() : [];
+            DismissAllSummons();
             targets = null;  // the new map's NPCs appear on 0x3622
             respawnAt = [];
+            // Hits still due land on the old map's NPCs: the next map reuses their keys (2000 onward), so they would hit (and kill) its NPCs.
+            pendingCombatHits.Clear();
+            pendingProjectiles.Clear();
             if (options.World is not null) ai = new NpcAi(rng, data);
         }
         spawn = (mapId, at);
         position = at;
         reloading = true;
+        NoteReloadStarted(now);
         // The official numbers the map loads of a connection 1, 2, 3 (capture 20261013: #244 world entry 1, #9655 the layer 2,
         // #14301 back 3); ours sent 1 every time. Live 2026-10-19: after a seamless layer move (reason 12) the client never
         // resumed play (no UpdateVisibleLen 0x3651, no movement) while a plain teleport worked: a repeated ticket is a suspect.
@@ -2513,7 +2347,11 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         worldPlayer.Level = level;
         var arriving = !world.Online.ContainsKey(playerKey);
         world.Online[playerKey] = worldPlayer;
-        if (arriving) TellFriends(true);
+        if (arriving)
+        {
+            TellFriends(true);
+            PartyReconnectIfNeeded();
+        }
         var previous = worldPlayer.Map;
         world.Map(mapId, instanceKey).Join(worldPlayer);
         if (previous is not null && previous != worldPlayer.Map) world.Drop(previous);
@@ -2522,6 +2360,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
     /// <summary>Leaves the shared map (lobby, disconnect): others see this player disappear. Call under the world gate.</summary>
     public void ExitSharedWorld()
     {
+        DismissAllSummons();
         HandOverCopy();
         if (worldPlayer is not null && options.World?.Online.ContainsKey(playerKey) == true) LeaveSocial(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
         if (worldPlayer?.Map is { } map) map.Leave(worldPlayer);
@@ -2533,7 +2372,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
     }
 
     /// <summary>This player as others see it (0x3645 CharAppear).</summary>
-    byte[] OtherAppearance()
+    internal byte[] OtherAppearance()
     {
         var profile = Profile();
         return PlayerPackets.CharAppear(new OtherCharacter
@@ -2543,9 +2382,12 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             Direction = worldPlayer?.Heading ?? 0, Hp = resources?.Hp ?? 1, HpMax = resources?.HpMax ?? 1, Mp = resources?.Mp ?? 0, MpMax = resources?.MpMax ?? 0,
             Level = level, WingId = wingId, TitleId = ShownTitle, Equips = VisualEquips(all: true), Abnormals = BuffWires(),
             EquipItemLevel = inventory.Values.Where(i => i.Container == InventoryItem.Equipped).Sum(i => i.Detail?.ItemLevel ?? 0),
-            MoveState = (byte)(moving ? 1 : 0), DeadReckoning = moving,
+            MoveState = mountedRide is not null ? RidePackets.MoveModelRun : (byte)(moving ? RidePackets.MoveModelRun : RidePackets.MoveModelStop),
+            MoveSubstate = mountedRide is not null ? MountMoveAckFields().Substate : (byte)0,
+            DeadReckoning = moving,
             CustomizingData = character?.CustomizingData ?? [], VoiceType = character?.VoiceType ?? 0, DbId = selected?.WireId ?? playerKey,
             Sprinting = sprinting, ToggleFlags = sealStoneOn ? 1 : 0, SealstoneItemId = SealStoneItemId,
+            RideDataId = mountedRide ?? 0, DefaultRideDataId = defaultRide,
         });
     }
 
@@ -2571,7 +2413,13 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         {
             int was = before.GetValueOrDefault(slot), now = after.GetValueOrDefault(slot);
             if (was == now) continue;
-            EquipBroad Broad(int id) => new(id, VisualSlot: (byte)slot, Godstones: id == 0 ? [] : [0, 0, 0]);
+            EquipBroad Broad(int id)
+            {
+                if (id == 0) return new EquipBroad(0, VisualSlot: (byte)slot, Godstones: []);
+                var equipSlot = VisualSlot.FirstOrDefault(p => p.Value == slot).Key;
+                var gs = equipSlot == 0 ? [0, 0, 0] : GodstonesInSlot(equipSlot).ToArray();
+                return new EquipBroad(id, VisualSlot: (byte)slot, Godstones: gs);
+            }
             changes.Add(((byte)slot, Broad(was), Broad(now)));
         }
         return changes.Count > 0 ? PlayerPackets.ItemEquipChange(playerKey, equipItemLevel, changes) : null;
@@ -2601,6 +2449,9 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
     /// <summary>Between the official walk (~200 cm/s) and run (~600 cm/s) speeds. CANDIDATE.</summary>
     public const double RunThreshold = 400;
 
+    /// <summary>Time of the last accepted non-dodge cast (see SkillCooldown.MinCastGapMs).</summary>
+    long lastAcceptedCastMs = long.MinValue / 2;
+
     /// <summary>Casts other players see: the skill start and its effects, not the caster's own replies and bars.</summary>
     bool SharedCastPacket(byte[] packet) => Opcode(packet) is 0x3802 or 0x3804 or 0x3642 or 0x3641 or 0x8d21 or 0x8d04 or 0x382a
         || Opcode(packet) == 0x3835 && QuestKey(packet, 2) != playerKey
@@ -2619,16 +2470,19 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
     /// <summary>The air state a movement request implies (the flight gauge drains in the air and refills on the ground).</summary>
     void TrackAir(byte[] plain)
     {
+        var wasAir = air;
         switch (Opcode(plain))
         {
-            case 0x370a: air = AirState.Fly; flySprint = plain.Length > 2 && (plain[2] & 1) != 0; break;
-            case 0x370b: air = AirState.Fly; break;
-            case 0x3706 or 0x3707: air = AirState.Glide; break;
+            case 0x370a when CanSpendFlightFp: air = AirState.Fly; flySprint = plain.Length > 2 && (plain[2] & 1) != 0; break;
+            case 0x370b when CanSpendFlightFp: air = AirState.Fly; break;
+            case 0x3706 or 0x3707 when CanSpendFlightFp: air = AirState.Glide; break;
             case 0x3702 or 0x3703: air = AirState.Fall; break;
             case 0x3712 or 0x3713: air = AirState.WindPath; break;
             case 0x3700 or 0x3701 or 0x3718 or 0x370c or 0x370d or 0x370e or 0x370f or 0x3710 or 0x3711 or 0x3714 or 0x3715 or 0x3716 or 0x3717:
                 air = AirState.Ground; break;
         }
+        if (air is AirState.Fly or AirState.Glide && wasAir is not (AirState.Fly or AirState.Glide))
+            ResetFpTick(lastNow);
         Resting = false;   // any movement stands the player up
     }
 
@@ -2783,7 +2637,13 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         || itemCast is { } cast && now >= cast.DueMs
         || instanceExitAt is { } exit && now >= exit
         || Social is { } s && worldPlayer is not null && s.DuelOf(worldPlayer) is { } duel && duel.Challenger == worldPlayer && now >= duel.NextMs
-        || Social is { } s2 && worldPlayer is not null && ArenaOf(worldPlayer) is { } arena && arena.Owner == worldPlayer && (now >= arena.NextMs || arena.RespawnAt.Values.Any(r => now >= r));
+        || Social is { } s2 && worldPlayer is not null && ArenaOf(worldPlayer) is { } arena && arena.Owner == worldPlayer && (now >= arena.NextMs || arena.RespawnAt.Values.Any(r => now >= r))
+        || Social is { } s3 && worldPlayer is not null && s3.PartyOf(worldPlayer) is { } lootParty && lootParty.Leader == worldPlayer
+            && (s3.DiceRolls.Values.Any(r => !r.Resolved && r.PartyKey == lootParty.Key && now >= r.ExpiresAtMs)
+                || s3.BidSessions.Values.Any(b => !b.Resolved && b.PartyKey == lootParty.Key && now >= b.ExpiresAtMs))
+        || options.World?.Airspace.NeedsTick(now) == true
+        || options.World?.Resets.NeedsTick(now) == true
+        || pendingCombatHits.Exists(h => now >= h.DueMs);
 
     /// <summary>The time of the last request or tick (for work done from a request without its own clock).</summary>
     long lastNow;
@@ -2795,6 +2655,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         lastNow = now;
         var replies = new List<byte[]>();
         while (posted.TryDequeue(out var item)) replies.AddRange(await item.Run(now));
+        replies.AddRange(IdleReturnTick(now));
         if (arrivalCheckDue && !reloading && position is { } arrivedAt)
         {
             // The arrival is a position too: event triggers, the area objectives (an EnterSubZone at the map's start: live
@@ -2808,8 +2669,15 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         }
         ApplyGeometry();
         replies.AddRange(FlushHeldDash(now));
+        replies.AddRange(FlightFpTick(now));
         replies.AddRange(SprintTick(now));
         replies.AddRange(DodgeAbnormalTick(now));
+        replies.AddRange(SkillEndTick(now));
+        replies.AddRange(SummonExpiryTick(now));
+        replies.AddRange(ElementalActivateTick(now));
+        replies.AddRange(DrainQueuedHeldCast(now));
+        replies.AddRange(SkillChargeTimeoutTick(now));
+        replies.AddRange(ChainTickReplies(now));
         replies.AddRange(await AutoPotionAsync(now, ct));
         if (resources is not null)
         {
@@ -2822,13 +2690,11 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
                 var underwater = diving && !dead;
                 resources.Op = underwater ? (int)Math.Max(0, op - seconds * DiveDrain) : (int)Math.Min(OpMax, op + seconds * OpRegen);
                 var fp = resources.Fp;
-                if (resources.FpMax > 0 && !dead)
-                {
-                    if (air is AirState.Fly or AirState.Glide)
-                        resources.Fp = (int)Math.Max(0, fp - seconds * (air == AirState.Glide ? GlideDrain : flySprint ? FlySprintDrain : FlyDrain));
-                    else if (air == AirState.Ground)
-                        resources.Fp = (int)Math.Min(resources.FpMax, fp + seconds * (inCombat ? FpRegenBattle : FpRegenRest));
-                }
+                if (resources.FpMax > 0 && !dead && air == AirState.Ground)
+                    resources.Fp = (int)Math.Min(resources.FpMax, fp + seconds * (inCombat ? FpRegenBattle : FpRegenRest));
+                var suffocating = underwater && resources.Op == 0;
+                if (suffocating) replies.AddRange(EnsureOxygenDeficiency(now));
+                else if (resources.Op > 0) replies.AddRange(ClearOxygenDeficiencyIfPresent());
                 // Minutes in a movement state for the ElapsedTime achievements naming it ("Glide for 10 minutes" = step 10;
                 // Flying, Swimming likewise): the seconds accrue per state and count a minute at a time. WindPath and
                 // springboard states are not tracked.
@@ -2838,45 +2704,63 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
                     for (; accrued >= 60; accrued -= 60) replies.AddRange(Achieve("ElapsedTime", 1, e => e.Has(moveState), now: now));
                     elapsedStateSeconds[moveState] = accrued;
                 }
-                var suffocating = underwater && op == 0;   // from the second after the gauge ran out
-                // OURS: HP recovers 2%/s out of combat (no official rate recovered); not while out of breath. Sitting
-                // (CharRestStart) triples HP and MP recovery (OURS too).
                 var rest = Resting && !inCombat ? RestRegenFactor : 1;
-                if (!inCombat && !suffocating) resources.Hp = (int)Math.Min(resources.HpMax, resources.Hp + seconds * rest * (Math.Max(1, resources.HpMax / 50) + BuffStat("HPRegen")));
-                if (suffocating && !invincible.Hp)
-                    resources.Hp = (int)Math.Max(0, resources.Hp - seconds * Math.Max(1L, (long)resources.HpMax * SuffocationRatio / 10000));
-                resources.Mp = (int)Math.Min(resources.MpMax, resources.Mp + seconds * rest * (25 + BuffStat("MPRegen")));
+                if (!inCombat)
+                {
+                    var hpRegen = StatWireValue(195) + BuffStat("HPRegen");
+                    if (hpRegen > 0) resources.Hp = (int)Math.Min(resources.HpMax, resources.Hp + seconds * rest * hpRegen);
+                    var mpRegen = StatWireValue(201) + BuffStat("MPRegen");
+                    resources.Mp = (int)Math.Min(resources.MpMax, resources.Mp + seconds * rest * Math.Max(0, mpRegen));
+                }
                 if (!sprinting)
                     resources.Sp = (int)Math.Min(resources.SpMax, resources.Sp + seconds * (inCombat ? SpRegenInCombat : SpRegenOutOfCombat));
+                if (resources.ApMax > 0)
+                {
+                    var apRegen = PlayerApPools.ApRegen(data, className);
+                    if (apRegen > 0)
+                        resources.Ap = (int)Math.Min(resources.ApMax, resources.Ap + seconds * apRegen);
+                }
                 Pin(resources);
                 // Invincible SP is resent each second: flight spends it on the client side.
+                var apBefore = resources.Ap;
                 if (invincible.Sp || before != (resources.Hp, resources.Mp, resources.Sp)) replies.Add(resources.Update());
+                else if (resources.ApMax > 0 && apBefore != resources.Ap) replies.Add(resources.ApUpdate());
                 if (resources.Op != op) replies.Add(resources.OpUpdate());
-                if (resources.Fp != fp) replies.Add(resources.FpUpdate());
-                if (resources.Fp == 0 && fp > 0 && air is AirState.Fly or AirState.Glide && position is { } here)
-                {
-                    // The gauge ran out: the official server starts the flyer's fall itself (0x371e with gravity mode 2, no jump;
-                    // recording 2026-10-19 at FP 0, twice: after the flight and after the glide that followed).
-                    air = AirState.Fall;
-                    replies.Add(PlayerPackets.GravityStart(playerKey, here, worldPlayer?.Heading ?? 0, Vector3d.Zero, 2, jumpUp: false));
-                }
+                if (resources.Fp != fp) replies.AddRange(FpWireUpdates());
+                if (resources.Fp == 0 && fp > 0 && air is AirState.Fly or AirState.Glide)
+                    replies.AddRange(EndFlightFromEmptyFp());
                 if (suffocating && resources.Hp == 0) replies.AddRange(Die(0, now));
             }
         }
         if (pendingUse is { } use && now >= use.DueMs)
         {
             pendingUse = null;
-            replies.AddRange(await CompleteUseAsync(use.Index, ct, now));
+            replies.AddRange(await WithMapEventClearsFlushedAsync(await CompleteUseAsync(use.Index, ct, now), ct));
         }
-        if (dead && now >= reviveAt) replies.AddRange(Revive(now));
+        if (dead && now >= reviveAt) replies.AddRange(AutoRevive(now));
+        WarnStuckReload(now);
         if (itemCast is { } cast && now >= cast.DueMs) replies.AddRange(await CompleteItemCastAsync(now, ct));
+        replies.AddRange(ReleasePendingProjectiles(now));
+        replies.AddRange(ResolvePendingCasterMoves(now));
+        replies.AddRange(ResolvePendingSkillAbnormals(now));
+        replies.AddRange(ResolvePendingSkillEffects(now));
+        replies.AddRange(ResolvePendingMoveStops(now));
+        replies.AddRange(ResolvePendingCombatHits(now));
+        replies.AddRange(TrapTick(now));
+        replies.AddRange(ZoneTick(now));
+        replies.AddRange(await QuestKillsAsync(ct));
+        replies.AddRange(await KillExperienceAsync(ct));
         replies.AddRange(BuffTick(now));
         replies.AddRange(DropTick(now));
         replies.AddRange(MapEventTick(now));
         replies.AddRange(InstanceTick(now));
+        replies.AddRange(AbyssTick(now));
+        replies.AddRange(AirspaceWorldTick(now));
+        replies.AddRange(ContentResetWorldTick(now));
+        await FlushContentResetWorkAsync(ct);
         // Map events cleared by a talk or a timer pay their quest objective here (kills pay on the cast).
         if (clearedEvents.Count > 0) replies.AddRange(await QuestKillsAsync(ct));
-        if (pendingRewards.Count > 0) replies.AddRange(await GrantPendingRewardsAsync(ct));
+        if (pendingRewards.Count > 0) replies.AddRange(await GrantPendingRewardsAsync(now, ct));
         if (pendingQuestChanges.Count > 0)
         {
             var changed = pendingQuestChanges.ToList();
@@ -2884,7 +2768,13 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             replies.AddRange(await Stored(() => QuestChangesAsync(changed, ct)));
         }
         await FlushAchievementsAsync(now, ct);
+        await FlushAbyssAsync(now, ct);
+        await FlushAirspaceAsync(ct);
         await FlushBossChallengeAsync(ct);
+        await FlushExpeditionTicketsAsync(ct);
+        await FlushRewardLimitsAsync(ct);
+        await FlushDungeonCooltimesAsync(ct);
+        await FlushBuffSettingsAsync(now, ct);
         // Play time: a minute at a time to the ElapsedTime achievements without a movement state (steps are minutes:
         // "Accumulate 3 hours of playtime" = 180). The ones naming states (Glide, Flying, Swimming) count their own minutes below.
         if (resources is not null && elapsedAchieveAt != 0 && now >= elapsedAchieveAt)
@@ -2908,10 +2798,11 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             if (now >= aiMap.AiTickAt)
             {
                 aiMap.AiTickAt = now + 50;
+                SyncSharedMapAiKillPreserve(aiMap);
                 aiMap.Ai.DefenseOf ??= key => aiMap.Players.TryGetValue(key, out var p) ? p.Session.Defense : 0;
                 aiMap.BroadcastAll(aiMap.Ai.Tick(aiMap.Targets, aiMap.NpcVictims(), now, (key, damage) =>
                 {
-                    if (aiMap.Players.TryGetValue(key, out var victim)) victim.Send(victim.Session.NpcHitsPlayer(damage, now, aiMap.Ai.LastAttacker));
+                    if (aiMap.Players.TryGetValue(key, out var victim)) victim.Send(victim.Session.NpcHitsPlayer(damage, now, aiMap.Ai.LastAttacker, aiMap.Ai.LastHitSkill));
                     return [];
                 }));
                 var npcKills = NpcKillsByNpcs(aiMap.Ai, now);
@@ -2921,10 +2812,15 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         }
         else if (targets is not null && (ai.DefenseOf ??= _ => Defense) is not null)
         {
-            replies.AddRange(Visible(ai.Tick(targets, invisible || dead || FriendlyToAll ? null : position, now, damage => NpcHitsPlayer(damage, now, ai.LastAttacker))));
+            ai.SkipLeashHealNpcIds = OpenKillNpcIdsForSharedAi();
+            if (ai.SkipLeashHealNpcIds.Count == 0) ai.SkipLeashHealNpcIds = null;
+            replies.AddRange(Visible(ai.Tick(targets, invisible || dead || FriendlyToAll ? null : position, now, damage => NpcHitsPlayer(damage, now, ai.LastAttacker, ai.LastHitSkill))));
             replies.AddRange(NpcKillsByNpcs(ai, now));
         }
         PartyTick(now);
+        StaggerGaugeCombat.StaggerTick(targets, now);
+        ClearPlayerStaggerIfExpired(now);
+        PartyLootTick(now);
         DuelTick(now);
         ArenaTick(now);
         if (pendingAchievementPackets.Count > 0) { replies.AddRange(pendingAchievementPackets); pendingAchievementPackets.Clear(); }
@@ -2932,6 +2828,28 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             while (worldPlayer.Outbox.TryDequeue(out var queued)) replies.Add(queued);
         await CheckpointAsync(now, force: false, ct);
         return replies;
+    }
+
+    /// <summary>Writes debounced session state before logout or disconnect (position is saved separately).</summary>
+    public async Task FlushDeferredPersistenceAsync(long now, CancellationToken ct)
+    {
+        if (pendingQuestChanges.Count > 0)
+        {
+            var changed = pendingQuestChanges.ToList();
+            pendingQuestChanges.Clear();
+            await Stored(() => QuestChangesAsync(changed, ct));
+        }
+        await FlushAchievementsAsync(now, ct, force: true);
+        await FlushAbyssAsync(now, ct, force: true);
+        await FlushAirspaceAsync(ct);
+        await FlushBossChallengeAsync(ct);
+        await FlushExpeditionTicketsAsync(ct);
+        await FlushRewardLimitsAsync(ct);
+        await FlushDungeonCooltimesAsync(ct);
+        await FlushContentResetWorkAsync(ct);
+        await FlushBuffSettingsAsync(now, ct, force: true);
+        if (InWorld && Store is { } logoutStore && selected is { } logoutWho)
+            selected = await logoutStore.RecordLogoutAsync(logoutWho, now, ct) ?? logoutWho;
     }
 
     /// <summary>Saves a selected stored character's position every 30 s when it moved, or now (force).</summary>
@@ -2943,6 +2861,8 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         try
         {
             selected = await Store.SavePositionAsync(selected, worldMap, at, ct);
+            if (TurnStore.Unwrap(Store) is IGameplayFlushStore flush && await flush.FlushAsync(ct) is { } flushed)
+                selected = flushed;
             savedPosition = at;
             Checkpoints++;
         }
@@ -3063,6 +2983,6 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             }
             catch (ArgumentException) { }
         }
-        return ("1000001", "00000000-0000-0000-0000-000000000000");
+        return (DevelopmentDefaults.AccountSid, DevelopmentDefaults.NullGuid);
     }
 }

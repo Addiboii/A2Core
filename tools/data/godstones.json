@@ -1,0 +1,587 @@
+{
+  "source": "GodStone.dat via tools/godstone_data.py (MetaBot text cross-check when catalogue absent)",
+  "stones": {
+    "513830001": {
+      "name": "AulakRoar",
+      "grade": 1,
+      "proc": {
+        "chance": 3,
+        "cooldown_ms": 5000,
+        "kind": "abnormal",
+        "abnormal": "Stun",
+        "duration_ms": 1000,
+        "abnormal_id": 10000017
+      }
+    },
+    "513830003": {
+      "name": "AultrossPromise",
+      "grade": 1,
+      "proc": {
+        "chance": 10,
+        "cooldown_ms": 1000,
+        "kind": "damage",
+        "amount": 500
+      }
+    },
+    "513830004": {
+      "name": "AulvicarSorcery",
+      "grade": 1,
+      "proc": {
+        "chance": 4,
+        "cooldown_ms": 1000,
+        "kind": "aoe_damage",
+        "amount": 625,
+        "targets": 4
+      }
+    },
+    "513830005": {
+      "name": "BargottEmber",
+      "grade": 1,
+      "proc": {
+        "chance": 2,
+        "cooldown_ms": 1000,
+        "kind": "aoe_damage",
+        "amount": 1250,
+        "targets": 4
+      }
+    },
+    "513830006": {
+      "name": "FerukInstinct",
+      "grade": 1,
+      "proc": {
+        "chance": 3,
+        "cooldown_ms": 1000,
+        "kind": "dot",
+        "tick": 400,
+        "interval_ms": 2000,
+        "duration_ms": 10000
+      }
+    },
+    "513830007": {
+      "name": "GartuaStrength",
+      "grade": 1,
+      "proc": {
+        "chance": 10,
+        "cooldown_ms": 1000,
+        "kind": "aoe_damage",
+        "amount": 250,
+        "targets": 4
+      }
+    },
+    "513830008": {
+      "name": "HeladrirChains",
+      "grade": 1,
+      "proc": {
+        "chance": 2,
+        "cooldown_ms": 5000,
+        "kind": "abnormal",
+        "abnormal": "Root",
+        "duration_ms": 3000,
+        "abnormal_id": 16056801
+      }
+    },
+    "513830009": {
+      "name": "KaisinelVestige",
+      "grade": 1,
+      "proc": {
+        "chance": 3,
+        "cooldown_ms": 5000,
+        "kind": "abnormal",
+        "abnormal": "Blind",
+        "duration_ms": 5000,
+        "abnormal_id": 10000017
+      }
+    },
+    "513830010": {
+      "name": "NotunCraft",
+      "grade": 1,
+      "proc": {
+        "chance": 3,
+        "cooldown_ms": 5000,
+        "kind": "debuff",
+        "stat": "CombatSpeed",
+        "percent": -50,
+        "duration_ms": 5000,
+        "abnormal_id": 22101051
+      }
+    },
+    "513830011": {
+      "name": "NuaScheme",
+      "grade": 1,
+      "proc": {
+        "chance": 2,
+        "cooldown_ms": 5000,
+        "kind": "abnormal",
+        "abnormal": "Paralyze",
+        "duration_ms": 2000,
+        "abnormal_id": 10000017
+      }
+    },
+    "513830012": {
+      "name": "PerionTragedy",
+      "grade": 1,
+      "proc": {
+        "chance": 3,
+        "cooldown_ms": 5000,
+        "kind": "abnormal",
+        "abnormal": "Seal",
+        "duration_ms": 3000,
+        "abnormal_id": 10000017
+      }
+    },
+    "513830013": {
+      "name": "RathmanGreed",
+      "grade": 1,
+      "proc": {
+        "chance": 20,
+        "cooldown_ms": 5000,
+        "kind": "aoe_damage",
+        "amount": 125,
+        "targets": 4
+      }
+    },
+    "513830014": {
+      "name": "RedaTenacity",
+      "grade": 1,
+      "proc": {
+        "chance": 3,
+        "cooldown_ms": 5000,
+        "kind": "debuff",
+        "stat": "MoveSpeed",
+        "percent": -50,
+        "duration_ms": 5000,
+        "abnormal_id": 1726
+      }
+    },
+    "513830015": {
+      "name": "SantrasSecret",
+      "grade": 1,
+      "proc": {
+        "chance": 5,
+        "cooldown_ms": 1000,
+        "kind": "dot",
+        "tick": 300,
+        "interval_ms": 2000,
+        "duration_ms": 20000
+      }
+    },
+    "513830016": {
+      "name": "TassinCommand",
+      "grade": 1,
+      "proc": {
+        "chance": 2,
+        "cooldown_ms": 1000,
+        "kind": "damage",
+        "amount": 2500
+      }
+    },
+    "513830017": {
+      "name": "UlgornWill",
+      "grade": 1,
+      "proc": {
+        "chance": 5,
+        "cooldown_ms": 1000,
+        "kind": "damage",
+        "amount": 1000
+      }
+    },
+    "513830018": {
+      "name": "ZikelVestige",
+      "grade": 1,
+      "proc": {
+        "chance": 1,
+        "cooldown_ms": 1000,
+        "kind": "damage",
+        "amount": 5000
+      }
+    },
+    "513840001": {
+      "name": "BollvigTragedy",
+      "grade": 2,
+      "proc": {
+        "chance": 3,
+        "cooldown_ms": 5000,
+        "kind": "abnormal",
+        "abnormal": "Blind",
+        "duration_ms": 6000,
+        "abnormal_id": 10000017
+      }
+    },
+    "513840003": {
+      "name": "BoreasEncouragement",
+      "grade": 2,
+      "proc": {
+        "chance": 2,
+        "cooldown_ms": 1000,
+        "kind": "aoe_damage",
+        "amount": 2500,
+        "targets": 4
+      }
+    },
+    "513840004": {
+      "name": "CharnaAcumen",
+      "grade": 2,
+      "proc": {
+        "chance": 4,
+        "cooldown_ms": 1000,
+        "kind": "aoe_damage",
+        "amount": 1250,
+        "targets": 4
+      }
+    },
+    "513840005": {
+      "name": "CharnaRoot",
+      "grade": 2,
+      "proc": {
+        "chance": 2,
+        "cooldown_ms": 5000,
+        "kind": "abnormal",
+        "abnormal": "Root",
+        "duration_ms": 4000,
+        "abnormal_id": 16056801
+      }
+    },
+    "513840006": {
+      "name": "DeltrasLoyalty",
+      "grade": 2,
+      "proc": {
+        "chance": 3,
+        "cooldown_ms": 5000,
+        "kind": "debuff",
+        "stat": "MoveSpeed",
+        "percent": -50,
+        "duration_ms": 6000,
+        "abnormal_id": 1726
+      }
+    },
+    "513840007": {
+      "name": "FasimedesDignity",
+      "grade": 2,
+      "proc": {
+        "chance": 3,
+        "cooldown_ms": 5000,
+        "kind": "abnormal",
+        "abnormal": "Stun",
+        "duration_ms": 2000,
+        "abnormal_id": 10000017
+      }
+    },
+    "513840008": {
+      "name": "FreyrWisdom",
+      "grade": 2,
+      "proc": {
+        "chance": 5,
+        "cooldown_ms": 1000,
+        "kind": "damage",
+        "amount": 2000
+      }
+    },
+    "513840009": {
+      "name": "IoSadness",
+      "grade": 2,
+      "proc": {
+        "chance": 3,
+        "cooldown_ms": 5000,
+        "kind": "debuff",
+        "stat": "CombatSpeed",
+        "percent": -50,
+        "duration_ms": 6000,
+        "abnormal_id": 22101051
+      }
+    },
+    "513840010": {
+      "name": "JumentisDexterity",
+      "grade": 2,
+      "proc": {
+        "chance": 20,
+        "cooldown_ms": 1000,
+        "kind": "aoe_damage",
+        "amount": 250,
+        "targets": 4
+      }
+    },
+    "513840011": {
+      "name": "KhrudgelmirSilence",
+      "grade": 2,
+      "proc": {
+        "chance": 3,
+        "cooldown_ms": 5000,
+        "kind": "abnormal",
+        "abnormal": "Seal",
+        "duration_ms": 4000,
+        "abnormal_id": 10000017
+      }
+    },
+    "513840012": {
+      "name": "MahishaWrath",
+      "grade": 2,
+      "proc": {
+        "chance": 3,
+        "cooldown_ms": 1000,
+        "kind": "dot",
+        "tick": 600,
+        "interval_ms": 2000,
+        "duration_ms": 10000
+      }
+    },
+    "513840013": {
+      "name": "OrissanBlood",
+      "grade": 2,
+      "proc": {
+        "chance": 5,
+        "cooldown_ms": 1000,
+        "kind": "dot",
+        "tick": 450,
+        "interval_ms": 2000,
+        "duration_ms": 20000
+      }
+    },
+    "513840014": {
+      "name": "SifKnowledge",
+      "grade": 2,
+      "proc": {
+        "chance": 2,
+        "cooldown_ms": 1000,
+        "kind": "damage",
+        "amount": 5000
+      }
+    },
+    "513840015": {
+      "name": "SigynBrilliance",
+      "grade": 2,
+      "proc": {
+        "chance": 10,
+        "cooldown_ms": 1000,
+        "kind": "damage",
+        "amount": 1000
+      }
+    },
+    "513840016": {
+      "name": "ThrasymedesWisdom",
+      "grade": 2,
+      "proc": {
+        "chance": 10,
+        "cooldown_ms": 1000,
+        "kind": "aoe_damage",
+        "amount": 500,
+        "targets": 4
+      }
+    },
+    "513840017": {
+      "name": "TraufnirCourage",
+      "grade": 2,
+      "proc": {
+        "chance": 1,
+        "cooldown_ms": 1000,
+        "kind": "damage",
+        "amount": 10000
+      }
+    },
+    "513840018": {
+      "name": "VidarDignity",
+      "grade": 2,
+      "proc": {
+        "chance": 2,
+        "cooldown_ms": 5000,
+        "kind": "abnormal",
+        "abnormal": "Paralyze",
+        "duration_ms": 3000,
+        "abnormal_id": 10000017
+      }
+    },
+    "513850001": {
+      "name": "BeritraConspiracy",
+      "grade": 3,
+      "proc": {
+        "chance": 3,
+        "cooldown_ms": 5000,
+        "kind": "abnormal",
+        "abnormal": "Seal",
+        "duration_ms": 5000,
+        "abnormal_id": 10000017
+      }
+    },
+    "513850003": {
+      "name": "BeritraSelfishness",
+      "grade": 3,
+      "proc": {
+        "chance": 20,
+        "cooldown_ms": 1000,
+        "kind": "aoe_damage",
+        "amount": 375,
+        "targets": 4
+      }
+    },
+    "513850004": {
+      "name": "EreshkigalHonor",
+      "grade": 3,
+      "proc": {
+        "chance": 2,
+        "cooldown_ms": 5000,
+        "kind": "abnormal",
+        "abnormal": "Paralyze",
+        "duration_ms": 4000,
+        "abnormal_id": 10000017
+      }
+    },
+    "513850005": {
+      "name": "FregionSchemes",
+      "grade": 3,
+      "proc": {
+        "chance": 3,
+        "cooldown_ms": 5000,
+        "kind": "abnormal",
+        "abnormal": "Blind",
+        "duration_ms": 7000,
+        "abnormal_id": 10000017
+      }
+    },
+    "513850006": {
+      "name": "FregionStrategy",
+      "grade": 3,
+      "proc": {
+        "chance": 3,
+        "cooldown_ms": 1000,
+        "kind": "dot",
+        "tick": 800,
+        "interval_ms": 2000,
+        "duration_ms": 10000
+      }
+    },
+    "513850007": {
+      "name": "KaisinelReverie",
+      "grade": 3,
+      "proc": {
+        "chance": 3,
+        "cooldown_ms": 5000,
+        "kind": "debuff",
+        "stat": "MoveSpeed",
+        "percent": -50,
+        "duration_ms": 7000,
+        "abnormal_id": 1726
+      }
+    },
+    "513850008": {
+      "name": "LumielInterference",
+      "grade": 3,
+      "proc": {
+        "chance": 3,
+        "cooldown_ms": 5000,
+        "kind": "debuff",
+        "stat": "CombatSpeed",
+        "percent": -50,
+        "duration_ms": 7000,
+        "abnormal_id": 22101051
+      }
+    },
+    "513850009": {
+      "name": "MarchutanJustice",
+      "grade": 3,
+      "proc": {
+        "chance": 4,
+        "cooldown_ms": 1000,
+        "kind": "aoe_damage",
+        "amount": 1875,
+        "targets": 4
+      }
+    },
+    "513850010": {
+      "name": "MeslamtaedaGreed",
+      "grade": 3,
+      "proc": {
+        "chance": 3,
+        "cooldown_ms": 5000,
+        "kind": "abnormal",
+        "abnormal": "Stun",
+        "duration_ms": 3000,
+        "abnormal_id": 10000017
+      }
+    },
+    "513850011": {
+      "name": "MeslamtaedaRegret",
+      "grade": 3,
+      "proc": {
+        "chance": 10,
+        "cooldown_ms": 1000,
+        "kind": "damage",
+        "amount": 1500
+      }
+    },
+    "513850012": {
+      "name": "NezekanMarch",
+      "grade": 3,
+      "proc": {
+        "chance": 2,
+        "cooldown_ms": 5000,
+        "kind": "abnormal",
+        "abnormal": "Root",
+        "duration_ms": 5000,
+        "abnormal_id": 16056801
+      }
+    },
+    "513850013": {
+      "name": "TiamatCounterstrike",
+      "grade": 3,
+      "proc": {
+        "chance": 2,
+        "cooldown_ms": 1000,
+        "kind": "aoe_damage",
+        "amount": 3750,
+        "targets": 4
+      }
+    },
+    "513850014": {
+      "name": "TiamatRage",
+      "grade": 3,
+      "proc": {
+        "chance": 1,
+        "cooldown_ms": 1000,
+        "kind": "damage",
+        "amount": 15000
+      }
+    },
+    "513850015": {
+      "name": "TrinielRationality",
+      "grade": 3,
+      "proc": {
+        "chance": 2,
+        "cooldown_ms": 1000,
+        "kind": "damage",
+        "amount": 7500
+      }
+    },
+    "513850016": {
+      "name": "VaizelOath",
+      "grade": 3,
+      "proc": {
+        "chance": 5,
+        "cooldown_ms": 1000,
+        "kind": "damage",
+        "amount": 3000
+      }
+    },
+    "513850017": {
+      "name": "YustielCompassion",
+      "grade": 3,
+      "proc": {
+        "chance": 10,
+        "cooldown_ms": 1000,
+        "kind": "aoe_damage",
+        "amount": 750,
+        "targets": 4
+      }
+    },
+    "513850018": {
+      "name": "ZikelArrogance",
+      "grade": 3,
+      "proc": {
+        "chance": 5,
+        "cooldown_ms": 1000,
+        "kind": "dot",
+        "tick": 600,
+        "interval_ms": 2000,
+        "duration_ms": 20000
+      }
+    }
+  }
+}

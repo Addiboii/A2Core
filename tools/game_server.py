@@ -37,6 +37,7 @@ try:
     from .run_diagnostics import record_exchange
     from .aion_protocol import Incomplete, Reader, encode_varint, split_frames, lz4_block_encode
     from .probe_login_reply import RC4, read_greeting, rsa_public_from_hello, rsa_pub_encrypt
+    from .dev_defaults import ACCOUNT_SID, NULL_GUID, WORLD_ID, WORLD_ID_STRING
 except ImportError:
     from starter_skills import starter_profile, build_skill_list, build_skill_slots
     from class_skills import learned_skills, clamp_level
@@ -48,6 +49,7 @@ except ImportError:
     from run_diagnostics import record_exchange
     from aion_protocol import Incomplete, Reader, encode_varint, split_frames, lz4_block_encode
     from probe_login_reply import RC4, read_greeting, rsa_public_from_hello, rsa_pub_encrypt
+    from dev_defaults import ACCOUNT_SID, NULL_GUID, WORLD_ID, WORLD_ID_STRING
 
 ROOT = Path(__file__).resolve().parents[1]
 HOST = "127.0.0.1"
@@ -529,7 +531,7 @@ def _build_spawn_detail_tail():
     return bytes(out)
 
 
-def build_my_char_appear(key=1, name="", server_id=1204, pc_id=1, race=1,
+def build_my_char_appear(key=1, name="", server_id=WORLD_ID, pc_id=1, race=1,
                          char_level=1, equip_item_level=0,
                          highest_total_item_level=0, level_max=1, exp=0,
                          combat_level=1, combat_exp=0, gender=1,
@@ -819,7 +821,7 @@ def _game_load_complete_request(body):
     return {"enter_map_ticket": enter_map_ticket}
 
 
-def build_game_login(name, position, class_template=0x2A14, world_id=1204,
+def build_game_login(name, position, class_template=0x2A14, world_id=WORLD_ID,
                      account_sid="721357", guid=None, now_ms=None,
                      name_code=None, race=0, gender=0, detail_flag=0,
                      equip_level=0, level=0, zone_id=0):
@@ -837,7 +839,7 @@ def build_game_login(name, position, class_template=0x2A14, world_id=1204,
     if not 0 <= world_id <= 0xFFFFFFFF:
         raise ValueError("world_id outside uint32")
     if guid is None:
-        guid = "00000000-0000-0000-0000-000000000000"
+        guid = NULL_GUID
     tail = bytearray(824)
     tail[0] = 1  # record count, observed
     tail[1:5] = class_template.to_bytes(4, "little")
@@ -974,14 +976,14 @@ def game_followup_replies(plain, now_ms=None, state=None):
         if intro.get("name"):
             name = intro["name"]
             position = SPAWN_POSITION
-            world_id = intro.get("server_id", 1204)
+            world_id = intro.get("server_id", WORLD_ID)
             name_code = intro.get("code", 42)
             race, gender, detail_flag = 1, 2, 1
             equip_level, zone_id = 12, 3000
         else:
             name = "$local"
             position = (0.0, 0.0, 0.0)
-            world_id = 1204
+            world_id = WORLD_ID
             name_code = None
             race = gender = detail_flag = 0
             equip_level, zone_id = 0, 3000
@@ -1117,7 +1119,7 @@ def game_followup_replies(plain, now_ms=None, state=None):
         # list: the no-login flow is on character creation at this point.
         state["lobby_login_sent"] = True
         account_sid, guid = state.get("login_identity", ("0", "0"))
-        return [build_login_characters([], f"{account_sid}:{guid}", "1204",
+        return [build_login_characters([], f"{account_sid}:{guid}", WORLD_ID_STRING,
                                        COMM_SERVER_KEY, now_ms=now_ms, is_born_server=True,
                                        chat_enable_level=0)]
     if header in WORLD_ENTRY_QUERY_REPLIES:
@@ -1214,7 +1216,7 @@ def _game_login_identity(body):
             raise ValueError("identity lacks account:guid")
         return account_sid, guid
     except (ValueError, UnicodeDecodeError):
-        return "1000001", "00000000-0000-0000-0000-000000000000"
+        return ACCOUNT_SID, NULL_GUID
 
 
 def drain_frames(buffer):

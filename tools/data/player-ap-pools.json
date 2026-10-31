@@ -1,0 +1,5 @@
+{
+  "note": "Class AP pools (EHudSkillCostType AP / PcStatLevel APMax). Patched by tools/player_ap_pools.py from client tables when present; ap_max_source \"override\" marks OURS.",
+  "regen_per_second": 0,
+  "classes": {}
+}

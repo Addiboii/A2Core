@@ -8,8 +8,12 @@ using Aion.Host.Native;
 using Aion.Host.Platform;
 using Aion.Host.NcGuard;
 using Aion.Host;
+using Aion.Host.Debug;
+using Aion.Host.Logging;
+using Aion.World;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using System.Net;
+using Aion.Core;
 using Aion.Infrastructure.Postgres;
 using Npgsql;
 using System.Threading.RateLimiting;
@@ -17,10 +21,30 @@ using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.Extensions.FileProviders;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Logging.AddServerFileLog(builder.Configuration);
+var debugOptions = builder.Configuration.GetSection(AionConfiguration.Debug).Get<DebugOptions>() ?? new DebugOptions();
+if (debugOptions.Enabled)
+{
+    builder.Services.AddSingleton(_ => OpcodeCatalog.Load());
+    builder.Services.AddSingleton(debugOptions);
+    builder.Services.AddSingleton<PlaytestDebugSink>();
+}
 // Bind and advertised addresses (loopback unless configured for a public server).
-var network = builder.Configuration.GetSection("Aion:Network").Get<NetworkOptions>() ?? new NetworkOptions();
+var network = builder.Configuration.GetSection(AionConfiguration.Network).Get<NetworkOptions>() ?? new NetworkOptions();
 network.Validate();
 builder.Services.AddSingleton(network);
+var progressionSection = builder.Configuration.GetSection(AionConfiguration.Progression).Get<ProgressionOptions>() ?? new ProgressionOptions();
+var levelCap = progressionSection.LevelCap is > 0 and <= ProgressionOptions.TableMaxLevel
+    ? progressionSection.LevelCap
+    : ProgressionOptions.DefaultLevelCap;
+builder.Services.AddSingleton(new ProgressionOptions { LevelCap = levelCap });
+builder.Services.AddSingleton(_ => Aion.World.GameData.Embedded.WithLevelCap(levelCap));
+builder.Services.AddSingleton<IItemStatRoller>(sp => new ItemStatRollerService(sp.GetRequiredService<GameData>(), Random.Shared));
+if (builder.Configuration["Aion:Debug:ShopFile"] is { Length: > 0 } shopDebug)
+    Aion.World.GameSession.ConfigureShopDebug(shopDebug);
+var shopPremium = Aion.World.ShopOptions.Parse(builder.Configuration["Aion:Shop:PremiumMode"]);
+Aion.World.GameSession.ConfigureShopOptions(new Aion.World.ShopOptions { PremiumMode = shopPremium });
+Aion.World.GameSession.ConfigureMembership(builder.Configuration.GetValue("Aion:World:MembershipByDefault", true));
 var connectionString = builder.Configuration.GetConnectionString("Aion");
 var authConnectionString = builder.Configuration.GetConnectionString("Auth");
 if (!string.IsNullOrWhiteSpace(connectionString))
@@ -32,16 +56,30 @@ if (!string.IsNullOrWhiteSpace(connectionString))
     builder.Services.AddSingleton<IWireCharacterRepository>(provider => provider.GetRequiredService<PostgresCharacterRepository>());
     builder.Services.AddSingleton<CharacterService>();
     builder.Services.AddSingleton<CharacterPersistenceService>();
-    builder.Services.AddSingleton<IGameplayStore, PostgresGameplayStore>();
+    builder.Services.AddSingleton<IGameplayStore>(sp => new PostgresGameplayStore(
+        sp.GetRequiredService<NpgsqlDataSource>(), sp.GetRequiredService<ProgressionOptions>(), sp.GetService<IItemStatRoller>()));
+    builder.Services.AddSingleton<IAccountQunaBalance, PostgresAccountQunaBalance>();
     builder.Services.AddSingleton<IGameTicketRedeemer, PostgresGameTicketRedeemer>();
 }
+else
+    builder.Services.AddSingleton<IAccountQunaBalance, NullAccountQunaBalance>();
 var accountsReady = !string.IsNullOrWhiteSpace(connectionString) && !string.IsNullOrWhiteSpace(authConnectionString);
 if (accountsReady)
 {
-    builder.Services.AddSingleton<PostgresAccountAuthentication>(_ => new PostgresAccountAuthentication(authConnectionString!));
+    builder.Services.AddSingleton<PostgresAccountAuthentication>(provider =>
+    {
+        var auth = new PostgresAccountAuthentication(authConnectionString!);
+        var totpKey = builder.Configuration["Aion:Totp:EncryptionKey"];
+        if (string.IsNullOrWhiteSpace(totpKey) && builder.Configuration["Aion:BridgeSecret"] is { Length: >= 32 } bridge)
+            totpKey = Convert.ToBase64String(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(bridge)));
+        if (!string.IsNullOrWhiteSpace(totpKey)) auth.ConfigureTotp(totpKey);
+        return auth;
+    });
     builder.Services.AddSingleton<IAccountAuthentication>(provider => provider.GetRequiredService<PostgresAccountAuthentication>());
     builder.Services.AddSingleton<IClientHandoff>(provider => provider.GetRequiredService<PostgresAccountAuthentication>());
     builder.Services.AddSingleton<IAccountManagement>(provider => provider.GetRequiredService<PostgresAccountAuthentication>());
+    builder.Services.AddSingleton<ITotpAuthentication>(provider => provider.GetRequiredService<PostgresAccountAuthentication>());
+    builder.Services.AddSingleton<IPlatformSecondaryAuth>(provider => provider.GetRequiredService<PostgresAccountAuthentication>());
     builder.Services.AddSingleton<IWorldSessions>(provider => provider.GetRequiredService<PostgresAccountAuthentication>());
     builder.Services.AddHostedService<AuthenticationCleanup>();
     // Staff tools: maintenance, sanctions, chat log, tickets, events, population, economy (migration 028).
@@ -57,8 +95,8 @@ builder.Services.AddSingleton(TimeProvider.System);
 // a chat login needs the account's game ticket and binds to the account's character in the
 // world on this host (native game listener with account logins); without those, every chat
 // login is rejected.
-var chatServerKey = builder.Configuration["Aion:ChatServerKey"] ?? "1204";
-var chatWorldId = int.TryParse(chatServerKey, out var parsedChatWorld) ? parsedChatWorld : 1204;
+var chatServerKey = builder.Configuration["Aion:ChatServerKey"] ?? Aion.World.DevelopmentDefaults.WorldIdString;
+var chatWorldId = int.TryParse(chatServerKey, out var parsedChatWorld) ? parsedChatWorld : Aion.World.DevelopmentDefaults.WorldId;
 static WorldChatDirectory? ChatDirectory(IServiceProvider provider, int world) =>
     provider.GetService<Aion.World.WorldPresence>() is { } presence && provider.GetService<IWireCharacterRepository>() is { } characters
         ? new WorldChatDirectory(presence, characters, world) : null;
@@ -75,7 +113,14 @@ else
 // Native client ports (port of tools/login_server.py and game_server.py) on the network bind address.
 // "accounts" logins check launch tickets and store characters; "development" accepts any
 // local client with an unsaved character and must be chosen explicitly.
-var native = (builder.Configuration.GetSection("Aion:Native").Get<NativeOptions>() ?? new NativeOptions()) with { Network = network };
+var worldOptions = builder.Configuration.GetSection(AionConfiguration.World).Get<WorldOptions>() ?? new WorldOptions();
+builder.Services.AddSingleton(worldOptions);
+var askNpcFallback = worldOptions.ResolveMapEventAskNpcProximityFallback(debugOptions);
+var native = (builder.Configuration.GetSection(AionConfiguration.Native).Get<NativeOptions>() ?? new NativeOptions()) with
+{
+    Network = network,
+    MapEventAskNpcProximityFallback = askNpcFallback,
+};
 if (native.LoginPort is not null || native.GamePort is not null)
 {
     if (!native.Development && !accountsReady)
@@ -96,16 +141,18 @@ if (native.LoginPort is not null || native.GamePort is not null)
     }
     // Builder (GM) commands: client console "s <command>" (0x362e) and "//<command>" in chat.
     builder.Services.AddSingleton<Aion.World.WorldPresence>();
+    builder.Services.AddSingleton<ShopQunaBalanceService>();
     builder.Services.AddSingleton<Aion.Host.Authentication.ScheduledRestart>();
     // Multiplayer: one shared world (maps, NPCs, players) for every game connection on this host.
-    builder.Services.AddSingleton(_ => new Aion.World.SharedWorld(Aion.World.GameData.Embedded));
+    builder.Services.AddSingleton(provider => new Aion.World.SharedWorld(provider.GetRequiredService<Aion.World.GameData>()));
     // The race of the world each account picks on the login port, for the game port's lobby.
     builder.Services.AddSingleton<Aion.World.WorldChoices>();
     builder.Services.AddSingleton(provider =>
     {
         var log = provider.GetRequiredService<ILoggerFactory>().CreateLogger("Aion.Gm");
         return new Aion.World.BuilderCommands(provider.GetRequiredService<Aion.World.WorldPresence>(), provider.GetRequiredService<Aion.World.GmPolicy>(),
-            (actor, command, result) => log.LogInformation("GM {Command} by {Actor}: {Result}", command, actor, result), Aion.World.GameData.Embedded);
+            (actor, command, result) => log.LogInformation("GM {Command} by {Actor}: {Result}", command, actor, result),
+            provider.GetRequiredService<Aion.World.GameData>());
     });
     builder.Services.AddSingleton<IChatCommandHandler>(provider =>
         new Aion.World.GmCommands(provider.GetRequiredService<Aion.World.WorldPresence>(), provider.GetRequiredService<Aion.World.BuilderCommands>())
@@ -167,7 +214,10 @@ if (native.LoginPort is not null || native.GamePort is not null)
     }
     // Dashboard grants reach players in the world at once (needs the game database).
     if (native.GamePort is not null && !string.IsNullOrWhiteSpace(connectionString))
+    {
         builder.Services.AddHostedService<InventoryNotifications>();
+        builder.Services.AddHostedService<PostExpirySweep>();
+    }
 }
 builder.Services.AddRateLimiter(options =>
 {
@@ -188,13 +238,16 @@ builder.Services.AddRateLimiter(options =>
     options.AddPolicy("admin", context => RateLimitPartition.GetFixedWindowLimiter(
         context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
         _ => new FixedWindowRateLimiterOptions { PermitLimit = 120, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
+    options.AddPolicy("totp-verify", context => RateLimitPartition.GetFixedWindowLimiter(
+        context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
 });
 // Optional platform bootstrap for the dev client (GamePlatform.ini ConfigurationServerUrl).
-var platform = builder.Configuration.GetSection("Aion:Platform").Get<PlatformOptions>() ?? new PlatformOptions();
+var platform = builder.Configuration.GetSection(AionConfiguration.Platform).Get<PlatformOptions>() ?? new PlatformOptions();
 var platformResponses = platform.Port is not { } bootstrapPort ? null : PlatformResponses.Load(platform, network, bootstrapPort, native.LoginPort, chatPort);
 // Launchers that sign in on this host and start clients without a launch code in the bootstrap URL.
 if (platform.Port is not null && accountsReady) builder.Services.AddSingleton<LaunchPairing>();
-var ncGuard = (builder.Configuration.GetSection("Aion:NcGuard").Get<NcGuardOptions>() ?? new NcGuardOptions()) with { BindAddress = network.BindAddress };
+var ncGuard = (builder.Configuration.GetSection(AionConfiguration.NcGuard).Get<NcGuardOptions>() ?? new NcGuardOptions()) with { BindAddress = network.BindAddress };
 if (ncGuard.Port is not null)
 {
     builder.Services.AddSingleton(ncGuard);
@@ -205,7 +258,7 @@ if (ncGuard.Port is not null)
 // Account site and API (sign-in, launches, staff dashboard). A public host serves it over HTTPS
 // (Aion:Https PEM certificate) unless a TLS proxy in front of it is declared (Aion:Https:Proxy).
 var port = builder.Configuration.GetValue<int?>("Aion:LocalPort") ?? 8780;
-var https = builder.Configuration.GetSection("Aion:Https").Get<HttpsOptions>() ?? new HttpsOptions();
+var https = builder.Configuration.GetSection(AionConfiguration.Https).Get<HttpsOptions>() ?? new HttpsOptions();
 if (!network.LoopbackOnly && https.CertificateFile is null && !https.Proxy)
     throw new InvalidOperationException("A public host needs Aion:Https:CertificateFile and KeyFile for the account port (or Aion:Https:Proxy=true behind a TLS proxy).");
 var accountCertificate = https.CertificateFile is { } certificateFile
@@ -228,9 +281,21 @@ builder.WebHost.ConfigureKestrel(options =>
 });
 builder.Services.AddSingleton<WardrobeAccess>();
 var app = builder.Build();
+if (debugOptions.Enabled && app.Services.GetService<PlaytestDebugSink>() is { } playtestDebug)
+{
+    PlaytestDebug.Sink = playtestDebug;
+    app.Lifetime.ApplicationStopping.Register(() => playtestDebug.DisposeAsync().AsTask().GetAwaiter().GetResult());
+}
+if (app.Services.GetService<ServerFileLoggerProvider>() is { } serverLog)
+{
+    app.Logger.LogInformation("Server log file: {Path}", serverLog.Path);
+    app.Lifetime.ApplicationStopping.Register(serverLog.Dispose);
+}
 // Chat mutes and the chat log go through the staff tools when both exist.
 if (app.Services.GetService<Aion.Host.Authentication.ServerControl>() is { } serverControl && app.Services.GetService<ChatRelay>() is { } chatRelay)
     chatRelay.Moderation = serverControl;
+if (app.Services.GetService<ChatRelay>() is { } chatRelayBlocks && app.Services.GetService<IGameplayStore>() is { } gameplayStore)
+    chatRelayBlocks.WhisperBlocked = (from, to) => gameplayStore.AnyBlockBetweenAsync(from, to, default).GetAwaiter().GetResult();
 // Behind the declared TLS proxy (loopback), client addresses for rate limits and launch pairing
 // come from X-Forwarded-For; only loopback proxies are trusted (the defaults).
 if (https.Proxy)
@@ -258,9 +323,18 @@ app.Use(async (context, next) =>
     if (context.Request.Path.StartsWithSegments("/api") || context.Request.Path.StartsWithSegments("/internal")) context.Response.Headers.CacheControl = "no-store";
     await next();
 });
-if (platform.Port is { } platformPort) app.UsePlatformBootstrap(platformPort, platformResponses!, platform.RequestLog);
+if (platform.Port is { } platformPort)
+{
+    var accountTls = https.Proxy || https.CertificateFile is not null;
+    var accountPageBase = accountTls
+        ? $"https://{network.PublicAddress}" + (https.Proxy ? "" : $":{port}")
+        : $"http://{network.PublicAddress}:{port}";
+    app.UsePlatformBootstrap(platformPort, platformResponses!, platform.RequestLog, network, accountPageBase);
+}
 app.UseRateLimiter();
+if (debugOptions.Enabled) app.UsePlaytestHttpLogging();
 app.UseWebSockets();
+app.MapSynapseStub();
 // The staff dashboard can live at a private address (Aion:Web:StaffPath, e.g. "/k3x9..."); then
 // /admin.html is not found. Obscurity only: every staff API call still needs a staff sign-in.
 if (builder.Configuration["Aion:Web:StaffPath"] is { Length: > 1 } staffPath && staffPath.StartsWith('/') && staffPath != "/admin.html")
@@ -312,6 +386,7 @@ app.MapGet("/api/status", () => Results.Ok(new { accountsConfigured = accountsRe
 if (accountsReady)
 {
     app.MapAccountEndpoints(registrationOpen);
+    app.MapTotpEndpoints();
     app.MapGameplayEndpoints();
     Aion.Host.Authentication.StaffEndpoints.MapStaffEndpoints(app);
     Aion.Host.Authentication.StaffToolsEndpoints.MapStaffToolsEndpoints(app);

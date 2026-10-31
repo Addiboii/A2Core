@@ -1,0 +1,26 @@
+{
+  "source": "Hand entry. Skill.dat 15280000 Bittercold Wind has no Damage row of its own: its SkillEffect Spawn row places NpcData 2920011 Sorcerer_Skill028_Invisible_A (tools/data/pc-summons.json, no ActiveSkillList), so the damage of the real skill lives in rows the committed exports do not carry (research tables were not at hand). Every value below is OURS (improvised) until a Skill.dat / SkillEffect.dat export names the real rows.",
+  "zones": {
+    "15280000": {
+      "name": "Bittercold Wind",
+      "npc": 2920011,
+      "lifetime_ms": 6000,
+      "tick_ms": 1000,
+      "radius": 400,
+      "max": 4,
+      "damage": {
+        "flat": [150, 150],
+        "ratio": [8000, 8000],
+        "effect_id": 1528000011
+      },
+      "notes": {
+        "npc": "pc-summons.json skills 15280000 (Spawn effect, invisible marker summon, level 10, radius 1)",
+        "lifetime_ms": "OURS (improvised): no lifetime in the exported tables",
+        "tick_ms": "OURS (improvised)",
+        "radius": "skill-areas.json 15280000: Circle 400 around the target, 4 targets (SkillEffectFilter); used only when that export is missing",
+        "damage": "OURS (improvised): one tick is 150 + 80 % of the weapon attack, six ticks per cast (Frost 15150000, 30 s cooldown, is one hit of 178 + 94 %)",
+        "effect_id": "pattern of the class damage rows (skill id * 100 + 11)"
+      }
+    }
+  }
+}

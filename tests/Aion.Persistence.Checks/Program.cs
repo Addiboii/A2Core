@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Aion.Application.Characters;
 using Aion.Application.Gameplay;
+using Aion.Core;
 using Aion.Core.Accounts;
 using Aion.Core.Characters;
 using Aion.Infrastructure.Postgres;
@@ -90,7 +91,8 @@ await using (var reopened = NpgsqlDataSource.Create(connectionString))
 }
 await using(var source=NpgsqlDataSource.Create(connectionString))
 {
-    var game=new PostgresGameplayStore(source);
+    var progression = new ProgressionOptions();
+    var game=new PostgresGameplayStore(source, progression);
     var draft=new CreatePlayer(Guid.NewGuid(),"test","Starter",[1,2,255],VoiceType:7,LobbySlot:3);
     var ids=await Task.WhenAll(game.CreateAsync(first,draft),game.CreateAsync(first,draft));
     var id=ids[0];
@@ -102,6 +104,13 @@ await using(var source=NpgsqlDataSource.Create(connectionString))
     Check(await wireRepository.LoadWireAsync(second.AccountId,1204,native.WireId,default) is null,"wire ID does not bypass account ownership");
     Check(await wireRepository.LoadWireAsync(first.AccountId,1205,native.WireId,default) is null,"wire ID does not bypass world scope");
     Check((await wireRepository.ListWorldAsync(first.AccountId,1204,default)).Any(x=>x.WireId==native.WireId),"lobby includes stable identity");
+    var slotB=await game.CreateAsync(first,draft with {RequestId=Guid.NewGuid(),Name="SlotB",LobbySlot=5});
+    var nativeB=(await wireRepository.LoadOwnedAsync(first.AccountId,slotB,default))!;
+    Check(await game.SwapLobbySlotsAsync(first,1204,[(native.WireId,5),(nativeB.WireId,3)],8),"lobby slots swap atomically");
+    var afterSwapA=(await wireRepository.LoadOwnedAsync(first.AccountId,id,default))!;
+    var afterSwapB=(await wireRepository.LoadOwnedAsync(first.AccountId,slotB,default))!;
+    Check(afterSwapA.LobbySlot==5 && afterSwapB.LobbySlot==3,"lobby slots persist after swap");
+    await Reject(()=>game.SwapLobbySlotsAsync(first,1204,[(native.WireId,5),(nativeB.WireId,5)],8),"slot_unavailable");
     await Reject(()=>game.CreateAsync(first,draft with {RequestId=Guid.NewGuid(),Name="SlotConflict"}),"slot_unavailable");
     await Reject(()=>game.CreateAsync(first,draft with {VoiceType=8}),"request_conflict");
     await Reject(()=>game.CreateAsync(first,draft with {LobbySlot=256}),"invalid_character");
@@ -121,6 +130,15 @@ await using(var source=NpgsqlDataSource.Create(connectionString))
     var bag=(await game.InventoryAsync(first,id))!;
     Check(bag.Items.Count==1 && bag.Items[0].Location=="equipment" && bag.Items[0].Slot==1,"starter equipment persisted");
     Check(bag.Skills.Count==1 && bag.Skills[0].SkillId==201 && bag.Skills[0].Slot==0,"starter skills and bar persisted");
+    if (Environment.GetEnvironmentVariable("AION_TEST_DAT_WEAPON") is { } datWeaponText
+        && int.TryParse(datWeaponText, out var datWeapon))
+    {
+        var datId = await game.CreateAsync(first, draft with { RequestId = Guid.NewGuid(), ProfileId = "dat-dark", Name = "DatDarkStarter", LobbySlot = 9 });
+        var datBag = (await game.InventoryAsync(first, datId))!;
+        Check(datBag.Items.Count == 1 && datBag.Items[0].TemplateId == datWeapon
+              && datBag.Items[0].Location == "equipment" && datBag.Items[0].Slot == 1,
+            "configure_starters dark begin weapon equipped on create");
+    }
     Check(await game.InventoryAsync(second,id) is null,"inventory ownership");
     var item=bag.Items[0];
     Check(item.WireId>0,"starter item receives durable wire ID");
@@ -186,6 +204,16 @@ await using(var source=NpgsqlDataSource.Create(connectionString))
     Check((await game.InventoryAsync(first,id))!.Items.All(x=>x.Location=="bag"),"the class change moved the other class's weapon to the bag");
     var sword=(await game.InventoryAsync(first,id))!.Items.First(x=>x.TemplateId==101);
     Check(await game.MoveItemAsync(first,id,sword.InstanceId,sword.Revision,1),"it equips again after changing back");
+    // Bag sort renumbers slots without tripping item_slot_idx (unique per character/location).
+    var sortGrantA=await game.AdminAsync(second,new AdminCommand(Guid.NewGuid(),id,"grant","test",530116001));
+    var sortGrantB=await game.AdminAsync(second,new AdminCommand(Guid.NewGuid(),id,"grant","test",530126003));
+    var sortIdA=sortGrantA.GetProperty("instanceId").GetGuid();
+    var sortIdB=sortGrantB.GetProperty("instanceId").GetGuid();
+    await using(var swapSlots=source.CreateCommand("UPDATE game.item_instances SET slot=1 WHERE instance_id=$1; UPDATE game.item_instances SET slot=0 WHERE instance_id=$2"))
+    { swapSlots.Parameters.AddWithValue(sortIdA); swapSlots.Parameters.AddWithValue(sortIdB); await swapSlots.ExecuteNonQueryAsync(); }
+    Check(await game.SortContainerAsync(first,id,"bag"),"bag sort succeeds when slots must be renumbered");
+    var bagSorted=(await game.InventoryAsync(first,id))!.Items.Where(x=>x.Location=="bag").OrderBy(x=>x.Slot!.Value).Select(x=>x.TemplateId).ToList();
+    Check(bagSorted.SequenceEqual(bagSorted.Order().ToList()),"bag sort orders by template_id");
     // Ascension grade: staff-set, 1..6, loaded with the character for the spawn.
     Check((await game.AdminCharacterAsync(second,id))!.Ascension==1,"new characters start at ascension grade 1");
     await Reject(()=>game.AdminAsync(second,new(Guid.NewGuid(),id,"ascension",Ascension:7)),"invalid_ascension");
@@ -246,13 +274,15 @@ await using(var source=NpgsqlDataSource.Create(connectionString))
     var profile=await game.AdminProfileAsync(second);
     Check(profile.Roles.SequenceEqual(["gamemaster"]) && profile.BuildId=="test","staff profile reports roles and catalogue build");
     var everyone=await game.AdminFindCharactersAsync(second,"");
-    Check(everyone.Count==5 && everyone.Any(x=>x.AccountId==first.AccountId) && everyone.Any(x=>x.AccountId==second.AccountId),"staff search spans accounts");
+    var expectedCharacters = Environment.GetEnvironmentVariable("AION_TEST_DAT_WEAPON") is null ? 6 : 7;
+    Check(everyone.Count==expectedCharacters && everyone.Any(x=>x.AccountId==first.AccountId) && everyone.Any(x=>x.AccountId==second.AccountId),"staff search spans accounts");
     Check(everyone.Single(x=>x.Name=="PreviouslyOwned").AccountDisabled,"staff search flags disabled accounts");
     Check((await game.AdminFindCharactersAsync(second,"brie")).Count==2,"staff search matches name substrings case-insensitively");
     Check((await game.AdminFindCharactersAsync(second,"%")).Count==0 && (await game.AdminFindCharactersAsync(second,"_")).Count==0,"staff search escapes LIKE wildcards");
     Check((await game.AdminFindCharactersAsync(second,id.ToString().ToUpperInvariant())).Single().CharacterId==id,"staff search finds a character UUID");
-    Check((await game.AdminFindCharactersAsync(second,first.AccountId.ToString())).Count==2,"staff search finds an account's characters");
-    Check((await game.AdminFindCharactersAsync(second,first.AccountId.ToString()[..8])).Count==2,"staff search matches account names");
+    var firstAccountChars = Environment.GetEnvironmentVariable("AION_TEST_DAT_WEAPON") is null ? 3 : 4;
+    Check((await game.AdminFindCharactersAsync(second,first.AccountId.ToString())).Count==firstAccountChars,"staff search finds an account's characters");
+    Check((await game.AdminFindCharactersAsync(second,first.AccountId.ToString()[..8])).Count==firstAccountChars,"staff search matches account names");
     await Reject(()=>game.AdminFindCharactersAsync(second,new string('a',65)),"invalid_query");
     var staffView=(await game.AdminCharacterAsync(second,id))!;
     Check(staffView.Character.Name=="Starter" && staffView.Character.Level==12 && staffView.Character.Gender==1,"staff detail reports character state");
@@ -260,10 +290,111 @@ await using(var source=NpgsqlDataSource.Create(connectionString))
     Check(await game.AdminCharacterAsync(second,Guid.NewGuid()) is null,"staff detail of unknown character is absent");
     Check(await new CharacterPersistenceService(new PostgresCharacterRepository(source)).SaveAsync(first,id,saved.Revision-1,saved.Progress) is null,"old world save cannot overwrite GM changes");
     await using var reopened=NpgsqlDataSource.Create(connectionString);
-    Check((await new PostgresGameplayStore(reopened).InventoryAsync(first,id))!.Items.Count==5,"inventory survives a fresh pool");
-    var restoredItems=(await new PostgresGameplayStore(reopened).InventoryAsync(first,id))!.Items;
-    Check(restoredItems.Single(x=>x.InstanceId==item.InstanceId).WireId==item.WireId,"item identity survives equips and pool restart");
-    Check(restoredItems.Select(x=>x.WireId).Distinct().Count()==5,"item wire IDs are unique");
+    var period="2026-W44";
+    Check(await game.SaveExpeditionTicketsAsync(first,id,[(4,period,2)]),"expedition tickets save");
+    Check((await game.ExpeditionTicketsAsync(first,id)).Single()==(4,period,2),"expedition tickets load");
+    Check(await game.SaveExpeditionTicketsAsync(first,id,[]),"expedition tickets clear");
+    Check((await game.ExpeditionTicketsAsync(first,id)).Count==0,"expedition tickets empty after clear");
+    // full character state survives a new pool (logout / server restart).
+    Check(await game.SaveProgressAsync(first,id,12,98765),"level and experience save");
+    var gatingQuest=await game.SaveQuestAsync(first,id,new QuestRecord("HQ1101018",1101018,0,2,4,[1,0,0,0,0,0]));
+    Check(gatingQuest.Step==4 && gatingQuest.Goals[0]==1,"quest gating step and goals saved");
+    var buffs=JsonSerializer.SerializeToElement(new[]{new{templateId=511060015,expireAt=DateTimeOffset.UtcNow.AddHours(1).ToUnixTimeMilliseconds()}});
+    Check(await game.SaveCharacterSettingAsync(first,id,"active_buffs",buffs),"active buffs setting save");
+    var cds=JsonSerializer.SerializeToElement(new Dictionary<string,long>{{"potion",DateTimeOffset.UtcNow.AddMinutes(5).ToUnixTimeMilliseconds()}});
+    Check(await game.SaveCharacterSettingAsync(first,id,"item_cooldowns",cds),"item cooldowns setting save");
+    var abyssNow=DateTimeOffset.UtcNow;
+    Check(await game.SaveAbyssAsync(first,id,new AbyssRecord(3_600_000,1200,55,2,abyssNow.AddDays(7),abyssNow,250,1)),"abyss AP and pending siege AP save");
+    Check(await game.CreateGuildAsync(first,id,"PersistLeg",0,"",0,"",[])=="ok","legion create");
+    var legion=(await game.GuildOfAsync(first,id))!;
+    Check(legion.Name=="PersistLeg" && legion.Members.Count==1,"legion row survives write");
+    Check((await game.DonateGuildWalletAsync(first,id,5000,[])).Result=="ok","legion treasury wallet donate");
+    Check((await game.GuildOfAsync(first,id))!.Wallet!.Any(w=>w.Amount>=5000),"legion wallet balance stored");
+    Check((await game.CreateGuildUnionAsync(first,id,"PersistUnion",0,"",0,"")).Result=="ok","union create");
+    Check((await game.GuildUnionInfoAsync(first,id)).Union?.Name=="PersistUnion","union metadata stored");
+    Check(await game.SaveDaevanionAsync(first,id,new DaevanionProgress([101,102],new Dictionary<int,int>{{1,3}},new Dictionary<int,int>{{2,1}})),"daevanion boards save");
+    Check(await game.SaveBossChallengeAsync(first,id,new BossChallengeRecord(1,5,9000,5,120_000,9000,abyssNow)),"boss challenge save");
+    Check(await game.SaveQuickSlotAsync(first,id,3,new QuickSlotRecord(3,0,0,0,202,[202,201,202,0])),"quick slot with context skills save");
+    Check(await game.ConversionAsync(first,id,1204,[],[(101,1)],[(1,999,period,1,20)]),"conversion morph count increment");
+    var mail=await game.SendPostAsync(second,id,106,"Title|Body",[(101,1)],2);
+    Check(mail is not null && mail!.Attachments.Count==1,"mail post with attachment stored");
+    const int kinaTemplate=930100001;
+    await game.AdminAsync(second,new AdminCommand(Guid.NewGuid(),id,"grant","test",kinaTemplate,Quantity:50_000));
+    await game.AdminAsync(second,new AdminCommand(Guid.NewGuid(),staffChar,"grant","test",kinaTemplate,Quantity:50_000));
+    var listGrant=await game.AdminAsync(second,new AdminCommand(Guid.NewGuid(),id,"grant","test",101));
+    var tradeItem=listGrant.GetProperty("instanceId").GetGuid();
+    Check((await game.InventoryAsync(first,id))!.Items.Any(x=>x.InstanceId==tradeItem && x.Location=="bag"),"trade item in bag");
+    var listWire=(await game.InventoryAsync(first,id))!.Items.First(x=>x.InstanceId==tradeItem).WireId;
+    var listed=await game.TradeListItemAsync(first,id,listWire,1,500,83,DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+    Check(listed.Result=="ok" && listed.Listing is not null,"broker list persists item in escrow");
+    var saleId=listed.Listing!.SaleId;
+    var buy=await game.TradePurchaseAsync(second,staffChar,saleId,101,1,83);
+    Check(buy.Result=="ok" && buy.DeliveryId>0,"broker purchase moves item and records delivery");
+    Check((await game.InventoryAsync(second,staffChar))!.Items.Any(x=>x.TemplateId==101 && x.Location=="bag"),"buyer receives listed item");
+    Check(await game.TradeCompleteDeliveryAsync(first,id,buy.DeliveryId,83),"offline seller payout completes");
+    await game.AdminAsync(second,new AdminCommand(Guid.NewGuid(),id,"grant","test",101,Quantity:2));
+    var playerMail=await game.SendPlayerPostAsync(first,id,staffChar,107,"cod|body",[(101,1)],50,100);
+    Check(playerMail is not null,"player mail with attachment and COD stored");
+    Check(await game.TakePostAsync(second,staffChar,playerMail!.Id),"recipient takes COD mail");
+    await using(var expire=source.CreateCommand("UPDATE game.character_posts SET expire_at=now()-interval '1 day' WHERE character_id=$1 AND NOT taken"))
+    { expire.Parameters.AddWithValue(staffChar); await expire.ExecuteNonQueryAsync(); }
+    var unclaimed=await game.SendPlayerPostAsync(first,id,staffChar,107,"late|body",[(101,1)],0,100);
+    Check(unclaimed is not null,"second mail for expiry sweep");
+    await using(var expire2=source.CreateCommand("UPDATE game.character_posts SET expire_at=now()-interval '1 day' WHERE post_id=$1"))
+    { expire2.Parameters.AddWithValue(unclaimed!.Id); await expire2.ExecuteNonQueryAsync(); }
+    Check(await game.ReturnExpiredPostsAsync()>0,"expired untaken mail returns to sender");
+    Check((await game.PostsAsync(first,id))!.Any(p=>p.Params.StartsWith("return|")),"sender inbox has return mail");
+    var persistEnchant=await game.AdminAsync(second,new AdminCommand(Guid.NewGuid(),id,"grant","test",101));
+    var bagSword=(await game.InventoryAsync(first,id))!.Items.First(x=>x.InstanceId==persistEnchant.GetProperty("instanceId").GetGuid());
+    Check(await game.EnchantItemAsync(first,id,bagSword.InstanceId,bagSword.Revision,[],3,12),"enchant persists path");
+    var store2=new PostgresGameplayStore(reopened, progression);
+    var prog=(await store2.InventoryAsync(first,id))!;
+    Check(prog.Skills.Any(s=>s.SkillId==201) && prog.Items.Count>=5,"inventory and skills reload");
+    var reloadedSword=prog.Items.First(x=>x.InstanceId==bagSword.InstanceId);
+    Check(reloadedSword.Upgrades.GetProperty("enchant").GetInt32()==3 && reloadedSword.Upgrades.GetProperty("enchant_bonus").GetInt32()==12,"enchant upgrades survive restart");
+    var quests=(await store2.QuestsAsync(first,id))!;
+    Check(quests.Single(q=>q.Code=="HQ1101018").Step==4 && quests.Single(q=>q.Code=="HQ1101018").Goals[0]==1,"quest gating survives restart");
+    var settings=(await store2.CharacterSettingsAsync(first,id))!;
+    Check(settings.ContainsKey("active_buffs") && settings.ContainsKey("item_cooldowns"),"buff and cooldown settings survive restart");
+    var abyss=(await store2.AbyssAsync(first,id))!;
+    Check(abyss!.ApAcc==1200 && abyss.PendingSiegeAp==250 && abyss.RiftPvpOn==1,"abyss and pending siege AP survive restart");
+    Check((await store2.GuildOfAsync(first,id))!.Name=="PersistLeg","legion survives restart");
+    Check((await store2.GuildUnionInfoAsync(first,id)).Union?.Name=="PersistUnion","union survives restart");
+    Check((await store2.DaevanionAsync(first,id))!.NodeIds.SequenceEqual([101,102]),"daevanion survives restart");
+    Check((await store2.BossChallengesAsync(first,id))!.Single().BestPoint==9000,"boss challenge survives restart");
+    Check((await store2.QuickSlotsAsync(first,id))!.Any(q=>q.Slot==3 && q.ContextSkills![1]==201 && q.ContextSkills[2]==202),"quick slot context survives restart");
+    Check((await store2.ConversionCountsAsync(first,id,1204)).Any(c=>c.RecipeId==999 && c.Count==1),"morph limits survive restart");
+    var cursor=new WorldResetCursorRecord(DateTimeOffset.Parse("2026-10-16T07:00:00Z").ToUnixTimeMilliseconds(),DateTimeOffset.Parse("2026-10-14T07:00:00Z").ToUnixTimeMilliseconds());
+    await game.SaveResetCursorsAsync(1204,cursor);
+    Check(true,"world reset cursors save");
+    Check(await game.SaveRewardLimitsAsync(first,id,[new RewardLimitRecord(1,"2026-10-16",3)]),"reward limits save");
+    Check(await game.SaveDungeonCooltimesAsync(first,id,[new DungeonCooltimeRecord(600000,DateTimeOffset.Parse("2026-10-20T07:00:00Z").ToUnixTimeMilliseconds())]),"dungeon cooltimes save");
+    Check((await store2.PostsAsync(first,id))!.Any(p=>p.Id==mail!.Id),"mail survives restart");
+    Check((await store2.ResetCursorsAsync(1204)).DailyBoundaryMs==cursor.DailyBoundaryMs,"reset cursors survive restart");
+    Check((await store2.RewardLimitsAsync(first,id)).Single().Count==3,"reward limits survive restart");
+    Check((await store2.DungeonCooltimesAsync(first,id)).Single().DungeonId==600000,"dungeon cooltimes survive restart");
+    var nativeReload=await new PostgresCharacterRepository(reopened).LoadOwnedAsync(first.AccountId,id,default);
+    Check(nativeReload!.Progress.Level==12 && nativeReload.Progress.Experience==98765,"level and experience survive restart");
+    // Core loop (Postgres): gameplay SaveProgressAsync then map checkpoint must not reset level/exp.
+    var checkpointPos=JsonSerializer.SerializeToElement(new{x=-127874.0,y=-111187.0,z=25393.0});
+    var checkpointSvc=new CharacterPersistenceService(new PostgresCharacterRepository(source));
+    var posRev=await checkpointSvc.SavePositionAsync(first,id,nativeReload.Revision,1010,checkpointPos);
+    Check(posRev is not null,"core loop position checkpoint save");
+    var afterCheckpoint=await new PostgresCharacterRepository(reopened).LoadOwnedAsync(first.AccountId,id,default);
+    Check(afterCheckpoint!.Progress.Level==12 && afterCheckpoint.Progress.Experience==98765 && afterCheckpoint.Progress.MapId==1010
+          && afterCheckpoint.Progress.Position.GetProperty("x").GetDouble()==-127874.0,"SaveProgress level/exp survive position checkpoint");
+    var loopStore=new PostgresGameplayStore(reopened,progression);
+    var equipped=(await loopStore.InventoryAsync(first,id))!.Items.First(x=>x.Location=="equipment");
+    Check(await loopStore.MoveItemAsync(first,id,equipped.InstanceId,equipped.Revision,null),"core loop unequip after relog pool");
+    var unequipped=(await loopStore.InventoryAsync(first,id))!.Items.Single(x=>x.InstanceId==equipped.InstanceId);
+    Check(unequipped.Location=="bag","core loop unequip persisted in Postgres");
+    Check(await loopStore.MoveItemAsync(first,id,unequipped.InstanceId,unequipped.Revision,1),"core loop re-equip after relog pool");
+    var loopQuest=await loopStore.SaveQuestAsync(first,id,new QuestRecord("HQ1101010",1101010,0,2,2,[0,1,0,0,0,0]));
+    Check(loopQuest.Goals[1]==1 && (await loopStore.QuestsAsync(first,id))!.Any(q=>q.Code=="HQ1101010" && q.Goals[1]==1),"core loop quest progress on gameplay store");
+    Check((await store2.InventoryAsync(first,id))!.Items.Count>=5,"inventory survives a fresh pool");
+    var restoredItems=(await store2.InventoryAsync(first,id))!.Items;
+    Check(restoredItems.Single(x=>x.InstanceId==bagSword.InstanceId).WireId==bagSword.WireId,"item identity survives equips and pool restart");
+    Check(restoredItems.Select(x=>x.WireId).Distinct().Count()==restoredItems.Count,"item wire IDs are unique");
     var restoredNative=(await new PostgresCharacterRepository(reopened).LoadWireAsync(first.AccountId,1204,native.WireId,default))!;
     Check(restoredNative.VoiceType==7 && restoredNative.LobbySlot==3 && restoredNative.Appearance.SequenceEqual(draft.Appearance),"identity and metadata survive progress saves and restart");
     await using var immutable=source.CreateCommand("UPDATE game.characters SET wire_id=DEFAULT WHERE character_id=$1");
@@ -271,7 +402,7 @@ await using(var source=NpgsqlDataSource.Create(connectionString))
     try { await immutable.ExecuteNonQueryAsync(); throw new Exception("Wire ID changed"); }
     catch(PostgresException e) when(e.SqlState=="P0001") { Check(true,"character wire ID immutable"); }
     await using var immutableItem=source.CreateCommand("UPDATE game.item_instances SET wire_id=DEFAULT WHERE instance_id=$1");
-    immutableItem.Parameters.AddWithValue(item.InstanceId);
+    immutableItem.Parameters.AddWithValue(bagSword.InstanceId);
     try { await immutableItem.ExecuteNonQueryAsync(); throw new Exception("Item wire ID changed"); }
     catch(PostgresException e) when(e.SqlState=="P0001") { Check(true,"item wire ID immutable"); }
 }

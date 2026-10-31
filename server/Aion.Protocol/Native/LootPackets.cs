@@ -6,8 +6,9 @@ public sealed record DropItem(int Key, Vector3d Center, Vector3d At, long Uid, i
 
 /// <summary>
 /// Monster loot (catalogue 340-343 + 0x54ca, the 0x56 run): 0x561e DropItem_NT, 0x561f DropItemRemove_NT,
-/// 0x5620 ItemLooting_RQ, 0x5621 ItemLooting_RS. Usmap layouts; keys as varints like the other actor keys,
-/// result u16 as every observed RS. No official sample (CANDIDATE).
+/// 0x5620 ItemLooting_RQ, 0x5621 ItemLooting_RS. Usmap DevPacketData_GameServer_ItemLooting_RS (_result wire u16
+/// OBSERVED, _drop_item_uid i64, _is_auto_looting bool). Successful pickup (capture): 0x5621 result 0 | uid | auto off,
+/// then 0x561f DropItemRemove_NT, 0x561b ItemModificationList_NT, 0x5616 ItemUse_NT when auto-use applies.
 /// </summary>
 public static class LootPackets
 {
@@ -33,6 +34,6 @@ public static class LootPackets
         return w.ToArray();
     }
 
-    /// <summary>0x5621 ItemLooting_RS: result | drop uid i64 | auto looting.</summary>
+    /// <summary>0x5621 ItemLooting_RS: result u16 | drop uid i64 | auto looting bool.</summary>
     public static byte[] LootReply(int result, long uid, bool auto) => PacketWriter.Opcode(LootRs).U16(result).I64(uid).Bool(auto).ToArray();
 }

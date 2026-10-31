@@ -18,6 +18,10 @@ sealed class Workflow(LauncherConfig config, LauncherSettings settings)
     public LauncherConfig Config => config;
     public LauncherSettings Settings => settings;
     public AccountClient Account { get; } = new(config);
+    /// <summary>The client version chosen on the Play page (launcher.json "selectedClientVersion").</summary>
+    public ClientVersion Version { get; set; } = ClientVersions.Selected(config);
+    /// <summary>The folder of the client started last (for waiting until it closes).</summary>
+    public string? GameFolder { get; private set; }
 
     public static SteamInstall? FindSteam()
     {
@@ -154,8 +158,12 @@ sealed class Workflow(LauncherConfig config, LauncherSettings settings)
     /// </summary>
     public async Task<Process> PlayAsync(SteamInstall steam, Action<string> status, IProgress<(long, long)> progress, CancellationToken ct)
     {
-        var folder = settings.InstallFolder ?? throw new LauncherException("The game is not installed.");
+        var version = Version;
+        var folder = version.IsSteam
+            ? ClientVersions.SteamFolder(version, config, steam) ?? throw new LauncherException("The Steam copy of AION2 was not found. Set steamClientPath in launcher.json.")
+            : version.ClientPath ?? settings.InstallFolder ?? throw new LauncherException("The game is not installed.");
         if (Elevated.GameRunning(folder)) throw new LauncherException("The game is already running.");
+        GameFolder = folder;
         if (Process.GetProcessesByName("steam").Length == 0)
         {
             status("Starting Steam…");
@@ -164,6 +172,10 @@ sealed class Workflow(LauncherConfig config, LauncherSettings settings)
             await Task.Delay(5000, ct);
         }
 
+        // Steam version: used read-only in place. No build check (it is newer than supported-build.json),
+        // no firewall rules (they would also block the official game) and no pak patch (it would write into Steam's folder).
+        if (!version.IsSteam)
+        {
         status("Checking the game files…");
         var sizes = await ClientFiles.CheckAsync(folder, Build, CheckLevel.Sizes, null, ct);
         if (!sizes.Ok) throw new LauncherException($"Game files changed ({sizes.Problem}). Use Check all files, or Uninstall and set up again.");
@@ -180,9 +192,11 @@ sealed class Workflow(LauncherConfig config, LauncherSettings settings)
             status("Restoring the firewall rules (approve the Windows prompt)…");
             if (!await RepairFirewallAsync()) throw new LauncherException("The firewall rules are missing and setup was cancelled.");
         }
+        }
 
         var app = AppInfo.Read(await File.ReadAllBytesAsync(steam.AppInfoPath, ct), SteamInstall.AppId);
-        var (executable, arguments) = AppInfo.LaunchArguments(app, config.SavedDirSuffix);
+        var (executable, steamArguments) = AppInfo.LaunchArguments(app, config.SavedDirSuffix);
+        var arguments = ClientVersions.Arguments(steamArguments, version);
         if (!executable.Equals(Build.Executable, StringComparison.OrdinalIgnoreCase))
             throw new LauncherException("Steam's launch entry for the game changed; A2Core Launcher needs an update.");
 
@@ -198,6 +212,9 @@ sealed class Workflow(LauncherConfig config, LauncherSettings settings)
         for (var i = 0; i < 30 && !HostsFile.HasBlock(await File.ReadAllTextAsync(HostsFile.SystemPath, ct)); i++) await Task.Delay(500, ct);
         if (!HostsFile.HasBlock(await File.ReadAllTextAsync(HostsFile.SystemPath, ct)))
             throw new LauncherException("The hosts entries were not added (see elevated.log in %LOCALAPPDATA%\\A2CorePrivate).");
+
+        if (!version.IsSteam) ClientPatchSupport.DeployIfEnabled(folder, settings.AllowClientPatchPaks);
+        else if (settings.AllowClientPatchPaks) status("Client patch paks are not applied to the Steam copy (its files are never changed).");
 
         status("Starting the game…");
         var exe = Path.Combine(folder, executable.Replace('/', '\\'));

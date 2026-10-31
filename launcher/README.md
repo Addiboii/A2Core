@@ -75,6 +75,35 @@ The session stays signed in for further plays; it signs out when the launcher cl
 Uninstall (the Play page, or Apps & features) removes the firewall rules, any hosts lines, the settings,
 the installed program with its shortcuts and (if chosen) the private copy.
 
+## Client versions
+
+The Play page has a **Client version** dropdown (dark theme, like the rest). The choice is stored as
+`selectedClientVersion` in the `launcher.json` next to the exe (created from the embedded one if missing;
+other keys are kept).
+
+- `2.0.6.0` (default): the launcher's private copy, checked against `supported-build.json`, with the
+  firewall rules and the optional Client Editor patch paks, exactly as before.
+- `Official latest (Steam)` (`steam-latest`): the player's own Steam install, started in place and
+  **read-only**: no file in the Steam folder is written, so no patch paks (they would land in its Paks
+  folder), no size/hash check (it is newer than the reference) and no firewall rules (they are per exe
+  path and would also block the official game). The redirect works without touching game files: the
+  private `Saved_A2CorePrivate\...\GamePlatform.ini` (via `-saveddirsuffix=A2CorePrivate`) plus the
+  per-session hosts lines. The folder is `clientPath` of the version, else `steamClientPath`, else the
+  AION2 folder found through Steam's `libraryfolders.vdf`.
+
+The server still runs 2.0.6.0 data and opcodes and has no client-version check, so a newer client may
+start but fail or misbehave in-game. Optional keys:
+
+```json
+"steamClientPath": "Z:\\SteamLibrary\\steamapps\\common\\AION2",
+"selectedClientVersion": "steam-latest",
+"clientVersions": [
+  { "id": "2.0.6.0", "name": "2.0.6.0", "kind": "private" },
+  { "id": "steam-latest", "name": "Official latest (Steam)", "kind": "steam", "launchArgs": [] }
+]
+```
+
+Each entry may set `clientPath` (its game folder) and `launchArgs` (added after Steam's arguments).
 ## Third-party components
 
 SteamKit2 (LGPL-2.1, https://github.com/SteamRE/SteamKit) and QRCoder (MIT) are NuGet packages

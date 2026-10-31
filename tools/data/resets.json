@@ -1,0 +1,144 @@
+{
+  "source": "tools/reset_data.py; ContentsReset/ResetTime.dat when research/local export exists",
+  "pin_build": 25767555,
+  "timezone": "UTC",
+  "server": {
+    "display": "Global live uses KST for maintenance; game-day anchor 07:00 UTC (GlobalSetting 57600 s)"
+  },
+  "schedule": {
+    "daily": {
+      "hour_utc": 7,
+      "global_setting_seconds_from_midnight_kst": 57600
+    },
+    "weekly": {
+      "hour_utc": 7,
+      "weekday": 3
+    },
+    "monthly": {
+      "hour_utc": 7,
+      "day_of_month": 1
+    }
+  },
+  "period_kinds": {
+    "0": "all",
+    "1": "daily",
+    "2": "weekly",
+    "3": "monthly"
+  },
+  "contents_reset_types": [],
+  "notes": [],
+  "counters": [
+    {
+      "id": "abyss_entry_pool",
+      "scope": "character",
+      "period": "weekly",
+      "store": "game.character_abyss",
+      "lazy": true
+    },
+    {
+      "id": "shop_limited_goods",
+      "scope": "character/account",
+      "period": "daily|weekly|monthly",
+      "store": "game.shop_purchases.period",
+      "lazy": true
+    },
+    {
+      "id": "conversion_morph",
+      "scope": "character/account/world",
+      "period": "weekly",
+      "store": "game.conversion_counts",
+      "lazy": true
+    },
+    {
+      "id": "expedition_tickets",
+      "scope": "character",
+      "period": "weekly",
+      "store": "game.character_expedition_tickets",
+      "lazy": true
+    },
+    {
+      "id": "achievement_daily",
+      "scope": "character",
+      "period": "daily",
+      "store": "game.character_achievements",
+      "lazy": true
+    },
+    {
+      "id": "achievement_weekly",
+      "scope": "character",
+      "period": "weekly",
+      "store": "game.character_achievements",
+      "lazy": true
+    },
+    {
+      "id": "attendance_login",
+      "scope": "character",
+      "period": "daily",
+      "store": "achievements Attendance type",
+      "lazy": true
+    },
+    {
+      "id": "legion_donation",
+      "scope": "character",
+      "period": "daily",
+      "store": "game.guild_members.donations_today",
+      "lazy": true
+    },
+    {
+      "id": "legion_weekly_reputation",
+      "scope": "character",
+      "period": "weekly",
+      "store": "game.guild_members.weekly_*",
+      "world_tick": true
+    },
+    {
+      "id": "legion_attendance",
+      "scope": "guild",
+      "period": "daily",
+      "store": "game.guilds.today_attendance_count",
+      "world_tick": true
+    },
+    {
+      "id": "reward_limits",
+      "scope": "character",
+      "period": "daily|weekly",
+      "store": "game.character_reward_limits",
+      "lazy": true
+    },
+    {
+      "id": "dungeon_cooltimes",
+      "scope": "character",
+      "period": "per-row",
+      "store": "game.character_dungeon_cooltimes",
+      "lazy": true
+    },
+    {
+      "id": "craft_limits",
+      "scope": "character/account/world",
+      "period": "daily|weekly",
+      "store": "game.character_craft_limits",
+      "lazy": true
+    },
+    {
+      "id": "boss_challenge",
+      "scope": "character",
+      "period": "season",
+      "store": "game.character_boss_challenges",
+      "lazy": false
+    },
+    {
+      "id": "period_collections",
+      "scope": "character",
+      "period": "daily|weekly|season",
+      "store": "in-memory + collections.json windows",
+      "lazy": true
+    },
+    {
+      "id": "battle_pass_weekly_exp",
+      "scope": "character",
+      "period": "weekly",
+      "store": "not persisted (stub)",
+      "lazy": true
+    }
+  ]
+}

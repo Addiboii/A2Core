@@ -217,11 +217,15 @@ class RealFixtureParityTests(unittest.TestCase):
             for method, route, fixture in [
                     ('GET', '/MobileAppConfigSdk/app/key', keys / 'app-key.json'),
                     ('POST', '/MobileAppConfigSdk/app/policy/maintenance', keys / 'app-maintenance.json'),
-                    ('GET', '/local-api-gate/sessions/v1.0/' + session, keys / 'session-response.candidate.json'),
                     ('POST', '/local-api-gate/sessions/v1.0/authn_token', keys / 'authn-response.candidate.json'),
                     ('POST', '/local-api-gate/secondary_auth/v1.0/my/auth;start', keys / 'secondary-start-response.candidate.json'),
                     ('POST', '/local-api-gate/secondary_auth/v1.0/my/auth;finish', keys / 'secondary-finish-response.candidate.json')]:
                 self.assertEqual(served(method, route), python(fixture), route)
+            # The session lookup carries the fixture's fields plus the official external_account (Steam store link).
+            served_session = json.loads(served('GET', '/local-api-gate/sessions/v1.0/' + session))
+            fixture_session = json.loads((keys / 'session-response.candidate.json').read_text(encoding='utf-8'))
+            self.assertEqual({k: served_session[k] for k in fixture_session}, fixture_session)
+            self.assertEqual(served_session['external_account']['store_auth_provider_code'], 'steam')
         finally:
             process.terminate()
             process.wait(timeout=10)

@@ -36,12 +36,31 @@ export function AccountApp() {
     setToken(null); setCharacters([]); setMessage({ text, kind });
   }
 
+  const [totpChallenge, setTotpChallenge] = useState<{ token: string; username: string } | null>(null);
+
   async function signIn(name: string, password: string, register: boolean) {
     if (register) await api('/api/accounts/register', { method: 'POST', body: { username: name, password } });
-    const session = await api<{ token: string }>('/api/accounts/login', { method: 'POST', body: { username: name, password } });
+    const session = await api<{ token?: string; requiresTotp?: boolean; challengeToken?: string }>(
+      '/api/accounts/login', { method: 'POST', body: { username: name, password } });
+    if (session.requiresTotp && session.challengeToken) {
+      setTotpChallenge({ token: session.challengeToken, username: name });
+      setMessage({ text: 'Enter the code from your authenticator app.', kind: '' });
+      return;
+    }
+    if (!session.token) throw new ApiError(401, 'Sign-in failed');
     const list = await api<Character[]>('/api/characters', { token: session.token });
-    setToken(session.token); setUsername(name); setCharacters(list);
+    setToken(session.token); setUsername(name); setCharacters(list); setTotpChallenge(null);
     setMessage({ text: register ? 'Account created. Welcome!' : '', kind: 'ok' });
+  }
+
+  async function completeTotp(code: string, recoveryCode?: string) {
+    if (!totpChallenge) return;
+    const session = await api<{ token: string }>('/api/accounts/login/totp', {
+      method: 'POST', body: { challengeToken: totpChallenge.token, code: code || null, recoveryCode: recoveryCode || null },
+    });
+    const list = await api<Character[]>('/api/characters', { token: session.token });
+    setToken(session.token); setUsername(totpChallenge.username); setCharacters(list); setTotpChallenge(null);
+    setMessage({ text: 'Signed in.', kind: 'ok' });
   }
 
   return (
@@ -55,7 +74,10 @@ export function AccountApp() {
           </div>
           {token
             ? <Signed token={token} characters={characters} onSignedOut={signedOut} onMessage={setMessage} />
-            : <SignIn disabled={!configured} registrationOpen={registrationOpen} onSubmit={signIn} onError={error => setMessage({ text: describe(error, true), kind: 'error' })} />}
+            : totpChallenge
+              ? <TotpSignIn onSubmit={completeTotp} onCancel={() => { setTotpChallenge(null); setMessage(null); }}
+                  onError={error => setMessage({ text: describe(error, true), kind: 'error' })} />
+              : <SignIn disabled={!configured} registrationOpen={registrationOpen} onSubmit={signIn} onError={error => setMessage({ text: describe(error, true), kind: 'error' })} />}
           <Status message={message} />
           {token && launcherAvailable && <LauncherDownload token={token} onMessage={setMessage} />}
         </div>
@@ -86,6 +108,41 @@ function LauncherDownload({ token, onMessage }: { token: string; onMessage: (m: 
       </div>
       <Button variant="primary" busy={busy} onClick={download}>Download A2Core Launcher</Button>
     </div>
+  );
+}
+
+function TotpSignIn({ onSubmit, onCancel, onError }: {
+  onSubmit: (code: string, recovery?: string) => Promise<void>; onCancel: () => void; onError: (error: unknown) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [useRecovery, setUseRecovery] = useState(false);
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    setBusy(true);
+    try {
+      await onSubmit(String(data.get('code') ?? ''), useRecovery ? String(data.get('recovery') ?? '') : undefined);
+    } catch (error) { onError(error); }
+    finally { setBusy(false); }
+  }
+  return (
+    <form className="stack" onSubmit={submit}>
+      <p className="muted small">Two-step verification is enabled on this account.</p>
+      {!useRecovery
+        ? <div className="field">
+            <label htmlFor="totp-code">Authenticator code</label>
+            <input id="totp-code" name="code" className="input" inputMode="numeric" pattern="[0-9]{6}" required maxLength={6} autoComplete="one-time-code" />
+          </div>
+        : <div className="field">
+            <label htmlFor="recovery">Recovery code</label>
+            <input id="recovery" name="recovery" className="input" required minLength={8} maxLength={32} autoComplete="off" />
+          </div>}
+      <div className="row wrap">
+        <Button type="submit" variant="primary" busy={busy}>Continue</Button>
+        <Button type="button" variant="ghost" onClick={() => setUseRecovery(r => !r)}>{useRecovery ? 'Use authenticator' : 'Use recovery code'}</Button>
+        <Button type="button" variant="ghost" onClick={onCancel}>Back</Button>
+      </div>
+    </form>
   );
 }
 
@@ -132,6 +189,69 @@ function SignIn({ disabled, registrationOpen, onSubmit, onError }:
   );
 }
 
+function TotpSettings({ token, onMessage }: { token: string; onMessage: (m: StatusMessage) => void }) {
+  const [enabled, setEnabled] = useState(false);
+  const [recoveryLeft, setRecoveryLeft] = useState(0);
+  const [enroll, setEnroll] = useState<{ secret: string; otpAuthUri: string } | null>(null);
+  const [recoveryCodes, setRecoveryCodes] = useState<string[] | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  useEffect(() => {
+    api<{ enabled: boolean; recoveryCodesRemaining: number }>('/api/accounts/totp/status', { token })
+      .then(s => { setEnabled(s.enabled); setRecoveryLeft(s.recoveryCodesRemaining); })
+      .catch(() => { setEnabled(false); setRecoveryLeft(0); });
+  }, [token]);
+
+  async function startEnroll() {
+    setBusy('enroll');
+    try {
+      const r = await api<{ secret: string; otpAuthUri: string }>('/api/accounts/totp/enroll', { method: 'POST', token });
+      setEnroll({ secret: r.secret, otpAuthUri: r.otpAuthUri });
+      onMessage({ text: 'Scan the key in your authenticator app, then confirm with a code.', kind: '' });
+    } catch (error) { onMessage({ text: describe(error), kind: 'error' }); }
+    finally { setBusy(null); }
+  }
+
+  async function confirmEnroll(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const code = String(new FormData(event.currentTarget).get('confirm'));
+    setBusy('confirm');
+    try {
+      const r = await api<{ recoveryCodes: string[] }>('/api/accounts/totp/confirm', { method: 'POST', token, body: { code } });
+      setEnabled(true); setEnroll(null); setRecoveryCodes(r.recoveryCodes); setRecoveryLeft(r.recoveryCodes.length);
+      onMessage({ text: 'Two-step verification is on.', kind: 'ok' });
+    } catch (error) { onMessage({ text: describe(error), kind: 'error' }); }
+    finally { setBusy(null); }
+  }
+
+  return (
+    <section className="stack-sm" id="totp">
+      <h4>Two-step verification (TOTP)</h4>
+      <p className="muted small">
+        {enabled ? `Enabled · ${recoveryLeft} recovery codes left` : 'Off — the game client shows security as not registered until you enable this.'}
+      </p>
+      {recoveryCodes && (
+        <div className="stack-sm">
+          <p className="small"><strong>Save these recovery codes</strong> (shown once):</p>
+          <ul className="character-list">{recoveryCodes.map(c => <li key={c}><code>{c}</code></li>)}</ul>
+        </div>
+      )}
+      {!enabled && !enroll && <Button variant="primary" busy={busy === 'enroll'} onClick={startEnroll}>Set up authenticator</Button>}
+      {enroll && (
+        <form className="stack" onSubmit={confirmEnroll}>
+          <p className="small">Manual key: <code>{enroll.secret}</code></p>
+          <p className="muted small">Or add this URI in your app: <code className="break">{enroll.otpAuthUri}</code></p>
+          <div className="field">
+            <label htmlFor="confirm">6-digit code</label>
+            <input id="confirm" name="confirm" className="input" inputMode="numeric" pattern="[0-9]{6}" required maxLength={6} />
+          </div>
+          <Button type="submit" variant="primary" busy={busy === 'confirm'}>Confirm and enable</Button>
+        </form>
+      )}
+    </section>
+  );
+}
+
 function Signed({ token, characters, onSignedOut, onMessage }:
   { token: string; characters: Character[]; onSignedOut: (text: string, kind?: StatusMessage['kind']) => void; onMessage: (m: StatusMessage) => void }) {
   const [busy, setBusy] = useState<string | null>(null);
@@ -165,8 +285,9 @@ function Signed({ token, characters, onSignedOut, onMessage }:
       <hr className="divider" />
       <ContactStaff token={token} characters={characters} />
       <hr className="divider" />
-      <details className="security">
-        <summary>Account security</summary>
+      <TotpSettings token={token} onMessage={onMessage} />
+      <details className="security" id="security">
+        <summary>Password</summary>
         <form className="stack" onSubmit={changePassword}>
           <div className="field">
             <label htmlFor="current">Current password</label>

@@ -1,0 +1,148 @@
+{
+  "max_level": 20,
+  "max_members": 128,
+  "donations_per_day": 3,
+  "wallet_kina_type": 0,
+  "storage_base_slots": 24,
+  "storage_slots_per_extension": 8,
+  "storage_max_extensions": 10,
+  "storage_extend_kina": 500000,
+  "agit_rent_kina": 1000000,
+  "agit_rent_ms": 2592000000,
+  "agits": [
+    {
+      "id": 1,
+      "map_id": 904,
+      "race": 0,
+      "name": "Legion_Agit_L"
+    },
+    {
+      "id": 2,
+      "map_id": 901,
+      "race": 1,
+      "name": "Legion_Agit_D"
+    }
+  ],
+  "donations": [
+    {
+      "level": 1,
+      "kina": 100000,
+      "guild_exp": 100,
+      "reputation": 100
+    },
+    {
+      "level": 2,
+      "kina": 500000,
+      "guild_exp": 500,
+      "reputation": 500
+    },
+    {
+      "level": 3,
+      "kina": 2000000,
+      "guild_exp": 2000,
+      "reputation": 2000
+    }
+  ],
+  "levels": [
+    {
+      "level": 1,
+      "total_exp": 0,
+      "next_total_exp": 1000
+    },
+    {
+      "level": 2,
+      "total_exp": 1000,
+      "next_total_exp": 3100
+    },
+    {
+      "level": 3,
+      "total_exp": 3100,
+      "next_total_exp": 6500
+    },
+    {
+      "level": 4,
+      "total_exp": 6500,
+      "next_total_exp": 11700
+    },
+    {
+      "level": 5,
+      "total_exp": 11700,
+      "next_total_exp": 19000
+    },
+    {
+      "level": 6,
+      "total_exp": 19000,
+      "next_total_exp": 29000
+    },
+    {
+      "level": 7,
+      "total_exp": 29000,
+      "next_total_exp": 42500
+    },
+    {
+      "level": 8,
+      "total_exp": 42500,
+      "next_total_exp": 60000
+    },
+    {
+      "level": 9,
+      "total_exp": 60000,
+      "next_total_exp": 82500
+    },
+    {
+      "level": 10,
+      "total_exp": 82500,
+      "next_total_exp": 110500
+    },
+    {
+      "level": 11,
+      "total_exp": 110500,
+      "next_total_exp": 143000
+    },
+    {
+      "level": 12,
+      "total_exp": 143000,
+      "next_total_exp": 180000
+    },
+    {
+      "level": 13,
+      "total_exp": 180000,
+      "next_total_exp": 223000
+    },
+    {
+      "level": 14,
+      "total_exp": 223000,
+      "next_total_exp": 272000
+    },
+    {
+      "level": 15,
+      "total_exp": 272000,
+      "next_total_exp": 328500
+    },
+    {
+      "level": 16,
+      "total_exp": 328500,
+      "next_total_exp": 393500
+    },
+    {
+      "level": 17,
+      "total_exp": 393500,
+      "next_total_exp": 468500
+    },
+    {
+      "level": 18,
+      "total_exp": 468500,
+      "next_total_exp": 554500
+    },
+    {
+      "level": 19,
+      "total_exp": 554500,
+      "next_total_exp": 653500
+    },
+    {
+      "level": 20,
+      "total_exp": 653500,
+      "next_total_exp": 767500
+    }
+  ]
+}

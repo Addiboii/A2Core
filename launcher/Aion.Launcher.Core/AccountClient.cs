@@ -19,11 +19,24 @@ public sealed class AccountClient : IDisposable
 
     public AccountClient(LauncherConfig config, HttpMessageHandler? handler = null)
     {
-        transport = handler ?? new HttpClientHandler();
+        transport = handler ?? Handler(config);
         var account = new Uri(config.AccountUrl);
         // The API answers within 20 seconds; the launcher download runs as long as it needs (cancellation stops it).
         http = new HttpClient(transport, disposeHandler: false) { BaseAddress = account, Timeout = TimeSpan.FromSeconds(20) };
         files = new HttpClient(transport, disposeHandler: false) { BaseAddress = account, Timeout = Timeout.InfiniteTimeSpan };
+    }
+
+    /// <summary>
+    /// A self-signed account certificate is accepted only when its thumbprint is the one in launcher.json.
+    /// No thumbprint keeps the normal system trust check.
+    /// </summary>
+    static HttpMessageHandler Handler(LauncherConfig config)
+    {
+        var handler = new HttpClientHandler();
+        if (config.CertificateThumbprint is not { Length: > 0 } pin) return handler;
+        handler.ServerCertificateCustomValidationCallback = (_, certificate, _, _) =>
+            certificate?.Thumbprint.Equals(pin, StringComparison.OrdinalIgnoreCase) == true;
+        return handler;
     }
 
     public bool SignedIn => token is not null;

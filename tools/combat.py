@@ -105,13 +105,14 @@ def apply_hits(target, hits):
 # SkillEffect_NT. CANDIDATE: which key is the target (first) vs the attacker follows
 # those three public sources; the live client has not been observed receiving these.
 def build_skill_hit(target_key, actor_key, skill_id, effect_id, damage, critical=False,
-                    seq=1, attack_speed=10000):
-    """0x3804 hit: target, switch 04, 0, actor, skill, hit count, type, effect ID,
-    sequence, attack speed, damage, then the sequence byte and 00."""
+                    action_uid=0, seq=1, attack_speed=10000):
+    """0x3804 player hit (PlayerPackets.SkillEffect switch 04): action uid matches 0x3802."""
     if not 0 <= seq <= 255:
         raise ValueError('Hit sequence must fit one byte')
+    if not 0 <= action_uid <= 255:
+        raise ValueError('Action uid must fit one byte')
     return (b'\x04\x38' + encode_varint(target_key) + b'\x04\x00' + encode_varint(actor_key)
-            + struct.pack('<IB', skill_id, 0) + encode_varint(3 if critical else 2)
+            + struct.pack('<IB', skill_id, action_uid) + encode_varint(3 if critical else 2)
             + struct.pack('<II', effect_id, seq) + encode_varint(attack_speed)
             + encode_varint(damage) + bytes([seq, 0]))
 

@@ -93,6 +93,14 @@ public sealed class GmCommands(WorldPresence presence, BuilderCommands builder) 
         if (actor is null) return "Enter the world first.";
         try
         {
+            // "//admin": the client's own in-game panel is its DevHelper (InputKeyMapping Dev_DevHelper = F10,
+            // Dev_DevTestUI = Ctrl+~, both bDev), enabled by Login_RS _is_admin; the server only explains it.
+            if (line.Equals("admin", StringComparison.OrdinalIgnoreCase)
+                || line.Equals("gm", StringComparison.OrdinalIgnoreCase) || line.Equals("panel", StringComparison.OrdinalIgnoreCase))
+                return await builder.AllowedAsync(actor.Session, ct)
+                    ? "GM panel: press F10 (client dev helper; Ctrl+~ dev test UI). It needs the lobby admin flag: re-login after a staff change. "
+                      + "Builder commands (in chat: //<command>; console: s <command>): " + string.Join(", ", BuilderCommands.Supported)
+                    : "GM permission required.";
             if (line.Length == 0 || line.Equals("help", StringComparison.OrdinalIgnoreCase))
                 return await builder.AllowedAsync(actor.Session, ct)
                     ? "Builder commands (in chat: //<command>; console: s <command>): " + string.Join(", ", BuilderCommands.Supported)

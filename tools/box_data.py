@@ -5,11 +5,10 @@ Derived from offline exports: BoxReward, RewardPackageItem and VehicleList
 Item.dat (research/local/game-catalog-v2). Rebuild the tracked summary with
 `python tools/box_data.py`.
 
-- uses: usable item ID -> [UseEffect, auto (AutoUseWhenAcquire 0/1), values...] for the effects
-  the server applies: RewardBox (values[0] = BoxReward Group), GetVehicle ([ride ID]),
-  GetVehicleSoul ([ride ID, count]), GetVehicleSoulCrystal ([ESoulCrystalType name, count]),
-  Fix_VehicleCreatureLevel ([ECreatureType name, board level]), Skill ([item skill ID]: potions, food, drinks, scrolls),
-  Telpo_Home (return scroll) and GetKina/GetNonBindingKina ([amount]).
+- uses: every Item.dat row with a non-empty UseEffect (— all usable items, not only
+  server-handled types). Row: [UseEffect, auto (AutoUseWhenAcquire 0/1), values...]. Examples:
+  RewardBox (values[0] = BoxReward Group), GetVehicle ([ride ID]), GetGodstone, GetArcana, …
+- handled_use_effects: UseEffect names the server implements today (see GameSession.Rides UseItemAsync).
 - cool: usable item ID -> [Cooltime ms, CoolTimeGroup, CastingTime ms (0 without NeedCasting)].
 - skills: item skill ID -> its effect rows [ESkillEffectType, EffectValueList...] (HpHeal_Item,
   HpHealRatio_Item, MpHeal_Item, FpHeal_Item, Abnormal_True ...).
@@ -37,14 +36,24 @@ Items are referenced by internal name in the tables; names Item.dat does not hav
 import json
 from pathlib import Path
 
+try:
+    from .data_json import write_data_json
+except ImportError:
+    from data_json import write_data_json
+
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / 'tools/data/boxes.json'
 ABNORMALS = ROOT / 'research/local/abnormal-tables-20261016'
 TABLES = ROOT / 'research/local/pet-tables-20261016'
 CATALOG = ROOT / 'research/local/game-catalog-v2/entries.jsonl'
 MAP_EVENTS = ROOT / 'tools/data/map-events.json'
-EFFECTS = {'RewardBox', 'GetVehicle', 'GetVehicleSoul', 'GetVehicleSoulCrystal', 'Fix_VehicleCreatureLevel', 'Skill', 'Telpo_Home', 'GetKina', 'GetNonBindingKina',
-           'GetTitle', 'GetSkin', 'GetSkinSet', 'GetSocialAction'}
+# UseEffect types with a handler in GameSession.Rides.cs (audit + boxes.json handled_use_effects).
+HANDLED_USE_EFFECTS = {
+    'RewardBox', 'GetVehicle', 'GetVehicleSoul', 'GetVehicleSoulCrystal', 'Fix_VehicleCreatureLevel', 'Skill',
+    'Telpo_Home', 'GetKina', 'GetNonBindingKina', 'GetTitle', 'GetSkin', 'GetSkinSet', 'GetSocialAction',
+    'GetDaevanionPoint', 'GetQuest', 'GetWing', 'AscensionGrade',
+}
+GODSTONES = ROOT / 'tools/data/godstones.json'
 CRYSTALS = {'SoulCrystalFeral': 1, 'SoulCrystalIntellect': 2, 'SoulCrystalNature': 3, 'SoulCrystalTrans': 4, 'SoulCrystalSpecial': 5,
             'SoulCrystalAll': 6}   # usmap ESoulCrystalType
 CREATURES = {'Intellect': 2, 'Feral': 3, 'Nature': 4, 'Trans': 5, 'Special': 6}   # usmap ECreatureType
@@ -88,6 +97,34 @@ def _map_event_abnormals(path=MAP_EVENTS):
     return found
 
 
+def _use_row(raw):
+    """Item.dat UseEffect row for boxes.json uses, or None when the item is not usable."""
+    effect = _short(raw.get('UseEffect', ''))
+    if not effect or effect == 'None':
+        return None
+    return [effect, 1 if raw.get('AutoUseWhenAcquire') else 0, *[str(v) for v in raw.get('UseEffectValues') or []]]
+
+
+def _cool_row(raw):
+    return [int(raw.get('Cooltime') or 0), _short(raw.get('CoolTimeGroup', 'None')),
+            int(raw.get('CastingTime') or 0) if raw.get('NeedCasting') else 0]
+
+
+def _finalize_uses(uses, cool):
+    """Daevanion crystals and godstone items when absent from Item.dat export."""
+    try:
+        from .daevanion_data import apply_daevanion_uses
+    except ImportError:
+        from daevanion_data import apply_daevanion_uses
+    apply_daevanion_uses(uses)
+    if GODSTONES.exists():
+        for item_id in json.loads(GODSTONES.read_text(encoding='utf-8')).get('stones', {}):
+            key = str(item_id)
+            if key not in uses:
+                uses[key] = ['GetGodstone', 0]
+                cool.setdefault(key, [0, 'None', 0])
+
+
 def _abnormals(skills, tables=ABNORMALS):
     wanted = {int(row[3]) for rows in skills.values() for row in rows if row[0] == 'Abnormal_True' and len(row) > 3 and row[3].isdigit()}
     wanted |= _map_event_abnormals()
@@ -117,11 +154,11 @@ def build(tables=TABLES, catalog=CATALOG):
                 continue
             ids[entry['internal_name']] = entry['id']
             raw = entry.get('raw') or {}
-            effect = _short(raw.get('UseEffect', ''))
-            if effect in EFFECTS:
-                uses[str(entry['id'])] = [effect, 1 if raw.get('AutoUseWhenAcquire') else 0, *[str(v) for v in raw.get('UseEffectValues') or []]]
-                cool[str(entry['id'])] = [int(raw.get('Cooltime') or 0), _short(raw.get('CoolTimeGroup', 'None')),
-                                          int(raw.get('CastingTime') or 0) if raw.get('NeedCasting') else 0]
+            if (row := _use_row(raw)) is not None:
+                key = str(entry['id'])
+                uses[key] = row
+                cool[key] = _cool_row(raw)
+    _finalize_uses(uses, cool)
     item_skills = {u[2] for u in uses.values() if u[0] == 'Skill' and len(u) > 2}
     skills = {str(k): v for k, v in skills.items() if str(k) in item_skills}
 
@@ -172,16 +209,34 @@ def build(tables=TABLES, catalog=CATALOG):
     for row in _rows(tables, 6):
         ride_stats.setdefault(row['Group'], {})[str(row['Level'])] = {_short(s['StatType']): int(s['StatValue']) for s in row.get('StatList') or []}
     return {'source': 'BoxReward/RewardPackageItem/VehicleList/VehicleLevel/VehicleStat + Item.dat (tools/box_data.py)',
+            'handled_use_effects': sorted(HANDLED_USE_EFFECTS),
             'uses': uses, 'cool': cool, 'skills': skills, 'boxes': boxes, 'packages': packages, 'rides': rides,
             'ride_levels': ride_levels, 'ride_stats': ride_stats, 'ride_board_exp': ride_board_exp, 'creature_levels': creature_levels,
             'creature_slots': creature_slots, 'creature_options': creature_options, 'abnormals': _abnormals(skills), 'passives': passives}
 
 
+def patch_committed_boxes(path=DATA):
+    """Add supplements and handled_use_effects only — never remove existing uses/boxes/skills rows."""
+    data = json.loads(path.read_text(encoding='utf-8'))
+    uses = data.setdefault('uses', {})
+    cool = data.setdefault('cool', {})
+    before = set(uses)
+    _finalize_uses(uses, cool)
+    if before - set(uses):
+        raise SystemExit(f'{path}: patch would remove {len(before - set(uses))} uses entries (refusing)')
+    data['handled_use_effects'] = sorted(HANDLED_USE_EFFECTS)
+    write_data_json(path, data)
+    return data
+
+
 def main():
-    data = build()
-    DATA.write_text(json.dumps(data, separators=(',', ':')) + '\n', encoding='utf-8')
-    print(f"{len(data['uses'])} usable items, {len(data['skills'])} item skills, {len(data['boxes'])} boxes, {len(data['packages'])} packages, "
-          f"{len(data['rides'])} rides written to {DATA.relative_to(ROOT)}")
+    if CATALOG.exists():
+        data = build()
+        write_data_json(DATA, data)
+    else:
+        data = patch_committed_boxes()
+    print(f"{len(data['uses'])} usable items, {len(data['skills'])} item skills, {len(data['boxes'])} boxes, "
+          f"{len(data['packages'])} packages, {len(data['rides'])} rides -> {DATA.relative_to(ROOT)}")
 
 
 if __name__ == '__main__':

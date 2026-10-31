@@ -33,8 +33,12 @@ Official NPC behaviour (research/local/npc-behaviour-20261017, capture 20261013-
 """
 import argparse
 import json
+import sys
 from functools import lru_cache
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from data_json import write_data_json
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / 'tools/data/world-npcs.json'
@@ -345,13 +349,86 @@ def map_targets(map_id, target_class):
     return targets
 
 
+def infer_skill_hits(effect, skill_id=0):
+    """When Skill.dat is unavailable: multi-hit rows share effect ids +10 per swing (123170011, 021, 031)."""
+    if effect <= 0:
+        return []
+    hits = [{'effect': effect, 'projectile_id': 0, 'groggy': 0}]
+    n = effect
+    for _ in range(2):
+        n += 10
+        if skill_id and n // 100 != effect // 100:
+            break
+        if n % 10 == 0:
+            break
+        hits.append({'effect': n, 'projectile_id': 0, 'groggy': 0})
+    return hits
+
+
+def skill_hits_catalog(skill_ids, skill_table=SKILLDATA, effect_table=EFFECTDATA):
+    """SkillEffectTimeDataList damage rows and ProjectileId per NPC skill (tools/world_npcs.py hits --catalog)."""
+    if not Path(skill_table).exists() or not Path(effect_table).exists():
+        out = {}
+        for sid in skill_ids:
+            key = str(sid)
+            row = npc_skills([sid], skill_table, effect_table).get(key)
+            if row and row.get('effect'):
+                out[key] = infer_skill_hits(row['effect'], sid)
+        return out
+    skills = {row['ID']['Value']: row for row in _rows(skill_table) if row['ID']['Value'] in skill_ids}
+    groups = {}
+    for effect in _rows(effect_table):
+        group = effect['SkillEffectGroupId']['Value']
+        if _enum(effect['EffectType']) == 'Damage':
+            groups.setdefault(group, []).append(effect)
+        elif _enum(effect['EffectType']) == 'GroggyGuardDecreaseEnergy':
+            val = effect.get('EffectValueList') or []
+            groups.setdefault(group, []).append({'groggy': int(val[0]) if val else 0})
+    out = {}
+    for skill_id, row in sorted(skills.items()):
+        hits = []
+        for timed in row.get('SkillEffectTimeDataList', []):
+            group = timed['SkillEffectGroupId']['Value']
+            dmg = next((e for e in groups.get(group, []) if isinstance(e, dict) and 'ID' in e), None)
+            if dmg is None:
+                continue
+            values = dmg.get('EffectValueList', [])
+            groggy_row = next((e for e in groups.get(group, []) if isinstance(e, dict) and 'groggy' in e), None)
+            projectile = int(_value(timed.get('ProjectileId', 0)) or 0)
+            hits.append({'effect': dmg['ID']['Value'],
+                         'projectile_id': projectile,
+                         'groggy': groggy_row['groggy'] if groggy_row else 0})
+        if not hits and str(skill_id) in npc_skills([skill_id], skill_table, effect_table):
+            entry = npc_skills([skill_id], skill_table, effect_table)[str(skill_id)]
+            hits = infer_skill_hits(entry.get('effect', 0), skill_id)
+        if hits:
+            out[str(skill_id)] = hits
+    return out
+
+
+def hits_catalog(skill_table=SKILLDATA, effect_table=EFFECTDATA, data_path=DATA):
+    raw = json.loads(Path(data_path).read_text(encoding='utf-8')) if Path(data_path).exists() else {'npc_skills': {}}
+    skill_ids = {int(k) for k in raw.get('npc_skills', {})}
+    return skill_hits_catalog(skill_ids, skill_table, effect_table)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('command', choices=['build'])
-    parser.parse_args()
-    out = build({**MAPDATA, **field_mapdata()})
-    DATA.write_text(json.dumps(out, separators=(',', ':')) + '\n', encoding='utf-8')
-    print({map_id: len(spawns) for map_id, spawns in out['maps'].items()}, 'spawns ->', DATA.relative_to(ROOT))
+    sub = parser.add_subparsers(dest='command')
+    sub.add_parser('build', help='write tools/data/world-npcs.json')
+    hits = sub.add_parser('hits', help='skill hit catalog from Skill.dat')
+    hits.add_argument('--catalog', action='store_true', help='print skill_hits json for npc_skills')
+    args = parser.parse_args()
+    if args.command == 'build':
+        out = build({**MAPDATA, **field_mapdata()})
+        used = {int(k) for k in out.get('npc_skills', {})}
+        out['skill_hits'] = skill_hits_catalog(used, skill_table=SKILLDATA, effect_table=EFFECTDATA)
+        write_data_json(DATA, out)
+        print({map_id: len(spawns) for map_id, spawns in out['maps'].items()}, 'spawns ->', DATA.relative_to(ROOT))
+    elif args.command == 'hits' and args.catalog:
+        print(json.dumps(hits_catalog(), indent=2, sort_keys=True))
+    else:
+        parser.error('command required')
 
 
 if __name__ == '__main__':

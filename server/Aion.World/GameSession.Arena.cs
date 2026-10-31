@@ -49,14 +49,13 @@ public sealed partial class GameSession
         ArenaDungeonReadyEndNt = 0xe2b6, ArenaDungeonKillNt = 0xe2be, ArenaDungeonScoreUpdateNt = 0xe2bf, ArenaDungeonResultNt = 0xe2c1, ArenaRecordRq = 0xe2c4, ArenaRecordRs = 0xe2c5;
     const byte MatchingStateMatching = 2, MatchingStatePendingReady = 3, MatchingStateComplete = 4;
     public const long ArenaReadyWaitMs = 30_000, ArenaRespawnMs = 5_000, ArenaExitMs = 10_000, ArenaPlayTimeMs = 600_000;
-    public const int AbyssPointItemId = 930100003;
     static readonly int[] ArenaDungeons = [7, 8];   // MatchingContents 11/22 (Single) and 33/44 (Team): Fire Temple Arena, Impetusium Arena
     static readonly int[] ArenaMaps = [60, 61];
 
     /// <summary>Matching.dat: team size per matching id (Single 1, Team 5).</summary>
     static int ArenaTeamSize(int matchingId) => matchingId switch { 1 => 1, 2 => 5, _ => 0 };
     static int ArenaLives(int matchingId) => matchingId == 1 ? 3 : 1;
-    static (int Join, int Win) ArenaRewards(int matchingId) => (300, 500);   // RewardArena.dat Reward_Join/Win_Single and _Team: Abyss Points
+    static (int Join, int Win) ArenaRewards(int matchingId) => PvpTables.Embedded.ArenaRewards(matchingId);
 
     ArenaMatch? ArenaOf(WorldPlayer p) => Social?.Arenas.Values.FirstOrDefault(a => a.Has(p));
 
@@ -188,17 +187,17 @@ public sealed partial class GameSession
     }
 
     /// <summary>A cast at an enemy in a running match (called when no duel claims the target): PvP damage; at 1 HP a death.</summary>
-    List<byte[]> ArenaHits(int skill, int targetKey, long now)
+    List<byte[]> ArenaHits(int skill, int targetKey, long now, byte actionUid)
     {
         if (worldPlayer is null || ArenaOf(worldPlayer) is not { State: 3 } match) return [];
         var victim = match.Players.FirstOrDefault(p => p.Key == targetKey);
         if (victim is null || !match.Enemies(worldPlayer, victim) || victim.Session.resources is not { } theirs || match.RespawnAt.ContainsKey(victim.Key)) return [];
         var replies = new List<byte[]>();
         var seq = 0;
-        foreach (var hit in Combat.SkillHits(data, skill, className, level, equippedWeapon, victim.Session.Defense, rng, pvp: true))
+        foreach (var hit in PlayerSkillHits(skill, victim.Session.Defense, pvp: true))
         {
             theirs.Hp = Math.Max(1, theirs.Hp - hit.Amount);
-            replies.Add(GamePackets.SkillHit(victim.Key, playerKey, skill, hit.EffectId, hit.Amount, hit.Critical, ++seq));
+            replies.Add(GamePackets.SkillHit(victim.Key, playerKey, skill, hit.EffectId, hit.Amount, hit.Critical, actionUid, ++seq));
         }
         if (replies.Count == 0) return [];
         victim.Send([.. replies, theirs.Update()]);

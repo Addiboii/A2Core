@@ -6,6 +6,7 @@ using Aion.Application.Gameplay;
 namespace Aion.World;
 
 // tools/data/quests.json (tools/quests.py from the client's Quest/QuestStep/QuestReward tables).
+[JsonConverter(typeof(QuestObjectiveJsonConverter))]
 public sealed record QuestObjective(
     [property: JsonPropertyName("type")] string Type,
     [property: JsonPropertyName("npc")] int? Npc = null,
@@ -16,18 +17,25 @@ public sealed record QuestObjective(
     [property: JsonPropertyName("optional")] bool Optional = false,
     [property: JsonPropertyName("level")] int? Level = null,
     [property: JsonPropertyName("envs")] int[]? Envs = null,
-    [property: JsonPropertyName("chance")] int Chance = 0);
+    [property: JsonPropertyName("env_names")] string[]? EnvNames = null,
+    [property: JsonPropertyName("value")] int? Value = null,
+    [property: JsonPropertyName("value_tokens")] string[]? ValueTokens = null,
+    [property: JsonPropertyName("chance")] int Chance = 0,
+    [property: JsonPropertyName("map")] int? Map = null,
+    [property: JsonPropertyName("move_point")] string? MovePoint = null);
 
 public sealed record QuestStep(
     [property: JsonPropertyName("order")] int Order,
     [property: JsonPropertyName("objectives")] QuestObjective[] Objectives,
     [property: JsonPropertyName("npc")] int? Npc = null,
-    [property: JsonPropertyName("id")] int Id = 0);
+    [property: JsonPropertyName("id")] int Id = 0,
+    [property: JsonPropertyName("unified_score")] int UnifiedScore = 0);
 
 public sealed record QuestRewards(
     [property: JsonPropertyName("exp")] long Exp = 0,
     [property: JsonPropertyName("kina")] long Kina = 0,
-    [property: JsonPropertyName("items")] long[][]? Items = null);
+    [property: JsonPropertyName("items")] long[][]? Items = null,
+    [property: JsonPropertyName("select")] long[][]? Select = null);
 
 public sealed record QuestDefinition(
     [property: JsonPropertyName("id")] int Id,
@@ -46,7 +54,13 @@ public sealed record QuestDefinition(
     [property: JsonPropertyName("next")] string? Next,
     [property: JsonPropertyName("steps")] QuestStep[] Steps,
     [property: JsonPropertyName("rewards")] QuestRewards? Rewards,
-    [property: JsonPropertyName("conditions")] QuestCondition[]? Conditions = null);
+    [property: JsonPropertyName("recommended_level")] int RecommendedLevel = 0,
+    [property: JsonPropertyName("repeat")] string Repeat = "None",
+    [property: JsonPropertyName("conditions")] QuestCondition[]? Conditions = null,
+    [property: JsonPropertyName("acquire_items")] long[][]? AcquireItems = null,
+    [property: JsonPropertyName("unavailable")] bool Unavailable = false,
+    [property: JsonPropertyName("finish_map")] int? FinishMap = null,
+    [property: JsonPropertyName("finish_teleport")] string? FinishTeleport = null);
 
 /// <summary>An AcquirableConditions row other than ClearQuest (those are Prerequisites): IncompleteQuest, ClearQuestStep, SubZone, CloseEnvObj, the masteries.</summary>
 public sealed record QuestCondition(
@@ -64,11 +78,13 @@ public sealed class QuestBook
     sealed record File([property: JsonPropertyName("quests")] Dictionary<string, QuestDefinition> Quests,
                        [property: JsonPropertyName("unlocks")] QuestUnlock[] Unlocks);
 
+    static readonly JsonSerializerOptions QuestJsonOptions = new() { PropertyNameCaseInsensitive = false };
+
     static readonly Lazy<QuestBook> embedded = new(() =>
     {
         using var stream = typeof(QuestBook).Assembly.GetManifestResourceStream("quests.json")
             ?? throw new InvalidOperationException("quests.json is not embedded");
-        var file = JsonSerializer.Deserialize<File>(stream) ?? throw new InvalidDataException("quests.json");
+        var file = JsonSerializer.Deserialize<File>(stream, QuestJsonOptions) ?? throw new InvalidDataException("quests.json");
         return new QuestBook(file.Quests, file.Unlocks);
     });
 
@@ -81,6 +97,19 @@ public sealed class QuestBook
         ById = quests.ToDictionary(q => q.Value.Id, q => q.Key);
         stepsById = quests.Values.SelectMany(q => q.Steps.Where(s => s.Id != 0).Select(s => (s.Id, Step: (q.Id, s.Order))))
             .GroupBy(x => x.Id).ToDictionary(g => g.Key, g => g.First().Step);
+        questsByAcquireItem = [];
+        foreach (var (code, quest) in quests)
+        {
+            if (quest.Acquire != "Item" || quest.AcquireItems is not { } rows) continue;
+            foreach (var row in rows)
+            {
+                if (row.Length < 1) continue;
+                var itemId = (int)row[0];
+                if (!questsByAcquireItem.TryGetValue(itemId, out var list))
+                    questsByAcquireItem[itemId] = list = [];
+                if (!list.Contains(code, StringComparer.OrdinalIgnoreCase)) list.Add(code);
+            }
+        }
     }
 
     readonly Dictionary<int, (int Quest, int Step)> stepsById;
@@ -98,8 +127,47 @@ public sealed class QuestBook
 
     public QuestDefinition? Find(string code) => Quests.GetValueOrDefault(code);
 
+    /// <summary>
+    /// Common_Quest step on the wire: the QuestStep Order column, always. The 71 rows whose dat ID is not
+    /// questId * 100 + order (HQ2101050 order 1 is row 210105002, order 3 is row 210105001) still go out as their order:
+    /// sending the row ID left the client tracker blank (HQ2101050 accept on 2026-10-30 sent 210105002, the
+    /// journal showed no objective). Row IDs stay a server-side key for conditions (<see cref="StepOf"/>).
+    /// </summary>
+    public static int WireStep(QuestDefinition quest, QuestStep step) => step.Order;
+
     public static bool RaceMatches(QuestDefinition quest, int race) =>
         quest.Race == "All" || (quest.Race == "Light" && race == 1) || (quest.Race == "Dark" && race == 2);
+
+    /// <summary>AcquireType Auto: the journal may add it from reward chain or AutoAcquire; Npc/Item need accept at the giver.</summary>
+    public static bool ChainsWithoutAccept(QuestDefinition quest) => quest.Acquire == "Auto";
+
+    /// <summary>
+    /// ClearQuestExplorationType target (Seal, OccupationTerritory, …): derived from Exploration quest steps and
+    /// SubZone gates when Quest.dat Part is empty in the export (region seals vs garrison territories).
+    /// </summary>
+    public static string? ExplorationSubtype(QuestDefinition quest)
+    {
+        if (quest.Type != "Exploration") return null;
+        foreach (var c in quest.Conditions ?? [])
+            if (c.Type == "SubZone" && c.Value.Contains("GarrisonTerritory", StringComparison.OrdinalIgnoreCase))
+                return "OccupationTerritory";
+        foreach (var step in quest.Steps)
+        {
+            foreach (var o in step.Objectives)
+            {
+                if (o.Target is not { } target) continue;
+                if (target.Contains("Seal", StringComparison.OrdinalIgnoreCase)) return "Seal";
+                if (target.Contains("Garrison", StringComparison.OrdinalIgnoreCase)) return "OccupationTerritory";
+            }
+        }
+        return null;
+    }
+
+    readonly Dictionary<int, List<string>> questsByAcquireItem;
+
+    /// <summary>Quest codes that start when the given item template is used (Quest.dat AcquireItemList / acquire_items).</summary>
+    public IReadOnlyList<string> QuestsByAcquireItem(int itemTemplateId) =>
+        questsByAcquireItem.TryGetValue(itemTemplateId, out var list) ? list : [];
 }
 
 /// <summary>
@@ -130,11 +198,36 @@ public sealed class QuestLog(QuestBook book, int race)
     bool Done(string code) => quests.TryGetValue(code, out var q) && q.Status >= Complete;
 
     /// <summary>Whether the character may take the quest now (race, level, not taken, earlier quests done).</summary>
-    public bool CanAccept(string code, int level)
+    public bool CanAccept(string code, int level, Func<QuestDefinition, bool>? conditionsHold = null)
     {
-        if (book.Find(code) is not { } quest || quests.ContainsKey(code)) return false;
-        if (!QuestBook.RaceMatches(quest, race) || level < quest.Level || quest.Steps.Length == 0) return false;
-        return (quest.Prerequisites ?? []).All(Done) && (quest.Previous ?? []).All(p => !book.Quests.ContainsKey(p) || Done(p));
+        if (book.Find(code) is not { } quest) return false;
+        return AcceptBlockReason(quest, level, conditionsHold) is null;
+    }
+
+    /// <summary>Why accept is blocked, or null when <see cref="CanAccept"/> would succeed.</summary>
+    public string? AcceptBlockReason(QuestDefinition quest, int level, Func<QuestDefinition, bool>? conditionsHold = null)
+    {
+        if (book.ById.TryGetValue(quest.Id, out var code) && quests.ContainsKey(code)) return "already_active";
+        if (quest.Unavailable) return "unavailable";
+        if (!QuestBook.RaceMatches(quest, race)) return "wrong_race";
+        if (level < quest.Level) return "level";
+        if (quest.Steps.Length == 0) return "no_steps";
+        foreach (var pre in quest.Prerequisites ?? [])
+            if (!Done(pre)) return $"prereq:{pre}";
+        foreach (var prev in quest.Previous ?? [])
+            if (book.Quests.ContainsKey(prev) && !Done(prev)) return $"previous:{prev}";
+        if (conditionsHold is not null && (quest.Conditions ?? []).Length > 0 && !conditionsHold(quest))
+            return FirstFailedConditionLabel(quest, conditionsHold);
+        return null;
+    }
+
+    static string FirstFailedConditionLabel(QuestDefinition quest, Func<QuestDefinition, bool> conditionsHold)
+    {
+        foreach (var c in quest.Conditions ?? [])
+        {
+            if (!conditionsHold(quest with { Conditions = [c] })) return $"condition:{c.Type}:{c.Value}";
+        }
+        return "conditions";
     }
 
     /// <summary>Quests an NPC offers now (its start NPC, acquired by talking).</summary>
@@ -145,16 +238,23 @@ public sealed class QuestLog(QuestBook book, int race)
     public IEnumerable<string> AutoAcquirable(int level) =>
         book.Quests.Where(q => q.Value.Acquire == "Auto" && CanAccept(q.Key, level)).Select(q => q.Key);
 
+    /// <summary>
+    /// AcquirableConditions UnifiedObjectiveScore (Quest.dat RecommendedLevel sum of rewarded quests).
+    /// CANDIDATE: live may add optional unified step points; export only has unified_score on six hero/daeva steps.
+    /// </summary>
+    public int UnifiedObjectiveScore() =>
+        quests.Values.Where(q => q.Status >= Rewarded).Sum(q => book.Find(q.Code)?.RecommendedLevel ?? 0);
+
     public static QuestRecord New(string code, QuestDefinition quest) => new(code, quest.Id, 0, Incomplete, 1, new int[6]);
 
     public QuestStep? CurrentStep(QuestRecord record) =>
         book.Find(record.Code)?.Steps.FirstOrDefault(s => s.Order == record.Step);
 
     /// <summary>Counts an event against every active quest's current step; the records that changed.</summary>
-    public List<QuestRecord> Progress(Func<QuestObjective, bool> matches, int amount = 1, int level = 0)
+    public List<QuestRecord> Progress(Func<QuestObjective, bool> matches, int amount = 1, int level = 0, Func<QuestRecord, bool>? only = null)
     {
         var changed = new List<QuestRecord>();
-        foreach (var record in quests.Values.Where(q => q.Status == Incomplete).ToList())
+        foreach (var record in quests.Values.Where(q => q.Status == Incomplete && (only is null || only(q))).ToList())
         {
             if (CurrentStep(record) is not { } step) continue;
             var goals = (int[])record.Goals.Clone();
@@ -188,9 +288,11 @@ public sealed class QuestLog(QuestBook book, int race)
     public static readonly HashSet<string> ClientObjectiveTypes = ["CompleteCelviceTalk", "CloseNote", "UseFakeItem"];
 
     /// <summary>The client reports objective <paramref name="index"/> of the quest's current step done; null when that is not its to decide.</summary>
-    public QuestRecord? ClientCompleted(long uid, int index, int level)
+    public QuestRecord? ClientCompleted(long uidOrQuestId, int index, int level)
     {
-        if (ByUid(uid) is not { Status: Incomplete } record || CurrentStep(record) is not { } step) return null;
+        var record = ByUid(uidOrQuestId);
+        if (record is null && book.ById.TryGetValue((int)uidOrQuestId, out var code)) record = Get(code);
+        if (record is not { Status: Incomplete } || CurrentStep(record) is not { } step) return null;
         if (index < 0 || index >= Math.Min(6, step.Objectives.Length) || !ClientObjectiveTypes.Contains(step.Objectives[index].Type)) return null;
         if (record.Goals[index] >= step.Objectives[index].Count) return record;
         var goals = (int[])record.Goals.Clone();
@@ -222,9 +324,153 @@ public sealed class QuestLog(QuestBook book, int race)
     public List<QuestRecord> Talked(int npcId, int level) =>
         Progress(o => o.Type is "AskNpc" or "CloseNpc" && o.Npc == npcId, level: level);
 
+    /// <summary>The talk with an NPC ended (0xe242): AskNpc / CloseNpc count only on the quests and steps that were open when
+    /// the dialog opened (<see cref="OpenTalks"/>), so a quest accepted from the same dialog is not credited by it.</summary>
+    public List<QuestRecord> Talked(int npcId, int level, IReadOnlyCollection<(string Code, int Step)> openedOn) =>
+        Progress(o => o.Type is "AskNpc" or "CloseNpc" && o.Npc == npcId, level: level, only: q => openedOn.Contains((q.Code, q.Step)));
+
+    /// <summary>Incomplete quests whose current step still needs a talk (AskNpc / CloseNpc) with this NPC.</summary>
+    public List<(string Code, int Step)> OpenTalks(int npcId) =>
+        quests.Values.Where(q => q.Status == Incomplete && CurrentStep(q) is { } step
+                && step.Objectives.Take(6).Select((o, i) => o.Type is "AskNpc" or "CloseNpc" && o.Npc == npcId && q.Goals[i] < o.Count).Any(x => x))
+            .Select(q => (q.Code, q.Step)).ToList();
+
     /// <summary>Using a quest object (UseEnvObj names EnvObjData ids).</summary>
     public List<QuestRecord> UsedObject(int env, int level) =>
         Progress(o => o.Type == "UseEnvObj" && (o.Envs ?? []).Contains(env), level: level);
+
+    /// <summary>KillNpc / CollectFakeItem NPC ids on incomplete quests' current steps that still need progress.</summary>
+    public IEnumerable<int> OpenKillNpcIds() =>
+        quests.Values.Where(q => q.Status == Incomplete).SelectMany(record =>
+            CurrentStep(record) is { } step
+                ? step.Objectives.Take(6).SelectMany((o, i) =>
+                    o.Type is "KillNpc" or "CollectFakeItem" && record.Goals[i] < o.Count && o.Npcs is { } npcs
+                        ? npcs : [])
+                : []);
+
+    /// <summary>AskNpc / CloseNpc on the current step that still need progress (stream on large field maps).</summary>
+    public IEnumerable<int> OpenTalkNpcIds() =>
+        quests.Values.Where(q => q.Status == Incomplete).SelectMany(record =>
+            CurrentStep(record) is { } step
+                ? step.Objectives.Take(6).SelectMany((o, i) =>
+                    o.Type is "AskNpc" or "CloseNpc" && record.Goals[i] < o.Count && o.Npc is { } npc
+                        ? new[] { npc } : [])
+                : []);
+
+    /// <summary>Field EnterInstanceLayer NPCs for open ClearMapEvent objectives (Robin on Ishalgen, etc.).</summary>
+    public IEnumerable<int> OpenClearMapEventEntryNpcIds() =>
+        OpenClearMapEventNames().SelectMany(MapEventTables.Embedded.FieldEntryNpcIds);
+
+    /// <summary>ClearMapEvent names on incomplete quests' current steps that still need credit.</summary>
+    public IEnumerable<string> OpenClearMapEventNames() =>
+        quests.Values.Where(q => q.Status == Incomplete).SelectMany(record =>
+            CurrentStep(record) is { } step
+                ? step.Objectives.Take(6).Select((o, i) => (o, i, record))
+                : []).Where(x => x.o.Type == "ClearMapEvent" && x.o.Target is { } name && x.record.Goals[x.i] < x.o.Count)
+            .Select(x => x.o.Target!);
+
+    /// <summary>The quests whose current step still waits for the map event's clear.</summary>
+    public IEnumerable<QuestDefinition> OpenClearMapEventQuests(string mapEvent) =>
+        quests.Values.Where(q => q.Status == Incomplete && CurrentStep(q) is { } step
+                && step.Objectives.Take(6).Where((o, i) => o.Type == "ClearMapEvent" && string.Equals(o.Target, mapEvent, StringComparison.OrdinalIgnoreCase) && q.Goals[i] < o.Count).Any())
+            .Select(q => book.Find(q.Code)).OfType<QuestDefinition>();
+
+    /// <summary>Another quest's current step waits to finish the given exploration or gate quest (HQ1102070 step 7 → EQ1820001).</summary>
+    public bool OpenClearQuestFor(string questCode) =>
+        !Done(questCode)
+        && All.Any(q => q.Status == Incomplete && CurrentStep(q) is { } step
+            && step.Objectives.Take(6).Any(o => o.Type == "ClearQuest" && o.Target == questCode));
+
+    /// <summary>
+    /// InstanceLayer MapEntrance QuestStepIdList, an open ClearMapEvent on the layer script, a ClearQuest waiting on a gate
+    /// quest, or (checked separately) UseEnvObj objectives whose objects live on the layer map.
+    /// </summary>
+    public bool InstanceLayerGateOpen(DungeonInfo room)
+    {
+        if (room.QuestGate is not { Length: > 0 }) return true;
+        foreach (var g in room.QuestGate)
+            if (g.Length >= 2 && g[0].GetString() is { } code && Get(code) is { } record
+                && record.Status == Incomplete && record.Step == g[1].GetInt32())
+                return true;
+        var eventsOnLayer = MapEventTables.Embedded.EventsOn(room.Map).Select(e => e.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (OpenClearMapEventNames().Any(eventsOnLayer.Contains)) return true;
+        foreach (var g in room.QuestGate)
+            if (g.Length >= 1 && g[0].GetString() is { } gateCode && OpenClearQuestFor(gateCode)) return true;
+        return false;
+    }
+
+    /// <summary>EnvObjData ids for open UseEnvObj objectives on the current step.</summary>
+    public IEnumerable<int> OpenUseEnvObjIds() =>
+        quests.Values.Where(q => q.Status == Incomplete).SelectMany(record =>
+            CurrentStep(record) is { } step
+                ? step.Objectives.Take(6).SelectMany((o, i) =>
+                    o.Type == "UseEnvObj" && record.Goals[i] < o.Count && o.Envs is { } envs ? envs : [])
+                : []);
+
+    /// <summary>
+    /// KillNpc / CollectFakeItem targets on a later step of an incomplete quest: visible in the world but not
+    /// damageable until that step is active (live HQ1101018: Balaur watchstones before step 4).
+    /// </summary>
+    public IEnumerable<int> PendingKillNpcIds() =>
+        quests.Values.Where(q => q.Status == Incomplete).SelectMany(PendingKillNpcIdsFor);
+
+    IEnumerable<int> PendingKillNpcIdsFor(QuestRecord record)
+    {
+        if (book.Find(record.Code) is not { } quest) yield break;
+        foreach (var step in quest.Steps)
+        {
+            if (step.Order <= record.Step) continue;
+            foreach (var id in KillObjectiveNpcIds(step)) yield return id;
+        }
+    }
+
+    /// <summary>
+    /// UseEnvObj ids on a later step of an incomplete quest (the supply box of HQ1101011 before step 3, and similar).
+    /// </summary>
+    public IEnumerable<int> PendingUseEnvObjIds() =>
+        quests.Values.Where(q => q.Status == Incomplete).SelectMany(PendingUseEnvObjIdsFor);
+
+    IEnumerable<int> PendingUseEnvObjIdsFor(QuestRecord record)
+    {
+        if (book.Find(record.Code) is not { } quest) yield break;
+        foreach (var step in quest.Steps)
+        {
+            if (step.Order <= record.Step) continue;
+            foreach (var env in UseObjectiveEnvIds(step)) yield return env;
+        }
+    }
+
+    /// <summary>Whether an EnvObj id belongs to a UseEnvObj objective on any incomplete quest (race-matched).</summary>
+    public bool IsQuestUseEnvObj(int env) =>
+        quests.Values.Any(q => q.Status == Incomplete && QuestBook.RaceMatches(book.Find(q.Code)!, race)
+            && book.Find(q.Code) is { } quest && quest.Steps.Any(s => s.Objectives.Any(o => o.Type == "UseEnvObj" && o.Envs?.Contains(env) == true)));
+
+    /// <summary>
+    /// Quest talk and turn-in NPCs while a quest is incomplete: the player must not damage them (live: scouts during HQ1101018).
+    /// </summary>
+    public IEnumerable<int> ProtectedTalkNpcIds() =>
+        quests.Values.Where(q => q.Status == Incomplete).SelectMany(ProtectedTalkNpcIdsFor);
+
+    IEnumerable<int> ProtectedTalkNpcIdsFor(QuestRecord record)
+    {
+        if (book.Find(record.Code) is not { } quest || !QuestBook.RaceMatches(quest, race)) yield break;
+        if (quest.StartNpc is { } start) yield return start;
+        if (quest.FinishNpc is { } finish) yield return finish;
+        foreach (var step in quest.Steps)
+        {
+            if (step.Npc is { } sn) yield return sn;
+            foreach (var o in step.Objectives)
+            {
+                if (o.Type is "AskNpc" or "CloseNpc" && o.Npc is { } npc) yield return npc;
+            }
+        }
+    }
+
+    static IEnumerable<int> KillObjectiveNpcIds(QuestStep step) =>
+        step.Objectives.SelectMany(o => o.Type is "KillNpc" or "CollectFakeItem" && o.Npcs is { } npcs ? npcs : []);
+
+    static IEnumerable<int> UseObjectiveEnvIds(QuestStep step) =>
+        step.Objectives.SelectMany(o => o.Type == "UseEnvObj" && o.Envs is { } envs ? envs : []);
 
     /// <summary>The area objectives (EnterVolumePC, EnterSubZone) of active quests' current steps, still to do.</summary>
     public IEnumerable<QuestObjective> OpenAreaObjectives() =>
@@ -311,6 +557,8 @@ public sealed class QuestLog(QuestBook book, int race)
             "PCLevel" => level >= (x.o.Level ?? int.MaxValue),
             "ClearQuest" => x.o.Target is { } code && Done(code),
             "ClearQuestType" => quests.Values.Count(q => q.Status >= Complete && book.Find(q.Code)?.Type == x.o.Target) >= x.o.Count,
+            "ClearQuestExplorationType" => quests.Values.Count(q => q.Status >= Complete && book.Find(q.Code) is { } eq
+                && eq.Type == "Exploration" && QuestBook.ExplorationSubtype(eq) == x.o.Target) >= x.o.Count,
             _ => goals[x.i] >= x.o.Count,
         });
     }
@@ -325,6 +573,14 @@ public sealed class QuestLog(QuestBook book, int race)
         var index = Array.FindIndex(steps, s => s.Order == step.Order);
         var next = index + 1 < steps.Length ? record with { Step = steps[index + 1].Order, Goals = new int[6] } : record with { Goals = goals, Status = Complete };
         return quests[code] = Advance(next, level);
+    }
+
+    /// <summary>GM QuestSetStep: jump to a step order with fresh objective counters (does not auto-advance).</summary>
+    public QuestRecord? SetStep(string code, int stepOrder)
+    {
+        if (Get(code) is not { } record || book.Find(code) is not { Steps: { Length: > 0 } steps }) return null;
+        if (Array.FindIndex(steps, s => s.Order == stepOrder) < 0) return null;
+        return quests[code] = record with { Status = Incomplete, Step = stepOrder, Goals = new int[6] };
     }
 
     /// <summary>GM QuestComplete: every step done, reward pending.</summary>

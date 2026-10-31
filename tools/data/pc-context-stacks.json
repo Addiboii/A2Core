@@ -1,0 +1,45 @@
+{
+  "source": "PCContextSkillSlot table-005.json under research/local/starter-skills-tables",
+  "quick_slot_id": 8,
+  "wire_slot": 7,
+  "real_export": true,
+  "e_slot_by_class": {
+    "Gladiator": [
+      11200000,
+      11170000
+    ],
+    "Templar": [
+      12270000,
+      12240000
+    ],
+    "Assassin": [
+      13210000,
+      13350000
+    ],
+    "Ranger": [
+      14070000,
+      14090000
+    ],
+    "Sorcerer": [
+      15050000,
+      15310000
+    ],
+    "Elementalist": [
+      16330000,
+      16300000,
+      16140000
+    ],
+    "Cleric": [
+      17350000,
+      17070000
+    ],
+    "Chanter": [
+      18150000,
+      18100000
+    ],
+    "Fighter": [
+      19250000,
+      19420000
+    ]
+  }
+}

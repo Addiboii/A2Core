@@ -1,0 +1,11 @@
+{
+  "rules": [
+    {
+      "host": "sdk.gpa.ncsoft.com",
+      "method": "POST",
+      "path": "/authz/token",
+      "content_type": "application/json",
+      "body": "{\"access_token\":\"aion-local-gpa-access-token\",\"token_type\":\"Bearer\",\"expires_in\":86400,\"refresh_token\":\"aion-local-gpa-refresh-token\",\"scope\":\"openid profile\"}"
+    }
+  ]
+}

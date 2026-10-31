@@ -10,7 +10,8 @@ namespace Aion.World;
 public sealed partial class GameSession
 {
     public const ushort ItemMoveRq = 0x563a, ItemMoveRs = 0x563b, ItemRemoveRq = 0x563c, ItemRemoveRs = 0x563d, ItemSortRq = 0x563e, ItemSortRs = 0x563f,
-        QuickSlotSetRq = 0x5601, QuickSlotSetRs = 0x5602, QuickSlotResetRq = 0x5603, QuickSlotResetRs = 0x5604;
+        QuickSlotSetRq = 0x5601, QuickSlotSetRs = 0x5602, QuickSlotResetRq = 0x5603, QuickSlotResetRs = 0x5604,
+        QuickSlotContextSkillResetRq = 0x5609, QuickSlotContextSkillResetRs = 0x560a;
     const byte DecreaseItemRemove = 13;   // EDecreaseReason kItemRemove
     readonly SortedDictionary<int, QuickSlotRecord> quickSlots = [];
     public IReadOnlyDictionary<int, QuickSlotRecord> QuickSlots => quickSlots;
@@ -25,11 +26,28 @@ public sealed partial class GameSession
     /// <summary>The bar at world entry: the class's default bar with the player's saved slots over it.</summary>
     byte[] Hotbar(IEnumerable<(int Slot, int SkillId)> defaults)
     {
-        var bar = new SortedDictionary<int, (int Slot, int Type, long ItemUid, int ItemId, int SkillId)>();
-        foreach (var (slot, skill) in defaults) bar[slot] = (slot, 0, 0, 0, skill);
-        foreach (var s in quickSlots.Values) bar[s.Slot] = (s.Slot, s.Type, s.ItemUid, s.ItemId, s.SkillId);
+        var bar = new SortedDictionary<int, (int Slot, int Type, long ItemUid, int ItemId, int SkillId, IReadOnlyList<int>?)>();
+        foreach (var (slot, skill) in defaults)
+            bar[slot] = (slot, 0, 0, 0, skill, data.DefaultContextSkills(skill));
+        // PCLevelQuickSlot.dat (Steam 2026-10-28 client): every class starts with its potions on the consumable bar
+        // (item slots 11-18 = F1-F8, QuickSlotData bEditable); the official level-1 entry sends these item records with
+        // the 8 skills (capture 20261013 #376: 14 records). Only items the player holds in the bag; saved slots win.
+        foreach (var (slot, itemId) in GamePackets.LevelQuickSlotItems)
+            if (storedItems.Values.Where(i => i.Location == "bag" && i.TemplateId == itemId).Select(WireKey).FirstOrDefault() is var uid and not 0)
+                bar[slot] = (slot, 1, uid, itemId, 0, null);
+        foreach (var s in quickSlots.Values)
+        {
+            if (IsClearedQuickSlot(s)) bar.Remove(s.Slot);
+            else bar[s.Slot] = (s.Slot, s.Type, s.ItemUid, s.ItemId, s.SkillId, ContextSkillsForSlot(s));
+        }
         return GamePackets.QuickSlots(bar.Values.ToList());
     }
+
+    /// <summary>A stored slot with nothing in it: how a slot of the default bar stays empty after the player emptied it (OURS).</summary>
+    static bool IsClearedQuickSlot(QuickSlotRecord slot) => slot.SkillId == 0 && slot.ItemId == 0 && slot.ItemUid == 0;
+
+    bool HasDefaultQuickSlot(int number) =>
+        Profile()?.DefaultBar().Any(s => s.Slot == number) == true || GamePackets.LevelQuickSlotItems.Any(i => i.Slot == number);
 
     /// <summary>
     /// 0x563a ItemMove_RQ {npc key i32, EItemContainerType u8, item key i64, slot pos i32}: a bag or warehouse item to a
@@ -42,8 +60,8 @@ public sealed partial class GameSession
         byte container = plain[6];
         var key = BitConverter.ToInt64(plain, 7);
         byte[] Reply(int result) => PacketWriter.Opcode(ItemMoveRs).U16(result).I32(npc).U8(container).I64(key).I32(slot).ToArray();
-        var target = container switch { InventoryItem.Bag => "bag", InventoryItem.Storage => "storage", _ => null };
-        if (target is null || Store is not { } store || CharacterId is not { } character || !storedItems.TryGetValue(key, out var row) || row.Location is not ("bag" or "storage") || slot < 0)
+        var target = container switch { InventoryItem.Bag => "bag", InventoryItem.Storage => "storage", InventoryItem.AccountStorage => "account_storage", _ => null };
+        if (target is null || Store is not { } store || CharacterId is not { } character || !storedItems.TryGetValue(key, out var row) || row.Location is not ("bag" or "storage" or "account_storage") || slot < 0)
             return [Reply(1)];
         var moved = await Stored(async () => (target == "bag" && row.Location == "bag"
             ? await store.MoveBagItemAsync(character, row.InstanceId, row.Revision, slot, ct)
@@ -93,8 +111,9 @@ public sealed partial class GameSession
         var npc = BitConverter.ToInt32(plain, 2);
         var container = plain[6];
         byte[] Reply(int result) => PacketWriter.Opcode(ItemSortRs).U16(result).I32(npc).U8(container).ToArray();
-        if (container != 1 || Store is not { } store || CharacterId is not { } character) return [Reply(1)];
-        var sorted = await Stored(async () => await store.SortBagAsync(character, ct) ? [[]] : []);
+        var location = container switch { InventoryItem.Bag => "bag", InventoryItem.Storage => "storage", InventoryItem.AccountStorage => "account_storage", _ => null };
+        if (location is null || Store is not { } store || CharacterId is not { } character) return [Reply(1)];
+        var sorted = await Stored(async () => await store.SortContainerAsync(character, location, ct) ? [[]] : []);
         return sorted.Count == 0 ? [Reply(1)] : [Reply(0), .. await InventoryChangesAsync(ct, 0, 0)];
     }
 
@@ -106,18 +125,30 @@ public sealed partial class GameSession
     {
         int number, type, itemId, skillId;
         long uid;
+        int[]? context = null;
         try
         {
             // QuickSlotInfo starts with its presence mask (live 2026-10-16 `00 0e 01 ...` for a potion on slot 14; the reader
             // took the mask for the slot and the slot for the type, so every item drag was refused).
             var reader = new PacketReader(plain) { Offset = 2 };
-            reader.U8();
+            var mask = reader.U8();
             number = reader.U8(); type = reader.U8(); uid = (long)reader.U64(); itemId = (int)reader.U32(); skillId = (int)reader.U32();
+            if ((mask & 1) != 0 && type == 0 && skillId != 0)
+            {
+                var count = reader.U8();
+                var ids = new int[4];
+                for (var i = 0; i < count && i < 4; i++) ids[i] = (int)reader.U32();
+                context = ids;
+            }
         }
         catch (ProtocolException) { return []; }
         byte[] Reply(int result) => PacketWriter.Opcode(QuickSlotSetRs).U16(result).Raw(plain.AsSpan(2)).ToArray();
         if (Store is not { } store || CharacterId is not { } character || type is < 0 or > 4) return [Reply(1)];
-        var slot = new QuickSlotRecord(number, type, uid, itemId, skillId);
+        if (type == 1 && uid != 0 && (!storedItems.TryGetValue(uid, out var itemRow) || itemRow.Location != "bag" || itemRow.TemplateId != itemId))
+            return [Reply(1)];
+        if (type == 0 && skillId != 0 && !learned.Contains(skillId)) return [Reply(1)];
+        context ??= type == 0 && skillId != 0 ? data.DefaultContextSkills(skillId).ToArray() : null;
+        var slot = new QuickSlotRecord(number, type, uid, itemId, skillId, context);
         var saved = await Stored(async () => await store.SaveQuickSlotAsync(character, number, slot, ct) ? [[]] : []);
         if (saved.Count == 0) return [Reply(1)];
         quickSlots[number] = slot;
@@ -129,10 +160,37 @@ public sealed partial class GameSession
     {
         byte[] Reply(int result) => PacketWriter.Opcode(QuickSlotResetRs).U16(result).U8(number).ToArray();
         if (Store is not { } store || CharacterId is not { } character) return [Reply(1)];
-        var saved = await Stored(async () => await store.SaveQuickSlotAsync(character, number, null, ct) ? [[]] : []);
+        // A default-bar slot is emptied with a stored empty record; deleting the row would bring the default back at the next login.
+        var tombstone = HasDefaultQuickSlot(number) ? new QuickSlotRecord(number, 0, 0, 0, 0, [0, 0, 0, 0]) : null;
+        var saved = await Stored(async () => await store.SaveQuickSlotAsync(character, number, tombstone, ct) ? [[]] : []);
         if (saved.Count == 0) return [Reply(1)];
-        quickSlots.Remove(number);
+        if (tombstone is null) quickSlots.Remove(number);
+        else quickSlots[number] = tombstone;
         return [Reply(0)];
+    }
+
+    /// <summary>
+    /// 0x5609 QuickSlotContextSkillReset_RQ (no body; the Skill Order window's reset button): every skill slot's stack goes
+    /// back to its class default, saved, answered 0x560a {result u16} and the bar sent again as 0x5600 (CANDIDATE: no official reply sample).
+    /// </summary>
+    async Task<List<byte[]>> ResetQuickSlotContextAsync(CancellationToken ct)
+    {
+        byte[] Reply(int result) => PacketWriter.Opcode(QuickSlotContextSkillResetRs).U16(result).ToArray();
+        if (Store is not { } store || CharacterId is not { } character || Profile() is not { } profile) return [Reply(1)];
+        var changed = quickSlots.Values
+            .Where(s => s.Type == 0 && s.SkillId != 0)
+            .Select(s => s with { ContextSkills = data.DefaultContextSkills(s.SkillId).ToArray() })
+            .Where(s => !s.ContextSkills!.SequenceEqual(ContextSkillsForSlot(quickSlots[s.Slot])))
+            .ToList();
+        var saved = await Stored(async () =>
+        {
+            foreach (var slot in changed)
+                if (!await store.SaveQuickSlotAsync(character, slot.Slot, slot, ct)) return [];
+            return [[]];
+        });
+        if (saved.Count == 0) return [Reply(1)];
+        foreach (var slot in changed) quickSlots[slot.Slot] = slot;
+        return [Reply(0), Hotbar(profile.DefaultBar())];
     }
 
     /// <summary>Party members on the same map within this distance share a kill's experience (OURS).</summary>

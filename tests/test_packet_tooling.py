@@ -1,4 +1,6 @@
 import json
+import subprocess
+import sys
 import unittest
 from pathlib import Path
 
@@ -107,9 +109,8 @@ class UsmapCodegenTests(unittest.TestCase):
 
     def test_codegen_check(self):
         # usmap_codegen --check must not report drift.
-        import subprocess
         result = subprocess.run(
-            ["python", "tools/usmap_codegen.py", "--check"],
+            [sys.executable, "tools/usmap_codegen.py", "--check"],
             cwd=str(ROOT), capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
