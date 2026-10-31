@@ -22,10 +22,29 @@ public sealed record WorldObject(
     // An exit door (EnvObjData Usage MoveMap): the MapData teleport point it leads to (tools/world_objects.py).
     [property: JsonPropertyName("move_to")] string? MoveTo = null,
     // Its EnvObjData name, when the spawn entry is named after another object (tools/world_objects.py).
-    [property: JsonPropertyName("env_name")] string? EnvName = null)
+    [property: JsonPropertyName("env_name")] string? EnvName = null,
+    // EnvObj_Destroy objects: the hits that break one (EnvObjData HitLimit; 0/1: one) and the skills that count (empty: any).
+    [property: JsonPropertyName("hit_limit")] int HitLimit = 0,
+    [property: JsonPropertyName("hit_skills")] int[]? HitSkills = null,
+    // A carried-item box (BombBox): InteractConditionList NotHaveAbnormalGroup, bDespawn, FinishDuration (tools/world_objects.py).
+    [property: JsonPropertyName("carry")] CarryBox? Carry = null,
+    // EnvObjData CombatPower and its Level / ItemLevel (portals gated for level 45).
+    [property: JsonPropertyName("required_combat_power")] int RequiredCombatPower = 0,
+    [property: JsonPropertyName("min_level")] int MinLevel = 0,
+    [property: JsonPropertyName("item_level")] int ItemLevel = 0)
 {
     public Vector3d At => new(Position[0], Position[1], Position[2]);
+    /// <summary>EnvObj_Destroy (ERelationshipEntity 15): broken by hits rather than used.</summary>
+    public bool Destructible => Relationship == 15;
+    public int HitsToBreak => Math.Max(1, HitLimit);
+    public bool CountsHit(int skill) => HitSkills is not { Length: > 0 } skills || skills.Contains(skill);
 }
+
+/// <summary>A carried-item box: the abnormal group it gives / refuses, whether it hides after use and for how long (ms).</summary>
+public sealed record CarryBox(
+    [property: JsonPropertyName("group")] int Group,
+    [property: JsonPropertyName("despawn")] bool Despawn,
+    [property: JsonPropertyName("finish_duration")] int FinishDuration);
 
 /// <summary>A quest trigger area (MapData TriggerActorDataMap): a rotated box or a sphere with a height.</summary>
 public sealed record TriggerArea(

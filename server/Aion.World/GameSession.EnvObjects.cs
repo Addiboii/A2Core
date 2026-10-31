@@ -45,6 +45,19 @@ public sealed partial class GameSession
     string? EnvObjRefusal(int index, WorldObject o)
     {
         if (!envObjCanInteract.GetValueOrDefault(index, true)) return "a map event made it not interactable";
+        // EnvObjData InteractConditionList NotHaveAbnormalGroup (OBSERVED table rule; A2Core PR #4).
+        if (o.Carry is { } box && buffs.Any(b => b.Group == box.Group || b.AbnormalId == box.Group)) return $"already carrying abnormal group {box.Group}";
+        // EnvObjData CombatPower gate: the server computes no combat power, so its Level / ItemLevel stand in (OURS).
+        if (o.RequiredCombatPower > 0 && (o.MinLevel > 0 && level < o.MinLevel || o.ItemLevel > 0 && EquipItemLevel() < o.ItemLevel))
+            return $"combat power {o.RequiredCombatPower} (level {o.MinLevel}, item level {o.ItemLevel}) not reached";
         return null;
+    }
+
+    /// <summary>A used carried-item box with bDespawn hides for its FinishDuration (as a gathered node; A2Core PR #4, OURS timing).</summary>
+    void CarryBoxUsed(int index, WorldObject o, long now, List<byte[]> replies)
+    {
+        if (o.Carry is not { Despawn: true } box) return;
+        gathered[index] = now + Math.Max(box.FinishDuration, 1000);
+        if (shownObjects.Remove(index)) replies.Add(GamePackets.EnvObjDespawn(WorldObjects.FirstKey + index));
     }
 }

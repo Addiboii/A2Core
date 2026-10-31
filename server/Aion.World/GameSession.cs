@@ -831,6 +831,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             GamePackets.InteractEnvObjReply(key),
         };
         if (objects[index].Gather is not null) replies.AddRange(await CompleteGatherAsync(index, objects[index], now, ct));
+        CarryBoxUsed(index, objects[index], now, replies);   // GameSession.EnvObjects.cs
         if (questLog is not null)
             replies.AddRange(await Stored(() => QuestChangesAsync(questLog.UsedObject(objects[index].Env, level), ct)));
         var consumed = (CopyOwner ?? this).mapEventRuns.Any(r => r.WantsObject(objects[index].Name, objects[index].EnvName));

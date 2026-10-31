@@ -57,6 +57,24 @@ class WorldObjectTests(unittest.TestCase):
         door = [o for o in data['maps']['1010']['objects'] if o['name'] == 'World_L_A_Layer_01_EnterDoor']
         self.assertEqual([o['portal'] for o in door], [[2]])
 
+    def test_destructible_carry_and_gated_objects(self):
+        rows = world_objects.envobj_rows({'Properties': [
+            {'ID': {'Value': 1400824}, 'Name': 'E_L0_Layer_2_Tower_01', 'Usage': 'EEnvObjectUsage::Normal', 'HitLimit': 5,
+             'HitSkillIdList': [{'Value': 5003}], 'RelationshipEntity': 'ERelationshipEntity::EnvObj_Destroy'},
+            {'ID': {'Value': 1400823}, 'Name': 'E_L0_Layer_2_BombBox_01', 'Usage': 'EEnvObjectUsage::Normal', 'FinishDuration': 10000,
+             'bDespawn': True, 'InteractConditionList': [
+                 {'ConditionType': 'EEnvObjCanInteractType::NotHaveAbnormalGroup', 'ConditionValues': ['1196']}]},
+            {'ID': {'Value': 1300001}, 'Name': 'E_L1_VerteronToEltnen_Portal', 'Usage': 'EEnvObjectUsage::MovemapCondition',
+             'CombatPower': 270000, 'Level': 45, 'ItemLevel': 3300}]})
+        self.assertEqual(rows[1400823]['not_have_abnormal_group'], 1196)
+        spawn = {'SpawnInfoList': [
+            {'Name': n, 'EnvObjIdList': [{'Value': e}], 'Positions': [{'Location': {'X': 0, 'Y': 0, 'Z': 0}, 'Rotation': {'Yaw': 0}}]}
+            for n, e in (('Tower', 1400824), ('Box', 1400823), ('Portal', 1300001))]}
+        tower, box, portal = world_objects.objects(spawn, rows, wanted=set(), everything=True)
+        self.assertEqual((tower['hit_limit'], tower['hit_skills'], tower['relationship']), (5, [5003], 15))
+        self.assertEqual(box['carry'], {'group': 1196, 'despawn': True, 'finish_duration': 10000})
+        self.assertEqual((portal['required_combat_power'], portal['min_level'], portal['item_level']), (270000, 45, 3300))
+
     def test_generated_poeta(self):
         data = json.loads((ROOT / 'tools/data/world-objects.json').read_text(encoding='utf-8'))['maps']['1000']
         self.assertIn(1200530, [o['env'] for o in data['objects']])

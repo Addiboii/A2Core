@@ -60,6 +60,12 @@ static partial class QuestWorldChecks
         var normal = tickets.Of(60000006)!;   // Party_Dungeon_Normal: 21, +1 every 28800 s
         C(ContentTicketTables.Recharged(normal, 0, Ms(27, 0), Ms(27, 16)) == 2, "cycle recharge: one per 8 hours");
         C(tickets.Of(3) is { Counted: false }, "Time tickets (the Abyss) are not counted");
+        // Object fields from tools/world_objects.py: destructible hits, carried-item boxes, gated portals (A2Core PR #4).
+        var tower = System.Text.Json.JsonSerializer.Deserialize<WorldObject>("""{"env":1400824,"name":"T","unique_key":1,"position":[0,0,0],"yaw":0,"interact_time":0,"interact_range":650,"relationship":15,"hit_limit":5,"hit_skills":[5003]}""")!;
+        var box = System.Text.Json.JsonSerializer.Deserialize<WorldObject>("""{"env":1400823,"name":"B","unique_key":2,"position":[0,0,0],"yaw":0,"interact_time":0,"interact_range":80,"relationship":7,"carry":{"group":1196,"despawn":true,"finish_duration":10000}}""")!;
+        C(tower is { Destructible: true, HitsToBreak: 5 } && tower.CountsHit(5003) && !tower.CountsHit(11010000)
+          && box is { Destructible: false, Carry: { Group: 1196, Despawn: true, FinishDuration: 10000 } },
+          "world objects read hit_limit / hit_skills and the carry box");
         return count;
     }
 }

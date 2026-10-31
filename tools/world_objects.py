@@ -59,8 +59,29 @@ def envobj_rows(table):
                 'interact_count': int(row.get('InteractCount') or 0), 'despawn': bool(row.get('bDespawn')),
                 'usage_value': row.get('UsageValue') if isinstance(row.get('UsageValue'), str) else None,
                 'relationship': RELATIONSHIP.get(relation, 7),
-                'long_range': str(row.get('VisibleRangeType', '')).endswith(('LongRange', 'MapRange'))}
+                'long_range': str(row.get('VisibleRangeType', '')).endswith(('LongRange', 'MapRange')),
+                'hit_limit': int(row.get('HitLimit') or 0),
+                'hit_skills': [s['Value'] for s in row.get('HitSkillIdList') or [] if isinstance(s, dict) and s.get('Value')],
+                'finish_duration': int(row.get('FinishDuration') or 0),
+                'not_have_abnormal_group': not_have_abnormal_group(row.get('InteractConditionList')),
+                'combat_power': int(row.get('CombatPower') or 0),
+                'level': int(row.get('Level') or 0), 'item_level': int(row.get('ItemLevel') or 0)}
     return rows
+
+
+def not_have_abnormal_group(conditions):
+    """The first abnormal group an InteractConditionList NotHaveAbnormalGroup row names (the BombBox: 1196), or 0.
+
+    The rows are {ConditionType: EEnvObjCanInteractType::NotHaveAbnormalGroup, ConditionValues: ['1196']} (OBSERVED in
+    EnvObjData.dat; A2Core PR #4's reader looked for a numeric field and never found one in this layout)."""
+    for condition in conditions or []:
+        if str(condition.get('ConditionType', '')).split('::')[-1] != 'NotHaveAbnormalGroup':
+            continue
+        for value in condition.get('ConditionValues') or []:
+            first = str(value).split(',')[0].strip()
+            if first.isdigit():
+                return int(first)
+    return 0
 
 
 def quest_targets(quests):
@@ -200,6 +221,25 @@ def objects(data, rows, wanted, gathers=None, everything=False, portals=None, du
                 # Exit doors (Usage MoveMap): UsageValue names the MapData teleport point the door leads to. (A2Core PR #4.)
                 if row['usage'] == 'MoveMap' and row.get('usage_value'):
                     found[-1]['move_to'] = row['usage_value']
+                # Destructible objects (RelationshipEntity EnvObj_Destroy): EnvObjData HitLimit hits break one (1 when unset),
+                # HitSkillIdList limits the skills that count. (A2Core PR #4.)
+                if row['relationship'] == RELATIONSHIP['EnvObj_Destroy']:
+                    if row.get('hit_limit', 0) > 1:
+                        found[-1]['hit_limit'] = row['hit_limit']
+                    if row.get('hit_skills'):
+                        found[-1]['hit_skills'] = row['hit_skills']
+                # Carried-item boxes (BombBox: InteractConditionList NotHaveAbnormalGroup 1196): refused while the player has
+                # that abnormal group; bDespawn hides the box for FinishDuration ms after its use. (A2Core PR #4.)
+                if row.get('not_have_abnormal_group'):
+                    found[-1]['carry'] = {'group': row['not_have_abnormal_group'], 'despawn': row['despawn'],
+                                          'finish_duration': row['finish_duration']}
+                # Gated objects (EnvObjData CombatPower, with its Level and ItemLevel: the Morheim / Eltnen portals).
+                if row.get('combat_power'):
+                    found[-1]['required_combat_power'] = row['combat_power']
+                    if row.get('level'):
+                        found[-1]['min_level'] = row['level']
+                    if row.get('item_level'):
+                        found[-1]['item_level'] = row['item_level']
     return found
 
 
