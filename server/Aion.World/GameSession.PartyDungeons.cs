@@ -91,12 +91,9 @@ public sealed partial class GameSession
         if (room.MinLevel > 0 && level < room.MinLevel) { why = $"level {level} < {room.MinLevel}"; return false; }
         if (room.MaxLevel > 0 && level > room.MaxLevel) { why = $"level {level} > {room.MaxLevel}"; return false; }
         if (room.ItemLevel > 0 && EquipItemLevel() < room.ItemLevel) { why = $"item level {EquipItemLevel()} < {room.ItemLevel}"; return false; }
-        if (room.QuestGate is { Length: > 0 } gates && questLog is not null)
-        {
-            var open = gates.Any(g => g.Length >= 2 && g[0].GetString() is { } code && questLog.Get(code) is { } record
-                && (record.Status != QuestLog.Incomplete || record.Step == g[1].GetInt32()));
-            if (!open) { why = $"quest step {string.Join('/', gates.Select(g => g[0].GetString()))} not reached"; return false; }
-        }
+        // GameSession.EntryGate.cs: the gate quest at its step or finished, or a quest step that needs this room (A2Core PR #4).
+        if (room.QuestGate is { Length: > 0 } gates && !QuestGateOpen(room))
+        { why = $"quest step {string.Join('/', gates.Select(g => g[0].GetString()))} not reached"; return false; }
         return true;
     }
 

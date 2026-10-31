@@ -33,6 +33,20 @@ static partial class QuestWorldChecks
         var phased = GamePackets.EnvObjSpawn(5, 1200081, at, 0, 9, 7, 8, canInteract: 0, phase: 3);
         C(phased[^2] == 3 && phased[^3] == 8 && GamePackets.InteractEnvObjCanInteract(5, false).SequenceEqual(new byte[] { 0x3c, 0x36, 5, 0 }),
           "phase sits after the relationship byte; 0x363c {key varint, flag}");
+        // Dungeon entry quest gate (GameSession.EntryGate.cs): a finished gate quest still opens it; the PR's extra openers.
+        var events = MapEventTables.Embedded;
+        var seal = events.Dungeon(310001)!;   // Seal_Verteron_001, gate EQ1810001 step 1
+        var gateLog = new QuestLog(book, race: 1);
+        C(!GameSession.QuestGateOpen(seal, gateLog), "Seal_Verteron_001: closed without its exploration quest");
+        gateLog.Set(QuestLog.New("EQ1810001", book.Find("EQ1810001")!) with { Uid = 31 });
+        C(GameSession.QuestGateOpen(seal, gateLog), "open at the gate quest's step");
+        gateLog.Set(gateLog.Get("EQ1810001")! with { Status = QuestLog.Rewarded });
+        C(GameSession.QuestGateOpen(seal, gateLog), "a finished gate quest keeps the gate open (fix over the PR)");
+        var layerRoom = events.Dungeon(153001)!;   // gate EQ1820001 step 1; HQ1102070 step 7 asks to finish it
+        var clearLog = new QuestLog(book, race: 1);
+        C(!GameSession.QuestGateOpen(layerRoom, clearLog), "153001 closed for an empty journal");
+        clearLog.Set(QuestLog.New("HQ1102070", book.Find("HQ1102070")!) with { Uid = 32, Step = 7 });
+        C(GameSession.QuestGateOpen(layerRoom, clearLog), "a quest step waiting to finish the gate quest (ClearQuest) opens it (A2Core PR #4)");
         return count;
     }
 }
