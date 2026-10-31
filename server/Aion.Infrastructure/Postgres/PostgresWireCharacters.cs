@@ -10,7 +10,9 @@ public sealed partial class PostgresCharacterRepository : IWireCharacterReposito
         await using var q=dataSource.CreateCommand($"""
             SELECT {StateColumns} FROM game.characters c JOIN auth.accounts a USING(account_id)
             WHERE c.account_id=$1 AND c.world_id=$2 AND a.disabled_at IS NULL
-            ORDER BY c.lobby_slot NULLS LAST,c.wire_id
+            ORDER BY c.lobby_slot NULLS LAST,
+                     GREATEST(COALESCE(c.last_login_at,c.created_at),COALESCE(c.last_logout_at,c.created_at)) DESC NULLS LAST,
+                     c.wire_id
             """);
         q.Parameters.AddWithValue(accountId); q.Parameters.AddWithValue(worldId);
         await using var r=await q.ExecuteReaderAsync(ct); var states=new List<CharacterState>();

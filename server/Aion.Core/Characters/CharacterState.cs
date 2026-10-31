@@ -12,4 +12,9 @@ public sealed record CharacterProgress(int Level, long Experience, int? MapId,
 
 public sealed record CharacterState(CharacterSummary Summary, int CreationId,
     int Race, int Gender, byte[] Appearance, CharacterProgress Progress, long Revision,
-    int WireId = 0, int VoiceType = 0, int? LobbySlot = null, int Ascension = 1, bool Staff = false);
+    int WireId = 0, int VoiceType = 0, int? LobbySlot = null, int Ascension = 1, bool Staff = false,
+    long LastLoginUnixMs = 0, long LastLogoutUnixMs = 0, long RegisteredUnixMs = 0)
+{
+    public long LastPlayedUnixMs => CharacterSessionTimes.LastPlayedUnixMs(LastLoginUnixMs, LastLogoutUnixMs, RegisteredUnixMs);
+    public long LobbyLogoutWireMs => CharacterSessionTimes.LobbyLogoutWireMs(LastLoginUnixMs, LastLogoutUnixMs, RegisteredUnixMs);
+}
