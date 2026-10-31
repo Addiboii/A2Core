@@ -64,7 +64,11 @@ public sealed partial class PostgresAccountAuthentication : IAccountAuthenticati
     /// <summary>Standard sessions last 8 hours; "keep me signed in" asks for up to MaxSessionLifetime.</summary>
     public static readonly TimeSpan DefaultSessionLifetime = TimeSpan.FromHours(8), MaxSessionLifetime = TimeSpan.FromDays(30);
 
-    public async Task<AccountSession?> SignInAsync(string username, string password, TimeSpan lifetime, CancellationToken cancellationToken)
+    /// <summary>No session for a two-step (TOTP) account: those sign in through ITotpAuthentication.SignInAsync.</summary>
+    public async Task<AccountSession?> SignInAsync(string username, string password, TimeSpan lifetime, CancellationToken cancellationToken) =>
+        (await PasswordSignInAsync(username, password, lifetime, twoStepChallenge: false, cancellationToken))?.Session;
+
+    async Task<PasswordSignIn?> PasswordSignInAsync(string username, string password, TimeSpan lifetime, bool twoStepChallenge, CancellationToken cancellationToken)
     {
         lifetime = lifetime <= TimeSpan.Zero ? DefaultSessionLifetime : lifetime > MaxSessionLifetime ? MaxSessionLifetime : lifetime;
         if (!ValidUsername(username) || password is null || password.Length > 256) return null;
@@ -122,6 +126,20 @@ public sealed partial class PostgresAccountAuthentication : IAccountAuthenticati
                 ? hasher.HashPassword(new(account), password) : storedHash);
             await reset.ExecuteNonQueryAsync(cancellationToken);
         }
+        // Two-step accounts get a code challenge instead of a session (migration 040).
+        bool twoStep;
+        await using (var totp = new NpgsqlCommand("SELECT 1 FROM auth.account_totp WHERE account_id=$1", connection, transaction))
+        {
+            totp.Parameters.AddWithValue(account);
+            twoStep = await totp.ExecuteScalarAsync(cancellationToken) is not null;
+        }
+        if (twoStep)
+        {
+            var challenge = twoStepChallenge && totpKeys is not null
+                ? await CreateTotpChallengeAsync(connection, transaction, account, lifetime, cancellationToken) : null;
+            await transaction.CommitAsync(cancellationToken);
+            return new(null, challenge, Unavailable: totpKeys is null);
+        }
         var token = Token();
         await using var session = new NpgsqlCommand("""
             INSERT INTO auth.sessions(token_hash,account_id,expires_at) VALUES($1,$2,now()+make_interval(secs=>$3)) RETURNING expires_at
@@ -131,7 +149,7 @@ public sealed partial class PostgresAccountAuthentication : IAccountAuthenticati
         session.Parameters.AddWithValue(lifetime.TotalSeconds);
         var expires = (DateTime)(await session.ExecuteScalarAsync(cancellationToken))!;
         await transaction.CommitAsync(cancellationToken);
-        return new(token, account, new DateTimeOffset(expires));
+        return new(new(token, account, new DateTimeOffset(expires)), null);
     }
 
     public async Task<VerifiedAccount?> AuthenticateAsync(string token, CancellationToken cancellationToken)
@@ -177,7 +195,9 @@ public sealed partial class PostgresAccountAuthentication : IAccountAuthenticati
             WITH expired_tickets AS (DELETE FROM auth.game_tickets WHERE expires_at<=now()),
                  expired_launches AS (DELETE FROM auth.client_launches WHERE expires_at<=now()),
                  expired_handoffs AS (DELETE FROM auth.client_handoffs WHERE expires_at<=now()),
-                 expired_worlds AS (DELETE FROM auth.world_sessions WHERE expires_at<=now())
+                 expired_worlds AS (DELETE FROM auth.world_sessions WHERE expires_at<=now()),
+                 expired_totp_enrollment AS (DELETE FROM auth.totp_enrollment WHERE expires_at<=now()),
+                 expired_totp_challenges AS (DELETE FROM auth.totp_login_challenges WHERE expires_at<=now())
             DELETE FROM auth.sessions WHERE expires_at<=now()
             """);
         await command.ExecuteNonQueryAsync(cancellationToken);

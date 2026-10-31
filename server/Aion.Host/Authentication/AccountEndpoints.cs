@@ -48,14 +48,19 @@ public static class AccountEndpoints
             return Results.Json(new { created = true }, statusCode: 201);
         }).RequireRateLimiting("admin");
 
-        app.MapPost("/api/accounts/login", async (Credentials input, IAccountAuthentication auth, CancellationToken ct) =>
+        app.MapPost("/api/accounts/login", async (Credentials input, ITotpAuthentication totp, CancellationToken ct) =>
         {
             if (input.Username is null || input.Password is null) return Results.Unauthorized();
             // "Keep me signed in" (the staff dashboard): a 30-day session instead of the standard 8 hours.
-            var session = input.Remember == true
-                ? await auth.SignInAsync(input.Username, input.Password, TimeSpan.FromDays(30), ct)
-                : await auth.SignInAsync(input.Username, input.Password, ct);
-            return session is null ? Results.Unauthorized() : Results.Ok(session);
+            var lifetime = input.Remember == true ? TimeSpan.FromDays(30) : PostgresAccountAuthentication.DefaultSessionLifetime;
+            var result = await totp.SignInAsync(input.Username, input.Password, lifetime, ct);
+            if (result?.Session is { } session) return Results.Ok(session);
+            // Two-step accounts: the code goes to POST /api/accounts/login/totp (TotpEndpoints).
+            if (result?.Challenge is { } challenge)
+                return Results.Ok(new { requiresTotp = true, challengeToken = challenge.ChallengeToken, expiresAt = challenge.ExpiresAt });
+            if (result?.Unavailable == true)
+                return Results.Json(new { error = "Two-step sign-in is not available on this server right now." }, statusCode: StatusCodes.Status503ServiceUnavailable);
+            return Results.Unauthorized();
         }).RequireRateLimiting("account-entry");
 
         app.MapPost("/api/accounts/logout", async (HttpContext context, IAccountAuthentication auth, CancellationToken ct) =>

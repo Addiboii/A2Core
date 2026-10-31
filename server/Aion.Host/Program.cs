@@ -38,7 +38,22 @@ if (!string.IsNullOrWhiteSpace(connectionString))
 var accountsReady = !string.IsNullOrWhiteSpace(connectionString) && !string.IsNullOrWhiteSpace(authConnectionString);
 if (accountsReady)
 {
-    builder.Services.AddSingleton<PostgresAccountAuthentication>(_ => new PostgresAccountAuthentication(authConnectionString!));
+    // Two-step sign-in (TOTP) needs its own key, Aion:Totp:EncryptionKey (base64 of 32 random bytes); without
+    // it, enrolment is refused and accounts that already use it cannot sign in (logged at startup).
+    var totpKeys = Aion.Core.Security.TotpSecretProtection.TryCreate(builder.Configuration["Aion:Totp:EncryptionKey"]);
+    var totpIssuer = builder.Configuration["Aion:Totp:Issuer"];
+    builder.Services.AddSingleton<PostgresAccountAuthentication>(provider =>
+    {
+        var accounts = new PostgresAccountAuthentication(authConnectionString!);
+        accounts.ConfigureTotp(totpKeys, totpIssuer);
+        var log = provider.GetRequiredService<ILoggerFactory>().CreateLogger("Aion.Accounts");
+        if (totpKeys is null)
+            log.LogWarning(string.IsNullOrWhiteSpace(builder.Configuration["Aion:Totp:EncryptionKey"])
+                ? "Two-step sign-in (TOTP) is disabled: Aion:Totp:EncryptionKey is not set."
+                : "Two-step sign-in (TOTP) is disabled: Aion:Totp:EncryptionKey must be base64 of 32 bytes.");
+        return accounts;
+    });
+    builder.Services.AddSingleton<ITotpAuthentication>(provider => provider.GetRequiredService<PostgresAccountAuthentication>());
     builder.Services.AddSingleton<IAccountAuthentication>(provider => provider.GetRequiredService<PostgresAccountAuthentication>());
     builder.Services.AddSingleton<IClientHandoff>(provider => provider.GetRequiredService<PostgresAccountAuthentication>());
     builder.Services.AddSingleton<IAccountManagement>(provider => provider.GetRequiredService<PostgresAccountAuthentication>());
@@ -184,6 +199,10 @@ builder.Services.AddRateLimiter(options =>
     options.AddPolicy("account-entry", context => RateLimitPartition.GetFixedWindowLimiter(
         context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
         _ => new FixedWindowRateLimiterOptions { PermitLimit = 15, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
+    // Two-step code checks (sign-in, enrolment, disable); wrong codes also lock code entry per account.
+    options.AddPolicy("totp-verify", context => RateLimitPartition.GetFixedWindowLimiter(
+        context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
     // Staff dashboard reads and commands; role checks happen per request in the store.
     options.AddPolicy("admin", context => RateLimitPartition.GetFixedWindowLimiter(
         context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
@@ -312,6 +331,7 @@ app.MapGet("/api/status", () => Results.Ok(new { accountsConfigured = accountsRe
 if (accountsReady)
 {
     app.MapAccountEndpoints(registrationOpen);
+    app.MapTotpEndpoints();
     app.MapGameplayEndpoints();
     Aion.Host.Authentication.StaffEndpoints.MapStaffEndpoints(app);
     Aion.Host.Authentication.StaffToolsEndpoints.MapStaffToolsEndpoints(app);
