@@ -15,7 +15,7 @@ class ItemDecomposeSkinsDataTests(unittest.TestCase):
         import sys
         sys.path.insert(0, str(ROOT / 'tools'))
         import item_decompose_skins_data as ids
-        built = ids.build(fetch_icons=False)
+        built = ids.build()
         self.assertIn('110430048', built['items'])
         self.assertGreaterEqual(len(built['items']), 3076)
 

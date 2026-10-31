@@ -1,4 +1,4 @@
-"""Platform BM shop catalog (GET /local-api-gate/goods/v2.0/goods) from GameShop export + optional G4L snapshot.
+"""Platform BM shop catalog (GET /local-api-gate/goods/v2.0/goods) from GameShop export.
 
 Rebuild: python tools/shop_platform_data.py
 Writes tools/data/platform_goods.json (embedded by Aion.Host).
@@ -14,14 +14,13 @@ from data_json import write_data_json
 
 SHOPS = ROOT / 'tools/data/shops.json'
 OUT = ROOT / 'tools/data/platform_goods.json'
-G4L_SNAPSHOT = ROOT / 'tools/data/snapshots/gamers4life-shop.txt'
 BMSHOP = ROOT / 'tools/data/bmshop_goods.json'
 
 # NC platform sale_status: the client asks sale_status_mask=2 (on sale) and hides other rows.
 ON_SALE = 2
 OFF_SALE = 1
 
-# Quna stack item (Global cash shop currency item id, external snapshot CANDIDATE).
+# Quna stack item (Global cash shop currency item id, CANDIDATE).
 QUNA_ITEM = 535300006
 KINA_ITEM = 930100001
 # NC platform virtual_currency (official_shop goods_basic_price_policies + mileage_currency_id 110).
@@ -86,46 +85,6 @@ def entries_from_game_goods(categories: dict, goods: dict) -> list:
     return entries
 
 
-def parse_g4l(path: Path, item_lookup: dict[int, list[str]]) -> tuple[dict, list]:
-    """Optional third-party snapshot: platform goods_id lines + ## category headers."""
-    if not path.is_file():
-        return {}, []
-    lines = path.read_text(encoding='utf-8', errors='replace').splitlines()
-    cats: dict = {}
-    entries: list = []
-    current_cat = 'misc'
-    current_label = 'Misc'
-    pending_shop: int | None = None
-    for raw in lines:
-        line = raw.strip()
-        if line.startswith('## '):
-            current_label = line[3:].strip()
-            current_cat = slug(current_label)
-            cats.setdefault(current_cat, {'label': current_label, 'goods_ids': []})
-            pending_shop = None
-            continue
-        m = re.search(r'On sale Shop (\d+)', line)
-        if m:
-            pending_shop = int(m.group(1))
-            cats.setdefault(current_cat, {'label': current_label, 'goods_ids': []})
-            if pending_shop not in cats[current_cat]['goods_ids']:
-                cats[current_cat]['goods_ids'].append(pending_shop)
-            continue
-        if pending_shop is not None:
-            item_m = re.search(r'Item (\d{9})', line)
-            if item_m:
-                item_id = int(item_m.group(1))
-                game_gid = int(item_lookup[item_id][0]) if item_id in item_lookup and item_lookup[item_id] else None
-                entries.append({
-                    'goods_id': pending_shop,
-                    'game_goods_id': game_gid,
-                    'sale_status': 1,
-                    'category_id': current_cat,
-                })
-                pending_shop = None
-    return cats, entries
-
-
 def merge_coin_shops(shops_data: dict, tables_dir: Path | None) -> dict:
     coin = dict(shops_data.get('coin_shops') or {})
     if tables_dir and (tables_dir / 'table-000.json').is_file():
@@ -150,12 +109,6 @@ def build():
     item_lookup = item_to_goods(goods)
     categories = categories_from_shops(shops_data['shops'], goods)
     entries = entries_from_game_goods(categories, goods)
-    g4l_cats, g4l_entries = parse_g4l(G4L_SNAPSHOT, item_lookup)
-    for k, v in g4l_cats.items():
-        if k in categories:
-            categories[k]['goods_ids'] = sorted(set(categories[k]['goods_ids']) | set(v['goods_ids']))
-        else:
-            categories[k] = {'label': v['label'], 'goods_ids': v['goods_ids']}
     # The BM shop UI only knows BMShopGoods.dat IDs; GameShop (NPC/coin) goods go over 0x8c06.
     bm = json.loads(BMSHOP.read_text(encoding='utf-8'))
     by_id = {}

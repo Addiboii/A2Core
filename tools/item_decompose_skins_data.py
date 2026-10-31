@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 from pathlib import Path
 
 try:
@@ -28,23 +27,7 @@ DATA = ROOT / 'tools/data/item-decompose-skins.json'
 ITEMS = ROOT / 'tools/data/items.json'
 
 
-def skin_name_from_icon(icon: str | None) -> str | None:
-    """Map Item.dat IconRes / site icon URL to Skin.dat Name (CANDIDATE when not from ExtractionSkins)."""
-    if not icon:
-        return None
-    name = icon.rsplit('/', 1)[-1].split('.')[0]
-    weapon = re.fullmatch(r'Icon_WP_(\w+)_(\d{4})_(T\d\d)', name)
-    if weapon:
-        code, setnum, tier = weapon.groups()
-        return f'WP_{setnum}_{tier}_{code}'
-    armor = re.fullmatch(r'Icon_G[MF]_(\d{4})_(T\d\d)_(\w+)', name)
-    if armor:
-        setnum, tier, slot = armor.groups()
-        return f'AR_{setnum}_{tier}_{slot}'
-    return None
-
-
-def build(*, fetch_icons: bool = False):
+def build():
     skin_map = json.loads(SKINS.read_text(encoding='utf-8')).get('skins', {})
     out_items = {}
     source_note = 'Item.dat ExtractionSkins (tools/item_decompose_skins_data.py)'
@@ -52,37 +35,6 @@ def build(*, fetch_icons: bool = False):
         ids = skin_ids(names, skin_map)
         if ids:
             out_items[str(tid)] = ids[0]
-
-    if fetch_icons:
-        try:
-            from audit_gamers4life import Fetcher
-        except ImportError:
-            import sys
-            sys.path.insert(0, str(ROOT / 'tools'))
-            from audit_gamers4life import Fetcher
-        repo_items = json.loads(ITEMS.read_text(encoding='utf-8')).get('items', {})
-        decompose = json.loads((ROOT / 'tools/data/decompose.json').read_text())['items']
-        before = len(out_items)
-        fetcher = Fetcher(delay_s=0.12)
-        targets = sorted(set(repo_items) & set(decompose), key=int)
-        for index, key in enumerate(targets, start=1):
-            if key in out_items:
-                continue
-            status, body, _ = fetcher.get(f'https://gamers4.life/aion-2/database/db/item/en/{key}.json')
-            if status != 200 or not isinstance(body, str):
-                continue
-            try:
-                site = json.loads(body)
-            except json.JSONDecodeError:
-                continue
-            skin_name = skin_name_from_icon(site.get('icon'))
-            if skin_name and skin_name in skin_map:
-                out_items[key] = skin_map[skin_name]
-            if index % 250 == 0:
-                print(f'... mapped {len(out_items)} skins ({index}/{len(targets)})', flush=True)
-        if len(out_items) > before:
-            source_note = ('Item.dat ExtractionSkins when exported; IconRes fallback for gaps '
-                           '(tools/item_decompose_skins_data.py --fetch-icons; CANDIDATE)')
 
     if DATA.exists():
         existing = json.loads(DATA.read_text(encoding='utf-8')).get('items') or {}
@@ -110,11 +62,9 @@ def patch_items(decompose_skins: dict[str, int]):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('--fetch-icons', action='store_true',
-                        help='When no local Item.dat export is present, derive skins from Gamers4Life item icons (CANDIDATE).')
     parser.add_argument('--patch-items', action='store_true', help='Copy skin ids into tools/data/items.json field k.')
     args = parser.parse_args()
-    data = build(fetch_icons=args.fetch_icons)
+    data = build()
     write_data_json(DATA, data)
     print(f"{len(data['items'])} dismantle skins -> {DATA.relative_to(ROOT)}")
     if args.patch_items:
