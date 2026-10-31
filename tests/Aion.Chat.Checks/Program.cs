@@ -29,7 +29,7 @@ Check(relay.Send(aliceToken, shout, Message("hi")).Deliveries.Single().SessionTo
 var announced = relay.Announce("The server restarts in 1 minute.");
 Check(announced.Count == 2 && announced.All(d => d.Notification.UserName == "Server" && d.Notification.Content == "The server restarts in 1 minute."),
       "an announcement reaches every session that joined a room, from Server");
-var whisper = relay.Whisper(aliceToken, common, Message("psst") with { ReceiverCharacterId = bob.CharacterId });
+var whisper = Whisper(relay, aliceToken, common, Message("psst") with { ReceiverCharacterId = bob.CharacterId });
 Check(whisper.Deliveries.Select(d => d.SessionToken).Order().SequenceEqual(new[] { aliceToken, bobToken }.Order()), "whisper to receiver and sender");
 Rejected(() => relay.Send("mtalk-unknown", common, Message("x")), "unauthenticated send");
 Rejected(() => relay.Send(bobToken, common, Message("")), "empty message");
@@ -72,11 +72,11 @@ relay.Join(bobToken, common);
 var hello = relay.Send(bobToken, common, Message("hello") with { UserName = "Bobby" });
 Check(hello.Deliveries.Select(d => d.SessionToken).Order().SequenceEqual(new[] { aliceToken, bobToken }.Order())
     && hello.Deliveries[0].Notification.UserName == "Bobby", "two identities in the same room receive each other's message");
-var byName = relay.Whisper(aliceToken, whisperRoom, Message("psst") with { TargetCharacterName = "[GM] bobby" });
+var byName = Whisper(relay, aliceToken, whisperRoom, Message("psst") with { TargetCharacterName = "[GM] bobby" });
 Check(byName.Deliveries.Select(d => d.SessionToken).Order().SequenceEqual(new[] { aliceToken, bobToken }.Order())
     && byName.Deliveries[0].Notification.ReceiverUserName == "Bobby", "development whisper by displayed name");
-Rejected(() => relay.Whisper(aliceToken, whisperRoom, Message("psst") with { ReceiverUserName = "Nobody" }), "development whisper to an offline name");
-Rejected(() => relay.Whisper(aliceToken, whisperRoom, Message("psst")), "whisper without a target");
+Rejected(() => Whisper(relay, aliceToken, whisperRoom, Message("psst") with { ReceiverUserName = "Nobody" }), "development whisper to an offline name");
+Rejected(() => Whisper(relay, aliceToken, whisperRoom, Message("psst")), "whisper without a target");
 Rejected(() => relay.Join(aliceToken, new ChatRoomKey("GUILD", "1204", "GU1")), "guild rooms need membership");
 Rejected(() => relay.Join(aliceToken, new ChatRoomKey("REGION", "1361", "RG")), "rooms of another server key");
 Rejected(() => relay.Join(aliceToken, new ChatRoomKey("WORLD", "1204", "9999")), "world room is the server key");
@@ -133,12 +133,12 @@ Check(said.Deliveries.Select(d => d.SessionToken).Order().SequenceEqual(new[] { 
     "account identities in the same room receive each other's message");
 Check(said.Deliveries[0].Notification.UserName == "Bram", "impersonation rejected: the sender name comes from the world");
 Check(accounts.Send(elyraToken, common, Message("hello")).Deliveries[0].Notification.UserName == "[GM] Elyra", "staff tag shown from the world");
-var toGm = accounts.Whisper(bramToken, whisperRoom, Message("help please") with { TargetCharacterName = "[GM] Elyra", UserName = "Elyra" });
+var toGm = Whisper(accounts, bramToken, whisperRoom, Message("help please") with { TargetCharacterName = "[GM] Elyra", UserName = "Elyra" });
 Check(toGm.Deliveries.Select(d => d.SessionToken).Order().SequenceEqual(new[] { elyraToken, bramToken }.Order())
     && toGm.Deliveries[0].Notification is { ReceiverUserName: "Elyra", UserName: "Bram" }, "whisper by displayed name reaches the stored name");
-Check(accounts.Whisper(elyraToken, whisperRoom, Message("ok") with { ReceiverUserName = "bram" }).Deliveries.Count == 2, "whisper by receiver user name, any case");
-Rejected(() => accounts.Whisper(bramToken, whisperRoom, Message("x") with { TargetCharacterName = "Nobody" }), "whisper to an offline character");
-Rejected(() => accounts.Whisper(bramToken, whisperRoom, Message("x") with { ReceiverCharacterId = "11" }), "account whispers are not routed by client-chosen IDs");
+Check(Whisper(accounts, elyraToken, whisperRoom, Message("ok") with { ReceiverUserName = "bram" }).Deliveries.Count == 2, "whisper by receiver user name, any case");
+Rejected(() => Whisper(accounts, bramToken, whisperRoom, Message("x") with { TargetCharacterName = "Nobody" }), "whisper to an offline character");
+Rejected(() => Whisper(accounts, bramToken, whisperRoom, Message("x") with { ReceiverCharacterId = "11" }), "account whispers are not routed by client-chosen IDs");
 var (_, gmAnswer) = await accounts.CommandAsync(bramToken, common, Message("//help") with { UserName = "[GM] Elyra" },
     (_, name) => Task.FromResult("as " + name));
 Check(gmAnswer.Single().Notification.Content == "as Bram", "commands run as the verified character, not the claimed name");
@@ -165,25 +165,60 @@ var moderation = new FakeModeration();
 accounts.Moderation = moderation;
 accounts.Send(elyraToken, common, Message("logged line"));
 Check(moderation.Log.Any(l => l.Sender == "Elyra" && l.Content == "logged line" && l.Channel == "REGION/RG" && l.AccountId == accountA), "room messages go to the chat log");
-accounts.Whisper(elyraToken, whisperRoom, Message("secret") with { ReceiverUserName = "Bram" });
+Whisper(accounts, elyraToken, whisperRoom, Message("secret") with { ReceiverUserName = "Bram" });
 Check(moderation.Log.Any(l => l is { Channel: "WHISPER", Receiver: "Bram", Content: "secret" }), "whispers go to the chat log with the receiver");
 moderation.Muted.Add(accountB);
 clock.Advance(TimeSpan.FromSeconds(6));
 Rejected(() => accounts.Send(bramToken, common, Message("let me talk")), "a muted account cannot chat in rooms");
-Rejected(() => accounts.Whisper(bramToken, whisperRoom, Message("x") with { TargetCharacterName = "Elyra" }), "a muted account cannot whisper");
+Rejected(() => Whisper(accounts, bramToken, whisperRoom, Message("x") with { TargetCharacterName = "Elyra" }), "a muted account cannot whisper");
 Check((await accounts.CommandAsync(bramToken, common, Message("//report spam"), (_, _) => Task.FromResult("sent"))).Deliveries.Single().Notification.Content == "sent",
     "a muted account can still use commands (//report)");
 Check(!moderation.Log.Any(l => l.Content == "let me talk"), "refused messages are not logged");
 accounts.Moderation = null;
 world.Leave(elyra);
-Rejected(() => accounts.Whisper(bramToken, whisperRoom, Message("x") with { TargetCharacterName = "Elyra" }), "whisper to a character that left the world");
+Rejected(() => Whisper(accounts, bramToken, whisperRoom, Message("x") with { TargetCharacterName = "Elyra" }), "whisper to a character that left the world");
 Rejected(() => accounts.Send(elyraToken, common, Message("x")), "a character out of the world cannot chat");
 Check(await verifier.VerifyAsync(Login(ticketA, "11"), default) is null, "no chat login after leaving the world");
 var readWhisper = LimeWire.ReadWhisper(JsonNode.Parse(
     """{"gameUserKey":{"characterId":"12"},"gameMessageInfo":{"content":"x"},"validationInfo":{"targetCharacterName":"[GM] Elyra"}}"""));
 Check(readWhisper is { TargetCharacterName: "[GM] Elyra", ReceiverCharacterId: "12", Content: "x" }, "reads sendWhisper");
 
+// Character switch: the client keeps its chat session; it follows the account's new character.
+clock.Advance(TimeSpan.FromSeconds(6));
+var elyraAlt = new ChatCharacter(Guid.NewGuid(), "Elyralt", "Elyralt", GuildId: 7);
+world.Enter(accountA, elyraAlt, "13");
+Check(Whisper(accounts, bramToken, whisperRoom, Message("found you") with { TargetCharacterName = "Elyralt" }).Deliveries.Any(d => d.SessionToken == elyraToken),
+    "a whisper reaches the new character before its session refreshed");
+var switchedSay = await accounts.SendAsync(elyraToken, common, Message("new me") with { UserName = "Elyra" });
+Check(switchedSay.Deliveries[0].Notification is { UserName: "Elyralt", GameUserId: "13" } && accounts.Find(elyraToken)?.Character?.Name == "Elyralt",
+    "the session is rebound to the new character (name and wire ID)");
+accounts.Join(elyraToken, legionRoom);
+Check((await accounts.SendAsync(elyraToken, legionRoom, Message("legion again"))).Deliveries.Any(d => d.SessionToken == bramToken), "the new character's legion applies");
+var altOneToken = accounts.Login((await verifier.VerifyAsync(Login(ticketC, "21"), default))!);
+accounts.Join(altOneToken, common);
+world.Enter(accountC, new ChatCharacter(Guid.NewGuid(), "AltThree", "AltThree"), "23");
+world.Leave(accounts.Find(altOneToken)!.Character!);
+await RejectedAsync(() => accounts.SendAsync(altOneToken, common, Message("x")), "no rebind while several characters are in the world");
+world.Leave(elyraAlt);
+await RejectedAsync(() => accounts.SendAsync(elyraToken, common, Message("x")), "no character in the world: still refused");
+world.Enter(accountA, elyraAlt, "13");
+
+// Friend-list blocks stop whispers either way, checked asynchronously.
+clock.Advance(TimeSpan.FromSeconds(6));
+var blocks = new FakeBlocks();
+accounts.Blocks = blocks;
+blocks.Pairs.Add((elyraAlt.Id, bram.Id));
+await RejectedAsync(() => accounts.WhisperAsync(bramToken, whisperRoom, Message("hey") with { TargetCharacterName = "Elyralt" }), "a blocked whisper is refused");
+await RejectedAsync(() => accounts.WhisperAsync(elyraToken, whisperRoom, Message("hey") with { TargetCharacterName = "Bram" }), "the blocker cannot whisper either");
+blocks.Pairs.Clear();
+Check((await accounts.WhisperAsync(bramToken, whisperRoom, Message("hey") with { TargetCharacterName = "Elyralt" })).Deliveries.Count == 2, "unblocked whisper delivered");
+Check(blocks.Calls > 0, "block list consulted");
+accounts.Blocks = null;
+
 Console.WriteLine($"{checks} chat checks passed.");
+
+(string Guid, IReadOnlyList<ChatDelivery> Deliveries) Whisper(ChatRelay chat, string token, ChatRoomKey room, ChatMessage message) =>
+    chat.WhisperAsync(token, room, message).GetAwaiter().GetResult();  // the fakes complete synchronously
 
 ChatMessage Message(string content) => new("Player1", "", "", content, "{}");
 
@@ -241,6 +276,20 @@ sealed class FakeDirectory : IChatDirectory
             present.Values.Where(p => p.Account == account).Select(p => (p.Character, p.WireId)).ToList());
     public ChatCharacter? Current(Guid character, Guid account) =>
         present.TryGetValue(character, out var p) && p.Account == account ? p.Character : null;
+    public ChatCharacter? CurrentOfAccount(Guid account) =>
+        present.Values.Where(p => p.Account == account).ToList() is [var only] ? only.Character : null;
+}
+
+sealed class FakeBlocks : IChatBlockList
+{
+    public HashSet<(Guid Owner, Guid Blocked)> Pairs { get; } = [];
+    public int Calls;
+    public async Task<bool> BlockedAsync(Guid character, Guid other, CancellationToken cancellationToken)
+    {
+        await Task.Yield();
+        Calls++;
+        return Pairs.Contains((character, other)) || Pairs.Contains((other, character));
+    }
 }
 
 sealed class FakeHandoff(Dictionary<string, Guid> tickets) : IClientHandoff

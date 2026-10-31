@@ -67,8 +67,16 @@ public static class LimeChatEndpoints
         chat.MapGet("/internal/world", (HttpContext context, IServiceProvider services) =>
             System.Net.IPAddress.IsLoopback(context.Connection.RemoteIpAddress ?? System.Net.IPAddress.None)
             && services.GetService<Aion.World.SharedWorld>() is { } world
-                ? Results.Ok(new { players = services.GetService<Aion.World.WorldPresence>()?.All.Count ?? 0, cpuSeconds = Aion.Host.Native.WorldLoadReporter.CpuSeconds(),
-                    locks = world.Lock.Stats.Read() }) : Results.NotFound());
+                ? Results.Ok(new
+                {
+                    players = services.GetService<Aion.World.WorldPresence>()?.All.Count ?? 0,
+                    connections = services.GetService<Aion.World.WorldPresence>()?.Connections ?? 0,
+                    cpuSeconds = Aion.Host.Native.WorldLoadReporter.CpuSeconds(),
+                    // Managed heap and collections since startup (load tests). From A2Core PR #4 (Artezianec).
+                    gcHeapBytes = GC.GetTotalMemory(false),
+                    gen0 = GC.CollectionCount(0), gen1 = GC.CollectionCount(1), gen2 = GC.CollectionCount(2),
+                    locks = world.Lock.Stats.Read(),
+                }) : Results.NotFound());
         chat.MapPost("/internal/announce", async (HttpContext context, ChatRelay relay, StompHub hub) =>
         {
             if (!System.Net.IPAddress.IsLoopback(context.Connection.RemoteIpAddress ?? System.Net.IPAddress.None)) return Results.NotFound();
@@ -130,8 +138,8 @@ public static class LimeChatEndpoints
                     return LimeWire.SendReply(commandGuid);
                 }
                 var (guid, deliveries) = route == "sendWhisper"
-                    ? relay.Whisper(token, room, message)
-                    : relay.Send(token, room, message);
+                    ? await relay.WhisperAsync(token, room, message, cancellationToken)
+                    : await relay.SendAsync(token, room, message, cancellationToken);
                 await hub.DeliverAsync(deliveries);
                 return LimeWire.SendReply(guid);
             }

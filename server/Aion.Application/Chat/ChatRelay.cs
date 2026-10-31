@@ -37,6 +37,9 @@ public sealed class ChatRelay(TimeProvider clock, IChatDirectory? directory = nu
     /// <summary>Mutes and the chat log (set by the host when staff tools are available).</summary>
     public IChatModeration? Moderation { get; set; }
 
+    /// <summary>Friend-list blocks (set by the host when the game database is available): no whispers either way.</summary>
+    public IChatBlockList? Blocks { get; set; }
+
     void CheckMute(ChatIdentity sender)
     {
         if (sender.AccountId is { } account && Moderation?.MuteMessage(account) is { } refusal) throw new ChatRejectedException(refusal);
@@ -44,7 +47,10 @@ public sealed class ChatRelay(TimeProvider clock, IChatDirectory? directory = nu
 
     sealed class Session(ChatIdentity identity)
     {
-        public ChatIdentity Identity { get; } = identity;
+        ChatIdentity identity = identity;
+        /// <summary>Replaced (never mutated) when the account switches characters; read and swapped atomically.</summary>
+        public ChatIdentity Identity => Volatile.Read(ref identity);
+        public bool Rebind(ChatIdentity seen, ChatIdentity next) => ReferenceEquals(Interlocked.CompareExchange(ref identity, next, seen), seen);
         public HashSet<ChatRoomKey> Rooms { get; } = [];
         /// <summary>Development identities: the stored form of the last user name the client sent.</summary>
         public string? DeclaredName { get; set; }
@@ -65,6 +71,35 @@ public sealed class ChatRelay(TimeProvider clock, IChatDirectory? directory = nu
 
     public void Logout(string token) => sessions.TryRemove(token, out _);
 
+    /// <summary>
+    /// After a character switch the client keeps its chat session (and mtalk token): when the bound character
+    /// left the world and exactly one other character of the account is in it, the session is rebound to that
+    /// one (name, legion and wire ID). Called before each message; a no-op while the bound character is in the world.
+    /// </summary>
+    public async Task RefreshAsync(string token, CancellationToken cancellationToken = default)
+    {
+        var session = Require(token);
+        var identity = session.Identity;
+        if (directory is null || identity is not { AccountId: { } account, Character: { } character }) return;
+        if (directory.Current(character.Id, account) is not null || directory.CurrentOfAccount(account) is not { } switched) return;
+        var wire = (await directory.InWorldAsync(account, cancellationToken)).FirstOrDefault(c => c.Character.Id == switched.Id).WireId;
+        if (wire is null) return;
+        session.Rebind(identity, identity with { Character = switched, CharacterId = wire });
+    }
+
+    /// <summary>The session's character now: the bound one, or (not yet refreshed after a switch) the account's only one.</summary>
+    ChatCharacter? CurrentOf(ChatIdentity identity) =>
+        identity is { AccountId: { } account, Character: { } character } && directory is not null
+            ? directory.Current(character.Id, account) ?? directory.CurrentOfAccount(account) : null;
+
+    /// <summary><see cref="Send"/> after <see cref="RefreshAsync"/>.</summary>
+    public async Task<(string Guid, IReadOnlyList<ChatDelivery> Deliveries)> SendAsync(string token, ChatRoomKey room, ChatMessage message,
+        CancellationToken cancellationToken = default)
+    {
+        await RefreshAsync(token, cancellationToken);
+        return Send(token, room, message);
+    }
+
     /// <summary>Joins one of the rooms every player on this server shares (see the class summary), or the legion room of a legion member.</summary>
     public void Join(string token, ChatRoomKey room)
     {
@@ -78,8 +113,7 @@ public sealed class ChatRelay(TimeProvider clock, IChatDirectory? directory = nu
     /// The legion the session's character is in now (0 none, and always 0 for development identities). The client's legion
     /// room key (ChatTypeRoomKeyPrefix GU...) is not relied on: a GUILD room's messages reach the sender's legion only.
     /// </summary>
-    long GuildOf(Session session) =>
-        session.Identity is { AccountId: { } account, Character: { } character } ? directory?.Current(character.Id, account)?.GuildId ?? 0 : 0;
+    long GuildOf(Session session) => CurrentOf(session.Identity)?.GuildId ?? 0;
 
     public void Leave(string token, ChatRoomKey room)
     {
@@ -133,8 +167,10 @@ public sealed class ChatRelay(TimeProvider clock, IChatDirectory? directory = nu
     /// "[GM] name" is mapped to the stored name); development sessions may also be addressed by
     /// their character ID. Rejected when the target has no chat session (offline).
     /// </summary>
-    public (string Guid, IReadOnlyList<ChatDelivery> Deliveries) Whisper(string token, ChatRoomKey room, ChatMessage message)
+    public async Task<(string Guid, IReadOnlyList<ChatDelivery> Deliveries)> WhisperAsync(string token, ChatRoomKey room, ChatMessage message,
+        CancellationToken cancellationToken = default)
     {
+        await RefreshAsync(token, cancellationToken);
         var sender = Require(token);
         var speaker = Resolve(sender, message.UserName);
         var shown = !string.IsNullOrWhiteSpace(message.TargetCharacterName) ? message.TargetCharacterName : message.ReceiverUserName;
@@ -145,9 +181,13 @@ public sealed class ChatRelay(TimeProvider clock, IChatDirectory? directory = nu
         if (receivers.Count == 0)
             throw new ChatRejectedException($"{(name.Length > 0 ? name : "That character")} is not online.");
         CheckMute(sender.Identity);
-        Validate(sender.Identity, message.Content);
         var receiver = receivers[0].Value;
-        var receiverName = receiver.Identity.Character?.Name ?? receiver.DeclaredName ?? name;
+        // Friend-list blocks either way (checked without blocking a thread). Ported from A2Core PR #4 (Artezianec).
+        if (Blocks is { } blocks && sender.Identity.Character is { } from && CurrentOf(receiver.Identity) is { } to
+            && await blocks.BlockedAsync(from.Id, to.Id, cancellationToken))
+            throw new ChatRejectedException($"{to.Name} cannot receive your whispers.");
+        Validate(sender.Identity, message.Content);
+        var receiverName = CurrentOf(receiver.Identity)?.Name ?? receiver.DeclaredName ?? name;
         var notification = Notify(sender.Identity, speaker, room, message with
         {
             ReceiverCharacterId = receiver.Identity.CharacterId, ReceiverUserName = receiverName,
@@ -167,6 +207,7 @@ public sealed class ChatRelay(TimeProvider clock, IChatDirectory? directory = nu
     public async Task<(string Guid, IReadOnlyList<ChatDelivery> Deliveries)> CommandAsync(string token, ChatRoomKey room,
         ChatMessage command, Func<ChatIdentity, string, Task<string>> answer, string from = "GM")
     {
+        await RefreshAsync(token);
         var sender = Require(token);
         var speaker = Resolve(sender, command.UserName);
         Validate(sender.Identity, command.Content);
@@ -196,10 +237,10 @@ public sealed class ChatRelay(TimeProvider clock, IChatDirectory? directory = nu
     bool Addressed(Session session, string name, string characterId)
     {
         var identity = session.Identity;
-        if (identity.AccountId is { } account)
+        if (identity.AccountId is not null)
             // Bound by the login; still in the world? Character IDs are client-chosen, never used.
-            return identity.Character is { } character && name.Length > 0
-                && directory?.Current(character.Id, account) is { } now && now.Name.Equals(name, StringComparison.OrdinalIgnoreCase);
+            // After a character switch (not yet refreshed) the account's only character in the world answers.
+            return name.Length > 0 && CurrentOf(identity) is { } now && now.Name.Equals(name, StringComparison.OrdinalIgnoreCase);
         return name.Length > 0 ? string.Equals(session.DeclaredName, name, StringComparison.OrdinalIgnoreCase)
             : identity.CharacterId == characterId;
     }

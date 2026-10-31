@@ -254,6 +254,9 @@ else if (logFile is not null) app.Logger.LogInformation("Writing log files to {P
 // Chat mutes and the chat log go through the staff tools when both exist.
 if (app.Services.GetService<Aion.Host.Authentication.ServerControl>() is { } serverControl && app.Services.GetService<ChatRelay>() is { } chatRelay)
     chatRelay.Moderation = serverControl;
+// Friend-list blocks stop whispers either way (game database).
+if (app.Services.GetService<NpgsqlDataSource>() is { } gameData && app.Services.GetService<ChatRelay>() is { } blockingRelay)
+    blockingRelay.Blocks = new PostgresChatBlocks(gameData);
 // Behind the declared TLS proxy (loopback), client addresses for rate limits and launch pairing
 // come from X-Forwarded-For; only loopback proxies are trusted (the defaults).
 if (https.Proxy)

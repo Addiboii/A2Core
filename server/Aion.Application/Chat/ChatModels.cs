@@ -66,6 +66,17 @@ public interface IChatDirectory
 
     /// <summary>The character as it is now, when it is in the world for this account; else null.</summary>
     ChatCharacter? Current(Guid character, Guid account);
+
+    /// <summary>The account's character in the world now when exactly one is (else null). The client keeps its
+    /// chat session across a character switch, so the session follows this character (ChatRelay.RefreshAsync).
+    /// Ported from A2Core PR #4 (Artezianec).</summary>
+    ChatCharacter? CurrentOfAccount(Guid account) => null;
+}
+
+/// <summary>Whether either character blocks the other (friend list blocks): whispers between them are refused.</summary>
+public interface IChatBlockList
+{
+    Task<bool> BlockedAsync(Guid character, Guid other, CancellationToken cancellationToken);
 }
 
 /// <summary>

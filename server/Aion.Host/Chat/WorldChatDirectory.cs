@@ -22,6 +22,14 @@ public sealed class WorldChatDirectory(WorldPresence presence, IWireCharacterRep
         return found;
     }
 
+    /// <summary>The account's only character in the world (after a character switch); null when none or several.
+    /// Ported from A2Core PR #4 (Artezianec).</summary>
+    public ChatCharacter? CurrentOfAccount(Guid account)
+    {
+        var mine = presence.All.Where(e => e.AccountId == account && e.Session.InWorld && e.Session.CharacterId is not null).Take(2).ToList();
+        return mine is [{ Session.CharacterId: { } id }] ? Current(id, account) : null;
+    }
+
     public ChatCharacter? Current(Guid character, Guid account)
     {
         var entry = presence.FindCharacter(character);
