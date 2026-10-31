@@ -77,8 +77,6 @@ What install.sh does:
    skills and policy rows move onto it (migration 070, `catalog.adopt_build`; rows whose template the new build lacks
    stay on the old build and are listed as kept_items) and the starter/class-skill/equipment policy is reinstalled.
    It is a no-op once a build is installed. Rehearse it on a restored copy with `AION_PG_DATABASE=<copy>`.
-6. Writes `/etc/aion/aion.env` (`tools/server_env.py`; mode 640, contains database passwords).
-   class skills and the equipment rules (`tools/equipment_rules.py`). Later runs apply new migrations only.
 6. Writes `/etc/aion/aion.env` (`tools/server_env.py`; mode 640, contains database passwords and
    `Aion__Totp__EncryptionKey`, the two-step sign-in key: generated on the first run and kept by later runs.
    Back it up with the database: without it enrolled authenticators stop working and only recovery codes
