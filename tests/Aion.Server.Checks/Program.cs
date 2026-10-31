@@ -28,6 +28,31 @@ try
 catch (ArgumentException) { }
 Console.WriteLine("7 account/character boundary checks passed.");
 
+// TOTP (Aion.Core.Security.Totp): RFC 6238 appendix B SHA-1 vectors (6-digit), replay window, secret protection.
+{
+    var rfcSecret = Aion.Core.Security.Totp.Base32Encode("12345678901234567890"u8);
+    Check(rfcSecret == "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ", "base32 of the RFC secret");
+    Check(Aion.Core.Security.Totp.CodeForStep(rfcSecret, 59 / 30) == "287082" && Aion.Core.Security.Totp.CodeForStep(rfcSecret, 1111111109 / 30) == "081804"
+        && Aion.Core.Security.Totp.CodeForStep(rfcSecret, 20000000000 / 30) == "353130", "RFC 6238 vectors");
+    var at = DateTimeOffset.FromUnixTimeSeconds(1111111109);
+    var step = Aion.Core.Security.Totp.CurrentStep(at);
+    Check(Aion.Core.Security.Totp.Match(rfcSecret, "081804", at) == step, "current code matches its step");
+    Check(Aion.Core.Security.Totp.Match(rfcSecret, "081804", at, afterStep: step) is null, "a used step is refused (replay)");
+    Check(Aion.Core.Security.Totp.Match(rfcSecret, Aion.Core.Security.Totp.CodeForStep(rfcSecret, step - 1), at) == step - 1
+        && Aion.Core.Security.Totp.Match(rfcSecret, Aion.Core.Security.Totp.CodeForStep(rfcSecret, step + 2), at) is null, "one step of drift either side");
+    Check(Aion.Core.Security.Totp.Match(rfcSecret, "08180x", at) is null && Aion.Core.Security.Totp.Match(rfcSecret, null, at) is null, "malformed codes refused");
+    Check(Aion.Core.Security.TotpSecretProtection.TryCreate("") is null && Aion.Core.Security.TotpSecretProtection.TryCreate(Convert.ToBase64String(new byte[16])) is null,
+        "no key or a short key: no protection");
+    var protection = Aion.Core.Security.TotpSecretProtection.TryCreate(Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32)))!;
+    var (cipher, nonce) = protection.Encrypt(rfcSecret);
+    Check(protection.Decrypt(cipher, nonce) == rfcSecret, "secret round trip");
+    cipher[0] ^= 1;
+    Check(protection.Decrypt(cipher, nonce) is null, "tampered secret refused");
+    var uri = Aion.Core.Security.Totp.BuildOtpAuthUri("Game account", "alice", rfcSecret);
+    Check(uri.StartsWith("otpauth://totp/Game%20account%3Aalice?secret=" + rfcSecret, StringComparison.Ordinal) && uri.Contains("period=30"), "otpauth URI");
+    Console.WriteLine("TOTP checks passed.");
+}
+
 // Customization bytes: version 12, then one byte per EAionPCCustomizeData_V12 field.
 var blob = new byte[CharacterAppearance.V12Fields.Count + 1];
 blob[0] = 12;
