@@ -319,16 +319,47 @@ sealed class MainForm : Form
         signIn.Click += async (_, _) =>
         {
             if (username.Text.Trim().Length == 0 || password.Text.Length == 0) { SetStatus("Enter your username and password.", error: true); return; }
+            string? challenge = null;
             var ok = await RunAsync(async ct =>
             {
                 SetStatus("Signing in…");
-                await workflow.Account.SignInAsync(username.Text.Trim(), password.Text, keep.Checked, ct);
-                workflow.Settings.Username = username.Text.Trim();
-                workflow.Settings.KeepSignedIn = keep.Checked;
-                workflow.Settings.SetSession(keep.Checked ? workflow.Account.Token : null, workflow.Account.ExpiresAt);
-                workflow.Settings.Save();
+                challenge = await workflow.Account.SignInAsync(username.Text.Trim(), password.Text, keep.Checked, ct);
+                if (challenge is null) SaveSignIn(username.Text.Trim(), keep.Checked);
             }, username, password, keep, signIn);
             password.Clear();
+            if (ok && challenge is not null) { SetStatus(""); ShowTwoStep(challenge, username.Text.Trim(), keep.Checked); return; }
+            if (ok) { SetStatus(""); await AfterSignInAsync(); }
+        };
+    }
+
+    void SaveSignIn(string username, bool keep)
+    {
+        workflow.Settings.Username = username;
+        workflow.Settings.KeepSignedIn = keep;
+        workflow.Settings.SetSession(keep ? workflow.Account.Token : null, workflow.Account.ExpiresAt);
+        workflow.Settings.Save();
+    }
+
+    /// <summary>Accounts with two-step sign-in: the code from the authenticator app (or a recovery code).</summary>
+    void ShowTwoStep(string challenge, string username, bool keep)
+    {
+        Page(SignInStep, "Two-step sign-in", "Enter the 6-digit code from your authenticator app, or one of your recovery codes.");
+        AddLabel("Code");
+        var code = AddInput();
+        var next = AddButton("Continue", primary: true, null, wide: true);
+        AddLink("Back to sign-in", () => ShowSignIn());
+        AcceptButton = next;
+        ActiveControl = code;
+        next.Click += async (_, _) =>
+        {
+            if (code.Text.Trim().Length == 0) { SetStatus("Enter the code.", error: true); return; }
+            var ok = await RunAsync(async ct =>
+            {
+                SetStatus("Signing in…");
+                await workflow.Account.CompleteTwoStepAsync(challenge, code.Text, ct);
+                SaveSignIn(username, keep);
+            }, code, next);
+            code.Clear();
             if (ok) { SetStatus(""); await AfterSignInAsync(); }
         };
     }

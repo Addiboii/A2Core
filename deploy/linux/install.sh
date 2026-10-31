@@ -119,6 +119,9 @@ if [[ $TLS == proxy ]]; then TLS_ARGS=(--proxy); else TLS_ARGS=(--certificate $T
 # Keep the staff dashboard's private address across updates.
 STAFF_PATH="$(grep -s '^Aion__Web__StaffPath=' $CONFIG/aion.env | cut -d= -f2- || true)"
 [[ -n "$STAFF_PATH" ]] && TLS_ARGS+=(--staff-path "$STAFF_PATH")
+# Keep the two-step sign-in key too: a new key would invalidate every enrolled authenticator.
+TOTP_KEY="$(grep -s '^Aion__Totp__EncryptionKey=' $CONFIG/aion.env | cut -d= -f2- || true)"
+[[ -n "$TOTP_KEY" ]] && TLS_ARGS+=(--totp-key "$TOTP_KEY")
 as_aion python3 $SRC/tools/server_env.py --public-address "$PUBLIC_ADDRESS" --data $DATA --state $STATE "${TLS_ARGS[@]}" > $CONFIG/aion.env.new
 chown root:aion $CONFIG/aion.env.new && chmod 640 $CONFIG/aion.env.new && mv $CONFIG/aion.env.new $CONFIG/aion.env
 
@@ -143,3 +146,8 @@ done
 printf '%q ' "${SAVED[@]}" > $CONFIG/install-args && chmod 640 $CONFIG/install-args
 echo "Installed. Status: systemctl status aion-host; logs: journalctl -u aion-host -f"
 echo "Staff dashboard: $(grep '^Aion__Web__StaffPath=' $CONFIG/aion.env | cut -d= -f2-) on the account site (port 8780)"
+if [[ $TLS == self-signed ]]; then
+  # The launcher accepts this self-signed certificate by its public key: launcher.json "certificatePins".
+  PIN="$(openssl x509 -in $TLS_DIR/cert.pem -pubkey -noout | openssl pkey -pubin -outform der | openssl dgst -sha256 -binary | openssl base64 -A)"
+  echo "Launcher certificate pin (launcher.json \"certificatePins\": [\"$PIN\"])"
+fi

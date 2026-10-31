@@ -19,7 +19,7 @@ public sealed class AccountClient : IDisposable
 
     public AccountClient(LauncherConfig config, HttpMessageHandler? handler = null)
     {
-        transport = handler ?? new HttpClientHandler();
+        transport = handler ?? CertificatePins.Handler(config.CertificatePins);
         var account = new Uri(config.AccountUrl);
         // The API answers within 20 seconds; the launcher download runs as long as it needs (cancellation stops it).
         http = new HttpClient(transport, disposeHandler: false) { BaseAddress = account, Timeout = TimeSpan.FromSeconds(20) };
@@ -31,7 +31,8 @@ public sealed class AccountClient : IDisposable
     public string? Token => token;
     public DateTimeOffset? ExpiresAt { get; private set; }
 
-    sealed record Session([property: JsonPropertyName("token")] string Token, [property: JsonPropertyName("expiresAt")] DateTimeOffset? ExpiresAt);
+    sealed record Session([property: JsonPropertyName("token")] string? Token, [property: JsonPropertyName("expiresAt")] DateTimeOffset? ExpiresAt,
+        [property: JsonPropertyName("requiresTotp")] bool? RequiresTotp = null, [property: JsonPropertyName("challengeToken")] string? ChallengeToken = null);
     sealed record DownloadLink([property: JsonPropertyName("url")] string Url);
     public sealed record Launch(
         [property: JsonPropertyName("authorization")] string Authorization,
@@ -43,15 +44,38 @@ public sealed class AccountClient : IDisposable
         [property: JsonPropertyName("size")] long Size,
         [property: JsonPropertyName("version")] string? Version);
 
-    /// <summary><paramref name="remember"/> asks for a 30-day session instead of the standard 8 hours.</summary>
-    public async Task SignInAsync(string username, string password, bool remember = false, CancellationToken ct = default)
+    /// <summary><paramref name="remember"/> asks for a 30-day session instead of the standard 8 hours.
+    /// Returns null when signed in, or (accounts with two-step sign-in) the challenge to pass to
+    /// <see cref="CompleteTwoStepAsync"/> with the code from the player's authenticator app.</summary>
+    public async Task<string?> SignInAsync(string username, string password, bool remember = false, CancellationToken ct = default)
     {
         using var response = await Send(HttpMethod.Post, "/api/accounts/login", new { username, password, remember }, ct);
         if (response.StatusCode == HttpStatusCode.Unauthorized) throw new AccountException("Wrong username or password.");
         if (response.StatusCode == HttpStatusCode.TooManyRequests) throw new AccountException("Too many attempts. Wait a minute and try again.");
+        if (response.StatusCode == HttpStatusCode.ServiceUnavailable) throw new AccountException("Two-step sign-in is not available on the server right now.");
         if (!response.IsSuccessStatusCode) throw new AccountException($"The account server answered {(int)response.StatusCode}.");
         var session = await response.Content.ReadFromJsonAsync<Session>(ct) ?? throw new AccountException("The account server sent no session.");
-        token = session.Token;
+        if (session.RequiresTotp == true)
+            return session.ChallengeToken is { Length: 64 } challenge && challenge.All(char.IsAsciiHexDigit)
+                ? challenge : throw new AccountException("Unexpected two-step challenge.");
+        token = session.Token ?? throw new AccountException("The account server sent no session.");
+        ExpiresAt = session.ExpiresAt;
+        return null;
+    }
+
+    /// <summary>Second sign-in step: a 6-digit app code, or otherwise a recovery code.</summary>
+    public async Task CompleteTwoStepAsync(string challenge, string code, CancellationToken ct = default)
+    {
+        code = code.Trim();
+        var digits = code.Length == 6 && code.All(char.IsAsciiDigit);
+        using var response = await Send(HttpMethod.Post, "/api/accounts/login/totp",
+            new { challengeToken = challenge, code = digits ? code : null, recoveryCode = digits ? null : code }, ct);
+        if (response.StatusCode == HttpStatusCode.Unauthorized)
+            throw new AccountException("That code did not work, or the sign-in expired. After 5 wrong codes, code entry is locked for 15 minutes.");
+        if (response.StatusCode == HttpStatusCode.TooManyRequests) throw new AccountException("Too many attempts. Wait a minute and try again.");
+        if (!response.IsSuccessStatusCode) throw new AccountException($"The account server answered {(int)response.StatusCode}.");
+        var session = await response.Content.ReadFromJsonAsync<Session>(ct);
+        token = session?.Token ?? throw new AccountException("The account server sent no session.");
         ExpiresAt = session.ExpiresAt;
     }
 

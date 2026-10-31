@@ -46,6 +46,21 @@ class ServerEnvTests(unittest.TestCase):
         self.assertNotIn('Aion__ChatDevelopmentLogins', env)
         self.assertNotIn('Aion__NcGuard__RewriteHosts', env)
 
+    def test_totp_key_and_log_directory(self):
+        import base64
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            server_data(root / 'data')
+            env = server_env.environment(self.args(root), {'aion_app': 'a', 'aion_auth': 'b'})
+            self.assertEqual(len(base64.b64decode(env['Aion__Totp__EncryptionKey'])), 32)
+            kept = base64.b64encode(bytes(range(32))).decode()
+            env = server_env.environment(self.args(root, totp_key=kept), {'aion_app': 'a', 'aion_auth': 'b'})
+            self.assertEqual(env['Aion__Totp__EncryptionKey'], kept)  # kept across updates
+            self.assertEqual(env['Aion__Logging__File__Directory'], root / 'state' / 'logs')
+            self.assertNotIn('Aion__Logging__File__Enabled', env)  # log files stay off by default
+        with self.assertRaises(SystemExit):
+            server_env.main(['--public-address', '203.0.113.5', '--data', '.', '--state', '.', '--proxy', '--totp-key', 'c2hvcnQ='])
+
     def test_proxy_and_missing_data(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

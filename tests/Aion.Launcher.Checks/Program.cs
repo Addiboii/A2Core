@@ -21,6 +21,63 @@ foreach (var bad in new[] { config with { ServerAddress = "example.com" }, confi
     try { bad.Validate(); Check(false, "invalid config accepted"); } catch (InvalidDataException) { checks++; }
 }
 
+// ---------- Certificate pins (SPKI SHA-256) ----------
+{
+    using var key = System.Security.Cryptography.ECDsa.Create(System.Security.Cryptography.ECCurve.NamedCurves.nistP256);
+    var request = new System.Security.Cryptography.X509Certificates.CertificateRequest("CN=127.0.0.1", key, System.Security.Cryptography.HashAlgorithmName.SHA256);
+    using var certificate = request.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(30));
+    using var renewed = request.CreateSelfSigned(DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddDays(60));
+    using var otherKey = System.Security.Cryptography.ECDsa.Create(System.Security.Cryptography.ECCurve.NamedCurves.nistP256);
+    using var other = new System.Security.Cryptography.X509Certificates.CertificateRequest("CN=127.0.0.1", otherKey, System.Security.Cryptography.HashAlgorithmName.SHA256)
+        .CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(30));
+    var spki = System.Security.Cryptography.SHA256.HashData(certificate.PublicKey.ExportSubjectPublicKeyInfo());
+    var base64 = Convert.ToBase64String(spki);
+    Check(CertificatePins.Base64(certificate) == base64 && base64.Length == 44, "pin is base64 SHA-256 of the SPKI");
+    Check(CertificatePins.Parse(base64)!.SequenceEqual(spki) && CertificatePins.Parse(Convert.ToHexString(spki).ToLowerInvariant())!.SequenceEqual(spki)
+        && CertificatePins.Parse("sha256//" + base64)!.SequenceEqual(spki), "pin parses from base64, hex and curl's sha256// form");
+    Check(CertificatePins.Parse("zz") is null && CertificatePins.Parse(new string('a', 40)) is null && CertificatePins.Parse("") is null, "bad pins rejected (a 40-hex thumbprint is not a pin)");
+    var pins = new[] { CertificatePins.Parse(base64)! };
+    var errors = System.Net.Security.SslPolicyErrors.RemoteCertificateChainErrors | System.Net.Security.SslPolicyErrors.RemoteCertificateNameMismatch;
+    Check(CertificatePins.Accept(other, System.Net.Security.SslPolicyErrors.None, pins), "a normally trusted certificate passes");
+    Check(CertificatePins.Accept(certificate, errors, pins), "a self-signed certificate passes when its key is pinned");
+    Check(CertificatePins.Accept(renewed, errors, pins), "a renewed certificate with the same key keeps passing");
+    Check(!CertificatePins.Accept(other, errors, pins), "another key with errors is refused");
+    Check(!CertificatePins.Accept(certificate, errors, []), "no pins keeps the normal refusal");
+    Check(!CertificatePins.Accept(null, System.Net.Security.SslPolicyErrors.RemoteCertificateNotAvailable, pins), "no certificate refused");
+    Check(CertificatePins.Accept(other, errors, [new byte[32], CertificatePins.Parse(CertificatePins.Base64(other))!]), "several pins (key rollover)");
+    (config with { CertificatePins = [base64, Convert.ToHexString(spki)] }).Validate();
+    checks++;
+    foreach (var bad in new[] { config with { CertificatePins = ["zz"] }, config with { CertificatePins = Enumerable.Repeat(base64, 9).ToArray() } })
+    {
+        try { bad.Validate(); Check(false, "invalid pins accepted"); } catch (InvalidDataException) { checks++; }
+    }
+    var json = $$"""{"name":"N","accountUrl":"https://127.0.0.1:8780","serverAddress":"127.0.0.1","bootstrapPort":8087,"savedDirSuffix":"Private","certificatePins":["{{base64}}"]}""";
+    Check(System.Text.Json.JsonSerializer.Deserialize<LauncherConfig>(json)!.CertificatePins!.Single() == base64, "certificatePins round-trips through launcher.json");
+}
+
+// ---------- Two-step sign-in ----------
+{
+    var challenge = new string('c', 64);
+    string? lastBody = null;
+    using var twoStep = new AccountClient(config, new StubHandler(async request =>
+    {
+        lastBody = request.Content is null ? "" : await request.Content.ReadAsStringAsync();
+        return request.RequestUri!.PathAndQuery switch
+        {
+            "/api/accounts/login" => Json(200, $$"""{"requiresTotp":true,"challengeToken":"{{challenge}}","expiresAt":"2030-01-01T00:00:00Z"}"""),
+            "/api/accounts/login/totp" => lastBody.Contains("\"code\":\"123456\"") || lastBody.Contains("\"recoveryCode\":\"ABCDE-12345\"")
+                ? Json(200, """{"token":"TOKEN2","accountId":"a","expiresAt":"2030-01-01T00:00:00Z"}""") : Json(401, "{}"),
+            _ => new HttpResponseMessage(HttpStatusCode.NotFound),
+        };
+    }));
+    Check(await twoStep.SignInAsync("player", "secret", remember: true) == challenge && !twoStep.SignedIn, "two-step account gets a challenge, not a session");
+    try { await twoStep.CompleteTwoStepAsync(challenge, "000000"); Check(false, "wrong code accepted"); } catch (AccountException) { checks++; }
+    await twoStep.CompleteTwoStepAsync(challenge, " 123456 ");
+    Check(twoStep.SignedIn && twoStep.Token == "TOKEN2" && lastBody!.Contains("\"recoveryCode\":null"), "app code completes the sign-in");
+    await twoStep.CompleteTwoStepAsync(challenge, "ABCDE-12345");
+    Check(lastBody!.Contains("\"code\":null"), "a longer code is sent as a recovery code");
+}
+
 // ---------- Account API: kept session, launcher manifest and self-update ----------
 var requests = new List<(string Method, string Path, string Body, string? Bearer)>();
 var launcherBytes = "new launcher"u8.ToArray();

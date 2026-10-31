@@ -7,6 +7,7 @@ bootstrap and the NCGuard sink. Contains passwords: write it to a file only root
 service account can read.
 """
 import argparse
+import base64
 import ipaddress
 import json
 import secrets
@@ -99,6 +100,11 @@ def environment(args, credentials):
         env['Aion__Https__KeyFile'] = args.key.resolve()
     # The staff dashboard's private address; kept across updates (install.sh passes the current one).
     env['Aion__Web__StaffPath'] = getattr(args, 'staff_path', None) or '/' + ''.join(secrets.choice(string.ascii_lowercase + string.digits) for _ in range(16))
+    # Two-step sign-in (TOTP) secret encryption key, base64 of 32 bytes; kept across updates (install.sh passes the
+    # current one): a new key would make every enrolled authenticator unusable (recovery codes still work).
+    env['Aion__Totp__EncryptionKey'] = getattr(args, 'totp_key', None) or base64.b64encode(secrets.token_bytes(32)).decode('ascii')
+    # Optional host log files (off unless Aion__Logging__File__Enabled=true): in the writable state folder.
+    env['Aion__Logging__File__Directory'] = args.state / 'logs'
     for index, map_id in enumerate(args.preload):
         env[f'Aion__Native__PreloadMaps__{index}'] = map_id
     return env
@@ -116,6 +122,7 @@ def main(argv=None):
     parser.add_argument('--key', type=Path, help='PEM private key for --certificate')
     parser.add_argument('--open-registration', action='store_true', help='let anyone create an account on the account page')
     parser.add_argument('--staff-path', help='staff dashboard address, e.g. /k3x9... (default: a new random one)')
+    parser.add_argument('--totp-key', help='two-step sign-in encryption key, base64 of 32 bytes (default: a new random one)')
     parser.add_argument('--max-connections', type=int, default=200, help='per native port')
     parser.add_argument('--preload', type=int, nargs='*', default=[1000], help='maps loaded at startup')
     parser.add_argument('--geolocation', default='59.9139,10.7522,NO', metavar='LAT,LON,CC',
@@ -132,6 +139,13 @@ def main(argv=None):
     if args.staff_path is not None and (len(args.staff_path) < 9 or not args.staff_path.startswith('/')
                                         or not all(c.isalnum() or c in '-_' for c in args.staff_path[1:])):
         parser.error('--staff-path must be / followed by at least 8 letters, digits, - or _')
+    if args.totp_key is not None:
+        try:
+            valid_key = len(base64.b64decode(args.totp_key, validate=True)) == 32
+        except ValueError:
+            valid_key = False
+        if not valid_key:
+            parser.error('--totp-key must be base64 of 32 bytes')
     credentials = json.loads((HOME / 'credentials.json').read_text(encoding='utf-8'))
     try:
         env = environment(args, credentials)

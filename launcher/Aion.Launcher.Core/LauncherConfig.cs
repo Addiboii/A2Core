@@ -13,7 +13,9 @@ public sealed record LauncherConfig(
     [property: JsonPropertyName("accountUrl")] string AccountUrl,
     [property: JsonPropertyName("serverAddress")] string ServerAddress,
     [property: JsonPropertyName("bootstrapPort")] int BootstrapPort,
-    [property: JsonPropertyName("savedDirSuffix")] string SavedDirSuffix)
+    [property: JsonPropertyName("savedDirSuffix")] string SavedDirSuffix,
+    // Optional SPKI SHA-256 pins for a self-signed account certificate (CertificatePins; launcher/README.md).
+    [property: JsonPropertyName("certificatePins")] string[]? CertificatePins = null)
 {
     public static LauncherConfig Load(string? overridePath = null)
     {
@@ -43,6 +45,8 @@ public sealed record LauncherConfig(
             throw new InvalidDataException("savedDirSuffix must be 1-32 letters or digits");
         if (SavedDirSuffix.Equals("Steam", StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException("savedDirSuffix must not be the official game's (Steam)");
+        if (CertificatePins is { } pins && (pins.Length > 8 || pins.Any(p => Aion.Launcher.CertificatePins.Parse(p) is null)))
+            throw new InvalidDataException("certificatePins must be up to 8 SHA-256 public-key pins (base64 or hex)");
     }
 
     /// <summary>The bootstrap URL for one launch: the launch authorization is the code in the path.</summary>

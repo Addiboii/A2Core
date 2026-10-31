@@ -19,7 +19,34 @@ Design and evidence: `research/client-installer.md`.
   from `research/local/client-26262663/verification.json`, keeping only the depot's files; Steam build 26262663,
   supported since 2026-10-31; before that manifest 1699273097574069541).
 - `launcher.json`: the server (account URL, IPv4 address, bootstrap port, private saved-folder suffix).
-  Embedded; a `launcher.json` next to the exe overrides it.
+  Embedded; a `launcher.json` next to the exe overrides it. Optional `certificatePins` (below).
+
+## Self-signed account certificate: `certificatePins`
+
+The launcher checks the account site's certificate the normal way. A server with a self-signed
+certificate (install.sh `--self-signed`) fails that check; list its public key in `launcher.json`:
+
+```json
+"certificatePins": ["<base64 SHA-256 of the certificate's public key>"]
+```
+
+A pin is the SHA-256 of the certificate's SubjectPublicKeyInfo (DER), written in base64 (44 characters,
+the same value as curl's `--pinnedpubkey sha256//...`); 64 hex characters are accepted too. A certificate
+is accepted when Windows trusts it, or, only when it does not, when its public key matches a pin. Up to
+8 pins: to change the key, ship a launcher with the old and new pins first. A renewed certificate with
+the same key keeps its pin. install.sh `--self-signed` prints the pin; from the certificate file:
+
+```bash
+openssl x509 -in cert.pem -pubkey -noout | openssl pkey -pubin -outform der | openssl dgst -sha256 -binary | openssl base64 -A
+```
+
+(`Aion.Launcher.Core/CertificatePins.cs`; idea from A2Core PR #4 by Artezianec, which pinned the
+thumbprint in place of the normal check.)
+
+## Two-step sign-in
+
+Accounts that turned on two-step sign-in on the account page get a second page after the password:
+the 6-digit code from the authenticator app, or a recovery code (`AccountClient.CompleteTwoStepAsync`).
 - `AionLauncher/icon.ico` (exe, window, taskbar, shortcuts) and `AionLauncher/emblem.png` (the rail): the "AH"
   emblem artwork (user-supplied PNG, 1254 px), cropped to the central 77 % and resized with Pillow;
   the ico holds 16-256 px.

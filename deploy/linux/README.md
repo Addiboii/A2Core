@@ -52,7 +52,11 @@ Certificate choices for the account site (port 8780), exactly one:
 
 - `--domain NAME --email ADDR`: Let's Encrypt (DNS A record of NAME must point at the server;
   port 80 open). Renewals copy the new files and restart the host automatically.
-- `--self-signed`: a certificate for the IP address. Browsers warn; the launcher must pin it.
+- `--self-signed`: a certificate for the IP address. Browsers warn; the launcher must pin it:
+  install.sh prints the pin at the end; put it in `launcher/launcher.json` as
+  `"certificatePins": ["<pin>"]` before building the launcher (launcher/README.md). The pin is the
+  base64 SHA-256 of the certificate's public key, from the certificate file:
+  `openssl x509 -in /etc/aion/tls/cert.pem -pubkey -noout | openssl pkey -pubin -outform der | openssl dgst -sha256 -binary | openssl base64 -A`
 - `--certificate cert.pem --key key.pem`: your own files.
 - `--proxy`: your own TLS proxy on this machine forwards to `127.0.0.1:8780` (the host then
   listens on loopback for the account site and trusts X-Forwarded-For from loopback). The proxy
@@ -74,6 +78,13 @@ What install.sh does:
    stay on the old build and are listed as kept_items) and the starter/class-skill/equipment policy is reinstalled.
    It is a no-op once a build is installed. Rehearse it on a restored copy with `AION_PG_DATABASE=<copy>`.
 6. Writes `/etc/aion/aion.env` (`tools/server_env.py`; mode 640, contains database passwords).
+   class skills and the equipment rules (`tools/equipment_rules.py`). Later runs apply new migrations only.
+6. Writes `/etc/aion/aion.env` (`tools/server_env.py`; mode 640, contains database passwords and
+   `Aion__Totp__EncryptionKey`, the two-step sign-in key: generated on the first run and kept by later runs.
+   Back it up with the database: without it enrolled authenticators stop working and only recovery codes
+   or an admin reset get those accounts in. Without the key the host logs that two-step sign-in is off.)
+   Host log files are off; `Aion__Logging__File__Enabled=true` in aion.env writes them to
+   `/var/lib/aion/logs` (`Aion__Logging__File__Directory`), rotated by size.
 7. Installs and starts `aion-postgres.service` and `aion-host.service`.
 
 ## Dashboard icons and 3D preview
