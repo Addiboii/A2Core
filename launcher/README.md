@@ -114,7 +114,7 @@ used) download the same manifest.
 ```powershell
 dotnet run --project tests/Aion.Launcher.Checks
 dotnet publish launcher/AionLauncher -c Release -r win-x64 -o research/local/launcher-publish -p:DebugType=none
-echo 0.4.1 > "research/local/launcher-publish/A2Core Launcher.exe.version"
+echo 0.5.0 > "research/local/launcher-publish/A2Core Launcher.exe.version"
 scp "research/local/launcher-publish/A2Core Launcher.exe" "research/local/launcher-publish/A2Core Launcher.exe.version" root@<server>:/var/lib/aion/downloads/
 ```
 
