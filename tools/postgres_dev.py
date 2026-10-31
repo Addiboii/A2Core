@@ -1,4 +1,4 @@
-"""Local PostgreSQL lifecycle, checked migrations, catalogue import and backups.
+"""Local PostgreSQL lifecycle, checked migrations, catalogue import/upgrade and backups.
 
 Uses vendor psql/pg_ctl tools, not a per-request game-server database driver.
 Credentials and all generated data stay under ignored research/local/postgres.
@@ -16,12 +16,15 @@ import os
 from pathlib import Path
 import secrets
 import subprocess
+import sys
 import tempfile
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 HOME = Path(os.environ['AION_PG_HOME']) if os.environ.get('AION_PG_HOME') else ROOT / 'research/local/postgres'
 PORT = 55432
+# AION_PG_DATABASE: another database of the cluster (a disposable restore to rehearse an upgrade); default aion.
+DATABASE = os.environ.get('AION_PG_DATABASE') or 'aion'
 WINDOWS = os.name == 'nt'
 
 
@@ -42,7 +45,8 @@ def literal(text):
     return "'" + str(text).replace("'", "''") + "'"
 
 
-def run(binary, args=(), *, text=None, role='aion_admin', database='aion', check=True):
+def run(binary, args=(), *, text=None, role='aion_admin', database=None, check=True):
+    database = database or DATABASE
     env = os.environ.copy()
     if (HOME / 'credentials.json').exists():
         credentials = json.loads((HOME / 'credentials.json').read_text())
@@ -72,7 +76,7 @@ def run(binary, args=(), *, text=None, role='aion_admin', database='aion', check
     return result
 
 
-def sql(text, *, role='aion_admin', database='aion', check=True):
+def sql(text, *, role='aion_admin', database=None, check=True):
     return run('psql', ['-X', '-q', '-A', '-t', '-v', 'ON_ERROR_STOP=1'], text=text,
                role=role, database=database, check=check)
 
@@ -196,6 +200,31 @@ def import_catalog(directory):
     return {'build_id': build_id, 'counts': counts}
 
 
+def upgrade_catalog(directory):
+    """Import a newer catalogue and move the game onto it (migration 070, catalog.adopt_build), then install the
+    build's policy rows (class skill unlocks, starter profiles, equipment rules). Repeatable: an already imported
+    and adopted build moves nothing more. Rows whose template the new build lacks stay on their old build and are
+    listed under kept_items / kept_skills / kept_profiles."""
+    manifest = json.loads((Path(directory) / 'manifest.json').read_text(encoding='utf-8'))
+    build = hashlib.sha256(json.dumps(manifest, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+    installed = f"SELECT count(*) FROM audit.events WHERE action='catalog_policy_installed' AND details->>'build'={literal(build)};"
+    if sql(installed).stdout.strip() != '0':
+        return {'build_id': build, 'unchanged': True}
+    imported = import_catalog(directory)
+    newest = sql('SELECT build_id FROM catalog.builds ORDER BY imported_at DESC, build_id LIMIT 1;').stdout.strip()
+    if newest != build:
+        raise ValueError(f'{build[:12]} is not the newest imported catalogue ({newest[:12]}); not moving back')
+    output = sql(f'BEGIN; SELECT pg_advisory_xact_lock(731924002); SET LOCAL ROLE aion_owner; '
+                 f'SELECT catalog.adopt_build({literal(build)}); COMMIT;').stdout
+    adopted = json.loads(next(line for line in output.splitlines() if line.startswith('{')))
+    for tool in (['class_skills.py', 'install'], ['configure_starters.py'], ['equipment_rules.py']):
+        subprocess.run([sys.executable, str(ROOT / 'tools' / tool[0]), *tool[1:], '--build-id', build], check=True)
+    # Marks the upgrade done (an interrupted one is resumed: import and adopt_build are repeatable).
+    sql(f"BEGIN; SET LOCAL ROLE aion_owner; INSERT INTO audit.events(action,details) "
+        f"VALUES('catalog_policy_installed',jsonb_build_object('build',{literal(build)})); COMMIT;")
+    return {**imported, 'adopted': adopted}
+
+
 def verify_backup(path):
     """Restore into a uniquely named disposable DB; never restore over aion."""
     name = 'aion_restore_' + secrets.token_hex(8)
@@ -232,6 +261,8 @@ def main():
         sub.add_parser(command)
     load = sub.add_parser('import-catalog')
     load.add_argument('--directory', type=Path, default=ROOT / 'research/local/game-catalog-v2')
+    upgrade = sub.add_parser('upgrade-catalog', help='import a newer catalogue and move items, skills and policy onto it')
+    upgrade.add_argument('--directory', type=Path, default=ROOT / 'research/local/game-catalog-v2')
     backup = sub.add_parser('backup')
     backup.add_argument('output', type=Path)
     verify = sub.add_parser('verify-backup')
@@ -254,6 +285,8 @@ def main():
         migrate()
     elif args.command == 'import-catalog':
         print(json.dumps(import_catalog(args.directory), indent=2))
+    elif args.command == 'upgrade-catalog':
+        print(json.dumps(upgrade_catalog(args.directory), indent=2))
     elif args.command == 'backup':
         if args.output.exists():
             raise ValueError('Backup destination already exists')

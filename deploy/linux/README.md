@@ -68,7 +68,11 @@ What install.sh does:
 5. First run: creates the database cluster (`tools/postgres_dev.py setup` with
    `AION_PG_HOME=/var/lib/aion/postgres`: 127.0.0.1:55432, generated passwords in
    `credentials.json`), applies migrations, imports the catalogue, installs starter profiles,
-   class skills and the equipment rules (`tools/equipment_rules.py`). Later runs apply new migrations only.
+   class skills and the equipment rules (`tools/equipment_rules.py`). Later runs apply new migrations and
+   `tools/postgres_dev.py upgrade-catalog`: when the data's catalogue is a newer client build it is imported, items,
+   skills and policy rows move onto it (migration 070, `catalog.adopt_build`; rows whose template the new build lacks
+   stay on the old build and are listed as kept_items) and the starter/class-skill/equipment policy is reinstalled.
+   It is a no-op once a build is installed. Rehearse it on a restored copy with `AION_PG_DATABASE=<copy>`.
 6. Writes `/etc/aion/aion.env` (`tools/server_env.py`; mode 640, contains database passwords).
 7. Installs and starts `aion-postgres.service` and `aion-host.service`.
 

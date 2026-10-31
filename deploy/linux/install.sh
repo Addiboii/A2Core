@@ -72,8 +72,9 @@ FIRST=0
 [[ -f $AION_PG_HOME/credentials.json ]] || FIRST=1
 systemctl stop aion-host 2>/dev/null || true
 if systemctl is-active --quiet aion-postgres; then
-  # Running under systemd: apply new migrations in place.
+  # Running under systemd: apply new migrations in place, then move to a newer catalogue in the data (no-op if current).
   as_aion python3 $SRC/tools/postgres_dev.py migrate
+  as_aion python3 $SRC/tools/postgres_dev.py upgrade-catalog --directory $DATA/game-catalog-v2
 else
   # setup creates the cluster (first run), starts it with pg_ctl and applies migrations.
   as_aion python3 $SRC/tools/postgres_dev.py setup
@@ -82,6 +83,8 @@ else
     as_aion python3 $SRC/tools/configure_starters.py
     as_aion python3 $SRC/tools/class_skills.py install
     as_aion python3 $SRC/tools/equipment_rules.py
+  else
+    as_aion python3 $SRC/tools/postgres_dev.py upgrade-catalog --directory $DATA/game-catalog-v2
   fi
   as_aion python3 $SRC/tools/postgres_dev.py stop
 fi
