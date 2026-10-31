@@ -1865,8 +1865,8 @@ Check(BitConverter.ToUInt16((await staffSession.HandleAsync(new PacketWriter().U
 var worktable = staffSession.Targets.Values.First(t => t.NpcId == 2910003);
 staffSession.Teleport(1010, worktable.Position with { X = worktable.Position.X + 100 }, Now);
 var craftEntry = await staffSession.HandleAsync(new PacketWriter().U16(0x3622).I32(1).ToArray(), Now);
-Check(craftEntry.Any(b => b[0] == 0x7e && b[1] == 0x8d && b[2] > 0) && craftEntry.Any(b => b[0] == 0x8c && b[1] == 0x8d && b[2] == 102)
-      && craftEntry.Any(b => b.SequenceEqual(Convert.FromHexString("378D0000000000"))), "world entry lists the recipes (0x8d7e), conversions (0x8d8c, 102) and gather skills (0x8d37)");
+Check(craftEntry.Any(b => b[0] == 0x7e && b[1] == 0x8d && b[2] > 0) && craftEntry.Any(b => b[0] == 0x8c && b[1] == 0x8d && b[2] == 113)
+      && craftEntry.Any(b => b.SequenceEqual(Convert.FromHexString("378D0000000000"))), "world entry lists the recipes (0x8d7e), conversions (0x8d8c, 113) and gather skills (0x8d37)");
 staffStore.Items.AddRange([Stored(610620013, 4, "bag", null, 70), Stored(630541001, 2, "bag", null, 71)]);
 await staffSession.InventoryChangesAsync(default);
 staffSession.CraftRoll = () => 0;
