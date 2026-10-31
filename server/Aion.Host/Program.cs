@@ -17,6 +17,8 @@ using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.Extensions.FileProviders;
 
 var builder = WebApplication.CreateBuilder(args);
+// Optional log files (Aion:Logging:File, off by default); a failure is logged below, never fatal.
+var (logFile, logFileWarning) = Aion.Host.Logging.FileLogging.Add(builder.Logging, builder.Configuration);
 // Bind and advertised addresses (loopback unless configured for a public server).
 var network = builder.Configuration.GetSection("Aion:Network").Get<NetworkOptions>() ?? new NetworkOptions();
 network.Validate();
@@ -247,6 +249,8 @@ builder.WebHost.ConfigureKestrel(options =>
 });
 builder.Services.AddSingleton<WardrobeAccess>();
 var app = builder.Build();
+if (logFileWarning is not null) app.Logger.LogWarning("{Warning}", logFileWarning);
+else if (logFile is not null) app.Logger.LogInformation("Writing log files to {Path}", logFile);
 // Chat mutes and the chat log go through the staff tools when both exist.
 if (app.Services.GetService<Aion.Host.Authentication.ServerControl>() is { } serverControl && app.Services.GetService<ChatRelay>() is { } chatRelay)
     chatRelay.Moderation = serverControl;
