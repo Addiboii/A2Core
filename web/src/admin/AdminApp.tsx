@@ -159,15 +159,32 @@ export function AdminApp() {
 function SignIn({ message, onSignedIn, onMessage }:
   { message: StatusMessage | null; onSignedIn: (s: Session, remember: boolean) => void; onMessage: (m: StatusMessage) => void }) {
   const [busy, setBusy] = useState(false);
+  // Two-step accounts: the password gave a challenge; a code (or recovery code) completes it.
+  const [challenge, setChallenge] = useState<{ token: string; username: string; remember: boolean } | null>(null);
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
     const data = new FormData(form);
-    const username = String(data.get('username'));
-    const remember = data.get('remember') === 'on';
+    const username = challenge?.username ?? String(data.get('username'));
+    const remember = challenge?.remember ?? data.get('remember') === 'on';
     setBusy(true);
     try {
-      const { token } = await api<{ token: string }>('/api/accounts/login', { method: 'POST', body: { username, password: data.get('password'), remember } });
+      let token: string;
+      if (challenge) {
+        const code = String(data.get('code') ?? '').trim();
+        const digits = /^[0-9]{6}$/.test(code);
+        ({ token } = await api<{ token: string }>('/api/accounts/login/totp', { method: 'POST',
+          body: { challengeToken: challenge.token, code: digits ? code : null, recoveryCode: digits ? null : code } }));
+        setChallenge(null);
+      } else {
+        const result = await api<{ token?: string; requiresTotp?: boolean; challengeToken?: string }>('/api/accounts/login', { method: 'POST', body: { username, password: data.get('password'), remember } });
+        if (result.requiresTotp && result.challengeToken) {
+          setChallenge({ token: result.challengeToken, username, remember });
+          onMessage({ text: '', kind: '' });
+          return;
+        }
+        token = result.token!;
+      }
       try {
         const profile = await api<StaffProfile>('/api/admin/me', { token });
         onSignedIn({ token, username, profile }, remember);
@@ -176,13 +193,33 @@ function SignIn({ message, onSignedIn, onMessage }:
         onMessage({ text: error instanceof ApiError && error.code === 'forbidden' ? ERRORS.forbidden : describe(error), kind: 'error' });
       }
     } catch (error) {
-      onMessage({ text: error instanceof ApiError && error.status === 401 ? 'Sign-in failed. Check your details.' : describe(error), kind: 'error' });
+      onMessage({ text: error instanceof ApiError && error.status === 401
+        ? challenge ? 'That code did not work, or the sign-in expired.' : 'Sign-in failed. Check your details.' : describe(error), kind: 'error' });
     } finally {
       setBusy(false);
-      const password = form.elements.namedItem('password');
-      if (password instanceof HTMLInputElement) password.value = '';
+      for (const name of ['password', 'code']) {
+        const input = form.elements.namedItem(name);
+        if (input instanceof HTMLInputElement) input.value = '';
+      }
     }
   }
+  if (challenge) return (
+    <main className="signin">
+      <form className="card card-body stack signin-card" onSubmit={submit}>
+        <div className="stack-sm center">
+          <h2>Two-step sign-in</h2>
+          <p className="muted">Enter the code from your authenticator app, or a recovery code.</p>
+        </div>
+        <div className="field">
+          <label htmlFor="code">Code</label>
+          <input id="code" name="code" className="input" autoComplete="one-time-code" required minLength={6} maxLength={32} autoFocus />
+        </div>
+        <Button type="submit" variant="primary" block busy={busy}>Continue</Button>
+        <Button block onClick={() => setChallenge(null)}>Back</Button>
+        <Status message={message} />
+      </form>
+    </main>
+  );
   return (
     <main className="signin">
       <form className="card card-body stack signin-card" onSubmit={submit}>

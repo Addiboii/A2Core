@@ -21,6 +21,8 @@ export function AccountApp() {
   const [configured, setConfigured] = useState(true);
   const [registrationOpen, setRegistrationOpen] = useState(false);
   const [launcherAvailable, setLauncherAvailable] = useState(false);
+  // Two-step accounts: the password gave a challenge; the code completes the sign-in.
+  const [challenge, setChallenge] = useState<{ token: string; username: string; registered: boolean } | null>(null);
 
   useEffect(() => {
     api<{ accountsConfigured: boolean; registrationOpen?: boolean; launcherAvailable?: boolean }>('/api/status')
@@ -38,10 +40,27 @@ export function AccountApp() {
 
   async function signIn(name: string, password: string, register: boolean) {
     if (register) await api('/api/accounts/register', { method: 'POST', body: { username: name, password } });
-    const session = await api<{ token: string }>('/api/accounts/login', { method: 'POST', body: { username: name, password } });
-    const list = await api<Character[]>('/api/characters', { token: session.token });
-    setToken(session.token); setUsername(name); setCharacters(list);
-    setMessage({ text: register ? 'Account created. Welcome!' : '', kind: 'ok' });
+    const session = await api<{ token?: string; requiresTotp?: boolean; challengeToken?: string }>('/api/accounts/login', { method: 'POST', body: { username: name, password } });
+    if (session.requiresTotp && session.challengeToken) {
+      setChallenge({ token: session.challengeToken, username: name, registered: register });
+      setMessage(null);
+      return;
+    }
+    await signedIn(session.token!, name, register);
+  }
+
+  async function signedIn(sessionToken: string, name: string, registered: boolean) {
+    const list = await api<Character[]>('/api/characters', { token: sessionToken });
+    setToken(sessionToken); setUsername(name); setCharacters(list); setChallenge(null);
+    setMessage({ text: registered ? 'Account created. Welcome!' : '', kind: 'ok' });
+  }
+
+  async function completeTwoStep(code: string, recoveryCode: string) {
+    if (!challenge) return;
+    const session = await api<{ token: string }>('/api/accounts/login/totp', {
+      method: 'POST', body: { challengeToken: challenge.token, code: code || null, recoveryCode: recoveryCode || null },
+    });
+    await signedIn(session.token, challenge.username, challenge.registered);
   }
 
   return (
@@ -55,7 +74,11 @@ export function AccountApp() {
           </div>
           {token
             ? <Signed token={token} characters={characters} onSignedOut={signedOut} onMessage={setMessage} />
-            : <SignIn disabled={!configured} registrationOpen={registrationOpen} onSubmit={signIn} onError={error => setMessage({ text: describe(error, true), kind: 'error' })} />}
+            : challenge
+              ? <TwoStepSignIn onSubmit={completeTwoStep} onCancel={() => { setChallenge(null); setMessage(null); }}
+                  onError={error => setMessage({ text: error instanceof ApiError && error.status === 401
+                    ? 'That code did not work, or the sign-in expired. After 5 wrong codes, code entry is locked for 15 minutes.' : describe(error), kind: 'error' })} />
+              : <SignIn disabled={!configured} registrationOpen={registrationOpen} onSubmit={signIn} onError={error => setMessage({ text: describe(error, true), kind: 'error' })} />}
           <Status message={message} />
           {token && launcherAvailable && <LauncherDownload token={token} onMessage={setMessage} />}
         </div>
@@ -132,6 +155,36 @@ function SignIn({ disabled, registrationOpen, onSubmit, onError }:
   );
 }
 
+/** Second sign-in step for accounts with two-step sign-in: a code from the app, or a recovery code. */
+function TwoStepSignIn({ onSubmit, onCancel, onError }:
+  { onSubmit: (code: string, recoveryCode: string) => Promise<void>; onCancel: () => void; onError: (error: unknown) => void }) {
+  const [busy, setBusy] = useState(false);
+  const [recovery, setRecovery] = useState(false);
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const value = String(new FormData(event.currentTarget).get('code') ?? '').trim();
+    setBusy(true);
+    try { await (recovery ? onSubmit('', value) : onSubmit(value, '')); }
+    catch (error) { onError(error); }
+    finally { setBusy(false); }
+  }
+  return (
+    <form className="stack" onSubmit={submit}>
+      <div className="field">
+        <label htmlFor="two-step-code">{recovery ? 'Recovery code' : 'Code from your authenticator app'}</label>
+        {recovery
+          ? <input key="recovery" id="two-step-code" name="code" className="input" autoComplete="off" required minLength={10} maxLength={32} />
+          : <input key="code" id="two-step-code" name="code" className="input" inputMode="numeric" pattern="[0-9]{6}" required maxLength={6} autoComplete="one-time-code" autoFocus />}
+      </div>
+      <Button type="submit" variant="primary" block busy={busy}>Continue</Button>
+      <div className="row wrap">
+        <Button onClick={() => setRecovery(!recovery)}>{recovery ? 'Use an app code' : 'Use a recovery code'}</Button>
+        <Button onClick={onCancel}>Back</Button>
+      </div>
+    </form>
+  );
+}
+
 function Signed({ token, characters, onSignedOut, onMessage }:
   { token: string; characters: Character[]; onSignedOut: (text: string, kind?: StatusMessage['kind']) => void; onMessage: (m: StatusMessage) => void }) {
   const [busy, setBusy] = useState<string | null>(null);
@@ -186,6 +239,7 @@ function Signed({ token, characters, onSignedOut, onMessage }:
           </div>
         </form>
       </details>
+      <TwoStepSettings token={token} onMessage={onMessage} />
       <div className="row">
         <Button busy={busy === 'logout'} onClick={() => run('logout', async () => {
           await api('/api/accounts/logout', { method: 'POST', token });
@@ -193,6 +247,112 @@ function Signed({ token, characters, onSignedOut, onMessage }:
         })}>Sign out</Button>
       </div>
     </div>
+  );
+}
+
+interface TwoStepStatus { available: boolean; enabled: boolean; recoveryCodesRemaining: number }
+
+/** Two-step sign-in (TOTP): turn on with the password and a first code, renew recovery codes, turn off. */
+function TwoStepSettings({ token, onMessage }: { token: string; onMessage: (m: StatusMessage) => void }) {
+  const [status, setStatus] = useState<TwoStepStatus | null>(null);
+  const [setup, setSetup] = useState<{ secret: string; otpAuthUri: string } | null>(null);
+  const [codes, setCodes] = useState<string[] | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const load = () => api<TwoStepStatus>('/api/accounts/totp/status', { token }).then(setStatus).catch(() => setStatus(null));
+  useEffect(() => { load(); }, [token]);  // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function run(name: string, form: HTMLFormElement, action: (data: FormData) => Promise<void>, wrong: string) {
+    setBusy(name);
+    try { await action(new FormData(form)); form.reset(); }
+    catch (error) { onMessage({ text: error instanceof ApiError && error.status === 403 ? wrong : describe(error), kind: 'error' }); }
+    finally { setBusy(null); }
+  }
+  const verified = (data: FormData) => ({ password: data.get('password'), code: data.get('code') || null, recoveryCode: data.get('recovery') || null });
+  function enroll(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    run('enroll', event.currentTarget, async data => {
+      setSetup(await api<{ secret: string; otpAuthUri: string }>('/api/accounts/totp/enroll', { method: 'POST', token, body: { password: data.get('password') } }));
+    }, 'Wrong password.');
+  }
+  function confirm(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    run('confirm', event.currentTarget, async data => {
+      const r = await api<{ recoveryCodes: string[] }>('/api/accounts/totp/confirm', { method: 'POST', token, body: { code: data.get('code') } });
+      setSetup(null); setCodes(r.recoveryCodes); await load();
+      onMessage({ text: 'Two-step sign-in is on.', kind: 'ok' });
+    }, 'That code is not valid. Check the time on your phone.');
+  }
+  function change(name: 'renew' | 'disable', form: HTMLFormElement | null) {
+    if (!form?.reportValidity()) return;
+    run(name, form, async data => {
+      if (name === 'renew') {
+        const r = await api<{ recoveryCodes: string[] }>('/api/accounts/totp/recovery/regenerate', { method: 'POST', token, body: verified(data) });
+        setCodes(r.recoveryCodes);
+      } else {
+        await api('/api/accounts/totp/disable', { method: 'POST', token, body: verified(data) });
+        setCodes(null);
+        onMessage({ text: 'Two-step sign-in is off.', kind: 'ok' });
+      }
+      await load();
+    }, 'Wrong password or code.');
+  }
+
+  if (!status) return null;
+  return (
+    <details className="security" id="two-step">
+      <summary>Two-step sign-in{status.enabled ? ' (on)' : ''}</summary>
+      {!status.available && <p className="muted">Two-step sign-in is not available on this server.</p>}
+      {codes && (
+        <div className="stack-sm">
+          <p><strong>Recovery codes.</strong> Each one signs you in once if you lose your phone. Save them now; they are not shown again.</p>
+          <ul className="character-list">{codes.map(c => <li key={c}><code>{c}</code></li>)}</ul>
+          <div className="row"><Button onClick={() => setCodes(null)}>I saved them</Button></div>
+        </div>
+      )}
+      {status.available && !status.enabled && !setup && (
+        <form className="stack" onSubmit={enroll}>
+          <p className="muted small">Sign-ins will also ask for a code from an authenticator app on your phone.</p>
+          <div className="field">
+            <label htmlFor="totp-enroll-password">Password</label>
+            <input id="totp-enroll-password" name="password" type="password" className="input" autoComplete="current-password" required maxLength={256} />
+          </div>
+          <div className="row"><Button type="submit" variant="primary" busy={busy === 'enroll'}>Set up two-step sign-in</Button></div>
+        </form>
+      )}
+      {status.available && !status.enabled && setup && (
+        <form className="stack" onSubmit={confirm}>
+          <p className="muted small">Add this key to your authenticator app (or open the link on your phone), then enter the code it shows.</p>
+          <code>{setup.secret.match(/.{1,4}/g)?.join(' ')}</code>
+          <a className="small" href={setup.otpAuthUri}>Open in authenticator app</a>
+          <div className="field">
+            <label htmlFor="totp-confirm-code">Code</label>
+            <input id="totp-confirm-code" name="code" className="input" inputMode="numeric" pattern="[0-9]{6}" required maxLength={6} autoComplete="one-time-code" />
+          </div>
+          <div className="row wrap">
+            <Button type="submit" variant="primary" busy={busy === 'confirm'}>Turn on</Button>
+            <Button onClick={() => setSetup(null)}>Cancel</Button>
+          </div>
+        </form>
+      )}
+      {status.available && status.enabled && (
+        <form className="stack" onSubmit={event => event.preventDefault()}>
+          <p className="muted small">On. {status.recoveryCodesRemaining} recovery code{status.recoveryCodesRemaining === 1 ? '' : 's'} left.
+            Changing this needs your password and an app code (or a recovery code).</p>
+          <div className="field">
+            <label htmlFor="totp-password">Password</label>
+            <input id="totp-password" name="password" type="password" className="input" autoComplete="current-password" required maxLength={256} />
+          </div>
+          <div className="row wrap">
+            <input name="code" className="input" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} placeholder="App code" aria-label="App code" autoComplete="one-time-code" />
+            <input name="recovery" className="input" maxLength={32} placeholder="or recovery code" aria-label="Recovery code" autoComplete="off" />
+          </div>
+          <div className="row wrap">
+            <Button busy={busy === 'renew'} onClick={event => change('renew', event.currentTarget.form)}>New recovery codes</Button>
+            <Button variant="danger" busy={busy === 'disable'} onClick={event => change('disable', event.currentTarget.form)}>Turn off</Button>
+          </div>
+        </form>
+      )}
+    </details>
   );
 }
 

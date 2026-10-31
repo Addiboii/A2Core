@@ -150,6 +150,25 @@ function Overview({ tools, detail, onRefresh }: { tools: Tools; detail: Characte
       },
     });
   }
+  // Removes two-step sign-in (lost phone and recovery codes); admins only, audited as totp_reset.
+  function resetTwoStep() {
+    tools.confirm({
+      title: 'Reset two-step sign-in', danger: true,
+      body: `Remove two-step sign-in from account ${c.accountName}? They sign in with the password alone until they set it up again.`,
+      note: 'This is recorded in the audit log under your account. Check who is asking first.',
+      confirmLabel: 'Reset two-step sign-in',
+      onConfirm: async () => {
+        setBusy('totp-reset');
+        try {
+          await tools.call(`/api/admin/accounts/${c.accountId}/totp/reset`, { method: 'POST' });
+          tools.notify(`Two-step sign-in removed from ${c.accountName}.`, 'ok');
+          tools.log(`Reset two-step sign-in · account ${c.accountName}`);
+        } catch (error) {
+          tools.notify(error instanceof ApiError && error.code === 'forbidden' ? 'Only admins can reset two-step sign-in.' : describe(error), 'error');
+        } finally { setBusy(null); }
+      },
+    });
+  }
 
   return (
     <div className="stack">
@@ -175,6 +194,7 @@ function Overview({ tools, detail, onRefresh }: { tools: Tools; detail: Characte
               return <Button key={role} size="sm" variant={has ? 'danger' : 'secondary'} busy={busy === 'role-' + role}
                 onClick={() => toggleRole(role, !has)}>{has ? 'Remove' : 'Make'} {ROLE_LABEL[role]}</Button>;
             })}
+            <Button size="sm" variant="danger" busy={busy === 'totp-reset'} onClick={resetTwoStep}>Reset two-step sign-in</Button>
           </div>
         )}
       </div>
