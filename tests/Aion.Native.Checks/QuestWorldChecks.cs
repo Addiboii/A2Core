@@ -47,6 +47,19 @@ static partial class QuestWorldChecks
         C(!GameSession.QuestGateOpen(layerRoom, clearLog), "153001 closed for an empty journal");
         clearLog.Set(QuestLog.New("HQ1102070", book.Find("HQ1102070")!) with { Uid = 32, Step = 7 });
         C(GameSession.QuestGateOpen(layerRoom, clearLog), "a quest step waiting to finish the gate quest (ClearQuest) opens it (A2Core PR #4)");
+        // Entry tickets (tools/data/expedition.json from ContentsTicket.dat / MapEntrance.dat; recharge rules OURS).
+        var tickets = ContentTicketTables.Embedded;
+        var awaken = tickets.Of(80000001)!;   // Contents_Ticket_Awaken: 3, +3 on Wednesday at 57600 s
+        static long Ms(int day, int hour) => new DateTimeOffset(2026, 10, day, hour, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds();
+        C(awaken is { Counted: true, Max: 3, Weekly: [3, 57600, 3] } && tickets.UsesOf(910011).Single() is { TicketId: 80000001, Count: 1, Deduct: "Enter" },
+          "Awaken dungeon 910011 takes one Contents_Ticket_Awaken at the entry (MapEntrance ContentsTicketList)");
+        C(ContentTicketTables.Recharged(awaken, 0, Ms(27, 12), Ms(29, 12)) == 3 && ContentTicketTables.Recharged(awaken, 0, Ms(28, 17), Ms(29, 12)) == 0
+          && ContentTicketTables.Recharged(awaken, 1, Ms(20, 12), Ms(29, 12)) == 3, "weekly recharge on Wednesday 16:00, capped at the maximum");
+        var field = tickets.Of(1)!;   // FieldEvent: 12, +3 daily at 57600 s
+        C(ContentTicketTables.Recharged(field, 0, Ms(27, 12), Ms(28, 17)) == 6, "daily recharge: two 16:00 passes add 3 each");
+        var normal = tickets.Of(60000006)!;   // Party_Dungeon_Normal: 21, +1 every 28800 s
+        C(ContentTicketTables.Recharged(normal, 0, Ms(27, 0), Ms(27, 16)) == 2, "cycle recharge: one per 8 hours");
+        C(tickets.Of(3) is { Counted: false }, "Time tickets (the Abyss) are not counted");
         return count;
     }
 }

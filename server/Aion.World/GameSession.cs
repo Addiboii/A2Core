@@ -32,6 +32,8 @@ public sealed record GameSessionOptions
     public bool TrainingDummy { get; init; }
     /// <summary>The race of the world this wire account picked on the login port (<see cref="WorldChoices"/>); null: none known.</summary>
     public Func<string, int?>? WorldRace { get; init; }
+    /// <summary>Refuse dungeon entries without the ticket MapEntrance names (GameSession.ContentTickets.cs); off: count only.</summary>
+    public bool EnforceContentTickets { get; init; }
 }
 
 /// <summary>
@@ -1627,6 +1629,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
                 LoadAchievements(await store.AchievementsAsync(state.Summary.CharacterId, ct), await store.GroupRewardsTakenAsync(state.Summary.CharacterId, ct), now);
                 LoadCollections(await store.CollectionsAsync(state.Summary.CharacterId, ct));
                 LoadBossChallenges(await store.BossChallengesAsync(state.Summary.CharacterId, ct));
+                LoadContentTickets(await store.ContentTicketsAsync(state.Summary.CharacterId, ct));   // GameSession.ContentTickets.cs
                 LoadTitles(extras);
                 LoadSkins(extras);
                 LoadMasteries(extras);
@@ -2880,6 +2883,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         }
         await FlushAchievementsAsync(now, ct);
         await FlushBossChallengeAsync(ct);
+        await FlushContentTicketsAsync(ct);
         // Play time: a minute at a time to the ElapsedTime achievements without a movement state (steps are minutes:
         // "Accumulate 3 hours of playtime" = 180). The ones naming states (Glide, Flying, Swimming) count their own minutes below.
         if (resources is not null && elapsedAchieveAt != 0 && now >= elapsedAchieveAt)

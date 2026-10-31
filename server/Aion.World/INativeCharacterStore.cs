@@ -51,6 +51,8 @@ public interface INativeCharacterStore : IAsyncDisposable
     Task<IReadOnlyList<CollectionRecord>> CollectionsAsync(Guid character, CancellationToken ct) => Task.FromResult<IReadOnlyList<CollectionRecord>>([]);
     Task<IReadOnlyList<BossChallengeRecord>> BossChallengesAsync(Guid character, CancellationToken ct) => Task.FromResult<IReadOnlyList<BossChallengeRecord>>([]);
     Task<bool> SaveBossChallengeAsync(Guid character, BossChallengeRecord record, CancellationToken ct) => Task.FromResult(false);
+    Task<IReadOnlyList<ContentTicketRecord>> ContentTicketsAsync(Guid character, CancellationToken ct) => Task.FromResult<IReadOnlyList<ContentTicketRecord>>([]);
+    Task<bool> SaveContentTicketAsync(Guid character, ContentTicketRecord record, CancellationToken ct) => Task.FromResult(false);
     Task<bool> SaveCollectionAsync(Guid character, int collectionId, int listId, int registered, bool rewarded, CancellationToken ct) => Task.FromResult(false);
     Task<IReadOnlyList<AchievementRecord>> AchievementsAsync(Guid character, CancellationToken ct) => Task.FromResult<IReadOnlyList<AchievementRecord>>([]);
     Task<IReadOnlyList<(int Group, int Step)>> GroupRewardsTakenAsync(Guid character, CancellationToken ct) => Task.FromResult<IReadOnlyList<(int, int)>>([]);

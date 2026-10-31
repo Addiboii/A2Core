@@ -310,6 +310,18 @@ public sealed class ServiceNativeCharacterStore(string token, WorldIdentity iden
         return await game.SaveBossChallengeAsync(identity.Account, character, record, ct);
     }
 
+    public async Task<IReadOnlyList<ContentTicketRecord>> ContentTicketsAsync(Guid character, CancellationToken ct)
+    {
+        await ValidateAsync(ct);
+        return await game.ContentTicketsAsync(identity.Account, character, ct);
+    }
+
+    public async Task<bool> SaveContentTicketAsync(Guid character, ContentTicketRecord record, CancellationToken ct)
+    {
+        await ValidateAsync(ct);
+        return await game.SaveContentTicketAsync(identity.Account, character, record, ct);
+    }
+
     public async Task<IReadOnlyList<CollectionRecord>> CollectionsAsync(Guid character, CancellationToken ct)
     {
         await ValidateAsync(ct);

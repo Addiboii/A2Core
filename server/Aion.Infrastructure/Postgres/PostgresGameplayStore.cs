@@ -985,6 +985,30 @@ public sealed class PostgresGameplayStore(NpgsqlDataSource source) : IGameplaySt
         await t.CommitAsync(ct); return true;
     }
 
+    public async Task<IReadOnlyList<ContentTicketRecord>> ContentTicketsAsync(VerifiedAccount account, Guid character, CancellationToken ct=default)
+    {
+        await using var c=await source.OpenConnectionAsync(ct); await using var t=await c.BeginTransactionAsync(ct);
+        if(!await Own(c,t,account.AccountId,character,ct)) return [];
+        var list=new List<ContentTicketRecord>();
+        await using(var q=Query(c,t,"SELECT ticket_id,remaining,updated_at FROM game.character_content_tickets WHERE character_id=$1",character))
+        {
+            await using var r=await q.ExecuteReaderAsync(ct);
+            while(await r.ReadAsync(ct)) list.Add(new(r.GetInt32(0),r.GetInt32(1),r.GetFieldValue<DateTimeOffset>(2)));
+        }
+        await t.CommitAsync(ct); return list;
+    }
+
+    public async Task<bool> SaveContentTicketAsync(VerifiedAccount account, Guid character, ContentTicketRecord record, CancellationToken ct=default)
+    {
+        await using var c=await source.OpenConnectionAsync(ct); await using var t=await c.BeginTransactionAsync(ct);
+        if(!await Own(c,t,account.AccountId,character,ct)) return false;
+        await Execute(c,t,"""
+            INSERT INTO game.character_content_tickets(character_id,ticket_id,remaining,updated_at) VALUES($1,$2,$3,$4)
+            ON CONFLICT (character_id,ticket_id) DO UPDATE SET remaining=EXCLUDED.remaining,updated_at=EXCLUDED.updated_at
+            """,ct,character,record.TicketId,record.Remaining,record.UpdatedAt);
+        await t.CommitAsync(ct); return true;
+    }
+
     private static async Task<bool> Consume(NpgsqlConnection c, NpgsqlTransaction t, Guid character, Guid item, long revision, int count, CancellationToken ct)
     {
         // quantity>0 is a table check: the last units delete the row instead of reaching 0 (live 2026-10-16).

@@ -49,6 +49,8 @@ public sealed record QuestRecord(string Code, int QuestId, long Uid, int Status,
 public sealed record AchievementRecord(int Id, int Count, DateTimeOffset? CompletedAt, int RewardedStep, DateTimeOffset UpdatedAt);
 /// <summary>A boss challenge group's progress (migration 033).</summary>
 public sealed record BossChallengeRecord(int GroupId, int ClearLevel, long BestPoint, int BestLevel, int BestTimeMs, long CumulativePoint, DateTimeOffset UpdatedAt);
+/// <summary>An entry ticket's count at a time (migration 065); the recharges since then are added on load.</summary>
+public sealed record ContentTicketRecord(int TicketId, int Remaining, DateTimeOffset UpdatedAt);
 /// <summary>A period collection list's progress (migration 032).</summary>
 public sealed record CollectionRecord(int CollectionId, int ListId, int Registered, bool Rewarded);
 /// <summary>A mail (migration 030): Post.dat template, EPostType, EPostSaveTab, its message parameters and attachments.</summary>
@@ -180,6 +182,8 @@ public interface IGameplayStore
     Task<bool> SaveCollectionAsync(VerifiedAccount account, Guid character, int collectionId, int listId, int registered, bool rewarded, CancellationToken ct = default) => Task.FromResult(false);
     Task<IReadOnlyList<BossChallengeRecord>> BossChallengesAsync(VerifiedAccount account, Guid character, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<BossChallengeRecord>>([]);
     Task<bool> SaveBossChallengeAsync(VerifiedAccount account, Guid character, BossChallengeRecord record, CancellationToken ct = default) => Task.FromResult(false);
+    Task<IReadOnlyList<ContentTicketRecord>> ContentTicketsAsync(VerifiedAccount account, Guid character, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<ContentTicketRecord>>([]);
+    Task<bool> SaveContentTicketAsync(VerifiedAccount account, Guid character, ContentTicketRecord record, CancellationToken ct = default) => Task.FromResult(false);
     /// <summary>A character id by name (any account), for mail to offline players.</summary>
     Task<Guid?> CharacterByNameAsync(VerifiedAccount account, string name, CancellationToken ct = default) => Task.FromResult<Guid?>(null);
     /// <summary>Sorts the bag: items ordered by template, then age, on slots 0, 1, 2, ...</summary>

@@ -27,6 +27,8 @@ public sealed record NativeOptions
     /// <summary>Development only: seed the '$' placeholder so the client skips character creation.</summary>
     public bool IntroCharacter { get; init; }
     public int CharacterLevel { get; init; } = 1;
+    /// <summary>Refuse dungeon entries without their entry ticket (ContentsTicket.dat counts; default off: counted only).</summary>
+    public bool EnforceContentTickets { get; init; }
     /// <summary>Development logins only: the map characters enter at its start point (tools/load_test.py --map).</summary>
     public int? DevelopmentStartMap { get; init; }
     /// <summary>Development logins only: character names allowed to use the /gm chat commands.</summary>
@@ -275,6 +277,7 @@ public sealed class NativeGameListener(NativeOptions options, IServiceProvider s
             Builder = services.GetService<BuilderCommands>(), Terrain = services.GetService<TerrainStore>(), Nav = services.GetService<NavMeshStore>(),
             World = services.GetService<SharedWorld>(), DevelopmentMap = Options.Development ? Options.DevelopmentStartMap : null,
             WorldRace = services.GetService<WorldChoices>() is { } choices ? choices.Race : null,
+            EnforceContentTickets = Options.EnforceContentTickets,
         }, new Random());
         // With a shared world, sessions take turns (WorldTurn): world work alone, map work in parallel per map;
         // storage calls run outside the turn (TurnStore).

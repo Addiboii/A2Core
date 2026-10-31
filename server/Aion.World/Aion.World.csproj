@@ -40,5 +40,6 @@
     <EmbeddedResource Include="../../tools/data/titles.json" LogicalName="titles.json" />
     <EmbeddedResource Include="../../tools/data/skins.json" LogicalName="skins.json" />
     <EmbeddedResource Include="../../tools/data/abnormal-stack-rules.json" LogicalName="abnormal-stack-rules.json" />
+    <EmbeddedResource Include="../../tools/data/expedition.json" LogicalName="expedition.json" />
   </ItemGroup>
 </Project>

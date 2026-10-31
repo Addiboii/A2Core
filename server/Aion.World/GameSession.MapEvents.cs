@@ -119,6 +119,7 @@ public sealed partial class GameSession : IMapEventHost
         var events = MapEventData.EventsOn(room.Map);
         if (copy == 0 && !IsAdmin && events.Count > 0 && !events.Any(e => new MapEventRun(e, 0, this, now).Holds(e.Start, now))) return [];
         if (!IsAdmin && !MeetsEntry(room, out var why)) { Note($"dungeon {room.Name}: entry refused ({why})"); return []; }
+        if (!IsAdmin && copy == 0 && !ContentTicketsAllowEntry(dungeonId, now, out var ticketWhy)) { Note($"dungeon {room.Name}: entry refused ({ticketWhy})"); return []; }
         var at = position ?? spawn?.Position ?? default;
         var arrival = MapEventData.Volume(room.Map) is { } volume && volume.Base == worldMap ? at : ArrivalPoint(room) ?? at;
         instanceReturn = (worldMap, at);
@@ -846,6 +847,7 @@ public sealed partial class GameSession : IMapEventHost
             // The clear reward (RewardDungeon.dat RewardLight/RewardDark by race: sealed dungeons' kina, materials, a title), once per copy.
             if (first && room is not null && (session.profileRace == 2 ? room.RewardDark : room.RewardLight) is { Length: > 0 } reward)
                 session.pendingRewards.Add(reward.Where(r => r.Length >= 2).Select(r => ((int)r[0], r[1])).ToList());
+            if (first && room is not null) session.SpendContentTickets(MapEventData.DungeonIdOfMap(worldMap), "Clear", mapEventNow);
             if (first && room is not null)
             {
                 var earned = session.AchieveDungeonClear(room, run.Name, CopyMembers().Count() + 1);
