@@ -4,10 +4,10 @@ Windows desktop tool (`editor/AionClientEditor`) for editing the supported AION2
 
 ## Requirements
 
-- Windows PC with the A2Core private client installed (default Paks folder: `%LOCALAPPDATA%\A2CorePrivate\AION2\Aion2\Content\Paks`).
+- Windows PC with the A2Core client installed via the launcher (default Paks folder: `%LOCALAPPDATA%\<A2Core data folder>\AION2\Aion2\Content\Paks`).
 - Your **archive key JSON** locally (`key_hex` field). Never commit this file.
 - Oodle: `oo2core_9_win64.dll` or `oodle-data-shared.dll` (WorldProbe uses `research/local/tooling/oodle-2.9.16/oodle-data-shared.dll`). The open flow lets you pick the DLL; defaults are auto-detected from the repo checkout.
-- Usmap: `research/local/tooling/mappings/*.usmap` (default `AION2-5.3.2.0-2.0.6.0.usmap`). Picked on open; last paths are stored in `%LOCALAPPDATA%\\A2CorePrivate\\client-editor-settings.json`.
+- Usmap: `research/local/tooling/mappings/*.usmap` (default `AION2-5.3.2.0-2.0.6.0.usmap`). Picked on open; last paths are stored in `%LOCALAPPDATA%\\<A2Core data folder>\\client-editor-settings.json`.
 
 ## Build & publish
 
@@ -23,8 +23,8 @@ dotnet publish editor/AionClientEditor -c Release -r win-x64 -o out/client-edito
 1. **Open Paks** — choose the client `Content\Paks` folder and your key JSON.
 2. **Browse / filter** — tables under `AION2/Content/Data/…` and `L10NString.dat` per locale.
 3. **Edit** — grid edits for L10N keys; data tables show row summaries (full struct editing continues in patch JSON + re-save pipeline).
-4. **Save to patch** — writes encrypted on-disk bytes into `%LOCALAPPDATA%\A2CorePrivate\client-patches\` (manifest + payloads). Base paks are not modified.
-5. **Build patch pak** — writes `z_A2Core_Patch-Windows_P.pak` (+ empty `.sig` placeholder) into the selected Paks folder and mirrors to `%LOCALAPPDATA%\A2CorePrivate\client-patches\deploy\` for the launcher.
+4. **Save to patch** — writes encrypted on-disk bytes into `%LOCALAPPDATA%\<A2Core data folder>\client-patches\` (manifest + payloads). Base paks are not modified.
+5. **Build patch pak** — writes `z_A2Core_Patch-Windows_P.pak` (+ empty `.sig` placeholder) into the selected Paks folder and mirrors to `%LOCALAPPDATA%\<A2Core data folder>\client-patches\deploy\` for the launcher.
 6. **Export / import JSON** — share edits as `patch-project.json` (paths + payload file names; binary payloads stay alongside).
 7. **Revert patch** — clears the local patch project.
 
@@ -50,7 +50,7 @@ dotnet publish editor/AionClientEditor -c Release -r win-x64 -o out/client-edito
 
 Modified **base** utoc/ucas/pak bytes **fail** quick/full checks — the editor never writes them.
 
-**Launcher opt-in:** `launcher-settings.json` → `"AllowClientPatchPaks": true` copies `z_A2Core_Patch-Windows_P.*` from `%LOCALAPPDATA%\A2CorePrivate\client-patches\deploy\` into the game Paks folder immediately before start (`ClientPatchSupport` in `Aion.Launcher.Core`).
+**Launcher opt-in:** `launcher-settings.json` → `"AllowClientPatchPaks": true` copies `z_A2Core_Patch-Windows_P.*` from `%LOCALAPPDATA%\<A2Core data folder>\client-patches\deploy\` into the game Paks folder immediately before start (`ClientPatchSupport` in `Aion.Launcher.Core`).
 
 ### Game client (best-effort, not exhaustively reversed here)
 
