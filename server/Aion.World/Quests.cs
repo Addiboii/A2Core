@@ -16,7 +16,9 @@ public sealed record QuestObjective(
     [property: JsonPropertyName("optional")] bool Optional = false,
     [property: JsonPropertyName("level")] int? Level = null,
     [property: JsonPropertyName("envs")] int[]? Envs = null,
-    [property: JsonPropertyName("chance")] int Chance = 0);
+    [property: JsonPropertyName("chance")] int Chance = 0,
+    [property: JsonPropertyName("map")] int? Map = null,
+    [property: JsonPropertyName("move_point")] string? MovePoint = null);
 
 public sealed record QuestStep(
     [property: JsonPropertyName("order")] int Order,
@@ -46,7 +48,9 @@ public sealed record QuestDefinition(
     [property: JsonPropertyName("next")] string? Next,
     [property: JsonPropertyName("steps")] QuestStep[] Steps,
     [property: JsonPropertyName("rewards")] QuestRewards? Rewards,
-    [property: JsonPropertyName("conditions")] QuestCondition[]? Conditions = null);
+    [property: JsonPropertyName("conditions")] QuestCondition[]? Conditions = null,
+    [property: JsonPropertyName("finish_map")] int? FinishMap = null,
+    [property: JsonPropertyName("finish_teleport")] string? FinishTeleport = null);
 
 /// <summary>An AcquirableConditions row other than ClearQuest (those are Prerequisites): IncompleteQuest, ClearQuestStep, SubZone, CloseEnvObj, the masteries.</summary>
 public sealed record QuestCondition(

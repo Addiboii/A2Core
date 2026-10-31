@@ -36,6 +36,8 @@ public sealed class InstanceTables
 
     public static InstanceTables Embedded => embedded.Value;
     public Instance? Of(int mapId) => byMap.GetValueOrDefault(mapId);
+    /// <summary>The hand-run instance layer whose map event this is.</summary>
+    public Instance? OfEvent(string mapEvent) => byMap.Values.FirstOrDefault(i => string.Equals(i.MapEvent, mapEvent, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>The instance whose entry trigger (a box on the field map) contains the position.</summary>
     public Instance? EntryAt(int mapId, Vector3d at) => byMap.Values.FirstOrDefault(i => i.Entry.Map == mapId

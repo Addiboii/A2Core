@@ -224,6 +224,18 @@ public sealed class MapEventTables
     public int DungeonIdOfMap(int mapId) => dungeonByMap.GetValueOrDefault(mapId);
     public IReadOnlyList<DungeonEntry> EntriesOn(int baseMap) => file.Entries.GetValueOrDefault(K(baseMap)) ?? [];
     public NpcEntry? EntryNpc(int npcId) => file.NpcEntries.GetValueOrDefault(K(npcId));
+    /// <summary>A base map's EnterInstanceLayer trigger that enters the dungeon (its centre), or null.</summary>
+    public (int BaseMap, Vector3d At)? EntryTriggerOf(int dungeonId)
+    {
+        foreach (var (map, entries) in file.Entries)
+            foreach (var e in entries)
+                if (e.Dungeon == dungeonId && e.Center is [var x, var y, var z])
+                    return (int.Parse(map, CultureInfo.InvariantCulture), new Vector3d(x, y, z));
+        return null;
+    }
+    /// <summary>The field NPCs whose dialog enters the dungeon (npc_entries).</summary>
+    public IEnumerable<int> EntryNpcsOf(int dungeonId) =>
+        file.NpcEntries.Where(p => p.Value.Dungeon == dungeonId).Select(p => int.Parse(p.Key, CultureInfo.InvariantCulture)).Order();
     public IReadOnlyDictionary<string, double[]> Points(int mapId) => file.Points.GetValueOrDefault(K(mapId)) ?? new Dictionary<string, double[]>();
     public LayerVolume? Volume(int mapId) => file.Volumes.GetValueOrDefault(K(mapId));
     /// <summary>A Teleport.dat name a PCTeleport uses that is not a point of its own map: the target map and location.</summary>

@@ -2273,6 +2273,10 @@ Check(released.Any(b => Op(b) == 0x382c && KeyOf(b) == eve.PlayerKey) && release
       "RemoveAbnormal on the player: the transformation ends (0x382c, 0x3655 own form, 0x39cd own relationship)");
 eve.ExitSharedWorld();
 MapEventChecks.Run(Check);
+QuestWorldChecks.Run(Check);
+var questTeleportUnknown = await game.HandleAsync(new PacketWriter().U16(GameSession.QuestTeleportRequest).I32(424242).ToArray(), Now);
+Check(questTeleportUnknown.Single().SequenceEqual(PacketWriter.Opcode(GameSession.QuestTeleportReply).U16(1).I32(424242).I32(0).ToArray()),
+      "0x8d16 for a quest the character does not have: 0x8d17 result 1 (CANDIDATE layout), no move");
 var mpFar = GamePackets.SpawnPosition with { X = GamePackets.SpawnPosition.X + SharedWorld.VisibleRange + 1000 };
 // 85 m in two reports at a plausible speed (the speed check rejects teleport-like jumps).
 var mpHalf = GamePackets.SpawnPosition with { X = (mpNear.X + mpFar.X) / 2 };

@@ -470,6 +470,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             case 0x4004: return instanceKey != 0 && !reloading ? [PacketWriter.Opcode(0x4005).U16(0).ToArray(), .. LeaveInstance(now)] : [PacketWriter.Opcode(0x4005).U16(1).ToArray()];
             case 0x930d: return instanceKey != 0 && !reloading ? [PacketWriter.Opcode(0x930e).U16(0).ToArray(), .. LeaveInstance(now)] : [PacketWriter.Opcode(0x930e).U16(1).ToArray()];
             case 0x8d0e when plain.Length >= 6: return await QuestRewardAsync(BitConverter.ToInt32(plain, 2), ct);
+            case QuestTeleportRequest when plain.Length >= 6: return QuestTeleport(BitConverter.ToInt32(plain, 2), now);   // GameSession.QuestTeleport.cs
             case 0x8d2b when plain.Length >= 6: return await QuestStepTalkAsync(plain, now, ct);
             // ClientObjectiveComplete_RQ {kind u8, id i32, objective index i32} (11 bytes live; the official reply mirrors it).
             case 0x9230 when plain.Length >= 11:
