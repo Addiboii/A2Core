@@ -1,0 +1,1 @@
+-- Broker listing fee is recorded on list (audit.events action trade_list).
