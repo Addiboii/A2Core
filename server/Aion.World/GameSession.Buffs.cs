@@ -77,9 +77,29 @@ public sealed partial class GameSession
     {
         if (resources is null) return null;
         var info = Boxes.Abnormal(abnormalId);
-        var group = info?.Group ?? abnormalId;
-        replies.AddRange(RemoveBuffs(buffs.Where(b => b.Group == group).ToList(), ExpireReplaced));
+        // SkillAbnormal.dat GroupId / AbnormalOverlapCount / AbnormalOverlapTimeType (AbnormalStackRules; A2Core PR #4).
+        var rule = AbnormalStackRules.For(abnormalId, info?.Group);
+        var group = rule.Group;
         var permanent = durationMs < 0;
+        // The same abnormal again is updated in place: 0x382b with its uid (OBSERVED 20261019-231752 #1638 for the dodge's 3015,
+        // overlap None) and a new end (Longer: the later one). A Separate abnormal stacks up to its count; at the count the
+        // stack ending first restarts (CANDIDATE). OURS: a buff that heals over time is still replaced whole, so a new potion
+        // brings its own heal rows.
+        var same = buffs.Where(b => b.AbnormalId == abnormalId).ToList();
+        if (same.Count > 0 && same.All(b => b.Heals.Count == 0)
+            && !(rule.OverlapTime == "Separate" && same.Count < Math.Max(1, rule.OverlapCount)))
+        {
+            var existing = same.MinBy(b => b.ExpireAt)!;
+            existing.ExpireAt = permanent ? PassiveExpireTime
+                : rule.OverlapTime == "Longer" ? Math.Max(existing.ExpireAt, now + durationMs) : now + durationMs;
+            existing.DurationMs = permanent ? -1 : existing.ExpireAt - now;
+            var change = PlayerPackets.AbnormalChange(playerKey, Wire(existing));
+            worldPlayer?.Map?.Broadcast(worldPlayer, [change]);
+            replies.Add(change);
+            return existing;
+        }
+        var separate = rule.OverlapTime == "Separate";
+        replies.AddRange(RemoveBuffs(buffs.Where(b => b.Group == group && !(separate && b.AbnormalId == abnormalId)).ToList(), ExpireReplaced));
         var duration = permanent ? 0 : durationMs;
         var buff = new Buff
         {

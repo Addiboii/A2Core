@@ -57,6 +57,11 @@ public static class CombatPacketChecks
         // 0xe005 groggy guard.
         Same("UpdateGroggyInfo (20261019-231752 #30737)", GamePackets.UpdateGroggyInfo(30114, 1, 50, 50), "05e0a2eb010301320000003200000002");
         Same("UpdateGroggyInfo broken (20261019-231752 #33475)", GamePackets.UpdateGroggyInfo(30114, 3, null, null), "05e0a2eb01000302");
+        // 0x382b: the same abnormal applied again (dodge 3015, same uid 41), show_msg packed into the ready-to-remove byte.
+        Same("AbnormalChange (20261019-231752 #1638)",
+            PlayerPackets.AbnormalChange(9655, new AbnormalWire(41, 3015, 3000, 0x000001A156077181, CasterKey: 9655, Level: 1, SkillId: 11000100,
+                RangeBase: V(0xc69bee16, 0xc6e76745, 0x46962983)), showMsg: true),
+            "2b38b74b1329c70b0000b80b00000000000081710756a1010000b74b0124d9a7000216ee9bc64567e7c683299646");
         return passed;
     }
 }

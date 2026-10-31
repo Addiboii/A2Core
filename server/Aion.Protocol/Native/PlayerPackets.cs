@@ -529,6 +529,18 @@ public static class PlayerPackets
     }
 
     /// <summary>
+    /// 0x382b AbnormalChange_NT: key | Common_Abnormal | show_msg (packed bool, it shares the abnormal's ready-to-remove byte).
+    /// OBSERVED (2.0.6, 20261019-231752 #1638: the dodge's abnormal 3015 applied again while on, same uid, byte 02 = show_msg).
+    /// Layout as A2Core PR #4 (Artezianec) wrote it.
+    /// </summary>
+    public static byte[] AbnormalChange(int key, AbnormalWire abnormal, bool showMsg = true)
+    {
+        var w = PacketWriter.Opcode(0x382b).Varint(key);
+        WriteAbnormal(w, abnormal);
+        return w.Bool(showMsg).ToArray();
+    }
+
+    /// <summary>
     /// 0x3803 SkillFireProjectile_NT: caster | presence u8 0 | target | skill i32 | action uid u8 (the 0x3802's) | projectile id varint
     /// (SkillProjectile.dat row; Skill.dat SkillEffectTimeDataList ProjectileId) | target position Vec3 | remaining flight ms varint |
     /// effect seq u32 | effect seq u8 | 00. OBSERVED (2.0.6: 20261013-144836 #15131, 43 samples; 20261019-231752 #31050, 114 samples,
