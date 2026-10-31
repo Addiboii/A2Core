@@ -281,6 +281,10 @@ public interface IMapEventHost
     void Abnormal(int id, int durationMs, string target, bool remove);
     void EnvObjState(string spawner, string state);
     void DynamicTerrain(string spawner, bool block);
+    /// <summary>EnvObjChangePhase {spawner, phase}: the objects' phase (A2Core PR #4; the session re-sends their 0x3634).</summary>
+    void EnvObjChangePhase(string spawner, int phase) { }
+    /// <summary>SetEnvObjCanInteract {spawner, True/False}: whether the objects can be used (A2Core PR #4).</summary>
+    void SetEnvObjCanInteract(string spawner, bool canInteract) { }
     void Progress(MapEventRun run);
     void Unsupported(MapEventRun run, string what);
 
@@ -686,7 +690,9 @@ public sealed class MapEventRun
             case "SetValue": SetVariable(d.Int(0) - 1, d.Int(1), false); break;
             case "AddValue": SetVariable(d.Int(0) - 1, d.Int(1), true); break;
             case "StartFocusCamera": Host.FocusCamera(d.Value(0), d.Value(2)); break;
-            case "CameraShake": case "PlayAct": case "ChangeBT": case "NpcMoveforSeamlessCutscene": case "SetEnvObjCanInteract": case "EnvObjChangePhase": case "NpcChangePhase":
+            case "EnvObjChangePhase": Host.EnvObjChangePhase(d.Value(0), d.Int(1)); break;
+            case "SetEnvObjCanInteract": Host.SetEnvObjCanInteract(d.Value(0), d.Flag(1)); break;
+            case "CameraShake": case "PlayAct": case "ChangeBT": case "NpcMoveforSeamlessCutscene": case "NpcChangePhase":
                 break;   // client-side presentation, or NPC details the server does not model; the event goes on
             default: Host.Unsupported(this, $"directive {d.Type} {d.Value(0)}"); break;
         }

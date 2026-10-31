@@ -993,6 +993,20 @@ public static class GamePackets
         PacketWriter.Opcode(0x3634).Varint(key).U8(4).U8(0).I32(envObjId).F32(position.X).F32(position.Y).F32(position.Z)
             .I32(0).F32(yaw).U8(1).U8(1).U8(1).I64(createTime).Zeros(8).I32(uniqueKey).U8(relationship).U8(0).U8(0).ToArray();
 
+    /// <summary>
+    /// 0x3634 EnvObjSpawn_NT with the can-interact and phase bytes set (map-event SetEnvObjCanInteract / EnvObjChangePhase;
+    /// A2Core PR #4). Which byte is can-interact and which is phase: CANDIDATE (layout comment above; every recorded spawn
+    /// has 01 01 01 and phase 0).
+    /// </summary>
+    public static byte[] EnvObjSpawn(int key, int envObjId, Vector3d position, double yaw, long createTime, int uniqueKey, byte relationship,
+        byte canInteract, byte phase) =>
+        PacketWriter.Opcode(0x3634).Varint(key).U8(4).U8(0).I32(envObjId).F32(position.X).F32(position.Y).F32(position.Z)
+            .I32(0).F32(yaw).U8(1).U8(canInteract).U8(1).I64(createTime).Zeros(8).I32(uniqueKey).U8(relationship).U8(phase).U8(0).ToArray();
+
+    /// <summary>0x363c InteractEnvObjCanInteractFlag_NT {object key varint, can interact u8} (usmap name; CANDIDATE: no recording has one).</summary>
+    public static byte[] InteractEnvObjCanInteract(int key, bool canInteract) =>
+        PacketWriter.Opcode(0x363c).Varint(key).U8(canInteract ? (byte)1 : (byte)0).ToArray();
+
     /// <summary>0x3638 InteractEnvObjStarted_NT: object key, interactor key, state 1.</summary>
     public static byte[] InteractEnvObjStarted(int key, int interactor) => PacketWriter.Opcode(0x3638).Varint(key).Varint(interactor).U8(1).ToArray();
     /// <summary>0x363a InteractEnvObjCompleted_NT: object key, interactor key, interaction count, item id.</summary>

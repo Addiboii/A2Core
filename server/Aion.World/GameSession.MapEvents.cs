@@ -245,6 +245,7 @@ public sealed partial class GameSession : IMapEventHost
         dormantSpawners.Clear();
         startedSpawners.Clear();
         removedObjects.Clear();
+        ClearEnvObjDirectives();
         pendingSpawns.Clear();
         pendingAggro.Clear();
         pendingExit = keepExit;
@@ -498,7 +499,7 @@ public sealed partial class GameSession : IMapEventHost
         {
             removedObjects.Remove(index);
             if (position is { } at && o.At.DistanceSquared(at) <= WorldObjects.VisibleRange * WorldObjects.VisibleRange && shownObjects.Add(index))
-                mapEventOut.Add(GamePackets.EnvObjSpawn(WorldObjects.FirstKey + index, o.Env, o.At, o.Yaw, mapEventNow, o.UniqueKey, (byte)o.Relationship));
+                mapEventOut.Add(EnvObjAppear(index, o, mapEventNow));
         }
     }
 

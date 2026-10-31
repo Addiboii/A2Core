@@ -26,6 +26,13 @@ static partial class QuestWorldChecks
         var finished = nania with { FinishMap = 1010 };
         C(QuestTeleportResolver.Resolve(finished, null, data) is { Map: 1010, Source: "finish-npc" },
           "QuestTeleport: a finished quest goes to its turn-in NPC");
+        // Map-event object directives: phase / can-interact bytes in 0x3634 (CANDIDATE) leave the default spawn unchanged.
+        var at = new Vector3d(1, 2, 3);
+        C(GamePackets.EnvObjSpawn(5, 1200081, at, 0, 9, 7, 8, canInteract: 1, phase: 0).SequenceEqual(GamePackets.EnvObjSpawn(5, 1200081, at, 0, 9, 7, 8)),
+          "0x3634 with can-interact 1 and phase 0 is the recorded spawn");
+        var phased = GamePackets.EnvObjSpawn(5, 1200081, at, 0, 9, 7, 8, canInteract: 0, phase: 3);
+        C(phased[^2] == 3 && phased[^3] == 8 && GamePackets.InteractEnvObjCanInteract(5, false).SequenceEqual(new byte[] { 0x3c, 0x36, 5, 0 }),
+          "phase sits after the relationship byte; 0x363c {key varint, flag}");
         return count;
     }
 }

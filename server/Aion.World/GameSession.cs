@@ -729,7 +729,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             double dx = o.Position[0] - at.X, dy = o.Position[1] - at.Y;
             var near = (instance && o.LongRange || dx * dx + dy * dy <= WorldObjects.VisibleRange * WorldObjects.VisibleRange) && !MapEventHidden(i, o);
             if (near && !Gathered(i, now) && !usedObjects.Contains(i) && shownObjects.Add(i))
-                replies.Add(GamePackets.EnvObjSpawn(WorldObjects.FirstKey + i, o.Env, o.At, o.Yaw, now, o.UniqueKey, (byte)o.Relationship));
+                replies.Add(EnvObjAppear(i, o, now));
             else if (!near && shownObjects.Remove(i))
                 replies.Add(GamePackets.EnvObjDespawn(WorldObjects.FirstKey + i));
         }
@@ -784,6 +784,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         var o = objects[found];
         var key2 = WorldObjects.FirstKey + found;
         if (o.FlightRing) return FlyThroughRing(key2, now);
+        if (EnvObjRefusal(found, o) is { } refused) { Note($"object {o.Name}: use refused ({refused})"); return [GamePackets.InteractEnvObjReply(key2, 1)]; }   // GameSession.EnvObjects.cs
         if (position is { } at && Math.Sqrt(Math.Pow(at.X - o.Position[0], 2) + Math.Pow(at.Y - o.Position[1], 2)) > o.InteractRange + WorldObjects.InteractSlack)
             return [GamePackets.InteractEnvObjReply(key2, 1)];
         var replies = new List<byte[]> { GamePackets.InteractEnvObjStarted(key2, playerKey) };

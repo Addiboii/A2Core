@@ -25,6 +25,8 @@ static class MapEventChecks
         public void FollowPc(string spawner, bool follow) => Call($"Follow {spawner} {follow}");
         public void RotateNpc(string spawner, string target) => Call($"Rotate {spawner} {target}");
         public void Talk(string talk) => Call($"Talk {talk}");
+        public void EnvObjChangePhase(string spawner, int phase) => Call($"Phase {spawner} {phase}");
+        public void SetEnvObjCanInteract(string spawner, bool canInteract) => Call($"CanInteract {spawner} {canInteract}");
         public void ChatBubble(string spawner, string talk) => Call($"Bubble {spawner} {talk}");
         public void SocialAction(string spawner, int action, bool stop) => Call($"Social {spawner} {action} {(stop ? "stop" : "play")}");
         public void SetAggroPc(string spawner) => Call($"Aggro {spawner}");
@@ -241,6 +243,13 @@ static class MapEventChecks
         C(!cave.CutsceneDone("Cutscene_Other", 15_000) && cave.CutsceneDone("Cutscene_L_A_Seq_1290", 15_000) && cave.StepOrder == 13
           && hostC.Calls.Contains("Spawn Dungeon_L_0016_Spawn_Boss_1 0") && hostC.Calls.Contains("Guide Tutorial_ForcedPopup_Groggy_01"),
           "the cutscene's end report finishes the step: the boss spawns and the groggy guide shows");
+        var objDirectives = new MapEventDefinition(1, [], [], [new MapEventStage(1, "s", [new MapEventStep(1,
+            [new MapEventDirective(1, "EnvObjChangePhase", ["E_Dungeon_D_0007_Root_001", "2"]), new MapEventDirective(2, "SetEnvObjCanInteract", ["E_Box", "False"])],
+            [new MapEventObjective(1, "CompleteCutscene", ["x"])], [])])]) { Name = "objdirectives" };
+        var hostO = new FakeHost();
+        new MapEventRun(objDirectives, 1, hostO, 0).Start(0);
+        C(hostO.Calls.Contains("Phase E_Dungeon_D_0007_Root_001 2") && hostO.Calls.Contains("CanInteract E_Box False"),
+          "EnvObjChangePhase / SetEnvObjCanInteract reach the host (A2Core PR #4)");
         C(cave.StageOrder == 3 && cave.WireStep == 1, "0x922d carries the step's place within its stage (OBSERVED: Dungeon_L_0016 step 13 went out as stage 3 step 1)");
         hostC.Calls.Clear();
         foreach (var percent in new[] { 70, 40, 10 }) cave.HpChanged(2701034, "Dungeon_L_0016_Spawn_Boss_1", percent, 15_500 + percent);
