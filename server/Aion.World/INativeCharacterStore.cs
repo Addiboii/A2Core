@@ -121,7 +121,7 @@ public interface INativeCharacterStore : IAsyncDisposable
     Task<bool> EngraveTeleportArtifactAsync(Guid character, int artifactId, CancellationToken ct);
     /// <summary>The stored skills with their levels (skill levels bought with skill points).</summary>
     Task<IReadOnlyList<SkillState>> SkillsAsync(Guid character, CancellationToken ct) => Task.FromResult<IReadOnlyList<SkillState>>([]);
-    Task<bool> SetSkillLevelAsync(Guid character, int skillId, int level, CancellationToken ct) => Task.FromResult(false);
+    Task<bool> SetSkillLevelAsync(Guid character, int skillId, int level, int purchased, CancellationToken ct) => Task.FromResult(false);
     /// <summary>Titles, skins and masteries (read at character selection).</summary>
     Task<CharacterExtras> ExtrasAsync(Guid character, CancellationToken ct) => Task.FromResult(CharacterExtras.None);
     Task<bool> GrantTitleAsync(Guid character, int titleId, CancellationToken ct) => Task.FromResult(false);

@@ -11,6 +11,8 @@ namespace Aion.World;
 // varint} (00: the level's one point spent). Points: Exp.dat BonusSkillPoint at the character level (cumulative,
 // CANDIDATE) minus the costs spent (SkillAcquireData Mastery rows: levels 2-4 cost 1, 5-7 cost 2, 8-10 cost 4).
 // The points message is sent after a purchase only, as recorded: the client knows the total from Exp.dat.
+// Only levels bought here cost points: the class kit raises skills above 1 by itself (sync_character_skills), so a bought
+// level is stored apart (character_skills.purchased_level, migration 039) and costs count from the kit's level up.
 public sealed partial class GameSession
 {
     public const ushort SkillLevelUpRq = 0x383f, SkillLevelUpRs = 0x3840, SkillLevelUpdateNt = 0x3813, SkillPointUpdateNt = 0x5105;
@@ -18,10 +20,19 @@ public sealed partial class GameSession
     const byte SkillPointLevelUp = 3, SkillPointLevelDown = 4, SkillLevelModify = 5;   // ESkillAcquireReason
     const byte SkillPointTypePoint = 1;   // ESkillPointType
 
-    /// <summary>Skill levels above 1 (bought with skill points), by skill id.</summary>
+    /// <summary>Levels bought with skill points (the level reached), by skill id.</summary>
     readonly Dictionary<int, int> skillLevels = [];
 
-    public int SkillLevel(int skillId) => Math.Max(1, skillLevels.GetValueOrDefault(skillId, 1));
+    /// <summary>The level the class kit gives a skill at the character's level (1 when it is not in the kit).</summary>
+    int KitSkillLevel(int skillId)
+    {
+        if (className is not { } cls) return 1;
+        foreach (var (id, kitLevel) in data.LearnedSkills(cls, level))
+            if (id == skillId) return Math.Max(1, kitLevel);
+        return 1;
+    }
+
+    public int SkillLevel(int skillId) => Math.Max(KitSkillLevel(skillId), skillLevels.GetValueOrDefault(skillId, 1));
 
     /// <summary>The learned kit with the bought levels on top of the level-based ones.</summary>
     List<(int SkillId, int Level)> WithLevels(IReadOnlyList<(int SkillId, int Level)> kit) =>
@@ -31,12 +42,15 @@ public sealed partial class GameSession
     {
         skillLevels.Clear();
         foreach (var s in stored)
-            if (s.Level > 1) skillLevels[s.SkillId] = s.Level;
+            if (s.Purchased > 1) skillLevels[s.SkillId] = s.Purchased;
     }
 
-    /// <summary>The skill points spent on the bought levels (each level's SkillAcquireData cost).</summary>
-    int SpentSkillPoints() =>
-        skillLevels.Sum(p => Enumerable.Range(2, Math.Max(0, p.Value - 1)).Sum(lvl => data.SkillLevelCost(p.Key, lvl)?.Cost ?? 0));
+    /// <summary>The skill points spent on the bought levels above the kit's (each level's SkillAcquireData cost).</summary>
+    int SpentSkillPoints() => skillLevels.Sum(p =>
+    {
+        var kit = KitSkillLevel(p.Key);
+        return Enumerable.Range(kit + 1, Math.Max(0, p.Value - kit)).Sum(lvl => data.SkillLevelCost(p.Key, lvl)?.Cost ?? 0);
+    });
 
     public int SkillPointsLeft => Math.Max(0, data.SkillPoints(level) - SpentSkillPoints());
 
@@ -53,7 +67,7 @@ public sealed partial class GameSession
         if (cost.NeedLevel > level || cost.Cost > SkillPointsLeft) return [Reply(2)];
         if (Store is { } store && CharacterId is { } character)
         {
-            var saved = await Stored(async () => await store.SetSkillLevelAsync(character, skillId, next, ct) ? [[]] : []);
+            var saved = await Stored(async () => await store.SetSkillLevelAsync(character, skillId, next, next, ct) ? [[]] : []);
             if (saved.Count == 0) return [Reply(1)];
         }
         skillLevels[skillId] = next;
@@ -73,16 +87,17 @@ public sealed partial class GameSession
         var skillId = BitConverter.ToInt32(plain, 2);
         byte[] Reply(int result) => PacketWriter.Opcode(SkillLevelDownRs).U16(result).I32(skillId).ToArray();
         var current = SkillLevel(skillId);
-        if (current <= 1 || !skillLevels.ContainsKey(skillId)) return [Reply(1)];
+        var kit = KitSkillLevel(skillId);
+        if (current <= kit || !skillLevels.ContainsKey(skillId)) return [Reply(1)];
         var next = current - 1;
-        if (!await SaveSkillLevelAsync(skillId, next, ct)) return [Reply(1)];
-        if (next <= 1) skillLevels.Remove(skillId); else skillLevels[skillId] = next;
+        if (!await SaveSkillLevelAsync(skillId, next, next > kit ? next : 0, ct)) return [Reply(1)];
+        if (next <= kit) skillLevels.Remove(skillId); else skillLevels[skillId] = next;
         return [Reply(0), SkillLevelUpdate(skillId, next, SkillPointLevelDown), SkillPointUpdate()];
     }
 
     /// <summary>
     /// 0x3843 SkillLevelReset_RQ {ESkillAcquireType u8, skill i32}: the skill (or every bought level when skill is 0) back
-    /// to level 1 with the points refunded (free, OURS). Reply 0x3844 {result u16, type, skill, modify list {skill → level},
+    /// to its kit level with the points refunded (free, OURS). Reply 0x3844 {result u16, type, skill, modify list {skill → level},
     /// modify points [{type u8 Point, points left}]} (usmap fields, CANDIDATE), then the level updates (SkillLevelModify).
     /// </summary>
     async Task<List<byte[]>> SkillLevelResetAsync(byte[] plain, CancellationToken ct)
@@ -94,25 +109,26 @@ public sealed partial class GameSession
         byte[] Reply(int result, IReadOnlyList<int> reset)
         {
             var w = PacketWriter.Opcode(SkillLevelResetRs).U16(result).U8(acquireType).I32(skillId).Varint((uint)reset.Count);
-            foreach (var id in reset) w.I32(id).I32(1);
+            foreach (var id in reset) w.I32(id).I32(KitSkillLevel(id));
             return w.Varint(1).U8(SkillPointTypePoint).I32(SkillPointsLeft).ToArray();
         }
         if (targets.Count == 0) return [Reply(1, [])];
         var updates = new List<byte[]>();
         foreach (var id in targets)
         {
-            if (!await SaveSkillLevelAsync(id, 1, ct)) continue;
+            var kit = KitSkillLevel(id);
+            if (!await SaveSkillLevelAsync(id, kit, 0, ct)) continue;
             skillLevels.Remove(id);
-            updates.Add(SkillLevelUpdate(id, 1, SkillLevelModify));
+            updates.Add(SkillLevelUpdate(id, kit, SkillLevelModify));
         }
         if (updates.Count == 0) return [Reply(1, [])];
         return [Reply(0, targets), .. updates, SkillPointUpdate()];
     }
 
-    async Task<bool> SaveSkillLevelAsync(int skillId, int newLevel, CancellationToken ct)
+    async Task<bool> SaveSkillLevelAsync(int skillId, int newLevel, int purchased, CancellationToken ct)
     {
         if (Store is not { } store || CharacterId is not { } character) return true;
-        var saved = await Stored(async () => await store.SetSkillLevelAsync(character, skillId, newLevel, ct) ? [[]] : []);
+        var saved = await Stored(async () => await store.SetSkillLevelAsync(character, skillId, newLevel, purchased, ct) ? [[]] : []);
         return saved.Count > 0;
     }
 }

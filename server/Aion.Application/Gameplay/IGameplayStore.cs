@@ -7,7 +7,8 @@ public sealed record CreatePlayer(Guid RequestId, string ProfileId, string Name,
     int? WorldId = null, int VoiceType = 0, int? LobbySlot = null);
 public sealed record ItemState(Guid InstanceId, string BuildId, int TemplateId, long Quantity,
     string Location, int? Slot, long Revision, JsonElement RolledStats, JsonElement Upgrades, long WireId = 0);
-public sealed record SkillState(int SkillId, int Level, int? Slot);
+/// <summary>A learned skill: the level the client sees, its quick slot, and the level bought with skill points (0: none).</summary>
+public sealed record SkillState(int SkillId, int Level, int? Slot, int Purchased = 0);
 // Legions: a member (grade EGuildMemberGrade 0 Master, 1 Officer, 2 Member) and a legion with its members.
 public sealed record GuildMember(Guid CharacterId, string Name, int Level, int Grade, string Comment, int CreationId, DateTimeOffset Joined);
 public sealed record GuildView(long Id, string Name, int Level, long Exp, int Emblem, int JoinRule, string Password, string Intro, string Notice,
@@ -102,7 +103,7 @@ public interface IGameplayStore
     /// <summary>Equipped skins by ESkinEquipSlot; 0 clears the slot. Each skin must be owned.</summary>
     Task<bool> SetSkinEquipsAsync(VerifiedAccount account, Guid character, IReadOnlyDictionary<int, int> equips, CancellationToken ct = default) => Task.FromResult(false);
     /// <summary>A learned skill's level (a skill level bought with skill points).</summary>
-    Task<bool> SetSkillLevelAsync(VerifiedAccount account, Guid character, int skillId, int level, CancellationToken ct = default) => Task.FromResult(false);
+    Task<bool> SetSkillLevelAsync(VerifiedAccount account, Guid character, int skillId, int level, int purchased, CancellationToken ct = default) => Task.FromResult(false);
     /// <summary>A mastery's level and exp.</summary>
     Task<bool> SaveMasteryAsync(VerifiedAccount account, Guid character, string kind, int category, int level, long exp, CancellationToken ct = default) => Task.FromResult(false);
     // Friends, requests and blocks of an owned character; null when not owned.

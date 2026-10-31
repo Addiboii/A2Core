@@ -80,18 +80,19 @@ public sealed partial class GameSession
     /// under an instance layer that overlays the base map (CurrentPosition, the HQ001 way out). The events' 0x922f follow
     /// the move (OBSERVED after 0x3621).
     /// </summary>
-    List<byte[]> LeaveInstance(long now, string mode = "LastPosition")
+    List<byte[]> LeaveInstance(long now, string mode = "LastPosition", (int Map, Vector3d At)? to = null, byte? teleportEffect = null)
     {
         if (resources is null || instanceKey == 0) return [];
         var hand = Instances.Of(worldMap);
         var volume = MapEventData.Volume(worldMap);
         int map; Vector3d exit;
-        if (hand is not null) (map, exit) = (hand.Exit.Map, new Vector3d(hand.Exit.Position[0], hand.Exit.Position[1], hand.Exit.Position[2]));
+        if (to is { } given) (map, exit) = given;
+        else if (hand is not null) (map, exit) = (hand.Exit.Map, new Vector3d(hand.Exit.Position[0], hand.Exit.Position[1], hand.Exit.Position[2]));
         else if (instanceReturn is { } back) (map, exit) = back;
         else if (volume is not null) (map, exit) = (volume.Base, position ?? spawn?.Position ?? default);
         // No way out recorded: the race's starting map (Poeta for Light, Ishalgen for Dark) at its start point.
         else (map, exit) = (HomeMap, data.MapStart(HomeMap)?.Position ?? GamePackets.SpawnPosition);
-        if (hand is null && volume is { } overlay && overlay.Base == map && string.Equals(mode, "CurrentPosition", StringComparison.OrdinalIgnoreCase) && position is { } here)
+        if (to is null && hand is null && volume is { } overlay && overlay.Base == map && string.Equals(mode, "CurrentPosition", StringComparison.OrdinalIgnoreCase) && position is { } here)
             exit = here;
         var leaving = (CopyOwner ?? this).mapEventRuns.Select(r => GamePackets.MapEventLeave(r.Id)).ToList();
         HandOverCopy();
@@ -100,8 +101,34 @@ public sealed partial class GameSession
         instanceKey = 0;
         instanceExitAt = null;
         instanceReturn = null;
-        return [.. InstanceMove(map, exit, now), .. leaving];
+        // Back outside: the entry triggers there wait until the player has stepped out of them (a way out that lands in or
+        // next to an entry area pulled the player straight back in; A2Core PR #4, 2026-10-30 HQ003).
+        dungeonTriggerNeedsOutside = true;
+        return [.. InstanceMove(map, exit, now, teleportEffect: teleportEffect), .. leaving];
     }
+
+    /// <summary>
+    /// An exit door used (EnvObjData Usage MoveMap, UsageValue the MapData teleport point: E_D0_Starter_HQ003_Warehouse_002 ->
+    /// World_D_Starter_HQ003_Exit on Ishalgen). Inside a layer or dungeon copy: out to that point (the base map's point first);
+    /// on a shared map: a teleport to it. An unknown point leaves the copy the usual way. (A2Core PR #4.)
+    /// </summary>
+    List<byte[]> MoveMapDoor(string point, long now)
+    {
+        if (resources is null || reloading || dead) return [];
+        var preferred = instanceReturn?.Map ?? MapEventData.Volume(worldMap)?.Base ?? worldMap;
+        (int Map, Vector3d At)? dest = data.MapPoints(preferred).TryGetValue(point, out var p) ? (preferred, new Vector3d(p[0], p[1], p[2])) : null;
+        if (dest is null)
+            foreach (var (name, map, at) in data.Destinations())
+                if (string.Equals(name, point, StringComparison.OrdinalIgnoreCase)) { dest = (map, at); break; }
+        // A door out is the PCTeleport counterpart of the way in (SeamlessDoorTeleport_heavy_out = TeleportEffect.dat 41); the
+        // seamless layer move (12 / 0x41) left the client inside the storage while the server put it on Ishalgen (2026-10-30).
+        if (instanceKey != 0) return LeaveInstance(now, to: dest, teleportEffect: DoorExitTeleportEffect);
+        if (dest is not { } d) { Note($"exit door: no teleport point {point}"); return []; }
+        return Teleport(d.Map, d.At, now);
+    }
+
+    /// <summary>A door's move out of its layer: SeamlessDoorTeleport_heavy_out (TeleportEffect.dat).</summary>
+    const byte DoorExitTeleportEffect = 41;
 
     /// <summary>A kill in an instance: the boss clears its map event and starts the way out.</summary>
     void InstanceKill(Target target, long now)

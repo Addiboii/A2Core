@@ -530,10 +530,10 @@ public sealed class ServiceNativeCharacterStore(string token, WorldIdentity iden
         return (await game.InventoryAsync(identity.Account, character, ct))?.Skills ?? [];
     }
 
-    public async Task<bool> SetSkillLevelAsync(Guid character, int skillId, int level, CancellationToken ct)
+    public async Task<bool> SetSkillLevelAsync(Guid character, int skillId, int level, int purchased, CancellationToken ct)
     {
         await ValidateAsync(ct);
-        return await game.SetSkillLevelAsync(identity.Account, character, skillId, level, ct);
+        return await game.SetSkillLevelAsync(identity.Account, character, skillId, level, purchased, ct);
     }
 
     public async Task<CharacterExtras> ExtrasAsync(Guid character, CancellationToken ct)

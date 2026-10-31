@@ -302,6 +302,9 @@ var levelReset = await pointed.HandleAsync(new PacketWriter().U16(GameSession.Sk
 Check(levelReset[0][0] == 0x44 && levelReset[0][1] == 0x38 && BitConverter.ToUInt16(levelReset[0], 2) == 0 && pointed.SkillLevel(11010000) == 1 && pointed.SkillPointsLeft == 16
       && levelReset.Any(b => Op(b) == 0x3813 && b[^1] == 5), "SkillLevelReset_RQ with skill 0: every bought level back to 1 (0x3844), all points back");
 Check((await pointed.HandleAsync(new PacketWriter().U16(GameSession.SkillLevelDownRq).I32(11010000).ToArray(), Now))[0][2] == 1, "a level-1 skill cannot go down (result 1)");
+// Every class has its own dodge (class prefix * 1,000,000 + 100) and running dash (+1): a Templar's 12000100 is a dodge too.
+Check(GameSession.IsCombatDodgeId(12000100) && GameSession.IsCombatDodgeId(19000100) && GameSession.IsDodgeId(16000101) && GameSession.IsDodgeId(GameSession.NormalDodge)
+      && !GameSession.IsCombatDodgeId(11010000) && !GameSession.IsCombatDodgeId(20000100) && !GameSession.IsDodgeId(12000102), "class dodges 11000100-19000100 and their dashes");
 // Sprint (Shift): 0x3704 → 0x8d03 + 0x3741; SP drains 500 per 100 ms on 0x8d00; 0x3705 → 0x3722 + 0x3742.
 var sprintOn = new PacketWriter().U16(0x3704).I64(1).ToArray();
 var sprintOff = new PacketWriter().U16(0x3705).I64(1).ToArray();
@@ -1095,11 +1098,16 @@ Check(Refused(await stored.HandleAsync(darkCreate, Now), GamePackets.CreateInval
 }
 Check(Refused(await stored.HandleAsync(create, Now), GamePackets.CreateDuplicateName) && store.Created.Count == 1, "the same name again is refused as a duplicate (kCharCreate_DuplicateCharName)");
 Check(BitConverter.ToUInt16((await stored.HandleAsync(NameRequest("Player1"), Now)).Single(), 2) == GamePackets.NameDuplicate, "the name check says duplicate (kCharCheckName_DuplicateCharName)");
+// A bought level loads from purchased_level (migration 039); a level the kit raised (level 2, nothing bought) costs no points.
+store.Skills.AddRange([new SkillState(11010000, 3, null, 3), new SkillState(11020000, 2, null, 0)]);
 var picked = await stored.HandleAsync(new PacketWriter().U16(0x361f).Varint(store.States[0].WireId << 16).I32(0).Vec3(Vector3d.Zero).ToArray(), Now);
 // SelectCharacter_RS: tag, u16 result, varint key, i32 last_using_pc_id, then the i64 dbid.
 var pickedKey = new PacketWriter().Varint(store.States[0].WireId << 16).ToArray();
 Check(picked.Count == 3 && picked[0].AsSpan(4, pickedKey.Length).SequenceEqual(pickedKey)
       && BitConverter.ToInt64(picked[0], 4 + pickedKey.Length + 4) == store.States[0].WireId, "shifted selection key resolves the stored character");
+Check(stored.SkillLevel(11010000) == 3 && stored.SkillLevel(11020000) == 1 && stored.SkillPointsLeft == Math.Max(0, data.SkillPoints(stored.Level) - 2),
+      "skill levels load from purchased_level: the bought level 3 costs its two points, the unpurchased level costs none");
+store.Skills.Clear();
 await stored.HandleAsync(new PacketWriter().U16(0x3622).I32(1).ToArray(), Now);
 await stored.HandleAsync(moved, Now);
 await stored.TickAsync(Now);
@@ -2660,10 +2668,10 @@ sealed class FakeStore : INativeCharacterStore
     public Task<IReadOnlyList<int>> WingsAsync(Guid character, CancellationToken ct) => Task.FromResult<IReadOnlyList<int>>(Wings.ToList());
     public List<SkillState> Skills { get; } = [];
     public Task<IReadOnlyList<SkillState>> SkillsAsync(Guid character, CancellationToken ct) => Task.FromResult<IReadOnlyList<SkillState>>(Skills.ToList());
-    public Task<bool> SetSkillLevelAsync(Guid character, int skillId, int level, CancellationToken ct)
+    public Task<bool> SetSkillLevelAsync(Guid character, int skillId, int level, int purchased, CancellationToken ct)
     {
         Skills.RemoveAll(s => s.SkillId == skillId);
-        Skills.Add(new SkillState(skillId, level, null));
+        Skills.Add(new SkillState(skillId, level, null, purchased));
         return Task.FromResult(true);
     }
     // Titles, skins and masteries (migration 029) in memory.

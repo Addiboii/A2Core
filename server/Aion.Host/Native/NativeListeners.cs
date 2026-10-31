@@ -366,7 +366,18 @@ public sealed class NativeGameListener(NativeOptions options, IServiceProvider s
                     trace?.Record(plain);
                     var errorsBefore = session.PersistenceErrors.Count;
                     var mapRequest = GameSession.IsMapRequest(plain);
-                    var replies = await InTurnAsync(() => session.HandleAsync(plain, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), ct), () => mapRequest);
+                    List<byte[]> replies;
+                    try
+                    {
+                        replies = await InTurnAsync(() => session.HandleAsync(plain, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), ct), () => mapRequest);
+                    }
+                    // A malformed body (short, out-of-range field) is that request's failure, not the connection's: it ended the
+                    // session before (idea from A2Core PR #4). Logged so a handler bug does not go unseen.
+                    catch (Exception error) when (authenticated && error is ArgumentException or IndexOutOfRangeException or OverflowException or InvalidCastException)
+                    {
+                        Logger.LogWarning("Native game request 0x{Opcode:x4} ({Length} bytes) failed and was skipped: {Error}", header, plain.Length, error.Message);
+                        replies = [];
+                    }
                     // A request the store refused (constraint, missing row): which one and why (it was silent before).
                     if (session.PersistenceErrors.Count > errorsBefore)
                         Logger.LogWarning("Native game request 0x{Opcode:x4} refused by the store: {Errors}", header,

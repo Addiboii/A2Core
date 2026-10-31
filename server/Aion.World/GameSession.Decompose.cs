@@ -55,13 +55,14 @@ public sealed class DecomposeTables
     }
 }
 
-// ItemDecompose: 0x5644 ItemDecompose_RQ {is auto, [item uids]} → 0x5645 {result u16, is auto, decomposed i32,
-// requested i32, rewards [{item, count}], skin ids []} (the 0x54ca run next to the OBSERVED 0x5646 OpenRewardBox_RQ; usmap
-// fields, CANDIDATE). Each bag item with Item.dat CanDecompose costs its DecomposeCostGold kina and is replaced by the
+// ItemDecompose: 0x5640 ItemDecompose_RQ {is auto, [item uids]} → 0x5641 {result u16, is auto, decomposed i32,
+// requested i32, rewards [{item, count}], skin ids []} (usmap fields, CANDIDATE). Opcode: developer 0x3782 + 0x1ebe, the
+// offset of the OBSERVED ItemSort 0x563e (0x3780) and OpenRewardBox 0x5646 (0x3788); 0x5644 (used before) is ItemTakeOut_RQ
+// (0x3786). From the A2Core PR #4 review; CANDIDATE until a live dismantle. Each bag item with Item.dat CanDecompose costs its DecomposeCostGold kina and is replaced by the
 // roll of its two groups; unbound equipment only (soul-bound items are kept out, OURS).
 public sealed partial class GameSession
 {
-    public const ushort ItemDecomposeRq = 0x5644, ItemDecomposeRs = 0x5645;
+    public const ushort ItemDecomposeRq = 0x5640, ItemDecomposeRs = 0x5641;
     const byte DecreaseDecompose = 31, IncreaseDecompose = 30;   // EDecreaseReason / EIncreaseReason (CANDIDATE values)
     static DecomposeTables Decompose => DecomposeTables.Embedded;
 

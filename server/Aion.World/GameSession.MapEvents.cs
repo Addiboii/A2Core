@@ -22,6 +22,10 @@ public sealed partial class GameSession : IMapEventHost
     readonly HashSet<int> removedObjects = [];
     readonly List<(string Spawner, long DueMs, bool Kill, bool Spawn)> pendingSpawns = [];
     (string Point, string Mode, long DueMs)? pendingExit;
+    /// <summary>Set on leaving a copy: the base map's entry triggers wait until the player is outside all of them.</summary>
+    bool dungeonTriggerNeedsOutside;
+    /// <summary>Where the event last moved the player inside this map (PCTeleport): the revival point when the stage names none.</summary>
+    Vector3d? eventRevivalPoint;
     /// <summary>The map and position the player entered the dungeon from (the way back for LastPosition exits).</summary>
     (int Map, Vector3d At)? instanceReturn;
     long mapEventNow;
@@ -91,7 +95,13 @@ public sealed partial class GameSession : IMapEventHost
     List<byte[]> DungeonTrigger(Vector3d at, long now)
     {
         if (reloading || resources is null || dead || instanceKey != 0) return [];
-        foreach (var entry in MapEventData.EntriesOn(worldMap))
+        var entries = MapEventData.EntriesOn(worldMap);
+        if (dungeonTriggerNeedsOutside)
+        {
+            if (!entries.Any(e => e.Contains(at))) dungeonTriggerNeedsOutside = false;
+            return [];
+        }
+        foreach (var entry in entries)
             if (entry.Contains(at) && EnterDungeon(entry.Dungeon, now) is { Count: > 0 } moved) return moved;
         return [];
     }
@@ -226,14 +236,18 @@ public sealed partial class GameSession : IMapEventHost
     void MapEventsPrepare()
     {
         if (mapEventsMap == worldMap && instanceKey != 0 && mapEventRuns.Count > 0) return;
+        // A revival inside the copy after the script's MapExit fired (HQ004: the closing bombs can kill the player in its 2 s
+        // delay) reloads the same map: the way out still holds, else the player waits in the cleared layer. (A2Core PR #4.)
+        var keepExit = mapEventsMap == worldMap && instanceKey != 0 ? pendingExit : null;
         mapEventsMap = 0;
         mapEventRuns.Clear();
+        eventRevivalPoint = null;
         dormantSpawners.Clear();
         startedSpawners.Clear();
         removedObjects.Clear();
         pendingSpawns.Clear();
         pendingAggro.Clear();
-        pendingExit = null;
+        pendingExit = keepExit;
         npcBuffs.Clear();
         if (!RunsMapEvents || targets is null) return;
         dormantSpawners.UnionWith(MapEventData.Deferred(worldMap));
@@ -518,15 +532,22 @@ public sealed partial class GameSession : IMapEventHost
 
     void IMapEventHost.Spawn(string spawner, int delayMs)
     {
+        CancelPendingSpawns(spawner);
         if (delayMs > 0) pendingSpawns.Add((spawner, mapEventNow + delayMs, false, true));
         else DoSpawn(spawner);
     }
 
     void IMapEventHost.Despawn(string spawner, int delayMs, bool kill)
     {
+        CancelPendingSpawns(spawner);
         if (delayMs > 0) pendingSpawns.Add((spawner, mapEventNow + delayMs, kill, false));
         else DoDespawn(spawner, kill);
     }
+
+    /// <summary>A later Start/End/KillSpawner overrides an earlier delayed one: HQ004's door (EndSpawner 2000 ms after step 6's use)
+    /// is started again by Sven's step 7 talk; a talk inside those 2 s let the stale despawn remove the door step 10 opens. (A2Core PR #4.)</summary>
+    void CancelPendingSpawns(string spawner) =>
+        pendingSpawns.RemoveAll(p => string.Equals(p.Spawner, spawner, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>SummonAroundTarget: the spawner's NPCs placed around the target NPC (or the player) and spawned.</summary>
     void IMapEventHost.SummonAround(string target, string spawner, int count, double radius)
@@ -615,6 +636,9 @@ public sealed partial class GameSession : IMapEventHost
         var points = MapEventData.Points(worldMap);
         foreach (var run in (CopyOwner ?? this).mapEventRuns)
             if (run.Stage?.RevivalPoint is { Length: > 0 } name && points.TryGetValue(name, out var p)) return new Vector3d(p[0], p[1], p[2]);
+        // No stage revival point, but the event moved the player inside this map (the Tunapre lake cave's PCTeleport into the boss
+        // room): revive there, since the dungeon start is behind steps that are already done (A2Core PR #4, live 2026-10-30 Dungeon_D_0018).
+        if (eventRevivalPoint is { } moved) return moved;
         return MapEventData.DungeonOfMap(worldMap) is { } room ? ArrivalPoint(room) : null;
     }
 
@@ -769,10 +793,12 @@ public sealed partial class GameSession : IMapEventHost
             : map != worldMap && MapEventData.DungeonOfMap(map)?.ArrivalCutscene is { Length: > 0 } own ? (own, false) : ((string, bool)?)null;
         foreach (var member in CopyMembers().ToList())
         {
+            if (map == worldMap) member.eventRevivalPoint = point3;
             member.pendingArrivalCutscene = arrival;
             if (!member.reloading) member.worldPlayer?.Send(member.MapEventMove(map, point3, mapEventNow, effectId, before, after));
         }
         pendingArrivalCutscene = arrival;
+        if (map == worldMap) eventRevivalPoint = point3;
         mapEventOut.AddRange(MapEventMove(map, point3, mapEventNow, effectId, before, after));
     }
 

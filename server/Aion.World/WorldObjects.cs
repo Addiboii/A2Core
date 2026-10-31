@@ -19,6 +19,8 @@ public sealed record WorldObject(
     [property: JsonPropertyName("cube")] bool Cube = false,
     [property: JsonPropertyName("long_range")] bool LongRange = false,
     [property: JsonPropertyName("flight_ring")] bool FlightRing = false,
+    // An exit door (EnvObjData Usage MoveMap): the MapData teleport point it leads to (tools/world_objects.py).
+    [property: JsonPropertyName("move_to")] string? MoveTo = null,
     // Its EnvObjData name, when the spawn entry is named after another object (tools/world_objects.py).
     [property: JsonPropertyName("env_name")] string? EnvName = null)
 {

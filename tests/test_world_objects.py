@@ -40,6 +40,23 @@ class WorldObjectTests(unittest.TestCase):
         fire = {o['name']: o.get('env_name') for o in data['maps']['110002']['objects'] if 'FireWood' in o['name']}
         self.assertEqual(fire, {'E_D0_FireWood_001_1': None, 'E_D0_FireWood_001_2': 'E_D0_FireWood_002'})
 
+    def test_doors(self):
+        dungeons = {'2': {'name': 'World_L_A_Layer_01', 'type': 'InstanceLayer'}, '23': {'name': 'Abyss_Reshanta_C', 'type': 'Abyss'}}
+        rows = world_objects.envobj_rows({'Properties': [
+            {'ID': {'Value': 1}, 'Name': 'E_L1_Barracks_LayerEnterDoor_001', 'Usage': 'EEnvObjectUsage::EnterInstanceLayer', 'UsageValue': chr(23)},
+            {'ID': {'Value': 2}, 'Name': 'E_D1_Exit_01', 'Usage': 'EEnvObjectUsage::MoveMap', 'UsageValue': 'Garrison_Out'}]})
+        # A door naming an unserved map (23, a field map) enters the layer its spawn entry is named after.
+        self.assertEqual(world_objects.party_portals(rows, dungeons), {})
+        self.assertEqual(world_objects.door_layer('World_L_A_Layer_01_EnterDoor', dungeons), 2)
+        spawn = {'SpawnInfoList': [
+            {'Name': 'World_L_A_Layer_01_EnterDoor', 'EnvObjIdList': [{'Value': 1}], 'Positions': [{'Location': {'X': 0, 'Y': 0, 'Z': 0}, 'Rotation': {'Yaw': 0}}]},
+            {'Name': 'Exit', 'EnvObjIdList': [{'Value': 2}], 'Positions': [{'Location': {'X': 0, 'Y': 0, 'Z': 0}, 'Rotation': {'Yaw': 0}}]}]}
+        placed = world_objects.objects(spawn, rows, wanted=set(), everything=True, dungeons=dungeons)
+        self.assertEqual([(p.get('portal'), p.get('move_to')) for p in placed], [([2], None), (None, 'Garrison_Out')])
+        data = json.loads((ROOT / 'tools/data/world-objects.json').read_text(encoding='utf-8'))
+        door = [o for o in data['maps']['1010']['objects'] if o['name'] == 'World_L_A_Layer_01_EnterDoor']
+        self.assertEqual([o['portal'] for o in door], [[2]])
+
     def test_generated_poeta(self):
         data = json.loads((ROOT / 'tools/data/world-objects.json').read_text(encoding='utf-8'))['maps']['1000']
         self.assertIn(1200530, [o['env'] for o in data['objects']])

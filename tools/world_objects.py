@@ -18,7 +18,11 @@ quest names.
 """
 import argparse
 import json
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from map_events import SERVED_TYPES
 
 ROOT = Path(__file__).resolve().parents[1]
 MAPDATA = ROOT / 'research/local/all-mapdata-full'
@@ -92,10 +96,26 @@ def gather_sources(tables=GATHER_TABLES, catalog=CATALOG):
             for row in rows('table-010.json') if row.get('MaterialGroup') in groups}
 
 
-def party_portals(rows, dungeons):
+def door_layer(name, dungeons, served_types=SERVED_TYPES):
+    """The served instance layer a door is named after (World_L_A_Layer_01_EnterDoor -> World_L_A_Layer_01), or 0."""
+    stem = str(name or '')
+    for suffix in ('_EnterDoor', '_EnterDoor_IN'):
+        if stem.endswith(suffix):
+            stem = stem[:-len(suffix)]
+            break
+    else:
+        return 0
+    found = [int(i) for i, room in dungeons.items() if room['name'] == stem and room['type'] in served_types]
+    return found[0] if len(found) == 1 else 0
+
+
+def party_portals(rows, dungeons, served_types=SERVED_TYPES):
     """Portal EnvObj id -> the dungeons it enters. EnterDungeon / EnterInstanceLayer objects name one dungeon in
-    UsageValue (digits, or a single character whose code is the id). PartyDungeon portals name their expedition by
-    name family (E_PD_KraoCave_EnterPortal_001 -> KraoCave_Easy/Normal/Hard; two portals are misspelt)."""
+    UsageValue (digits, or a single character whose code is the id). The target must be a dungeon the server serves:
+    World_L_A_Layer_01_EnterDoor (the Dawn Legion barracks door, HQ1102010 step 2) names 23, which Dungeon.dat has as the
+    Abyss_Reshanta_C field map; the door enters the layer its own name gives (id 2). (A2Core PR #4.)
+    PartyDungeon portals name their expedition by name family
+    (E_PD_KraoCave_EnterPortal_001 -> KraoCave_Easy/Normal/Hard; two portals are misspelt)."""
     fixes = {'urugugucaynon': 'urugugucanyon', 'fiercehorncave': 'horncave'}
     order = {'easy': 0, 'normal': 1, 'hard': 2}
     out = {}
@@ -103,6 +123,9 @@ def party_portals(rows, dungeons):
         if row['usage'] in ('EnterDungeon', 'EnterInstanceLayer'):
             value = row.get('usage_value') or ''
             dungeon = int(value) if value.isdigit() else ord(value) if len(value) == 1 else 0
+            target = dungeons.get(str(dungeon))
+            if target is None or target['type'] not in served_types:
+                dungeon = door_layer(row.get('name'), dungeons, served_types)
             if dungeon and str(dungeon) in dungeons:
                 out[env] = [dungeon]
             continue
@@ -129,7 +152,7 @@ def misleading(spawn, own, env_names):
     return any('_'.join(parts[:i]) in env_names for i in range(len(parts), 1, -1))
 
 
-def objects(data, rows, wanted, gathers=None, everything=False, portals=None):
+def objects(data, rows, wanted, gathers=None, everything=False, portals=None, dungeons=None):
     """Placed EnvObjs: quest objects, gather nodes and the wanted ids; <paramref>everything</paramref> keeps every placed
     object with a row (instance maps: map events name walls, wagons and doors by spawn name)."""
     gathers = gathers or {}
@@ -142,6 +165,11 @@ def objects(data, rows, wanted, gathers=None, everything=False, portals=None):
             row = rows.get(env)
             gather = gathers.get(row['usage_value']) if row is not None and row['usage'] == 'GatherSource' else None
             portal = portals.get(env)
+            # A door whose UsageValue names no served dungeon enters the layer its spawn entry is named after: the Dawn Legion
+            # barracks door (EnvObjData E_L1_DawnLegionBaseBarracks_LayerEnterDoor_001, UsageValue 23 = the Abyss_Reshanta_C
+            # field map) is spawned as World_L_A_Layer_01_EnterDoor -> layer 2 (HQ1102010 step 2).
+            if row is not None and portal is None and row['usage'] in ('EnterDungeon', 'EnterInstanceLayer') and dungeons:
+                portal = [layer] if (layer := door_layer(record.get('Name'), dungeons)) else None
             if row is None or row['usage'] == 'TeleportArtifact' or not (everything or env in wanted or row['usage'] == 'Quest' or gather or portal):
                 continue
             for position in record.get('Positions') or []:
@@ -169,6 +197,9 @@ def objects(data, rows, wanted, gathers=None, everything=False, portals=None):
                 # Flight rings (Usage FlightRing): flying through refills the flight points (OBSERVED 2026-10-19).
                 if row['usage'] == 'FlightRing':
                     found[-1]['flight_ring'] = True
+                # Exit doors (Usage MoveMap): UsageValue names the MapData teleport point the door leads to. (A2Core PR #4.)
+                if row['usage'] == 'MoveMap' and row.get('usage_value'):
+                    found[-1]['move_to'] = row['usage_value']
     return found
 
 
@@ -218,7 +249,7 @@ def build():
             continue
         data = json.loads(path.read_text(encoding='utf-8'))['Properties']['Data']
         instance = data.get('MapId') in instance_maps
-        placed, areas = objects(data, rows, envs, gathers, everything=instance, portals=portals), triggers(data, trigger_names, map_events=instance)
+        placed, areas = objects(data, rows, envs, gathers, everything=instance, portals=portals, dungeons=dungeon_rows), triggers(data, trigger_names, map_events=instance)
         if placed or areas:
             entry = maps.setdefault(str(data['MapId']), {'objects': [], 'triggers': []})
             entry['objects'].extend(placed)

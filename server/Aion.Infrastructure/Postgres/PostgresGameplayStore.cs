@@ -49,9 +49,9 @@ public sealed class PostgresGameplayStore(NpgsqlDataSource source) : IGameplaySt
     private static async Task<List<SkillState>> Skills(NpgsqlConnection c, NpgsqlTransaction t, Guid character, CancellationToken ct)
     {
         var skills=new List<SkillState>();
-        await using var q=Query(c,t,"SELECT s.skill_id,s.level,q.slot FROM game.character_skills s LEFT JOIN game.skill_slots q USING(character_id,skill_id) WHERE s.character_id=$1 ORDER BY s.skill_id,q.slot",character);
+        await using var q=Query(c,t,"SELECT s.skill_id,s.level,q.slot,s.purchased_level FROM game.character_skills s LEFT JOIN game.skill_slots q USING(character_id,skill_id) WHERE s.character_id=$1 ORDER BY s.skill_id,q.slot",character);
         await using var r=await q.ExecuteReaderAsync(ct);
-        while(await r.ReadAsync(ct)) skills.Add(new(r.GetInt32(0),r.GetInt32(1),r.IsDBNull(2)?null:r.GetInt32(2)));
+        while(await r.ReadAsync(ct)) skills.Add(new(r.GetInt32(0),r.GetInt32(1),r.IsDBNull(2)?null:r.GetInt32(2),r.GetInt32(3)));
         return skills;
     }
     private static async Task<bool> Own(NpgsqlConnection c, NpgsqlTransaction t, Guid account, Guid character, CancellationToken ct) =>
@@ -199,12 +199,12 @@ public sealed class PostgresGameplayStore(NpgsqlDataSource source) : IGameplaySt
         await t.CommitAsync(ct); return true;
     }
 
-    public async Task<bool> SetSkillLevelAsync(VerifiedAccount account, Guid character, int skillId, int level, CancellationToken ct=default)
+    public async Task<bool> SetSkillLevelAsync(VerifiedAccount account, Guid character, int skillId, int level, int purchased, CancellationToken ct=default)
     {
-        if(skillId<=0 || level is <1 or >40) throw new GameplayException("invalid_skill_level");
+        if(skillId<=0 || level is <1 or >40 || purchased<0 || purchased>level) throw new GameplayException("invalid_skill_level");
         await using var c=await source.OpenConnectionAsync(ct); await using var t=await c.BeginTransactionAsync(ct);
         if(!await Own(c,t,account.AccountId,character,ct)) return false;
-        var set=await Scalar(c,t,"UPDATE game.character_skills SET level=$3 WHERE character_id=$1 AND skill_id=$2 RETURNING skill_id",ct,character,skillId,level) is int;
+        var set=await Scalar(c,t,"UPDATE game.character_skills SET level=$3,purchased_level=$4 WHERE character_id=$1 AND skill_id=$2 RETURNING skill_id",ct,character,skillId,level,purchased) is int;
         await t.CommitAsync(ct); return set;
     }
 

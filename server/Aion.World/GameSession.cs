@@ -65,6 +65,15 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
     /// <summary>Dodges: CombatDodge (learned) and NormalDodge, its variant (Skill.dat: SP 10000, same 500 ms group cooldown).</summary>
     public const int CombatDodge = 11000100, NormalDodge = 11000101, NormalDodgeSp = 10000;
     /// <summary>
+    /// Every class has its own dodge: class prefix * 1,000,000 + 100 (class-skills.json: 11000100 Gladiator ... 19000100, each class
+    /// unlocks its own at level 1); the running dash is that id + 1. A Templar's dodge (12000100) was answered as an ordinary skill.
+    /// From A2Core PR #4 (Artezianec): live 2026-10-30 a class-16 sprint sent 16000100 and the client dropped the sprint.
+    /// </summary>
+    public static bool IsCombatDodgeId(int skill) => skill % 1_000_000 == 100 && skill / 1_000_000 is >= 11 and <= 19;
+    public static bool IsDodgeId(int skill) => IsCombatDodgeId(skill) || IsCombatDodgeId(skill - 1);
+    /// <summary>This character's CombatDodge (the learned class dodge; Gladiator's id when none is learned).</summary>
+    int ClassCombatDodge => learned.FirstOrDefault(IsCombatDodgeId) is var id and > 0 ? id : CombatDodge;
+    /// <summary>
     /// The dodge's abnormal (OBSERVED at every official dodge and sprint dash 2026-10-19): id 200 for 300 ms on the dodger, removed
     /// with reason 7 about 200 ms later (0x382c), together with the skill's end (0x3806).
     /// </summary>
@@ -838,6 +847,8 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         // A party dungeon's portal (EnvObjData Usage PartyDungeon): into the expedition.
         if (objects[index].Portal is { Length: > 0 } portal) replies.AddRange(EnterPartyDungeon(portal, now));
         // The expedition's reward cube (Usage OdEnergyCube): the final boss's reward, once per player per run.
+        // A layer's exit door (Usage MoveMap: UsageValue names the teleport point outside).
+        if (objects[index].MoveTo is { Length: > 0 } point) replies.AddRange(MoveMapDoor(point, now));
         if (objects[index].Cube) replies.AddRange(await CubeRewardAsync(null, now, ct));
         replies.AddRange(Achieve("UseEnvObjSpawnerName", 1, e => e.Has(objects[index].Name), now));
         replies.AddRange(Achieve("UseEnvObj", 1, e => e.Envs?.Contains(objects[index].Env) == true, now));
@@ -1177,10 +1188,11 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         if (dodgeEffectAt is { } fx && now >= fx.At && resources is not null)
         {
             dodgeEffectAt = null;
-            var effect = GamePackets.SkillEffect(playerKey, playerKey, CombatDodge, fx.Action, CombatDodge * 100 + DodgeEffectOffset);
+            var dodge = ClassCombatDodge;
+            var effect = GamePackets.SkillEffect(playerKey, playerKey, dodge, fx.Action, dodge * 100 + DodgeEffectOffset);
             worldPlayer?.Map?.Broadcast(worldPlayer, [effect]);
             replies.Add(effect);
-            AddBuff(DodgeAfterAbnormal, DodgeAfterMs, CombatDodge, now, replies);
+            AddBuff(DodgeAfterAbnormal, DodgeAfterMs, dodge, now, replies);
             replies.Add(GamePackets.CharPoints(playerKey, [(CharPoint.Sp, resources.Sp)]));
         }
         if (dodgeAbnormalOff is { } off && now >= off.At)
@@ -1835,7 +1847,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             {
                 // Owned skills before the hotbar (0x5100 then 0x5600; not the usmap ordinals).
                 replies.Add(GamePackets.SkillList(WithLevels(kit)));
-                replies.Add(GamePackets.SkillOptionSlots(learned.Where(id => id >= 11_000_000 && id != CombatDodge && data.Skill(id)?.Type == "Active").Order().ToList()));
+                replies.Add(GamePackets.SkillOptionSlots(learned.Where(id => id >= 11_000_000 && !IsDodgeId(id) && data.Skill(id)?.Type == "Active").Order().ToList()));
                 replies.AddRange(GamePackets.EmptyEntryLists());
                 replies.AddRange(SettingsAtEntry(now));
                 // The player's saved hotbar, else the class's default bar for its level.
@@ -1918,27 +1930,28 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         // CombatDodge request): a dodge requested while the sprint is on starts NormalDodge 11000101 (the running dash, SP 10,000)
         // in place of CombatDodge (SP 30,000). Its replies: 0x3802, the 9-byte 0x3801 naming CombatDodge, abnormal 200 for 300 ms,
         // then 0x8d00 with the SP; 200 ms later 0x3806 ends it and 0x382c removes the abnormal.
-        var dodging = skill is CombatDodge or NormalDodge;
+        var dodging = IsDodgeId(skill);
+        var combatDodge = dodging ? (IsCombatDodgeId(skill) ? skill : skill - 1) : ClassCombatDodge;
         var variant = DashVariant;
         // Variants 6-9 change only the dash that follows a sprint. A standing dodge keeps the reply this client already completes.
         if (dodging && !sprinting && variant >= 6) variant = 0;
         // Variant 6: the sprint stands on its own. A 9-byte refusal (result 1, no skill start) so the client does not read the
         // mask-first reply as a failed dash and drop the sprint. The live question is whether the sprint run then holds on land.
         if (dodging && sprinting && variant == 6)
-            return [GamePackets.DodgeResult(CombatDodge, 1)];
+            return [GamePackets.DodgeResult(combatDodge, 1)];
         // Variant 10: no reply at all to the dodge the client sends with the sprint (6 refused it and still froze, live 2026-10-20).
         if (dodging && sprinting && variant == 10) return [];
         // Variant 9 starts CombatDodge while sprinting (official starts NormalDodge). The rest of the sprint dashes are NormalDodge.
         // OBSERVED (official 2026-10-19 and 2026-10-20): the server picks the dodge by combat state. All 36 CombatDodge starts came
         // within 8 s of the player's own attack; out of combat the dodge is NormalDodge (10,000 SP, no 0x3804 effect) whether the
         // player sprints, runs or stands (2026-10-20: shift while standing gave NormalDodge with no sprint reply at all).
-        var started = skill == CombatDodge && variant != 9 && (sprinting || !inCombat) ? NormalDodge : skill;
+        var started = skill == combatDodge && variant != 9 && (sprinting || !inCombat) ? combatDodge + 1 : skill;
         // Recovered Skill.dat cost, cooldown and weapon requirement for any learned skill.
         // NormalDodge is CombatDodge's variant: learned with it, SP 10000, the same group cooldown.
-        var normalDodge = started == NormalDodge && learned.Contains(CombatDodge);
-        var definition = normalDodge ? data.Skill(CombatDodge) is { } dodge ? dodge with { Cost = dodge.Cost with { Sp = NormalDodgeSp } } : null
+        var normalDodge = dodging && started == combatDodge + 1 && learned.Contains(combatDodge);
+        var definition = normalDodge ? data.Skill(combatDodge) is { } dodge ? dodge with { Cost = dodge.Cost with { Sp = NormalDodgeSp } } : null
             : data.Skill(skill);
-        var cooldownKey = normalDodge ? CombatDodge : skill;
+        var cooldownKey = normalDodge ? combatDodge : skill;
         var cost = definition?.Cost ?? new SkillCost(0, 0, 0);
         if (BuffStat("MPUseDecrease") is > 0 and var cheaper) cost = cost with { Mp = cost.Mp * Math.Max(0, 10_000 - cheaper) / 10_000 };
         var weapons = (definition?.Weapons ?? []).Where(w => w != "None").ToList();
@@ -1982,11 +1995,11 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
                 [
                     .. dismount,
                     GamePackets.SkillStart(started, actionUid, request.Yaw, request.Location, playerKey, actorKey: playerKey, cooldown: cooldown),
-                    GamePackets.DodgeResult(CombatDodge),
+                    GamePackets.DodgeResult(combatDodge),
                     DodgeAbnormalAdd(now, started, actionUid, batchEnd),
                     GamePackets.CharPoints(playerKey, [(CharPoint.Sp, resources!.Sp)]),
                 ];
-                if (started == CombatDodge) dodgeEffectAt = (actionUid, now + delay + DodgeEffectMs);
+                if (started == combatDodge) dodgeEffectAt = (actionUid, now + delay + DodgeEffectMs);
                 return DeliverDash(dash, variant);
             }
             if (variant == 0)
@@ -2005,12 +2018,12 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             [
                 .. dismount,
                 GamePackets.SkillStart(started, actionUid, request.Yaw, request.Location, playerKey, actorKey: playerKey, cooldown: cooldown),
-                GamePackets.DodgeResult(CombatDodge),
+                GamePackets.DodgeResult(combatDodge),
             ];
             if (variant is 2 or >= 4) dodgeReplies.Add(DodgeAbnormalAdd(now, started, actionUid, endAt, end: variant != 2));
             else if (variant == 3) dodgeAbnormalOff = (0, started, actionUid, endAt, true);
             dodgeReplies.Add(GamePackets.CharPoints(playerKey, [(CharPoint.Sp, resources!.Sp)]));
-            if (variant >= 4 && started == CombatDodge) dodgeEffectAt = (actionUid, now + DodgeEffectMs);
+            if (variant >= 4 && started == combatDodge) dodgeEffectAt = (actionUid, now + DodgeEffectMs);
             return dodgeReplies;   // no damage rows: nothing for CombatReplies
         }
         var replies = new List<byte[]>
