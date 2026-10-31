@@ -13,7 +13,11 @@ public sealed record LauncherConfig(
     [property: JsonPropertyName("accountUrl")] string AccountUrl,
     [property: JsonPropertyName("serverAddress")] string ServerAddress,
     [property: JsonPropertyName("bootstrapPort")] int BootstrapPort,
-    [property: JsonPropertyName("savedDirSuffix")] string SavedDirSuffix)
+    [property: JsonPropertyName("savedDirSuffix")] string SavedDirSuffix,
+    [property: JsonPropertyName("certificateThumbprint")] string? CertificateThumbprint = null,
+    [property: JsonPropertyName("clientVersions"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ClientVersion[]? ClientVersions = null,
+    [property: JsonPropertyName("selectedClientVersion"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? SelectedClientVersion = null,
+    [property: JsonPropertyName("steamClientPath"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? SteamClientPath = null)
 {
     public static LauncherConfig Load(string? overridePath = null)
     {
@@ -30,7 +34,7 @@ public sealed record LauncherConfig(
         return config;
     }
 
-    public IPAddress Server => IPAddress.Parse(ServerAddress);
+    [JsonIgnore] public IPAddress Server => IPAddress.Parse(ServerAddress);
 
     public void Validate()
     {
@@ -43,6 +47,15 @@ public sealed record LauncherConfig(
             throw new InvalidDataException("savedDirSuffix must be 1-32 letters or digits");
         if (SavedDirSuffix.Equals("Steam", StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException("savedDirSuffix must not be the official game's (Steam)");
+        if (CertificateThumbprint is { } pin && (pin.Length != 40 || !pin.All(char.IsAsciiHexDigit)))
+            throw new InvalidDataException("certificateThumbprint must be 40 hex characters");
+        foreach (var version in ClientVersions ?? [])
+        {
+            if (string.IsNullOrWhiteSpace(version.Id) || string.IsNullOrWhiteSpace(version.Name))
+                throw new InvalidDataException("clientVersions entries need an id and a name");
+            if (!version.Kind.Equals(ClientVersion.PrivateKind, StringComparison.OrdinalIgnoreCase) && !version.IsSteam)
+                throw new InvalidDataException("clientVersions kind must be private or steam");
+        }
     }
 
     /// <summary>The bootstrap URL for one launch: the launch authorization is the code in the path.</summary>

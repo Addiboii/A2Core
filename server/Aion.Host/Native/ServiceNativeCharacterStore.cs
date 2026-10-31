@@ -198,7 +198,7 @@ public sealed class ServiceNativeCharacterStore(string token, WorldIdentity iden
     public async Task<string> JoinGuildAsync(Guid character, long guild, string password, int maxMembers, CancellationToken ct)
     {
         await ValidateAsync(ct);
-        return await game.JoinGuildAsync(identity.Account, character, guild, password, maxMembers, ct);
+        return await game.JoinGuildAsync(identity.Account, character, guild, password, "", maxMembers, ct);
     }
 
     public async Task<string> LeaveGuildAsync(Guid character, CancellationToken ct)
@@ -485,7 +485,7 @@ public sealed class ServiceNativeCharacterStore(string token, WorldIdentity iden
         if (otherStore is not ServiceNativeCharacterStore partner) return false;
         await ValidateAsync(ct);
         await partner.ValidateAsync(ct);
-        return await game.ExchangeAsync(identity.Account, character, gives, partner.Account, other, receives, ct);
+        return await game.ExchangeAsync(identity.Account, character, gives, partner.Account, other, receives, ct: ct);
     }
 
     public async Task<IReadOnlyList<int>> MapFogAsync(Guid character, CancellationToken ct)
@@ -533,7 +533,7 @@ public sealed class ServiceNativeCharacterStore(string token, WorldIdentity iden
     public async Task<bool> SetSkillLevelAsync(Guid character, int skillId, int level, CancellationToken ct)
     {
         await ValidateAsync(ct);
-        return await game.SetSkillLevelAsync(identity.Account, character, skillId, level, ct);
+        return await game.SetSkillLevelAsync(identity.Account, character, skillId, level, level, ct);
     }
 
     public async Task<CharacterExtras> ExtrasAsync(Guid character, CancellationToken ct)

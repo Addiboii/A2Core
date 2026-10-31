@@ -33,6 +33,8 @@ sealed class LauncherSettings
     public string? SteamAccount { get; set; }
     /// <summary>Steam refresh token, DPAPI-protected (current Windows user), base64.</summary>
     public string? SteamToken { get; set; }
+    /// <summary>When true, copy z_A2Core_Patch-Windows_P.* from the client editor deploy folder before starting the game.</summary>
+    public bool AllowClientPatchPaks { get; set; }
 
     /// <summary>The kept account session, when there is one that has not ended yet.</summary>
     public string? Session()

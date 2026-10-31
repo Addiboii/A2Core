@@ -42,6 +42,16 @@ public sealed class CharacterPersistenceService(ICharacterStateRepository reposi
         return repository.SaveOwnedAsync(account.AccountId, characterId, expectedRevision, progress, cancellationToken);
     }
 
+    public Task<long?> SavePositionAsync(VerifiedAccount account, Guid characterId, long expectedRevision, int mapId,
+        JsonElement position, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(account);
+        if (expectedRevision < 0 || mapId <= 0) throw new ArgumentException("Invalid checkpoint.");
+        if (position.ValueKind != JsonValueKind.Object) throw new ArgumentException("Position must be an object.");
+        return repository.SavePositionOwnedAsync(account.AccountId, characterId, expectedRevision, mapId, position,
+            cancellationToken);
+    }
+
     private static void ValidateObjects(JsonElement position, JsonElement resources)
     {
         if (position.ValueKind != JsonValueKind.Object || resources.ValueKind != JsonValueKind.Object)

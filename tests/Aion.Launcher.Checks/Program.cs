@@ -16,11 +16,38 @@ void Check(bool condition, string label)
 var config = LauncherConfig.Load();
 Check(config.Server.ToString() == config.ServerAddress && config.AccountUrl.StartsWith("https://"), "embedded config");
 Check(config.BootstrapUrl(new string('A', 64)) == $"http://{config.ServerAddress}:{config.BootstrapPort}/c/{new string('A', 64)}", "bootstrap URL carries the code");
-foreach (var bad in new[] { config with { ServerAddress = "example.com" }, config with { AccountUrl = "http://x" }, config with { SavedDirSuffix = "Steam" } })
+(config with { CertificateThumbprint = new string('a', 40) }).Validate();
+checks++;
+foreach (var bad in new[] { config with { ServerAddress = "example.com" }, config with { AccountUrl = "http://x" }, config with { SavedDirSuffix = "Steam" }, config with { CertificateThumbprint = "zz" } })
 {
     try { bad.Validate(); Check(false, "invalid config accepted"); } catch (InvalidDataException) { checks++; }
 }
 
+// ---------- Client versions ----------
+Check(ClientVersions.Selected(config).Id == ClientVersion.DefaultId && !ClientVersions.Selected(config).IsSteam, "default client version is 2.0.6.0");
+Check(ClientVersions.Selected(config with { SelectedClientVersion = "steam-latest" }).IsSteam, "steam version selectable");
+Check(ClientVersions.Selected(config with { SelectedClientVersion = "nope" }).Id == ClientVersion.DefaultId, "unknown selection falls back");
+Check(ClientVersions.Arguments(["-steam", "-lp:x"], new("a", "a", "steam", null, ["-foo", "-steam"])).SequenceEqual(["-steam", "-lp:x", "-foo"]), "extra launch args appended once");
+try { (config with { ClientVersions = [new("x", "x", "other")] }).Validate(); Check(false, "bad kind accepted"); } catch (InvalidDataException) { checks++; }
+{
+    var temp = Directory.CreateTempSubdirectory("a2versions").FullName;
+    var cvSteamRoot = Path.Combine(temp, "Steam"); var library = Path.Combine(temp, "Lib");
+    Directory.CreateDirectory(Path.Combine(cvSteamRoot, "steamapps")); Directory.CreateDirectory(Path.Combine(library, "steamapps", "common", "AION2"));
+    File.WriteAllText(Path.Combine(cvSteamRoot, "steamapps", "libraryfolders.vdf"), "\"libraryfolders\"\n{\n\"1\"\n{\n\"path\" \"" + library.Replace("\\", "\\\\") + "\"\n}\n}\n");
+    File.WriteAllText(Path.Combine(library, "steamapps", "appmanifest_3393110.acf"), "\"AppState\"\n{\n\"installdir\" \"AION2\"\n\"buildid\" \"26262663\"\n}\n");
+    var steamVersion = ClientVersion.Defaults[1];
+    Check(ClientVersions.SteamFolder(steamVersion, config, new SteamInstall(cvSteamRoot)) == Path.Combine(library, "steamapps", "common", "AION2"), "steam client found via libraryfolders.vdf");
+    Check(ClientVersions.SteamFolder(steamVersion, config with { SteamClientPath = temp }, new SteamInstall(cvSteamRoot)) == temp, "steamClientPath overrides detection");
+    var json = Path.Combine(temp, "launcher.json");
+    File.WriteAllText(json, """{"name":"N","custom":1}""");
+    ClientVersions.SaveSelection(json, config, "steam-latest");
+    var saved = File.ReadAllText(json);
+    Check(saved.Contains("\"selectedClientVersion\": \"steam-latest\"") && saved.Contains("\"custom\": 1"), "selection persisted, other keys kept");
+    File.Delete(json);
+    ClientVersions.SaveSelection(json, config, "2.0.6.0");
+    Check(LauncherConfig.Load(json).SelectedClientVersion == "2.0.6.0", "new launcher.json loads with selection");
+    Directory.Delete(temp, true);
+}
 // ---------- Account API: kept session, launcher manifest and self-update ----------
 var requests = new List<(string Method, string Path, string Body, string? Bearer)>();
 var launcherBytes = "new launcher"u8.ToArray();
