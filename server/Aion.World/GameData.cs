@@ -441,12 +441,26 @@ public sealed class GameData
     public IReadOnlyList<int>? ESlotComboStack(string className) =>
         classes.EComboStacks?.GetValueOrDefault(className);
 
-    /// <summary>First skill in the class E combo stack that is auto-learned at this level (what the client tends to cast).</summary>
+    /// <summary>
+    /// First E-key context skill the client would cast: walk the slot stack in hotbar order and skip skills that are
+    /// not learned yet or still grey (SkillCond / spirit requirement), same as the client's priority walk.
+    /// </summary>
     public int? FirstLearnedESlotComboSkill(string className, int level)
     {
-        if (classes.EComboStacks?.GetValueOrDefault(className) is not { } stack) return null;
+        var profile = profiles.Values.FirstOrDefault(p => p.Class == className);
+        if (profile is null) return null;
+        var barSkill = profile.DefaultBar().FirstOrDefault(s => s.Slot == 7).SkillId;
+        if (barSkill <= 0) return null;
         var known = LearnedSkills(className, level).Select(k => k.SkillId).ToHashSet();
-        return stack.FirstOrDefault(known.Contains);
+        foreach (var id in DefaultContextSkills(barSkill))
+        {
+            if (id <= 0 || !known.Contains(id)) continue;
+            if (Skill(id) is not { } def) continue;
+            if (def.SkillCond is not null) continue;
+            if (def.NeedsSpirit is { Length: > 0 }) continue;
+            return id;
+        }
+        return known.Contains(barSkill) ? barSkill : null;
     }
 
     /// <summary>Every skill id that may be cast from the E-key stack for this class.</summary>

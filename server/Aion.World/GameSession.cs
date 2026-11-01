@@ -1800,6 +1800,9 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         var normalDodge = dodging && started == combatDodge + 1 && learned.Contains(combatDodge);
         var definition = normalDodge ? data.Skill(combatDodge) is { } dodge ? dodge with { Cost = dodge.Cost with { Sp = NormalDodgeSp } } : null
             : ResolveSkillDefinition(skill);
+        // Hold-charge skills (Deadshot): the client opens the charge with 0x381a; 0x3800 would fire instantly with no pose or cooldown pacing.
+        if (!releasingSkillCharge && definition is not null && UsesHoldChargeFlow(definition))
+            return [CastReplyFor(request, false)];
         var cooldownKey = data.CooldownGroup(normalDodge ? combatDodge : (data.Skill(skill) is not null ? skill : SkillFamilyId(skill)));
         var cost = definition?.Cost ?? new SkillCost(0, 0, 0);
         if (BuffStat("MPUseDecrease") is > 0 and var cheaper) cost = cost with { Mp = cost.Mp * Math.Max(0, 10_000 - cheaper) / 10_000 };

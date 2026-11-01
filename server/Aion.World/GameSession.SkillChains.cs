@@ -121,9 +121,17 @@ public sealed partial class GameSession
         return stack;
     }
 
-    /// <summary>Allowed ids in a slot's four context rows (class default stack for the bar skill).</summary>
-    HashSet<int> AllowedContextSkillIds(int barSkillId) =>
-        data.DefaultContextSkills(barSkillId).Where(id => id > 0).ToHashSet();
+    /// <summary>Allowed ids in a slot's four context rows (class default stack plus the class E-combo / SkillCond stack skills).</summary>
+    HashSet<int> AllowedContextSkillIds(int barSkillId)
+    {
+        var allowed = data.DefaultContextSkills(barSkillId).Where(id => id > 0).ToHashSet();
+        if (Profile() is { Class: var cls })
+        {
+            foreach (var id in data.ESlotComboSkills(cls))
+                if (id > 0) allowed.Add(id);
+        }
+        return allowed;
+    }
 
     /// <summary>Saved or default context rows match the class stack (no foreign skills such as Deadshot on the E combo slot).</summary>
     bool ContextStackValid(int barSkillId, IReadOnlyList<int> stack)
