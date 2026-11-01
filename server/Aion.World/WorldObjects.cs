@@ -167,6 +167,17 @@ public static class WorldObjects
 
     public static IReadOnlyList<TriggerArea> TriggersOn(int mapId) =>
         fieldComposed.Value.Triggers.TryGetValue(mapId, out var composed) ? composed : Map(mapId)?.Triggers ?? [];
+
+    /// <summary>A field EnvObj portal that opens the dungeon (when there is no EnterInstanceLayer trigger entry in map-events).</summary>
+    public static (int Map, Vector3d At)? PortalEntryOf(int dungeonId)
+    {
+        foreach (var (mapId, objects) in fieldComposed.Value.Objects)
+            foreach (var o in objects)
+                if (o.Portal is { } portal && portal.Contains(dungeonId))
+                    return (mapId, o.At);
+        return null;
+    }
+
     internal static IEnumerable<(int Map, WorldObject Object)> AllObjects =>
         maps.Value.SelectMany(m => m.Value.Objects.Select(o => (int.Parse(m.Key, System.Globalization.CultureInfo.InvariantCulture), o)));
 

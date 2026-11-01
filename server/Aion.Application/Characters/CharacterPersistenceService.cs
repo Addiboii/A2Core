@@ -52,6 +52,21 @@ public sealed class CharacterPersistenceService(ICharacterStateRepository reposi
             cancellationToken);
     }
 
+    public Task<long?> SaveInstanceReturnAsync(VerifiedAccount account, Guid characterId, long expectedRevision,
+        int? returnMap, double? returnX, double? returnY, double? returnZ, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(account);
+        if (expectedRevision < 0) throw new ArgumentException("Invalid revision.");
+        if (returnMap is <= 0) returnMap = null;
+        if (returnMap is null) returnX = returnY = returnZ = null;
+        else if (returnX is null or double.NaN or double.PositiveInfinity or double.NegativeInfinity
+                 || returnY is null or double.NaN or double.PositiveInfinity or double.NegativeInfinity
+                 || returnZ is null or double.NaN or double.PositiveInfinity or double.NegativeInfinity)
+            throw new ArgumentException("Invalid instance return position.");
+        return repository.SaveInstanceReturnOwnedAsync(account.AccountId, characterId, expectedRevision, returnMap,
+            returnX, returnY, returnZ, cancellationToken);
+    }
+
     private static void ValidateObjects(JsonElement position, JsonElement resources)
     {
         if (position.ValueKind != JsonValueKind.Object || resources.ValueKind != JsonValueKind.Object)

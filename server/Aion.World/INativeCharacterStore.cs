@@ -187,6 +187,8 @@ public interface INativeCharacterStore : IAsyncDisposable
     /// reloads once and keeps other edits.
     /// </summary>
     Task<CharacterState> SavePositionAsync(CharacterState state, int mapId, Vector3d position, CancellationToken ct);
+    /// <summary>The field map and spot the player entered their instance or quest dungeon from; null clears it.</summary>
+    Task<CharacterState> SaveInstanceReturnAsync(CharacterState state, int? mapId, Vector3d? position, CancellationToken ct);
     /// <summary>The character's stored items (bag, equipment, storage).</summary>
     Task<IReadOnlyList<ItemState>> InventoryAsync(Guid character, CancellationToken ct);
     /// <summary>Sum of Quna item stacks for the whole account (platform GameCash wallet).</summary>
@@ -264,6 +266,19 @@ public static class StoredCharacters
 
     public static JsonElement PositionJson(Vector3d position) =>
         JsonSerializer.SerializeToElement(new { x = position.X, y = position.Y, z = position.Z });
+
+    public static (int Map, Vector3d At)? InstanceReturn(CharacterState state)
+    {
+        var p = state.Progress;
+        if (p.ReturnMap is not > 0 || p.ReturnX is not { } x || p.ReturnY is not { } y || p.ReturnZ is not { } z) return null;
+        var at = new Vector3d(x, y, z);
+        return at.IsFinite ? (p.ReturnMap.Value, at) : null;
+    }
+
+    public static CharacterProgress WithInstanceReturn(CharacterProgress progress, int? mapId, Vector3d? position) =>
+        mapId is > 0 && position is { IsFinite: true } at
+            ? progress with { ReturnMap = mapId, ReturnX = at.X, ReturnY = at.Y, ReturnZ = at.Z }
+            : progress with { ReturnMap = null, ReturnX = null, ReturnY = null, ReturnZ = null };
 
     /// <summary>Name-based UUID (RFC 4122 version 5, SHA-1), as Python's uuid.uuid5.</summary>
     public static Guid Uuid5(Guid ns, string name)

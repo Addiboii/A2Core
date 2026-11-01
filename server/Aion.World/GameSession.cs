@@ -1387,13 +1387,9 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
                 // same spot, any other dungeon at the race's starting point (live 2026-10-18: a relog from the HQ001 layer).
                 else if (IsInstanceMap(savedMap))
                 {
-                    var home = HomeMapOf(state.Race);
                     var dungeonMap = savedMap;
-                    (savedMap, savedAt) = MapEventData.Volume(savedMap) is { } overlay ? (overlay.Base, savedAt)
-                        : data.MapStart(home) is { } start ? (home, start.Position) : (GamePackets.SpawnMapId, GamePackets.SpawnPosition);
-                    // A solo dungeon a quest still sends the player into (an event started by an open quest step): a fresh copy
-                    // from its start, the field spot kept as the way out (live 2026-10-25: a relog in the Ascension Subspace left
-                    // the player at the base, the lake cave that leads there already cleared and AQ1602000 open for good).
+                    (savedMap, savedAt) = StoredCharacters.InstanceReturn(state) is { } stored ? stored
+                        : FieldExitFallback(dungeonMap, state.Race, savedAt);
                     profileRace = state.Race == 2 ? 2 : 1;
                     if (QuestDungeonResume(dungeonMap, now) is { } resume)
                     {
@@ -2273,7 +2269,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         // An instance layer or dungeon is a private copy (the entry set it; a staff move gets one too); elsewhere the shared map.
         var previousInstance = instanceKey;
         instanceKey = !IsInstanceMap(mapId) ? 0 : instanceKey != 0 ? instanceKey : playerKey;
-        if (!IsInstanceMap(mapId)) { instanceExitAt = null; instanceReturn = null; clearExit = null; ResetWalkInLayerState(); }
+        if (!IsInstanceMap(mapId)) { instanceExitAt = null; instanceReturn = null; clearExit = null; ResetWalkInLayerState(); ForgetPersistedInstanceReturn(); }
         else if (mapId != worldMap) ResetWalkInLayerState();
         moveReason = reason;
         moveEffect = effect;
@@ -2868,18 +2864,23 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         await FlushDungeonCooltimesAsync(ct);
         await FlushContentResetWorkAsync(ct);
         await FlushBuffSettingsAsync(now, ct, force: true);
+        await FlushPendingInstanceReturnAsync(ct);
         if (InWorld && Store is { } logoutStore && selected is { } logoutWho)
             selected = await logoutStore.RecordLogoutAsync(logoutWho, now, ct) ?? logoutWho;
     }
 
-    /// <summary>Saves a selected stored character's position every 30 s when it moved, or now (force).</summary>
+    /// <summary>Saves a selected stored character's position every 30 s when it moved, or now (force). Instance return is flushed whenever this runs, even when the position checkpoint is skipped.</summary>
     public async Task CheckpointAsync(long now, bool force, CancellationToken ct = default)
     {
-        if (Store is null || selected is null || position is not { } at || at == savedPosition) return;
-        if (!force && now < checkpointAt) return;
-        checkpointAt = now + CheckpointMs;
+        if (Store is null || selected is null) return;
         try
         {
+            await FlushPendingInstanceReturnAsync(ct);
+            if (position is not { } at) return;
+            var staleMap = selected.Progress.MapId != worldMap;
+            if (!force && now < checkpointAt && !staleMap) return;
+            if (at == savedPosition && !staleMap) return;
+            checkpointAt = now + CheckpointMs;
             selected = await Store.SavePositionAsync(selected, worldMap, at, ct);
             if (TurnStore.Unwrap(Store) is IGameplayFlushStore flush && await flush.FlushAsync(ct) is { } flushed)
                 selected = flushed;

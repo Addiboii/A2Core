@@ -13,4 +13,6 @@ public interface ICharacterStateRepository
     /// <summary>Checkpoint map/position only; level, experience, and resources stay as stored.</summary>
     Task<long?> SavePositionOwnedAsync(Guid accountId, Guid characterId, long expectedRevision, int mapId,
         JsonElement position, CancellationToken cancellationToken);
+    Task<long?> SaveInstanceReturnOwnedAsync(Guid accountId, Guid characterId, long expectedRevision, int? returnMap,
+        double? returnX, double? returnY, double? returnZ, CancellationToken cancellationToken);
 }

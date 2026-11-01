@@ -19,6 +19,7 @@ public sealed class ServiceNativeCharacterStore(string token, WorldIdentity iden
 {
     bool closed;
     (CharacterState State, int MapId, Vector3d Position)? pendingLocation;
+    (CharacterState State, int? MapId, Vector3d? Position)? pendingInstanceReturn;
     List<ItemState>? itemCache;
     Guid itemCacheCharacter;
 
@@ -79,27 +80,62 @@ public sealed class ServiceNativeCharacterStore(string token, WorldIdentity iden
         return Task.FromResult(state with { Progress = progress });
     }
 
+    public Task<CharacterState> SaveInstanceReturnAsync(CharacterState state, int? mapId, Vector3d? position, CancellationToken ct)
+    {
+        if (mapId is > 0 && position is not { IsFinite: true }) throw new ArgumentException("Invalid instance return");
+        var progress = StoredCharacters.WithInstanceReturn(state.Progress, mapId, position);
+        pendingInstanceReturn = (state with { Progress = progress }, mapId, position);
+        return Task.FromResult(state with { Progress = progress });
+    }
+
     public async Task<CharacterState?> FlushAsync(CancellationToken ct = default)
     {
         if (closed) return null;
-        if (pendingLocation is not { } pending) return null;
-        var (state, mapId, position) = pending;
-        for (var attempt = 0; ; attempt++)
+        if (pendingLocation is null && pendingInstanceReturn is null) return null;
+        CharacterState? flushed = null;
+        if (pendingLocation is { } pending)
         {
-            await ValidateAsync(ct);
-            var positionJson = StoredCharacters.PositionJson(position);
-            var revision = await persistence.SavePositionAsync(identity.Account, state.Summary.CharacterId, state.Revision, mapId, positionJson, ct);
-            var progress = state.Progress with { MapId = mapId, Position = positionJson };
-            if (revision is { } saved)
+            var (state, mapId, position) = pending;
+            for (var attempt = 0; ; attempt++)
             {
-                pendingLocation = null;
-                return state with { Progress = progress, Revision = saved };
+                await ValidateAsync(ct);
+                var positionJson = StoredCharacters.PositionJson(position);
+                var revision = await persistence.SavePositionAsync(identity.Account, state.Summary.CharacterId, state.Revision, mapId, positionJson, ct);
+                var progress = state.Progress with { MapId = mapId, Position = positionJson };
+                if (revision is { } saved)
+                {
+                    pendingLocation = null;
+                    flushed = state with { Progress = progress, Revision = saved };
+                    break;
+                }
+                if (attempt > 0) throw new InvalidOperationException("Character changed concurrently.");
+                state = await persistence.LoadAsync(identity.Account, state.Summary.CharacterId, ct)
+                    ?? throw new InvalidOperationException("Character is no longer available.");
+                pendingLocation = (state, mapId, position);
             }
-            if (attempt > 0) throw new InvalidOperationException("Character changed concurrently.");
-            state = await persistence.LoadAsync(identity.Account, state.Summary.CharacterId, ct)
-                ?? throw new InvalidOperationException("Character is no longer available.");
-            pendingLocation = (state, mapId, position);
         }
+        if (pendingInstanceReturn is { } retPending)
+        {
+            var (state, mapId, position) = retPending;
+            for (var attempt = 0; ; attempt++)
+            {
+                await ValidateAsync(ct);
+                var revision = await persistence.SaveInstanceReturnAsync(identity.Account, state.Summary.CharacterId, state.Revision,
+                    mapId, position?.X, position?.Y, position?.Z, ct);
+                var progress = StoredCharacters.WithInstanceReturn(state.Progress, mapId, position);
+                if (revision is { } saved)
+                {
+                    pendingInstanceReturn = null;
+                    flushed = (flushed ?? state) with { Progress = progress, Revision = saved };
+                    break;
+                }
+                if (attempt > 0) throw new InvalidOperationException("Character changed concurrently.");
+                state = await persistence.LoadAsync(identity.Account, state.Summary.CharacterId, ct)
+                    ?? throw new InvalidOperationException("Character is no longer available.");
+                pendingInstanceReturn = (state, mapId, position);
+            }
+        }
+        return flushed;
     }
 
     async Task RefreshItemCacheAsync(Guid character, CancellationToken ct)

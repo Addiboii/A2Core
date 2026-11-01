@@ -77,7 +77,7 @@ public sealed partial class GameSession
         if (instance.Quest is { } code && !IsAdmin && questLog is not null && questLog.Get(code) is not { Status: QuestLog.Incomplete }) return [];
         instanceKey = playerKey;
         instanceExitAt = null;
-        instanceReturn = (worldMap, at);
+        RememberInstanceReturn(worldMap, at);
         var arrival = new Vector3d(instance.Arrival[0], instance.Arrival[1], instance.Arrival[2]);
         return InstanceMove(instance.MapId, arrival, now);
     }
@@ -97,6 +97,8 @@ public sealed partial class GameSession
         else if (hand is not null) (map, exit) = (hand.Exit.Map, new Vector3d(hand.Exit.Position[0], hand.Exit.Position[1], hand.Exit.Position[2]));
         else if (instanceReturn is { } back) (map, exit) = back;
         else if (volume is not null) (map, exit) = (volume.Base, position ?? spawn?.Position ?? default);
+        else if (MapEventData.DungeonOfMap(worldMap) is not null || hand is not null)
+            (map, exit) = FieldExitFallback(worldMap, Profile()?.Race ?? 1, position);
         // No way out recorded: the race's starting map (Poeta for Light, Ishalgen for Dark) at its start point.
         else (map, exit) = (HomeMap, data.MapStart(HomeMap)?.Position ?? GamePackets.SpawnPosition);
         if (to is null && hand is null && volume is { } overlay && overlay.Base == map && string.Equals(mode, "CurrentPosition", StringComparison.OrdinalIgnoreCase) && position is { } here)
@@ -109,6 +111,7 @@ public sealed partial class GameSession
         instanceKey = 0;
         instanceExitAt = null;
         instanceReturn = null;
+        ForgetPersistedInstanceReturn();
         // Back outside: the entry triggers there wait until the player has stepped out of them (a way out that lands in or
         // next to an entry area pulled the player straight back in, 2026-10-30 HQ003 14:11:47-49).
         dungeonTriggerNeedsOutside = true;

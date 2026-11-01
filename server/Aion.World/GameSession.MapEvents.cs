@@ -38,6 +38,49 @@ public sealed partial class GameSession : IMapEventHost
     (string Point, string Mode, long DueMs)? pendingExit;
     /// <summary>The map and position the player entered the dungeon from (the way back for LastPosition exits).</summary>
     (int Map, Vector3d At)? instanceReturn;
+    (int Map, Vector3d At)? pendingInstanceReturnSave;
+    bool pendingInstanceReturnClear;
+
+    void RememberInstanceReturn(int map, Vector3d at)
+    {
+        instanceReturn = (map, at);
+        pendingInstanceReturnSave = (map, at);
+        pendingInstanceReturnClear = false;
+    }
+
+    void ForgetPersistedInstanceReturn()
+    {
+        pendingInstanceReturnSave = null;
+        pendingInstanceReturnClear = true;
+    }
+
+    /// <summary>Where a cleared or abandoned instance sends the player when nothing else was recorded.</summary>
+    (int Map, Vector3d At) FieldExitFallback(int dungeonMapId, int race, Vector3d? here = null)
+    {
+        var dungeonId = MapEventData.DungeonIdOfMap(dungeonMapId);
+        if (dungeonId != 0)
+        {
+            if (MapEventData.EntryTriggerOf(dungeonId) is { } entry) return (entry.BaseMap, entry.At);
+            if (WorldObjects.PortalEntryOf(dungeonId) is { } portal) return portal;
+        }
+        if (MapEventData.Volume(dungeonMapId) is { } overlay) return (overlay.Base, here ?? spawn?.Position ?? default);
+        var home = HomeMapOf(race);
+        return (home, data.MapStart(home)?.Position ?? GamePackets.SpawnPosition);
+    }
+
+    async Task FlushPendingInstanceReturnAsync(CancellationToken ct)
+    {
+        if (Store is null || selected is null) return;
+        if (!pendingInstanceReturnClear && pendingInstanceReturnSave is null) return;
+        int? map = pendingInstanceReturnSave?.Map;
+        Vector3d? at = pendingInstanceReturnSave?.At;
+        if (pendingInstanceReturnClear) { map = null; at = null; }
+        pendingInstanceReturnSave = null;
+        pendingInstanceReturnClear = false;
+        selected = await Store.SaveInstanceReturnAsync(selected, map, at, ct);
+        if (TurnStore.Unwrap(Store) is IGameplayFlushStore flush && await flush.FlushAsync(ct) is { } flushed)
+            selected = flushed;
+    }
     long mapEventNow;
     static int nextMapEventId = 0x149942;   // the official run's id; one per run on this host
 
@@ -260,7 +303,7 @@ public sealed partial class GameSession : IMapEventHost
             pendingExit = null;
             if (worldPlayer?.Map is { } oldInst) oldInst.Leave(worldPlayer);
         }
-        instanceReturn = (worldMap, at);
+        RememberInstanceReturn(worldMap, at);
         instanceKey = targetCopy;
         instanceExitAt = null;
         // A door moves the player across the layer: the seamless layer move (12 / 0x41) left the client outside while the server

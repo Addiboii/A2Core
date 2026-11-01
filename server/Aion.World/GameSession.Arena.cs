@@ -144,7 +144,7 @@ public sealed partial class GameSession
     List<byte[]> EnterArena(ArenaMatch match, long now)
     {
         if (resources is null || worldPlayer is null || reloading || ArenaPoints(match, match.TeamOf(worldPlayer)) is not { } points) return [];
-        instanceReturn = (worldMap, position ?? spawn?.Position ?? default);
+        RememberInstanceReturn(worldMap, position ?? spawn?.Position ?? default);
         instanceKey = match.RoomKey;
         instanceExitAt = null;
         if (dead) { dead = false; (resources.Hp, resources.Mp) = (resources.HpMax, resources.MpMax); }

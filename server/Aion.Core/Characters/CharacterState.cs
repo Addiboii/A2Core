@@ -8,7 +8,8 @@ public sealed record NewCharacter(int WorldId, string Name, int CreationId,
     int VoiceType = 0, int? LobbySlot = null);
 
 public sealed record CharacterProgress(int Level, long Experience, int? MapId,
-    JsonElement Position, JsonElement Resources);
+    JsonElement Position, JsonElement Resources, int? ReturnMap = null, double? ReturnX = null, double? ReturnY = null,
+    double? ReturnZ = null);
 
 public sealed record CharacterState(CharacterSummary Summary, int CreationId,
     int Race, int Gender, byte[] Appearance, CharacterProgress Progress, long Revision,
