@@ -140,7 +140,7 @@ public interface INativeCharacterStore : IAsyncDisposable
     Task<IReadOnlyList<AchievementRecord>> AchievementsAsync(Guid character, CancellationToken ct) => Task.FromResult<IReadOnlyList<AchievementRecord>>([]);
     Task<IReadOnlyList<(int Group, int Step)>> GroupRewardsTakenAsync(Guid character, CancellationToken ct) => Task.FromResult<IReadOnlyList<(int, int)>>([]);
     Task<bool> SaveAchievementsAsync(Guid character, IReadOnlyList<AchievementRecord> records, CancellationToken ct) => Task.FromResult(false);
-    Task<bool> TakeAchievementRewardAsync(Guid character, int achievementId, int step, IReadOnlyList<(int TemplateId, long Count)> items, CancellationToken ct) => Task.FromResult(false);
+    Task<bool> TakeAchievementRewardAsync(Guid character, int achievementId, int step, int progressCount, IReadOnlyList<(int TemplateId, long Count)> items, CancellationToken ct) => Task.FromResult(false);
     Task<bool> TakeGroupRewardAsync(Guid character, int groupId, int step, IReadOnlyList<(int TemplateId, long Count)> items, CancellationToken ct) => Task.FromResult(false);
     Task<bool> SortBagAsync(Guid character, CancellationToken ct) => SortContainerAsync(character, "bag", ct);
     Task<bool> SortContainerAsync(Guid character, string location, CancellationToken ct) => Task.FromResult(false);

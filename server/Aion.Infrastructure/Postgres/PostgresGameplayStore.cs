@@ -1913,16 +1913,18 @@ public sealed class PostgresGameplayStore(NpgsqlDataSource source, ProgressionOp
                 await Scalar(c,t,"SELECT game.grant_item($1,$2,$3,$4,$5)",ct,character,build,template,count,Guid.NewGuid());
     }
 
-    public async Task<bool> TakeAchievementRewardAsync(VerifiedAccount account, Guid character, int achievementId, int step, IReadOnlyList<(int TemplateId, long Count)> items, CancellationToken ct=default)
+    public async Task<bool> TakeAchievementRewardAsync(VerifiedAccount account, Guid character, int achievementId, int step, int progressCount, IReadOnlyList<(int TemplateId, long Count)> items, CancellationToken ct=default)
     {
         if(step<1) throw new GameplayException("invalid_step");
         await using var c=await source.OpenConnectionAsync(ct); await using var t=await c.BeginTransactionAsync(ct);
         if(!await Own(c,t,account.AccountId,character,ct)) return false;
         var changed=await ExecuteCount(c,t,"""
-            INSERT INTO game.character_achievements(character_id,achievement_id,count,rewarded_step) VALUES($1,$2,0,$3)
-            ON CONFLICT (character_id,achievement_id) DO UPDATE SET rewarded_step=EXCLUDED.rewarded_step
+            INSERT INTO game.character_achievements(character_id,achievement_id,count,rewarded_step) VALUES($1,$2,$3,$4)
+            ON CONFLICT (character_id,achievement_id) DO UPDATE SET
+                rewarded_step=GREATEST(game.character_achievements.rewarded_step,EXCLUDED.rewarded_step),
+                count=GREATEST(game.character_achievements.count,EXCLUDED.count)
             WHERE game.character_achievements.rewarded_step<EXCLUDED.rewarded_step
-            """,ct,character,achievementId,(short)step);
+            """,ct,character,achievementId,Math.Max(progressCount,step),(short)step);
         if(changed==0) return false;
         await GrantRewards(c,t,character,items,ct);
         await Execute(c,t,"INSERT INTO audit.events(action,character_id,actor_id,details) VALUES('achievement_rewarded',$1,$2,$3)",ct,character,account.AccountId,

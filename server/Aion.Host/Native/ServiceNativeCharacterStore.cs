@@ -787,10 +787,10 @@ public sealed class ServiceNativeCharacterStore(string token, WorldIdentity iden
         return await game.SaveAchievementsAsync(identity.Account, character, records, ct);
     }
 
-    public async Task<bool> TakeAchievementRewardAsync(Guid character, int achievementId, int step, IReadOnlyList<(int TemplateId, long Count)> items, CancellationToken ct)
+    public async Task<bool> TakeAchievementRewardAsync(Guid character, int achievementId, int step, int progressCount, IReadOnlyList<(int TemplateId, long Count)> items, CancellationToken ct)
     {
         await ValidateAsync(ct);
-        return await game.TakeAchievementRewardAsync(identity.Account, character, achievementId, step, items, ct);
+        return await game.TakeAchievementRewardAsync(identity.Account, character, achievementId, step, progressCount, items, ct);
     }
 
     public async Task<bool> TakeGroupRewardAsync(Guid character, int groupId, int step, IReadOnlyList<(int TemplateId, long Count)> items, CancellationToken ct)

@@ -155,6 +155,8 @@ public sealed partial class GameSession
         foreach (var record in stored)
         {
             var state = new AchievementState { Count = record.Count, CompletedMs = record.CompletedAt?.ToUnixTimeMilliseconds() ?? 0, RewardedStep = record.RewardedStep, UpdatedMs = record.UpdatedAt.ToUnixTimeMilliseconds() };
+            if (Achievements.Of(record.Id) is { Type: "Attendance" })
+                state.Count = Math.Max(state.Count, state.RewardedStep);
             // Daily and weekly missions start over after their cycle (UTC days; weeks from Monday).
             if (Achievements.Of(record.Id) is { Reset: 1 or 2 } entry && ContentResetSchedule.AchievementCycleStartMs(entry.Reset, now) > state.UpdatedMs)
                 state = new AchievementState { UpdatedMs = now };
@@ -174,8 +176,17 @@ public sealed partial class GameSession
         return group.Category == "Attendance" && Achievements.OpenBoards(profileRace, now).Any(b => b.Achievement == entry.Id);
     }
 
-    static PacketWriter WriteState(PacketWriter w, int id, AchievementState? state) =>
-        w.I32(id).I32(state?.Count ?? 0).I64(state?.CompletedMs ?? 0).U8((byte)(state?.RewardedStep ?? 0));
+    static int AttendanceProgressCount(int count, int rewardedStep) => Math.Max(count, rewardedStep);
+
+    bool IsAttendanceBoardAchievement(int id) => Achievements.Boards.Any(b => b.Achievement == id);
+
+    PacketWriter WriteState(PacketWriter w, int id, AchievementState? state)
+    {
+        var count = state?.Count ?? 0;
+        var step = state?.RewardedStep ?? 0;
+        if (IsAttendanceBoardAchievement(id)) count = AttendanceProgressCount(count, step);
+        return w.I32(id).I32(count).I64(state?.CompletedMs ?? 0).U8((byte)step);
+    }
 
     /// <summary>AchievementList_NT at world entry: the listed achievements with their states, no group reward states.</summary>
     byte[] AchievementList(long now)
@@ -321,7 +332,8 @@ public sealed partial class GameSession
         var items = entry.StepRewards(step);
         if (Store is { } store && CharacterId is { } character)
         {
-            var ok = await Stored(async () => await store.TakeAchievementRewardAsync(character, id, step, items, ct) ? [[]] : []);
+            await FlushAchievementsAsync(now, ct, force: true);
+            var ok = await Stored(async () => await store.TakeAchievementRewardAsync(character, id, step, state.Count, items, ct) ? [[]] : []);
             if (ok.Count == 0) return null;
         }
         state.RewardedStep = step;
@@ -481,6 +493,7 @@ public sealed partial class GameSession
     /// <summary>Maps stored attendance achievement state to AccountContentsInfo value1/value2 game-day keys.</summary>
     internal static (int CheckDay, int RewardDay) AttendanceAccountValues(int count, int rewardedStep, long updatedMs, long now)
     {
+        count = AttendanceProgressCount(count, rewardedStep);
         if (count <= 0) return (0, 0);
         var todayStart = CycleStart(1, now);
         var checkDay = updatedMs >= todayStart ? ContentResetSchedule.GameDayKey(now) : ContentResetSchedule.GameDayKey(updatedMs);

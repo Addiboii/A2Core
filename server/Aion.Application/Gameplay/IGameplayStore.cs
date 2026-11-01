@@ -291,7 +291,7 @@ public interface IGameplayStore
     /// <summary>Upserts the given states.</summary>
     Task<bool> SaveAchievementsAsync(VerifiedAccount account, Guid character, IReadOnlyList<AchievementRecord> records, CancellationToken ct = default) => Task.FromResult(false);
     /// <summary>Grants a step's reward once (rewarded_step rises to the step); false when already rewarded.</summary>
-    Task<bool> TakeAchievementRewardAsync(VerifiedAccount account, Guid character, int achievementId, int step, IReadOnlyList<(int TemplateId, long Count)> items, CancellationToken ct = default) => Task.FromResult(false);
+    Task<bool> TakeAchievementRewardAsync(VerifiedAccount account, Guid character, int achievementId, int step, int progressCount, IReadOnlyList<(int TemplateId, long Count)> items, CancellationToken ct = default) => Task.FromResult(false);
     /// <summary>Grants a group reward step once.</summary>
     Task<bool> TakeGroupRewardAsync(VerifiedAccount account, Guid character, int groupId, int step, IReadOnlyList<(int TemplateId, long Count)> items, CancellationToken ct = default) => Task.FromResult(false);
     Task<IReadOnlyList<CollectionRecord>> CollectionsAsync(VerifiedAccount account, Guid character, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<CollectionRecord>>([]);
