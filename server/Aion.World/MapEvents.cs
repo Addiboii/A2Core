@@ -604,14 +604,27 @@ public sealed class MapEventRun
     static bool Names(MapEventObjective o, string spawnName) => o.Names.Any(n => NameMatches(n, spawnName));
 
     /// <summary>An NPC of this instance died (its NpcData id, spawn entry name); <paramref name="spawnerAlive"/>: others of its spawner still live.</summary>
-    public bool Killed(int npcId, string spawnName, bool hostile, bool spawnerAlive, long now) =>
-        Apply(o => o.Type switch
+    public bool Killed(int npcId, string spawnName, bool hostile, bool spawnerAlive, long now)
+    {
+        var changed = Apply(o => o.Type switch
         {
             "KillNpc" => (o.Npcs ?? []).Contains(npcId) || Names(o, spawnName),
             "KillSpawner" => Names(o, spawnName) && !spawnerAlive,
             "KillNpcRelationshipEntity" or "KillNpcSubtype" or "KillNpcCreatureType" => hostile,
             _ => false,
         }, now);
+        // A non-player kill never ran MapEventHp; death is 0% HP and must satisfy HpRemaining (Belgor / DQ1202013 step 8).
+        return changed | HpChanged(npcId, spawnName, 0, now);
+    }
+
+    /// <summary>
+    /// While a step still waits on HpRemaining at 1% or below for this NPC, non-player hits must not kill it (the script may
+    /// still need a talk or post-directive on the living NPC; the player's hit may finish it).
+    /// </summary>
+    public bool HoldsOpenHpRemainingAtOnePercent(int npcId, string spawnName) =>
+        Open.Any(x => x.Objective.Type == "HpRemaining"
+                      && int.TryParse(x.Objective.Value(1), NumberStyles.Integer, CultureInfo.InvariantCulture, out var limit) && limit >= 1
+                      && ((x.Objective.Npcs ?? []).Contains(npcId) || Names(x.Objective, spawnName)));
 
     /// <summary>
     /// The player talked to an NPC (the step talk, 0x8d2b kind 2; <paramref name="index"/> names the objective when the client said

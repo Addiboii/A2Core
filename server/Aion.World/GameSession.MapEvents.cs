@@ -536,17 +536,38 @@ public sealed partial class GameSession : IMapEventHost
         return DrainMapEvents();
     }
 
-    List<byte[]> MapEventHp(Target target, long now)
+    List<byte[]> MapEventHp(Target target, long now, bool playerCombat = true)
     {
-        if (ToCopyOwner(o => o.MapEventHp(target, now)) || mapEventRuns.Count == 0 || target.HpMax <= 0) return [];
+        if (ToCopyOwner(o => o.MapEventHp(target, now, playerCombat)) || mapEventRuns.Count == 0 || target.HpMax <= 0) return [];
         mapEventNow = now;
         var percent = (int)Math.Ceiling(target.Hp * 100.0 / target.HpMax);
         foreach (var run in mapEventRuns.ToList())
         {
-            run.CombatStarted(now);   // the player's own hit is a fight too (PCCombatStart), whether or not the client bracketed it
+            if (playerCombat) run.CombatStarted(now);   // the player's own hit is a fight too (PCCombatStart), whether or not the client bracketed it
             run.HpChanged(target.NpcId, target.Name, percent, now);
         }
         return DrainMapEvents();
+    }
+
+    int CapMapEventNonPlayerDamage(Target victim, int damage)
+    {
+        if (damage <= 0 || mapEventRuns.Count == 0) return damage;
+        foreach (var run in mapEventRuns)
+            if (run.HoldsOpenHpRemainingAtOnePercent(victim.NpcId, victim.Name))
+                return Math.Min(damage, Math.Max(0, victim.Hp - 1));
+        return damage;
+    }
+
+    void WireMapEventNpcCombatHooks(NpcAi ai, long now)
+    {
+        ai.OnNpcHpChanged = t => MapEventHp(t, now, playerCombat: false);
+        ai.CapNpcDamage = CapMapEventNonPlayerDamage;
+    }
+
+    void ClearMapEventNpcCombatHooks(NpcAi ai)
+    {
+        ai.OnNpcHpChanged = null;
+        ai.CapNpcDamage = null;
     }
 
     /// <summary>A talk with an NPC: the step talk (0x8d2b kind 2) names the objective; closing the dialog (0xe242) counts CloseNpc only.</summary>
@@ -678,8 +699,7 @@ public sealed partial class GameSession : IMapEventHost
                 foreach (var run in mapEventRuns)
                 {
                     if (run.Finished) continue;
-                    // The corner title is this packet. Sending it again puts the name back when the client dropped it.
-                    mapEventOut.Add(GamePackets.MapEventJoin(run.Id, run.Name, (byte)run.Status, run.StageOrder, run.WireStep, run.Goals, run.StartedMs, run.Variables));
+                    // Refresh progress only: resending 0x922e every 8 s re-ran join handling on long instance scripts (840001) without changing goals.
                     mapEventOut.Add(GamePackets.MapEventProgress(run.Id, (byte)run.Status, run.StageOrder, run.WireStep, run.Goals, run.Variables));
                 }
             }
@@ -1308,6 +1328,7 @@ public sealed partial class GameSession : IMapEventHost
                     t.Hp = Math.Max(0, t.Hp - amount);
                     mapEventOut.Add(RidePackets.AbnormalEffect(t.Key, playerKey, b.Uid, d.EffectId, d.Remaining, amount, b.SkillId));
                     mapEventOut.Add(GamePackets.NpcHp(t.Key, t.Hp));
+                    mapEventOut.AddRange(MapEventHp(t, now));
                     if (t.Dead) mapEventOut.AddRange(PlayerKilledNpc(t, b.SkillId, playerKey, now));
                     else if (amount > 0 && targets is not null) mapEventOut.AddRange(ai.Engage(targets, t, now, playerKey, amount));
                 }

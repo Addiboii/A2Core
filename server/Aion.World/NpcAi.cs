@@ -294,8 +294,10 @@ public sealed partial class NpcAi(Random rng, GameData? data = null)
         // A friendly NPC (Maard, Elvida) helps, but the player lands the kill. Otherwise the starter
         // packs die before anyone walks up to them and the camp looks empty.
         if (!attacker.Hostile && attacker.OwnerKey == 0 && victim.Hostile) damage = Math.Min(damage, Math.Max(0, victim.Hp - 1));
+        if (CapNpcDamage is { } cap) damage = cap(victim, damage);
         if (!victim.Immune) victim.Hp = Math.Max(0, victim.Hp - damage);
         var replies = new List<byte[]> { GamePackets.NpcHp(victim.Key, victim.Hp) };
+        if (OnNpcHpChanged is { } hpChanged) replies.AddRange(hpChanged(victim));
         LastAttacker = attacker.Key;
         if (victim.Dead) { npcKills.Add((victim, attacker)); return replies; }
         if (!victim.Held && (!brains.TryGetValue(victim.Key, out var mind) || mind.Mode is not (Mode.Scripted or Mode.Follow)))
@@ -447,6 +449,10 @@ public sealed partial class NpcAi(Random rng, GameData? data = null)
     /// <summary>The NPC died: it leaves combat (official 0x8d21 off after the kill) and drops a pending hit.</summary>
     /// <summary>A victim's defense by entity key (null: no reduction).</summary>
     public Func<int, int>? DefenseOf { get; set; }
+    /// <summary>After an NPC-vs-NPC hit changes victim HP (map event HpRemaining from summons and SetAggroNpc fights).</summary>
+    public Func<Target, List<byte[]>>? OnNpcHpChanged { get; set; }
+    /// <summary>Caps damage from another NPC before HP is applied (map event HpRemaining talk targets).</summary>
+    public Func<Target, int, int>? CapNpcDamage { get; set; }
 
     /// <summary>
     /// Quest / map-event kill targets on shared maps: leash return must not full-heal them (Gravi herbs, watchstones).
