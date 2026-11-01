@@ -1410,15 +1410,18 @@ public static class GamePackets
         return w.U8(0).ToArray();
     }
 
-    /// <summary>0x381b SkillChargingStart_RS (OBSERVED 2026-10-31): result u16, skill i32 (8 bytes).</summary>
+    /// <summary>0x381b SkillChargingStart_RS (OBSERVED 2026-10-31): result u16, skill i32.</summary>
     public static byte[] SkillChargingStartReply(int result, int skill) =>
         PacketWriter.Opcode(0x381b).U16(result).I32(skill).ToArray();
 
-    /// <summary>0x381c SkillChargingStart_NT (OBSERVED): actor varint, skill i32, level u8, target type u8 + key varint, yaw f32, x/y/z f32, charge rate f32, act u8 1.</summary>
+    /// <summary>
+    /// 0x381c SkillChargingStart_NT (live +0x157, OBSERVED Deadshot 2026-10-31): actor varint | skill i32 | level u8 |
+    /// target mask u8 2 | target varint | yaw f32 | Vec3 | charge rate f32 | act_move u8 | charging_act_id i32 (usmap).
+    /// </summary>
     public static byte[] SkillChargingStartNotify(int actorKey, int skillId, int skillLevel, int targetKey, float yaw, Vector3d location,
-        float chargeRate = 1.236f) =>
+        float chargeRate = 1.236f, byte actMoveType = 1, int chargingActId = 0) =>
         PacketWriter.Opcode(0x381c).Varint(actorKey).I32(skillId).U8(skillLevel).U8(2).Varint(targetKey).F32(yaw)
-            .F32((float)location.X).F32((float)location.Y).F32((float)location.Z).F32(chargeRate).U8(1).ToArray();
+            .F32((float)location.X).F32((float)location.Y).F32((float)location.Z).F32(chargeRate).U8(actMoveType).I32(chargingActId).ToArray();
 
     /// <summary>0x381e SkillChargingEnd_RS (OBSERVED): step u8, result u16, skill i32, i32 0, selected skill i32.</summary>
     public static byte[] SkillChargingEndReply(int result, int skill, int step, int selectedSkill) =>

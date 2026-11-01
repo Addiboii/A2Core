@@ -56,7 +56,7 @@ public sealed partial class GameSession
         var kill = GamePackets.Kill(playerKey, skill, killerKey, 0, "", dieType: 2, npcCasterDataId: npcDataId,
             npcDieActId: 0, reason: 1);
         worldPlayer?.Map?.Broadcast(worldPlayer, [kill]);
-        return [.. deathLimit, .. ForceDismount(), .. ClearBuffs(), kill, GamePackets.CombatState(playerKey, false)];
+        return [.. CancelPendingSkillCharge(sendStopReply: true), .. deathLimit, .. ForceDismount(), .. ClearBuffs(), kill, GamePackets.CombatState(playerKey, false)];
     }
 
     /// <summary>0x8d22 CharRespawn_RQ {ERespawnType u8, item uid i64}.</summary>

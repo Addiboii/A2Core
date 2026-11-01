@@ -371,13 +371,15 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
                 map.Broadcast(worldPlayer, MovementRelay(plain, reported));
             }
             var abandonedHeld = AbandonQueuedHeldCast(now);
-            return await WithMapEventClearsFlushedAsync([.. abandonedHeld, .. uncovered, .. entering], ct);
+            var chargeCancelled = pendingSkillCharge is not null ? CancelPendingSkillCharge(sendStopReply: true) : [];
+            return await WithMapEventClearsFlushedAsync([.. abandonedHeld, .. chargeCancelled, .. uncovered, .. entering], ct);
         }
         switch (header)
         {
             case 0x3800:
             {
-                var cast = CastReplies(plain, now);
+                var cast = new List<byte[]>(ClearOrphanSkillChargeAbnormals());
+                cast.AddRange(CastReplies(plain, now));
                 LogSkillCastFromReplies(plain, cast);
                 if (worldPlayer?.Map is { } castMap) castMap.Broadcast(worldPlayer, cast.Where(SharedCastPacket));
                 cast.AddRange(await SealStoneConsumedAsync(ct));
@@ -1507,13 +1509,14 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         pendingInstanceMove = false;
         var shortLoad = instanceMove && sameLevelMove && TestPiece(LayerPieceShortLoad);   // a dungeon on another level is a full load (unrecorded)
         sameLevelMove = false;
-        var replies = new List<byte[]>
+        var replies = SkillChargeMapEntryCleanup();
+        replies.AddRange(new List<byte[]>
         {
             // OBSERVED (capture 20261013 #371, #9676, #14305): the ticket is 0 in every load reply whatever 0x3621 carried;
             // the i32 after the position is 4 at the instance-layer entry and 1 at the world entry and the way back
             // (CANDIDATE: the map's kind; 2 came from an earlier sample and works at the world entry).
             GamePackets.LoadComplete(0, at, frame: IsInstanceMap(mapId) ? 4 : 2, charKey: playerKey),
-        };
+        });
         if (!shortLoad)
         {
             // Official order: the last ground height and the resource maxima before the appear.
@@ -1845,7 +1848,8 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             // Held-key duplicate 0x3800 (~17 ms): 0x3801 failure (no second 0x3802). Playtest 2026-10-31 #262 silent drop hid reason.
             return [CastReplyFor(request, false)];  // must not end another action
         }
-        var dismount = ForceDismount().Concat(InterruptItemCast()).ToList();
+        var dismount = (!releasingSkillCharge && pendingSkillCharge is not null ? CancelPendingSkillCharge(sendStopReply: true) : [])
+            .Concat(ForceDismount()).Concat(InterruptItemCast()).ToList();
         // The bomb thrown at a tower ends with the hit that breaks it; any other cast of it uses a charge now.
         if (DestructibleEnvObjIndex(request.TargetKey) is null) dismount.AddRange(CarrySkillStarted(skill));
         if (!dodging) lastAcceptedCastMs = now;
@@ -2265,6 +2269,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
     {
         if (resources is null) throw new InvalidOperationException("Not in the world.");
         if (mapId != worldMap) LogTeleport(mapId, at, "teleport");
+        var ending = CancelPendingSkillCharge(sendStopReply: false);
         BroadcastWarpLeave(effect, cutscene.Length > 0);
         // An instance layer or dungeon is a private copy (the entry set it; a staff move gets one too); elsewhere the shared map.
         var previousInstance = instanceKey;
@@ -2275,7 +2280,6 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         moveEffect = effect;
         diving = false;
         surfaceZ = null;
-        var ending = new List<byte[]>();
         if (mapId != worldMap || instanceKey != previousInstance) ending.AddRange(DropCarried(ExpireEventFunction));
         if (mapId != worldMap)
         {
@@ -2659,7 +2663,8 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
                 || s3.BidSessions.Values.Any(b => !b.Resolved && b.PartyKey == lootParty.Key && now >= b.ExpiresAtMs))
         || options.World?.Airspace.NeedsTick(now) == true
         || options.World?.Resets.NeedsTick(now) == true
-        || pendingCombatHits.Exists(h => now >= h.DueMs);
+        || pendingCombatHits.Exists(h => now >= h.DueMs)
+        || NeedsSkillChargeTick(now);
 
     /// <summary>The time of the last request or tick (for work done from a request without its own clock).</summary>
     long lastNow;
@@ -2692,7 +2697,9 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         replies.AddRange(SummonExpiryTick(now));
         replies.AddRange(ElementalActivateTick(now));
         replies.AddRange(DrainQueuedHeldCast(now));
-        replies.AddRange(SkillChargeTimeoutTick(now));
+        replies.AddRange(await SkillChargeTimeoutTickAsync(now, ct));
+        if (pendingSkillCharge is not null)
+            skillChargeNextTickAtMs = now + SkillChargePendingTickMs;
         replies.AddRange(ChainTickReplies(now));
         replies.AddRange(await AutoPotionAsync(now, ct));
         if (resources is not null)

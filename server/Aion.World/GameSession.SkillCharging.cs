@@ -9,19 +9,32 @@ partial class GameSession
     public const ushort SkillChargingEndRq = 0x381d, SkillChargingEndRs = 0x381e;
     public const ushort SkillChargingStopRq = 0x381f, SkillChargingStopRs = 0x3820;
 
-    /// <summary>Hold-charge pose abnormal on the caster (OBSERVED 0x382a id 0x05F5E291, duration/expire -1 until release).</summary>
+    /// <summary>Hold-charge pose abnormal on the caster (OBSERVED 0x382a id 0x05F5E291).</summary>
     internal const int SkillChargingAbnormalId = 0x05F5E291;
+
+    internal const int SkillChargingAbnormalDurationMs = 5_000;
 
     CastRequest? pendingSkillCharge;
     CastRequest? lastSkillChargingStart;
     bool releasingSkillCharge;
     long skillChargeStartedAtMs;
-    int skillChargeAbnormalUid;
+    long lastChargeRepeatAtMs;
+    long skillChargeNextTickAtMs;
+    readonly List<int> skillChargeAbnormalUids = [];
 
-    /// <summary>Held charge with no 0x381d release: clear state so movement is not blocked indefinitely.</summary>
-    internal const int SkillChargeTimeoutMs = 30_000;
+    /// <summary>Charging abnormal duration on the caster (OBSERVED ~5000ms).</summary>
+    internal const int SkillChargeTimeoutMs = 5_000;
+
+    /// <summary>Max hold before auto-release while the client keeps sending 0x381a (live: 3s).</summary>
+    internal const int SkillChargeMaxHoldMs = 3_000;
+
+    /// <summary>Silence after the last 0x381a before treating the button as released.</summary>
+    internal const int SkillChargeReleaseSilenceMs = 400;
+
+    internal const int SkillChargePendingTickMs = 50;
 
     internal bool HasPendingSkillChargeForTests => pendingSkillCharge is not null;
+    internal IReadOnlyList<int> SkillChargeAbnormalUidsForTests => skillChargeAbnormalUids;
 
     /// <summary>0x381a body (dev SkillChargingStart_RQ): skill i32 | target type u8 + key varint | parts i32 | Vec3 | auto u8 — no yaw (use heading at accept).</summary>
     public static CastRequest? ParseSkillChargingStart(byte[] body)
@@ -97,38 +110,94 @@ partial class GameSession
         return false;
     }
 
-    static bool UsesHoldChargeFlow(SkillDefinition definition) =>
-        !SkillCooldown.IsBasicAutoAttack(definition) && definition.CastingMs <= 0;
+    /// <summary>Hold-to-charge skills (Deadshot): several damage rows on one timed shot, instant cast in data.</summary>
+    static bool HasHoldChargeStages(SkillDefinition definition)
+    {
+        if (SkillCooldown.IsBasicAutoAttack(definition) || definition.CastingMs > 0 || definition.Damage.Length < 2)
+            return false;
+        var timed = SkillTiming.TimedRows(definition);
+        return timed[^1] == timed[0];
+    }
+
+    static bool UsesHoldChargeFlow(SkillDefinition definition) => HasHoldChargeStages(definition);
+
+    static bool SameHoldChargeRequest(CastRequest a, CastRequest b) => a.SkillId == b.SkillId;
+
+    static int ChargeStepForElapsed(SkillDefinition definition, long chargeBuildMs)
+    {
+        var stages = definition.Damage.Length;
+        if (stages <= 1) return 1;
+        var capped = Math.Min(chargeBuildMs, SkillChargeMaxHoldMs);
+        var step = (int)(capped * stages / SkillChargeMaxHoldMs) + 1;
+        return Math.Clamp(step, 1, stages);
+    }
+
+    long HoldChargeBuildMs(long now) =>
+        Math.Min(SkillChargeMaxHoldMs, Math.Max(0, lastChargeRepeatAtMs - skillChargeStartedAtMs));
+
+    internal bool NeedsSkillChargeTick(long now) =>
+        pendingSkillCharge is not null && now >= skillChargeNextTickAtMs;
+
+    List<byte[]> ClearSkillChargeAbnormal()
+    {
+        if (skillChargeAbnormalUids.Count == 0) return [];
+        var uids = skillChargeAbnormalUids.ToList();
+        skillChargeAbnormalUids.Clear();
+        return [PlayerPackets.AbnormalRemove(playerKey, uids.Select(uid => (uid, (byte)1)).ToList())];
+    }
+
+    /// <summary>Leftover hold-charge abnormals with no pending charge (client/server desync).</summary>
+    List<byte[]> ClearOrphanSkillChargeAbnormals() =>
+        pendingSkillCharge is null ? ClearSkillChargeAbnormal() : [];
+
+    /// <summary>Ends a hold charge: optional 0x3820, always removes every tracked charging abnormal uid in one 0x382c.</summary>
+    List<byte[]> CancelPendingSkillCharge(bool sendStopReply)
+    {
+        var hadPending = pendingSkillCharge is not null;
+        var hadAbnormals = skillChargeAbnormalUids.Count > 0;
+        pendingSkillCharge = null;
+        lastSkillChargingStart = null;
+        skillChargeStartedAtMs = 0;
+        lastChargeRepeatAtMs = 0;
+        skillChargeNextTickAtMs = 0;
+        var replies = new List<byte[]>();
+        if (sendStopReply && (hadPending || hadAbnormals)) replies.Add(GamePackets.SkillChargingStopReply(0));
+        replies.AddRange(ClearSkillChargeAbnormal());
+        return replies;
+    }
+
+    int HoldChargeChargingActId(int skillId) => CastArea(skillId)?.ProjectileFor(0) ?? 0;
 
     List<byte[]> BeginSkillCharging(CastRequest request, SkillDefinition definition, long now)
     {
         pendingSkillCharge = request;
         lastSkillChargingStart = request;
         skillChargeStartedAtMs = now;
+        lastChargeRepeatAtMs = now;
+        skillChargeNextTickAtMs = now;
         selectedTarget = request.TargetKey;
-        skillChargeAbnormalUid = ++buffUid;
+        var uid = ++buffUid;
+        skillChargeAbnormalUids.Add(uid);
         var level = (byte)Math.Clamp(SkillLevel(request.SkillId), 1, 255);
         var yaw = (float)request.Yaw;
         var chargeRate = BitConverter.ToSingle(Convert.FromHexString("40359E3F"));
-        return
-        [
-            GamePackets.SkillChargingStartNotify(playerKey, request.SkillId, level, request.TargetKey, yaw, request.Location, chargeRate),
-            GamePackets.SkillChargingStartReply(0, request.SkillId),
-            PlayerPackets.AbnormalAdd(playerKey,
-            [
-                new AbnormalWire(skillChargeAbnormalUid, SkillChargingAbnormalId, -1, -1, CasterKey: playerKey, Level: level,
-                    SkillId: request.SkillId, RangeBase: request.Location),
-            ]),
-        ];
+        var chargingActId = HoldChargeChargingActId(request.SkillId);
+        var expireAt = now + SkillChargingAbnormalDurationMs;
+        return HoldChargeStartPackets(request, level, yaw, chargeRate, chargingActId, uid, expireAt);
     }
 
-    List<byte[]> ClearSkillChargeAbnormal()
-    {
-        if (skillChargeAbnormalUid == 0) return [];
-        var uid = skillChargeAbnormalUid;
-        skillChargeAbnormalUid = 0;
-        return [PlayerPackets.AbnormalRemove(playerKey, [(uid, 1)])];
-    }
+    List<byte[]> HoldChargeStartPackets(CastRequest request, byte level, float yaw, float chargeRate,
+        int chargingActId, int abnormalUid, long expireAt) =>
+    [
+        GamePackets.SkillChargingStartReply(0, request.SkillId),
+        GamePackets.SkillChargingStartNotify(playerKey, request.SkillId, level, request.TargetKey, yaw, request.Location, chargeRate,
+            chargingActId: chargingActId),
+        PlayerPackets.AbnormalAdd(playerKey,
+        [
+            new AbnormalWire(abnormalUid, SkillChargingAbnormalId, SkillChargingAbnormalDurationMs, expireAt, CasterKey: playerKey, Level: level,
+                SkillId: request.SkillId, RangeBase: request.Location),
+        ]),
+    ];
 
     static List<byte[]> OrderSkillChargeReleaseCast(List<byte[]> cast, byte[] endReply, IReadOnlyList<byte[]> afterHits)
     {
@@ -141,34 +210,72 @@ partial class GameSession
         return ordered;
     }
 
-    List<byte[]> SkillChargeTimeoutTick(long now)
+    async Task<List<byte[]>> SkillChargeTimeoutTickAsync(long now, CancellationToken ct)
     {
-        if (pendingSkillCharge is null || skillChargeStartedAtMs <= 0 || now - skillChargeStartedAtMs < SkillChargeTimeoutMs) return [];
-        pendingSkillCharge = null;
-        lastSkillChargingStart = null;
-        skillChargeStartedAtMs = 0;
-        var replies = new List<byte[]> { GamePackets.SkillChargingStopReply(0) };
-        replies.AddRange(ClearSkillChargeAbnormal());
-        return replies;
+        if (pendingSkillCharge is null || skillChargeStartedAtMs <= 0 || lastChargeRepeatAtMs <= 0)
+            return [];
+        var releaseSilence = now - lastChargeRepeatAtMs >= SkillChargeReleaseSilenceMs;
+        var releaseMax = now - skillChargeStartedAtMs >= SkillChargeMaxHoldMs;
+        if (!releaseSilence && !releaseMax)
+            return [];
+        var definition = ResolveSkillDefinition(pendingSkillCharge.SkillId);
+        var step = definition is not null ? ChargeStepForElapsed(definition, HoldChargeBuildMs(now)) : 1;
+        return await ReleasePendingSkillChargeAsync(step, pendingSkillCharge.SkillId, now, ct);
     }
 
     async Task<List<byte[]>> HandleSkillChargingStartAsync(byte[] plain, long now, CancellationToken ct)
     {
+        var replies = ClearOrphanSkillChargeAbnormals();
         if (ParseChargingCastWire(plain) is not { } request)
-            return [GamePackets.SkillChargingStartReply(1, SkillIdFromChargingWire(plain))];
+        {
+            replies.Add(GamePackets.SkillChargingStartReply(1, SkillIdFromChargingWire(plain)));
+            return replies;
+        }
         NoteHeldCastWireReceived(now);
         var definition = ResolveSkillDefinition(request.SkillId);
         if (definition is not null && SkillCooldown.IsBasicAutoAttack(definition))
         {
+            replies.AddRange(CancelPendingSkillCharge(sendStopReply: true));
             var cast = CastReplies(plain, now);
             cast.AddRange(await SealStoneConsumedAsync(ct));
             cast.AddRange(await QuestKillsAsync(ct));
             cast.AddRange(await KillExperienceAsync(ct));
-            return SkillChargingStartAck(cast, request);
+            replies.AddRange(SkillChargingStartAck(cast, request));
+            return replies;
         }
-        if (definition is null || !UsesHoldChargeFlow(definition) || !TryValidateCast(request, now, out _))
-            return [GamePackets.SkillChargingStartReply(1, request.SkillId)];
-        return BeginSkillCharging(request, definition, now);
+        if (definition is null || !TryValidateCast(request, now, out _))
+        {
+            replies.Add(GamePackets.SkillChargingStartReply(1, request.SkillId));
+            return replies;
+        }
+        if (!UsesHoldChargeFlow(definition))
+        {
+            replies.AddRange(CancelPendingSkillCharge(sendStopReply: true));
+            var cast = CastReplies(plain, now);
+            cast.AddRange(await SealStoneConsumedAsync(ct));
+            cast.AddRange(await QuestKillsAsync(ct));
+            cast.AddRange(await KillExperienceAsync(ct));
+            replies.AddRange(SkillChargingStartAck(cast, request));
+            return replies;
+        }
+        if (pendingSkillCharge is { } existing && SameHoldChargeRequest(existing, request))
+        {
+            lastChargeRepeatAtMs = now;
+            pendingSkillCharge = request with { Yaw = request.Yaw };
+            lastSkillChargingStart = pendingSkillCharge;
+            selectedTarget = request.TargetKey;
+            var level = (byte)Math.Clamp(SkillLevel(request.SkillId), 1, 255);
+            var yaw = (float)request.Yaw;
+            var chargeRate = BitConverter.ToSingle(Convert.FromHexString("40359E3F"));
+            var chargingActId = HoldChargeChargingActId(request.SkillId);
+            replies.Add(GamePackets.SkillChargingStartReply(0, request.SkillId));
+            replies.Add(GamePackets.SkillChargingStartNotify(playerKey, request.SkillId, level, request.TargetKey, yaw, request.Location,
+                chargeRate, chargingActId: chargingActId));
+            return replies;
+        }
+        if (pendingSkillCharge is not null) replies.AddRange(CancelPendingSkillCharge(sendStopReply: true));
+        replies.AddRange(BeginSkillCharging(request, definition, now));
+        return replies;
     }
 
     static (int Step, int SelectedSkill, bool PassLos, byte CasterDirection)? ParseSkillChargingEnd(byte[] body)
@@ -190,6 +297,33 @@ partial class GameSession
         }
     }
 
+    async Task<List<byte[]>> ReleasePendingSkillChargeAsync(int step, int selectedSkill, long now, CancellationToken ct)
+    {
+        var charge = pendingSkillCharge ?? lastSkillChargingStart;
+        if (charge is null) return [];
+        var skill = charge.SkillId;
+        pendingSkillCharge = null;
+        lastSkillChargingStart = null;
+        skillChargeStartedAtMs = 0;
+        lastChargeRepeatAtMs = 0;
+        skillChargeNextTickAtMs = 0;
+        var wire = BuildSkillStartWire(skill, charge.TargetKey, charge.Location, charge.Yaw);
+        releasingSkillCharge = true;
+        List<byte[]> cast;
+        try { cast = CastReplies(wire, now); }
+        finally { releasingSkillCharge = false; }
+        cast = cast.Where(p => Opcode(p) != 0x3801).ToList();
+        if (cast.Count == 0)
+            cast = [CastReplyFor(charge, false)];
+        var accepted = cast.Any(p => Opcode(p) == 0x3802);
+        var endReply = GamePackets.SkillChargingEndReply(accepted ? 0 : 1, skill, step, selectedSkill);
+        cast = OrderSkillChargeReleaseCast(cast, endReply, ClearSkillChargeAbnormal());
+        cast.AddRange(await SealStoneConsumedAsync(ct));
+        cast.AddRange(await QuestKillsAsync(ct));
+        cast.AddRange(await KillExperienceAsync(ct));
+        return cast;
+    }
+
     async Task<List<byte[]>> HandleSkillChargingEndAsync(byte[] plain, long now, CancellationToken ct)
     {
         if (ParseSkillChargingEnd(plain) is not { } end)
@@ -200,33 +334,17 @@ partial class GameSession
         var skill = end.SelectedSkill > 0 ? end.SelectedSkill : charge.SkillId;
         if (skill != charge.SkillId)
             return [GamePackets.SkillChargingEndReply(1, skill, end.Step, end.SelectedSkill)];
-        pendingSkillCharge = null;
-        lastSkillChargingStart = null;
-        skillChargeStartedAtMs = 0;
-        var wire = BuildSkillStartWire(skill, charge.TargetKey, charge.Location, charge.Yaw);
-        releasingSkillCharge = true;
-        List<byte[]> cast;
-        try { cast = CastReplies(wire, now); }
-        finally { releasingSkillCharge = false; }
-        cast = cast.Where(p => Opcode(p) != 0x3801).ToList();
-        if (cast.Count == 0)
-            cast = [CastReplyFor(charge, false)];
-        var accepted = cast.Any(p => Opcode(p) == 0x3802);
-        var endReply = GamePackets.SkillChargingEndReply(accepted ? 0 : 1, skill, end.Step, end.SelectedSkill > 0 ? end.SelectedSkill : skill);
-        cast = OrderSkillChargeReleaseCast(cast, endReply, ClearSkillChargeAbnormal());
-        cast.AddRange(await SealStoneConsumedAsync(ct));
-        cast.AddRange(await QuestKillsAsync(ct));
-        cast.AddRange(await KillExperienceAsync(ct));
-        return cast;
+        var selected = end.SelectedSkill > 0 ? end.SelectedSkill : skill;
+        return await ReleasePendingSkillChargeAsync(end.Step, selected, now, ct);
     }
 
     List<byte[]> HandleSkillChargingStop(byte[] plain)
     {
-        pendingSkillCharge = null;
-        lastSkillChargingStart = null;
-        skillChargeStartedAtMs = 0;
-        var replies = new List<byte[]> { GamePackets.SkillChargingStopReply(0) };
-        replies.AddRange(ClearSkillChargeAbnormal());
+        var replies = CancelPendingSkillCharge(sendStopReply: false);
+        replies.Insert(0, GamePackets.SkillChargingStopReply(0));
         return replies;
     }
+
+    /// <summary>Map load / world entry: drop any hold-charge state left from the previous map.</summary>
+    List<byte[]> SkillChargeMapEntryCleanup() => CancelPendingSkillCharge(sendStopReply: false);
 }
