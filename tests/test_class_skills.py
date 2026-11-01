@@ -55,8 +55,9 @@ class ClassSkillTests(unittest.TestCase):
         self.assertEqual(starter_weapon(starter_profile(2, 1)), 110260001)   # Light Templar sword
         self.assertEqual(starter_weapon(starter_profile(10, 2)), 110260008)  # Dark Templar sword
 
-    def test_levels_clamp_to_recovered_cap(self):
-        self.assertEqual((class_skills.clamp_level(0), class_skills.clamp_level(500)), (1, class_skills.data()['max_level']))
+    def test_levels_clamp_to_progression_cap(self):
+        self.assertEqual((class_skills.clamp_level(0), class_skills.clamp_level(500)),
+                         (1, class_skills.PROGRESSION_LEVEL_CAP))
 
     def test_skill_list_carries_skill_levels(self):
         body = build_skill_list([(11020000, 3), 11010000])
@@ -73,8 +74,10 @@ class GeneralCastTests(unittest.TestCase):
         definition = class_skills.skill(11290000)   # Mocking Blade: 200 MP, 20 s
         self.assertTrue(accepted(cast_control_replies(request(11290000), state, 1000)))
         self.assertEqual(state['resources']['mp'], 1000 - definition['cost']['mp'])
-        self.assertFalse(accepted(cast_control_replies(request(11290000), state, 1000 + definition['cooldown_ms'] - 1)))
-        self.assertTrue(accepted(cast_control_replies(request(11290000), state, 1000 + definition['cooldown_ms'])))
+        cd = definition['cooldown_ms']
+        tol = class_skills.COOLDOWN_CHECK_TOLERANCE_MS
+        self.assertFalse(accepted(cast_control_replies(request(11290000), state, 1000 + cd - tol - 1)))
+        self.assertTrue(accepted(cast_control_replies(request(11290000), state, 1000 + cd)))
 
     def test_skill_above_level_is_not_learned(self):
         self.assertFalse(accepted(cast_control_replies(request(11290000), state_for('Gladiator', 2), 1000)))
@@ -120,3 +123,19 @@ class NativeLevelTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class ChainVariantTests(unittest.TestCase):
+    def test_variant_chains_join_their_family(self):
+        def row(i, prev=0):
+            raw = {'ID': {'Value': i}, 'ChainSkillPrevSkillId': {'Value': prev}, 'SkillType': 'ESkillType::Active'}
+            return {'id': i, 'name': 'STR_SKILL_PC_RANGER_%d' % i, 'raw': raw, 'facts': raw}
+        skills = {i: row(i, p) for i, p in [(14020000, 0), (14030000, 14020000), (14020010, 0), (14030010, 14020010),
+                                            (14040010, 14030010), (14180010, 0), (14200010, 14180010)]}
+        cast = {'14020000': {'name': 'Rapid Fire', 'chain_prev': 0, 'damage': [{'flat': [1, 1]}]},
+                '14030000': {'name': 'Rapid Fire II', 'chain_prev': 14020000, 'damage': []}}
+        class_skills.merge_chain_skills(cast, skills, cast.keys())
+        self.assertEqual(cast['14040010']['chain_prev'], 14030010)
+        self.assertEqual(cast['14020010']['chain_next'], [14030010])
+        self.assertEqual(cast['14030010']['name'], 'Rapid Fire II')
+        self.assertNotIn('14200010', cast)

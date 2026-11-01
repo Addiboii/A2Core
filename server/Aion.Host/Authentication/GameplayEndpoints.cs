@@ -66,6 +66,18 @@ public static class GameplayEndpoints
             var account=await auth.AuthenticateAsync(Bearer(ctx),ct); if(account is null) return Results.Unauthorized();
             return Results.Ok(await game.AdminCatalogAsync(account,q??"",category,offset??0,limit??120,ct));
         });
+        admin.MapPost("/accounts/{id:guid}/totp/reset", async (Guid id, HttpContext ctx, IAccountAuthentication auth, ITotpAuthentication totp, IGameplayStore game, CancellationToken ct) =>
+        {
+            var account = await auth.AuthenticateAsync(Bearer(ctx), ct);
+            if (account is null) return Results.Unauthorized();
+            try
+            {
+                if (!(await game.AdminProfileAsync(account, ct)).Roles.Contains("admin")) return Results.StatusCode(403);
+            }
+            catch (GameplayException) { return Results.StatusCode(403); }
+            await totp.AdminResetAsync(id, ct);
+            return Results.NoContent();
+        });
         admin.MapPost("/commands",async(AdminCommand input,HttpContext ctx,IAccountAuthentication auth,IGameplayStore game,CancellationToken ct) =>
         {
             var account=await auth.AuthenticateAsync(Bearer(ctx),ct); if(account is null) return Results.Unauthorized();

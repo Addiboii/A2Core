@@ -19,11 +19,24 @@ public sealed class AccountClient : IDisposable
 
     public AccountClient(LauncherConfig config, HttpMessageHandler? handler = null)
     {
-        transport = handler ?? new HttpClientHandler();
+        transport = handler ?? Handler(config);
         var account = new Uri(config.AccountUrl);
         // The API answers within 20 seconds; the launcher download runs as long as it needs (cancellation stops it).
         http = new HttpClient(transport, disposeHandler: false) { BaseAddress = account, Timeout = TimeSpan.FromSeconds(20) };
         files = new HttpClient(transport, disposeHandler: false) { BaseAddress = account, Timeout = Timeout.InfiniteTimeSpan };
+    }
+
+    /// <summary>
+    /// A self-signed account certificate is accepted only when its thumbprint is the one in launcher.json.
+    /// No thumbprint keeps the normal system trust check.
+    /// </summary>
+    static HttpMessageHandler Handler(LauncherConfig config)
+    {
+        var handler = new HttpClientHandler();
+        if (config.CertificateThumbprint is not { Length: > 0 } pin) return handler;
+        handler.ServerCertificateCustomValidationCallback = (_, certificate, _, _) =>
+            certificate?.Thumbprint.Equals(pin, StringComparison.OrdinalIgnoreCase) == true;
+        return handler;
     }
 
     public bool SignedIn => token is not null;
@@ -32,6 +45,18 @@ public sealed class AccountClient : IDisposable
     public DateTimeOffset? ExpiresAt { get; private set; }
 
     sealed record Session([property: JsonPropertyName("token")] string Token, [property: JsonPropertyName("expiresAt")] DateTimeOffset? ExpiresAt);
+    sealed record LoginChallenge(
+        [property: JsonPropertyName("requiresTotp")] bool RequiresTotp,
+        [property: JsonPropertyName("challengeToken")] string? ChallengeToken,
+        [property: JsonPropertyName("expiresAt")] DateTimeOffset? ExpiresAt,
+        [property: JsonPropertyName("token")] string? Token);
+
+    /// <summary>Password sign-in: either a session or a TOTP challenge (no bearer token until <see cref="CompleteTotpAsync"/>).</summary>
+    public sealed record SignInResult(bool RequiresTotp, string? ChallengeToken, DateTimeOffset? ExpiresAt)
+    {
+        public bool IsSignedIn => !RequiresTotp;
+    }
+
     sealed record DownloadLink([property: JsonPropertyName("url")] string Url);
     public sealed record Launch(
         [property: JsonPropertyName("authorization")] string Authorization,
@@ -44,13 +69,35 @@ public sealed class AccountClient : IDisposable
         [property: JsonPropertyName("version")] string? Version);
 
     /// <summary><paramref name="remember"/> asks for a 30-day session instead of the standard 8 hours.</summary>
-    public async Task SignInAsync(string username, string password, bool remember = false, CancellationToken ct = default)
+    public async Task<SignInResult> SignInAsync(string username, string password, bool remember = false, CancellationToken ct = default)
     {
         using var response = await Send(HttpMethod.Post, "/api/accounts/login", new { username, password, remember }, ct);
-        if (response.StatusCode == HttpStatusCode.Unauthorized) throw new AccountException("Wrong username or password.");
-        if (response.StatusCode == HttpStatusCode.TooManyRequests) throw new AccountException("Too many attempts. Wait a minute and try again.");
-        if (!response.IsSuccessStatusCode) throw new AccountException($"The account server answered {(int)response.StatusCode}.");
-        var session = await response.Content.ReadFromJsonAsync<Session>(ct) ?? throw new AccountException("The account server sent no session.");
+        if (response.StatusCode == HttpStatusCode.Unauthorized) throw new AccountException(LauncherLoc.ErrWrongPassword);
+        if (response.StatusCode == HttpStatusCode.TooManyRequests) throw new AccountException(LauncherLoc.ErrTooManyAttempts);
+        if (!response.IsSuccessStatusCode) throw new AccountException(LauncherLoc.ErrAccountServerCode((int)response.StatusCode));
+        var body = await response.Content.ReadFromJsonAsync<LoginChallenge>(ct) ?? throw new AccountException(LauncherLoc.ErrNoSession);
+        if (body.RequiresTotp)
+        {
+            if (body.ChallengeToken is not { Length: > 0 }) throw new AccountException(LauncherLoc.ErrNoChallenge);
+            token = null;
+            ExpiresAt = null;
+            return new(true, body.ChallengeToken, body.ExpiresAt);
+        }
+        if (body.Token is not { Length: > 0 }) throw new AccountException(LauncherLoc.ErrNoSession);
+        token = body.Token;
+        ExpiresAt = body.ExpiresAt;
+        return new(false, null, body.ExpiresAt);
+    }
+
+    /// <summary>Completes sign-in after <see cref="SignInAsync"/> returned a TOTP challenge.</summary>
+    public async Task CompleteTotpAsync(string challengeToken, string? code, string? recoveryCode, CancellationToken ct = default)
+    {
+        using var response = await Send(HttpMethod.Post, "/api/accounts/login/totp",
+            new { challengeToken, code = string.IsNullOrWhiteSpace(code) ? null : code.Trim(), recoveryCode = string.IsNullOrWhiteSpace(recoveryCode) ? null : recoveryCode.Trim() }, ct);
+        if (response.StatusCode == HttpStatusCode.Unauthorized) throw new AccountException(LauncherLoc.TotpWrong);
+        if (!response.IsSuccessStatusCode) throw new AccountException(LauncherLoc.ErrAccountServerCode((int)response.StatusCode));
+        var session = await response.Content.ReadFromJsonAsync<Session>(ct) ?? throw new AccountException(LauncherLoc.ErrNoSession);
+        if (session.Token.Length == 0) throw new AccountException(LauncherLoc.ErrNoSession);
         token = session.Token;
         ExpiresAt = session.ExpiresAt;
     }
@@ -61,7 +108,7 @@ public sealed class AccountClient : IDisposable
         token = savedToken;
         using var response = await Send(HttpMethod.Get, "/api/accounts/me", null, ct);
         if (response.StatusCode == HttpStatusCode.Unauthorized) { token = null; return false; }
-        if (!response.IsSuccessStatusCode) { token = null; throw new AccountException($"The account server answered {(int)response.StatusCode}."); }
+        if (!response.IsSuccessStatusCode) { token = null; throw new AccountException(LauncherLoc.ErrAccountServerCode((int)response.StatusCode)); }
         return true;
     }
 
@@ -69,10 +116,10 @@ public sealed class AccountClient : IDisposable
     public async Task<Launch> AuthorizeLaunchAsync(CancellationToken ct = default)
     {
         using var response = await Send(HttpMethod.Post, "/api/client-launches", null, ct);
-        if (response.StatusCode == HttpStatusCode.Unauthorized) { token = null; throw new AccountException("Your session ended. Sign in again."); }
-        if (!response.IsSuccessStatusCode) throw new AccountException($"The account server answered {(int)response.StatusCode}.");
-        var launch = await response.Content.ReadFromJsonAsync<Launch>(ct) ?? throw new AccountException("The account server sent no launch.");
-        if (launch.Authorization.Length != 64 || !launch.Authorization.All(char.IsAsciiHexDigit)) throw new AccountException("Unexpected launch authorization.");
+        if (response.StatusCode == HttpStatusCode.Unauthorized) { token = null; throw new AccountException(LauncherLoc.ErrSessionEnded); }
+        if (!response.IsSuccessStatusCode) throw new AccountException(LauncherLoc.ErrAccountServerCode((int)response.StatusCode));
+        var launch = await response.Content.ReadFromJsonAsync<Launch>(ct) ?? throw new AccountException(LauncherLoc.ErrNoLaunch);
+        if (launch.Authorization.Length != 64 || !launch.Authorization.All(char.IsAsciiHexDigit)) throw new AccountException(LauncherLoc.ErrUnexpectedLaunch);
         return launch;
     }
 
@@ -81,9 +128,9 @@ public sealed class AccountClient : IDisposable
     {
         using var response = await Send(HttpMethod.Get, "/api/downloads/launcher/manifest", null, ct);
         if (response.StatusCode == HttpStatusCode.NotFound) return null;
-        if (!response.IsSuccessStatusCode) throw new AccountException($"The account server answered {(int)response.StatusCode}.");
-        var manifest = await response.Content.ReadFromJsonAsync<LauncherManifest>(ct) ?? throw new AccountException("The account server sent no launcher manifest.");
-        if (manifest.Sha256.Length != 64 || !manifest.Sha256.All(char.IsAsciiHexDigit) || manifest.Size <= 0) throw new AccountException("Unexpected launcher manifest.");
+        if (!response.IsSuccessStatusCode) throw new AccountException(LauncherLoc.ErrAccountServerCode((int)response.StatusCode));
+        var manifest = await response.Content.ReadFromJsonAsync<LauncherManifest>(ct) ?? throw new AccountException(LauncherLoc.ErrUnexpectedManifest);
+        if (manifest.Sha256.Length != 64 || !manifest.Sha256.All(char.IsAsciiHexDigit) || manifest.Size <= 0) throw new AccountException(LauncherLoc.ErrUnexpectedManifest);
         return manifest;
     }
 
@@ -91,14 +138,14 @@ public sealed class AccountClient : IDisposable
     public async Task DownloadLauncherAsync(string to, IProgress<(long Done, long Total)>? progress, CancellationToken ct = default)
     {
         using var link = await Send(HttpMethod.Post, "/api/downloads/launcher", null, ct);
-        if (link.StatusCode == HttpStatusCode.Unauthorized) { token = null; throw new AccountException("Your session ended. Sign in again."); }
-        if (link.StatusCode == HttpStatusCode.NotFound) throw new AccountException("The server has no launcher download.");
-        if (!link.IsSuccessStatusCode) throw new AccountException($"The account server answered {(int)link.StatusCode}.");
-        var url = (await link.Content.ReadFromJsonAsync<DownloadLink>(ct))?.Url ?? throw new AccountException("The account server sent no download link.");
-        if (!url.StartsWith('/')) throw new AccountException("Unexpected download link.");
+        if (link.StatusCode == HttpStatusCode.Unauthorized) { token = null; throw new AccountException(LauncherLoc.ErrSessionEnded); }
+        if (link.StatusCode == HttpStatusCode.NotFound) throw new AccountException(LauncherLoc.ErrNoLauncherDownload);
+        if (!link.IsSuccessStatusCode) throw new AccountException(LauncherLoc.ErrAccountServerCode((int)link.StatusCode));
+        var url = (await link.Content.ReadFromJsonAsync<DownloadLink>(ct))?.Url ?? throw new AccountException(LauncherLoc.ErrUnexpectedDownloadLink);
+        if (!url.StartsWith('/')) throw new AccountException(LauncherLoc.ErrUnexpectedDownloadLink);
         using var request = new HttpRequestMessage(HttpMethod.Get, url);
         using var response = await SendRaw(files, request, HttpCompletionOption.ResponseHeadersRead, ct);
-        if (!response.IsSuccessStatusCode) throw new AccountException($"The launcher download answered {(int)response.StatusCode}.");
+        if (!response.IsSuccessStatusCode) throw new AccountException(LauncherLoc.ErrLauncherDownloadCode((int)response.StatusCode));
         var total = response.Content.Headers.ContentLength ?? 0;
         long done = 0;
         await using var input = await response.Content.ReadAsStreamAsync(ct);
@@ -133,8 +180,8 @@ public sealed class AccountClient : IDisposable
     {
         if (token is not null) request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
         try { return await client.SendAsync(request, completion, ct); }
-        catch (HttpRequestException error) { throw new AccountException($"Could not reach the account server ({error.Message})."); }
-        catch (TaskCanceledException) when (!ct.IsCancellationRequested) { throw new AccountException("The account server did not answer in time."); }
+        catch (HttpRequestException error) { throw new AccountException(LauncherLoc.ErrReachAccount(error.Message)); }
+        catch (TaskCanceledException) when (!ct.IsCancellationRequested) { throw new AccountException(LauncherLoc.ErrAccountTimeout); }
     }
 
     public void Dispose()

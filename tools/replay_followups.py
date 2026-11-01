@@ -26,12 +26,14 @@ try:
     from .packet_schema import PacketSchema, WireError
     from . import game_server, login_server
     from .protocol_knowledge import summarize_body
+    from .dev_defaults import ACCOUNT_SID, NULL_GUID
 except ImportError:
     from probe_login_reply import RC4
     from aion_protocol import split_frames
     from packet_schema import PacketSchema, WireError
     import game_server, login_server
     from protocol_knowledge import summarize_body
+    from dev_defaults import ACCOUNT_SID, NULL_GUID
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -146,7 +148,7 @@ def main(argv=None):
             else:
                 rows = replay_login(
                     schema, bodies, login_server.DEFAULT_WORLDS,
-                    account_id="1000001", guid="00000000-0000-0000-0000-000000000000",
+                    account_id=ACCOUNT_SID, guid=NULL_GUID,
                     server_id=1, redirect_port=13328)
             entries.append({"peer_port": peer,
                             "frames": len(rows),

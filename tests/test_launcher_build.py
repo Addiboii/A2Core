@@ -44,7 +44,8 @@ class LauncherBuildTests(unittest.TestCase):
     def test_runtime_files_are_left_out(self):
         depot = launcher_build.depot_manifest(_manifest([('Aion2\\Binaries\\Win64\\AION2.exe', 10, 0)]))
         result = launcher_build.build(_verification([(EXE, 10), ('Aion2/InstallLog.txt', 20),
-                                                     ('Aion2/Binaries/Win64/NCGuard/bb64.dll', 30)]), depot)
+                                                     ('Aion2/Binaries/Win64/NCGuard/bb64.dll', 30)]),
+                                      '1699273097574069541', depot)
         self.assertEqual([f['path'] for f in result['files']], [EXE])
         self.assertEqual((result['fileCount'], result['totalBytes']), (1, 10))
 
@@ -52,12 +53,13 @@ class LauncherBuildTests(unittest.TestCase):
         for entries in ([('Aion2\\Binaries\\Win64\\AION2.exe', 10, 0), ('Engine\\x.dll', 5, 0)],
                         [('Aion2\\Binaries\\Win64\\AION2.exe', 11, 0)]):
             with self.assertRaises(ValueError):
-                launcher_build.build(_verification([(EXE, 10)]), launcher_build.depot_manifest(_manifest(entries)))
+                launcher_build.build(_verification([(EXE, 10)]), '1699273097574069541',
+                                     launcher_build.depot_manifest(_manifest(entries)))
 
     def test_other_manifest_rejected(self):
         depot = launcher_build.depot_manifest(_manifest([('Aion2\\Binaries\\Win64\\AION2.exe', 10, 0)], manifest=1))
         with self.assertRaises(ValueError):
-            launcher_build.build(_verification([(EXE, 10)]), depot)
+            launcher_build.build(_verification([(EXE, 10)]), '1699273097574069541', depot)
 
 
 if __name__ == '__main__':

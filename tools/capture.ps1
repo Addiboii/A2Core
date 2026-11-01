@@ -1,4 +1,5 @@
-# Short entry point to avoid escaped ampersands/underscores when copying commands.
+# Entry point for passive official-server capture (see docs/CAPTURE.md).
+# Wrappers: capture-game.cmd (elevated -InGame), capture-stop.cmd, capture-mark.cmd.
 [CmdletBinding()]
 param(
     [ValidateRange(15, 7200)][int]$DurationSeconds = 300,

@@ -16,7 +16,7 @@
     <Product>A2Core Launcher</Product>
     <AssemblyTitle>A2Core Launcher</AssemblyTitle>
     <Description>A2Core Launcher: sets up the game and plays on the A2Core Launcher server.</Description>
-    <Version>0.4.1</Version>
+    <Version>0.4.4</Version>
     <SelfContained>true</SelfContained>
     <PublishSingleFile>true</PublishSingleFile>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
@@ -30,5 +30,12 @@
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="QRCoder" Version="1.8.0" />
+  </ItemGroup>
+  <PropertyGroup>
+    <RedirectDll>$(MSBuildThisFileDirectory)..\..\build\a2core-redirect-mingw\A2Core.Redirect.dll</RedirectDll>
+  </PropertyGroup>
+  <ItemGroup Condition="Exists('$(RedirectDll)')">
+    <Content Include="$(RedirectDll)" Link="A2Core.Redirect.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <EmbeddedResource Include="$(RedirectDll)" LogicalName="A2Core.Redirect.dll" />
   </ItemGroup>
 </Project>

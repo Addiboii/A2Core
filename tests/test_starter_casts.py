@@ -115,9 +115,9 @@ class StarterCastTests(unittest.TestCase):
         self.assertEqual([r[:2] for r in replies],
                          [bytes.fromhex(x) for x in ('0138', '4c36', '0238')])
         self.assertEqual(state['resources']['sp'], 70000)
-        cast_control_replies(DODGE, state, 1499)
+        cast_control_replies(DODGE, state, 1299)
         self.assertFalse(state["last_cast"]["accepted"])
-        cast_control_replies(DODGE, state, 1500)
+        cast_control_replies(DODGE, state, 1300)
         self.assertTrue(state["last_cast"]["accepted"])
 
     def test_unowned_or_unequipped_cast_is_not_accepted(self):

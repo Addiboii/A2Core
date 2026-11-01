@@ -25,7 +25,9 @@ Not included: the client archive key. You only need it to extract new or updated
 |---|---|
 | `server/` | The .NET 10 host: account site and API, platform bootstrap, login (3700), game (13328), chat, NCGuard sink. `Aion.World` is the game logic, `Aion.Protocol` the packet layer. |
 | `launcher/` | The Windows launcher (WinForms, single-file exe). See `launcher/README.md`. |
+| `editor/` | A2Core Client Editor (WinForms): edit client tables and build patch paks. See `docs/tools/CLIENT_EDITOR.md`. |
 | `deploy/linux/` | `install.sh` / `update.sh` and systemd units for an Ubuntu server. See `deploy/linux/README.md`. |
+| `docs/SERVER_CONFIGURATION.md` | All `Aion:*` / `Aion__*` host settings and dev vs production. |
 | `database/` | PostgreSQL migrations. |
 | `web/` | The account page and staff dashboard (React), built into the host. |
 | `tools/` | Python and .NET tools: client data extraction (`WorldProbe`, `TerrainProbe`, `NavProbe`, `AssetProbe`, ...), table builders (`quests.py`, `world_npcs.py`, `world_objects.py`, `map_events.py`, ...), database setup (`postgres_dev.py`), packet tools. |
@@ -55,6 +57,19 @@ The first install creates an empty database and fills only the game tables (cata
 equipment rules). To apply code changes, run `install.sh` again with the same options (`update.sh` pulls first, then does the
 same).
 
+## Run locally on Windows (development)
+
+Requirements: .NET 10 SDK, Python 3.11+, and a PostgreSQL build (see `tools/postgres_dev.py`, or set `AION_PG_BIN`).
+
+1. Clone this branch: `git clone -b v1.0.1 https://github.com/Artezianec/A2Core-ChanAge`
+2. Double-click `start-all.cmd` (or run it from a terminal). It checks the requirements, builds `server/Aion.Host`,
+   starts PostgreSQL, the account server (http://127.0.0.1:8780), the login/game/chat hosts and the launcher.
+   Options: `nobuild`, `nolauncher`, `skipncguard`.
+3. Stop everything with `stop-all.cmd`.
+
+Server settings live in `server/Aion.Host/appsettings.json`; see `docs/SERVER_CONFIGURATION.md`. No keys or passwords are
+shipped: connection strings and secrets are empty and must be provided by you (environment variables or a local override).
+
 ## Build the launcher for your server (Windows, .NET 10 SDK)
 
 1. Edit `launcher/launcher.json`: `accountUrl` (`https://<your server>:8780`), `serverAddress` (its IPv4), `name`.
@@ -71,11 +86,6 @@ same).
    update themselves.
 
 Players need a Steam account that owns the game; the launcher downloads the supported build with it.
-
-> **Do not run the launcher as administrator** (no right-click → "Run as administrator", no compatibility setting).
-> The game must not run elevated, and a launcher started as administrator starts the game as administrator too. Start
-> it normally: the steps that need administrator rights (the firewall rules and the hosts entries) ask through their
-> own Windows prompt.
 
 ## Develop
 

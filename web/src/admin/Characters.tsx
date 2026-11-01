@@ -170,6 +170,14 @@ function Overview({ tools, detail, onRefresh }: { tools: Tools; detail: Characte
         </div>
         {isAdmin && !c.accountDisabled && (
           <div className="row wrap">
+            <Button size="sm" variant="danger" busy={busy === 'totp-reset'} onClick={async () => {
+              if (!window.confirm('Remove two-step verification for this account?')) return;
+              setBusy('totp-reset');
+              try {
+                await tools.call(`/api/admin/accounts/${c.accountId}/totp/reset`, { method: 'POST' });
+                await onRefresh();
+              } finally { setBusy(null); }
+            }}>Reset 2FA</Button>
             {['gamemaster', 'admin'].map(role => {
               const has = roles.includes(role);
               return <Button key={role} size="sm" variant={has ? 'danger' : 'secondary'} busy={busy === 'role-' + role}

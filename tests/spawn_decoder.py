@@ -53,6 +53,8 @@ def decode_spawn(body):
     result['purchased'] = boolean()
     result['voice'] = r.uint(1)
     r.take(16)  # conqueror
+    r.take(13)  # rift_pvp_on, rift_pvp_set_time, polymorph_abnormal_uid
+    r.take(16)  # succession_count_info (four i32)
     result['power'] = (r.uint(8), r.uint(8))
     for _ in range(2):
         r.take(r.varuint() * 3)

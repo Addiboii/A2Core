@@ -59,9 +59,11 @@ class TimelineTests(unittest.TestCase):
         ]
         summary, lines, large = self.decode(packets)
         self.assertEqual(summary['messages'], 5)
-        self.assertEqual([(l['dir'], l['op'], l['ms']) for l in lines],
-                         [('c2s', '0x3615', 0), ('s2c', '0x8d00', 2500), ('s2c', '0x3641', 2500), ('s2c', '0x8d00', 2500), ('c2s', '0xe334', 4000)])
+        self.assertEqual([(l['dir'], l.get('op'), l.get('opaque'), l['ms']) for l in lines],
+                         [('c2s', None, True, 0), ('s2c', '0x8d00', None, 2500), ('s2c', '0x3641', None, 2500),
+                          ('s2c', '0x8d00', None, 2500), ('c2s', None, True, 4000)])
         self.assertEqual(lines[0]['t'], '1970-01-01T00:00:11.000+00:00')
+        self.assertTrue(lines[0]['opaque'])
         self.assertEqual(lines[1]['body'], points.hex())
         self.assertEqual(lines[1]['name'], 'CharPointUpdate_NT')
         self.assertNotIn('body', lines[2])
@@ -71,7 +73,9 @@ class TimelineTests(unittest.TestCase):
         s2c = flow['directions']['s2c']
         self.assertEqual((s2c['syn_observed'], s2c['conflicting_bytes'], s2c['gap_at'], s2c['trailing_bytes'], s2c['messages']), (True, 0, None, 0, 3))
         self.assertEqual(s2c['opcodes'], {'0x3641': 1, '0x8d00': 2})
-        self.assertEqual(flow['directions']['c2s']['opcodes'], {'0x3615': 1, '0xe334': 1})
+        c2s = flow['directions']['c2s']
+        self.assertTrue(c2s['ciphered_opaque'])
+        self.assertEqual(c2s['opcodes'], {'opaque': 2})
 
     def test_gap_and_trailing_partial_frame_are_reported(self):
         a, b = frame(b'\x00\x8d' + bytes(4)), frame(b'\x42\x36' + bytes(5))

@@ -1,0 +1,1094 @@
+{
+  "quests": 1429,
+  "states": 2987,
+  "unresolved_states": 194,
+  "unresolved_quests": 174,
+  "resolved_by_source": {
+    "dungeon-entry-npc-any-map": 64,
+    "dungeon-entry-trigger": 116,
+    "finish-map-map-start": 6,
+    "finish-npc": 413,
+    "finish-npc-any-map": 5,
+    "finish-teleport": 1,
+    "finish-teleport-map-start": 1,
+    "map-event-layer-entry": 1,
+    "map-event-map": 77,
+    "map-event-map-layer-base-map-start": 72,
+    "map-event-map-map-start": 2,
+    "objective-map-map-start": 549,
+    "objective-npc": 925,
+    "step-npc": 549,
+    "step-npc-any-map": 12
+  },
+  "unresolved_by_reason": {
+    "ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI)": 184,
+    "counts other quests, no place": 2,
+    "finish teleport names a dungeon start point (no field location)": 8
+  },
+  "unresolved": {
+    "AQ1602000": {
+      "title": "The One Who Perceives",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "AQ1602010": {
+      "title": "The One Who Hears the Voice",
+      "states": [
+        "step 2 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))",
+        "step 3 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))",
+        "finish (finish teleport names a dungeon start point (no field location))"
+      ]
+    },
+    "AQ1602020": {
+      "title": "The One Who Witnesses the Nightmare",
+      "states": [
+        "step 2 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))",
+        "step 3 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))",
+        "step 4 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))",
+        "finish (finish teleport names a dungeon start point (no field location))"
+      ]
+    },
+    "AQ1602030": {
+      "title": "The One Who Dreams",
+      "states": [
+        "step 2 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))",
+        "step 3 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))",
+        "step 4 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))",
+        "finish (finish teleport names a dungeon start point (no field location))"
+      ]
+    },
+    "AQ1602040": {
+      "title": "The One Who Swears the Oath",
+      "states": [
+        "step 2 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))",
+        "step 3 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))",
+        "finish (finish teleport names a dungeon start point (no field location))"
+      ]
+    },
+    "AQ2602000": {
+      "title": "The One Who Perceives",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "AQ2602010": {
+      "title": "The One Who Hears the Voice",
+      "states": [
+        "step 2 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))",
+        "step 3 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))",
+        "finish (finish teleport names a dungeon start point (no field location))"
+      ]
+    },
+    "AQ2602020": {
+      "title": "The One Who Witnesses the Nightmare",
+      "states": [
+        "step 2 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))",
+        "step 3 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))",
+        "step 4 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))",
+        "finish (finish teleport names a dungeon start point (no field location))"
+      ]
+    },
+    "AQ2602030": {
+      "title": "The One Who Dreams",
+      "states": [
+        "step 2 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))",
+        "step 3 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))",
+        "step 4 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))",
+        "finish (finish teleport names a dungeon start point (no field location))"
+      ]
+    },
+    "AQ2602040": {
+      "title": "The One Who Swears the Oath",
+      "states": [
+        "step 2 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))",
+        "step 3 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))",
+        "finish (finish teleport names a dungeon start point (no field location))"
+      ]
+    },
+    "EQ1803011": {
+      "title": "Hidden Lepharist Research Center",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1803012": {
+      "title": "Abandoned Life Hideout",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1803013": {
+      "title": "Life Awakening Site",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1803014": {
+      "title": "Sunken Ancient Legacy",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1803015": {
+      "title": "Ishtar Logistics Base",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1803016": {
+      "title": "Drok the Outlaw\u0027s Den",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1803017": {
+      "title": "Filthy Cave",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1803018": {
+      "title": "Defunct Creion Laboratory",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1803019": {
+      "title": "Fallen Haven",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1803020": {
+      "title": "Life Daeva Library",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1803021": {
+      "title": "Lepharist Special Operations Research Center",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1803022": {
+      "title": "Ratcatchers Base",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1803023": {
+      "title": "Gravarax Research Center",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1803024": {
+      "title": "Manduri Habitat",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1803025": {
+      "title": "Mutated Drana Plantation",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1803026": {
+      "title": "Sunken Temple",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1803027": {
+      "title": "Barrier Tower Fortress Vault",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1803028": {
+      "title": "Forgotten Spring",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1803029": {
+      "title": "Fugitive Hideout",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1803030": {
+      "title": "Iagosh\u0027s Secret Storage",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1810001": {
+      "title": "Poacher\u0027s Den",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1810002": {
+      "title": "Spirit Flower Cave",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1810003": {
+      "title": "Cursed Hideout",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1810004": {
+      "title": "Mysterious Mushroom Cave",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1810005": {
+      "title": "Cave of the Defeated",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1810006": {
+      "title": "Filth Pit",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1810007": {
+      "title": "Illusionary Ruins",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1810008": {
+      "title": "Dehinon\u0027s Hideout",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1810009": {
+      "title": "Guardian\u0027s Armory",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1810010": {
+      "title": "Cave of the Desperate",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1810011": {
+      "title": "Hidden Valley",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1810012": {
+      "title": "Distorted Cave",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1810013": {
+      "title": "Corrupted Spiritmaster\u0027s Residence",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1810014": {
+      "title": "Karat\u0027s Nest",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1810015": {
+      "title": "Kius\u0027 Residence",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1810016": {
+      "title": "Lupyllini Habitat",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1810017": {
+      "title": "Looted Repository",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1810018": {
+      "title": "Abandoned Odylium Cave",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1810019": {
+      "title": "Solitary Rock Tomb",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1810020": {
+      "title": "Kidnapper\u0027s Hold",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1810021": {
+      "title": "Marsh Library",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1810022": {
+      "title": "Krall Barracks",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1810023": {
+      "title": "Canyon Library",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1810024": {
+      "title": "Chilly Hideout",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1810025": {
+      "title": "Cave Storage",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1810026": {
+      "title": "Grave of the Wrathful Dead",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1810027": {
+      "title": "Akilo Thieves Den",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1810028": {
+      "title": "Deadly Poison Den",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1810029": {
+      "title": "Herb Cave",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1810030": {
+      "title": "Looted Pilgrim\u0027s Rest",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1810031": {
+      "title": "Targoth\u0027s Cave",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1810032": {
+      "title": "Broken Hall of Knowledge",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1810033": {
+      "title": "Deep Underground Cave",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1810034": {
+      "title": "Fortress Jail",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1810035": {
+      "title": "Scribe\u0027s Room",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1810036": {
+      "title": "Red Dragon Altar",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1810037": {
+      "title": "Wild Biruta Habitat",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1810038": {
+      "title": "Fissure Cave",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1810039": {
+      "title": "Renegade Base",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1810040": {
+      "title": "Klaw Den",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1810041": {
+      "title": "Rift Cave",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1810042": {
+      "title": "Deep and Dark Pit",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1810043": {
+      "title": "Wild Kuru Habitat",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1810044": {
+      "title": "Fortress Grave",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1810045": {
+      "title": "Anguish Hideout",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1810046": {
+      "title": "Aullaeu Oratory",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1810047": {
+      "title": "Prison of Exiles",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1810048": {
+      "title": "Kraka\u0027s Altar",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1810049": {
+      "title": "Dratona Outpost",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1810050": {
+      "title": "Balaur Scouts Campsite",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1810051": {
+      "title": "Altar of Hope",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1810052": {
+      "title": "Experimental Prison Compound",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1810053": {
+      "title": "Balaur Scouts Outpost",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1810054": {
+      "title": "Hidden Ruins Altar",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1810055": {
+      "title": "Laborers Training Ground",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1810056": {
+      "title": "Konutin\u0027s Cave",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1810057": {
+      "title": "Plantation Storage",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1810058": {
+      "title": "Bibliophile\u0027s Grave",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1810059": {
+      "title": "Forest Library",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1810060": {
+      "title": "Collapsed Fortress Basement",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ1810061": {
+      "title": "Ruins of the Ancient City of Ru",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2803011": {
+      "title": "Forgotten Fire Altar",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2803012": {
+      "title": "Abandoned Kromede Base",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2803013": {
+      "title": "Verdandi\u0027s Oratory",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2803014": {
+      "title": "Blades Secret Repository",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2803015": {
+      "title": "Frozen Land of Fate",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2803016": {
+      "title": "Land of Raging Flame",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2803017": {
+      "title": "Pure Spring",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2803018": {
+      "title": "Predator\u0027s Nest",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2803019": {
+      "title": "Cave of the Stranded",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2803020": {
+      "title": "Cave of the Exiled Ones",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2803021": {
+      "title": "Blades Base",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2803022": {
+      "title": "Patamor Marauder Base",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2803023": {
+      "title": "Kurpak Special Operations Unit Base",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2803024": {
+      "title": "Camouflaged Fate Archon Base",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2803025": {
+      "title": "Fire Cave",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2803026": {
+      "title": "Fate Temple",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2803027": {
+      "title": "Indnath Secret Base",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2803028": {
+      "title": "Guardian Statues\u0027 Cave",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2803029": {
+      "title": "Iralcig Naga Cave",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2803030": {
+      "title": "Patamor Underwater Cave",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2810001": {
+      "title": "Abandoned Memorial Room",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2810002": {
+      "title": "Trickster\u0027s Den",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2810003": {
+      "title": "Abandoned One\u0027s Grave",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2810004": {
+      "title": "Dratona Cave",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2810005": {
+      "title": "Predator\u0027s Lair",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2810006": {
+      "title": "Dusk Pit",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2810007": {
+      "title": "Lost Ruins",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2810008": {
+      "title": "Poisonous Plant Habitat",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2810009": {
+      "title": "Valka\u0027s Nest",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2810010": {
+      "title": "Old Graveyard",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2810011": {
+      "title": "Treasure Hunter Residence",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2810012": {
+      "title": "Abandoned Archon Jail",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2810013": {
+      "title": "Fafnite Storage Room",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2810014": {
+      "title": "Insectoid Tunnel",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2810015": {
+      "title": "Bloodsoaked Confessional",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2810016": {
+      "title": "Prison of Oblivion",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2810017": {
+      "title": "Watcher\u0027s Temporary Outpost",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2810018": {
+      "title": "Blue Dragon\u0027s Trap",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2810019": {
+      "title": "Hidden Vein Cave",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2810020": {
+      "title": "Fortuneteller\u0027s Grave",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2810021": {
+      "title": "Howling Den",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2810022": {
+      "title": "Ossuary of the Noble",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2810023": {
+      "title": "Smuggler\u0027s Cave",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2810024": {
+      "title": "Homish\u0027s Prison Compound",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2810025": {
+      "title": "Kumbahum\u0027s Cave",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2810026": {
+      "title": "Victims\u0027 Cave",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2810027": {
+      "title": "Drana Depository",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2810028": {
+      "title": "High Priest\u0027s Ruins",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2810029": {
+      "title": "Closed Hideout",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2810030": {
+      "title": "All-Curing Cave",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2810031": {
+      "title": "Fungie Habitat",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2810032": {
+      "title": "Library of Wisdom",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2810033": {
+      "title": "Destroyed Scriptorium",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2810034": {
+      "title": "Dark Root Cave",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2810035": {
+      "title": "Unstable Cave",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2810036": {
+      "title": "Lamnah Base",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2810037": {
+      "title": "Twisted Pit",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2810038": {
+      "title": "Rift Fissure",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2810039": {
+      "title": "Scale Altar",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2810040": {
+      "title": "Library of Foresight",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2810041": {
+      "title": "Skurv Laborer Den",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2810042": {
+      "title": "Dratona Assembly Area",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2810043": {
+      "title": "Place of Rest",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2810044": {
+      "title": "Final Haven",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2810045": {
+      "title": "Worshiper\u0027s Underground Cave",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2810046": {
+      "title": "Fanatics\u0027 Den",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2810047": {
+      "title": "Spider Cave",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2810048": {
+      "title": "Empty Cave",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2810049": {
+      "title": "Lonely Rock Chasm",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2810050": {
+      "title": "Rock Cave",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2810051": {
+      "title": "Den of Exiles",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2810052": {
+      "title": "Pirate\u0027s Treasure Storage",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2810053": {
+      "title": "Shulak Cave",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2810054": {
+      "title": "Destruction Archons Armory",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2810055": {
+      "title": "Ascetic\u0027s Cave",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2810056": {
+      "title": "Lagta Fafnite Storage",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2810057": {
+      "title": "Warriors\u0027 Rest",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2810058": {
+      "title": "Tayga Breeding Ground",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2810059": {
+      "title": "Library of Patience",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2810060": {
+      "title": "Odylium Marauder Den",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "EQ2810061": {
+      "title": "Ruins of the Ancient City of Ru",
+      "states": [
+        "step 1 (ClearMapEvent of a dungeon with no field entry (opened from the dungeon UI))"
+      ]
+    },
+    "GQ1702010": {
+      "title": "Elyos Ascension Gauge",
+      "states": [
+        "step 1 (counts other quests, no place)"
+      ]
+    },
+    "GQ2702010": {
+      "title": "Asmodian Ascension Gauge",
+      "states": [
+        "step 1 (counts other quests, no place)"
+      ]
+    }
+  }
+}

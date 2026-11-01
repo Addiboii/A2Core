@@ -179,6 +179,15 @@ world.Leave(elyra);
 Rejected(() => accounts.Whisper(bramToken, whisperRoom, Message("x") with { TargetCharacterName = "Elyra" }), "whisper to a character that left the world");
 Rejected(() => accounts.Send(elyraToken, common, Message("x")), "a character out of the world cannot chat");
 Check(await verifier.VerifyAsync(Login(ticketA, "11"), default) is null, "no chat login after leaving the world");
+// Character switch: the client keeps its old chat token; the session follows the account's new character.
+var zakl = new ChatCharacter(Guid.NewGuid(), "Zakl", "[GM] Zakl");
+world.Enter(accountA, zakl, "13");
+clock.Advance(TimeSpan.FromSeconds(6));
+Check(accounts.Send(elyraToken, common, Message("after switch")).Deliveries[0].Notification.UserName == "[GM] Zakl",
+    "after a character switch the old chat session speaks as the new character");
+Check((await accounts.CommandAsync(elyraToken, common, Message("//admin"), (id, name) => Task.FromResult(id.Character!.Name + "/" + name)))
+    .Deliveries.Single().Notification.Content == "Zakl/Zakl", "commands after a switch run as the new character");
+world.Leave(zakl);
 var readWhisper = LimeWire.ReadWhisper(JsonNode.Parse(
     """{"gameUserKey":{"characterId":"12"},"gameMessageInfo":{"content":"x"},"validationInfo":{"targetCharacterName":"[GM] Elyra"}}"""));
 Check(readWhisper is { TargetCharacterName: "[GM] Elyra", ReceiverCharacterId: "12", Content: "x" }, "reads sendWhisper");
@@ -241,6 +250,8 @@ sealed class FakeDirectory : IChatDirectory
             present.Values.Where(p => p.Account == account).Select(p => (p.Character, p.WireId)).ToList());
     public ChatCharacter? Current(Guid character, Guid account) =>
         present.TryGetValue(character, out var p) && p.Account == account ? p.Character : null;
+    public ChatCharacter? CurrentOfAccount(Guid account) =>
+        present.Values.Where(p => p.Account == account).ToList() is [var only] ? only.Character : null;
 }
 
 sealed class FakeHandoff(Dictionary<string, Guid> tickets) : IClientHandoff
@@ -258,6 +269,7 @@ sealed class FakeHandoff(Dictionary<string, Guid> tickets) : IClientHandoff
     }
     public Task<ClientLaunch?> AuthorizeLaunchAsync(string sessionToken, int worldId, CancellationToken ct) => throw new NotSupportedException();
     public Task<GameTicket?> RedeemLaunchAsync(string authorization, CancellationToken ct) => throw new NotSupportedException();
+    public Task<Guid?> ResolveLaunchAccountAsync(string authorization, CancellationToken ct) => Task.FromResult<Guid?>(null);
     public Task<VerifiedAccount?> CompleteLoginAsync(string ticket, long wireAccountId, string grant, int worldId, CancellationToken ct) => throw new NotSupportedException();
 }
 

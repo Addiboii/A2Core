@@ -1,12 +1,15 @@
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.Net;
 using System.Security.Cryptography;
+using Microsoft.Extensions.Logging;
 using System.Text.Encodings.Web;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Aion.Application.Authentication;
+using Aion.World;
 
 namespace Aion.Host.Platform;
 
@@ -56,6 +59,16 @@ public sealed class PlatformResponses
     /// </summary>
     public byte[]? SteamLogin { get; private init; }
     public string? SessionId { get; private init; }
+    /// <summary>GET account/v1.0/me/user_credentials: the account's one credential (official capture), not an empty list.</summary>
+    public byte[]? UserCredentials { get; private init; }
+    public string? GameAccountId { get; private init; }
+
+    /// <summary>The official external_account object of a Steam-linked account.</summary>
+    public static JsonObject ExternalAccount(string accountKey, string name) => new()
+    {
+        ["auth_provider_code"] = "steam", ["external_account_key"] = accountKey, ["external_account_name"] = name,
+        ["external_account_data"] = "", ["store_auth_provider_code"] = "steam", ["simple_signup"] = "1",
+    };
     public byte[]? Authn { get; private init; }
     public byte[]? SecondaryStart { get; private init; }
     public byte[]? SecondaryFinish { get; private init; }
@@ -65,8 +78,22 @@ public sealed class PlatformResponses
     public static PlatformResponses Load(PlatformOptions options, int? loginPort, int? chatPort) =>
         Load(options, new NetworkOptions(), options.Port ?? 8087, loginPort, chatPort);
 
+    /// <summary>
+    /// custom_data every served policy carries unless configured otherwise. SecondaryAuthCheckType "None": a Steam account
+    /// has no NC in-client secondary auth, and "OTP" makes the title screen (AionDialogWidget_Login_Logined) show the NC
+    /// account menu (Security Settings "Unregistered", Manage Account, Credits) the official Steam title does not show.
+    /// TOTP is enforced by the account login that creates the launch instead.
+    /// </summary>
+    public static readonly IReadOnlyDictionary<string, string> SteamCustomData = new Dictionary<string, string>
+    {
+        ["SecondaryAuthCheckType"] = "None",
+    };
+
     public static PlatformResponses Load(PlatformOptions options, NetworkOptions network, int platformPort, int? loginPort, int? chatPort)
     {
+        var customData = new Dictionary<string, string>(SteamCustomData);
+        foreach (var (key, value) in options.CustomData ?? []) customData[key] = value;
+        options = options with { CustomData = customData };
         string? Fixture(string name) => options.FixtureDirectory is { } dir && File.Exists(Path.Combine(dir, name)) ? Path.Combine(dir, name) : null;
         byte[]? keyResponse = null, policy = null, maintenance = null;
         string? aesKey = null;
@@ -105,7 +132,8 @@ public sealed class PlatformResponses
         }
         if (Fixture("app-maintenance.json") is { } maintenancePath && policy is not null)
             maintenance = PythonJson("value", BlockFixture(maintenancePath));
-        byte[]? session = null, steamLogin = null;
+        byte[]? session = null, steamLogin = null, userCredentials = null;
+        string? gameAccountId = null;
         string? sessionId = null;
         if (Fixture("session-response.candidate.json") is { } sessionPath && maintenance is not null)
         {
@@ -113,7 +141,17 @@ public sealed class PlatformResponses
             string[] expected = ["session", "session_secret", "game_account_id", "login_name", "user_id", "user_name"];
             if (fields.Count != expected.Length || expected.Any(f => fields[f]?.GetValue<string>() is not { Length: >= 1 and <= 512 }))
                 throw new InvalidDataException("Expected six nonempty session string fields");
-            session = PythonJson(expected.Select(f => (f, fields[f]!.GetValue<string>())));
+            // Official sessions reply (capture 2026-10-30): the user's linked store account rides in external_account. The SDK
+            // takes the Steam goods account (pg_account_key) from it; without it the client never asks for the Steam (pg 15) goods
+            // (skins, weapons, Kuna, event tabs). Provider codes are sanitized in the capture; "steam" is the login's own code.
+            var external = ExternalAccount(fields["user_id"]!.GetValue<string>(), fields["user_name"]!.GetValue<string>());
+            var plain = Encoding.ASCII.GetString(PythonJson(expected.Select(f => (f, fields[f]!.GetValue<string>()))));
+            session = Encoding.UTF8.GetBytes(plain[..^1] + ", \"external_account\": " + external.ToJsonString(Plain) + ", \"roles\": []}");
+            gameAccountId = fields["game_account_id"]!.GetValue<string>();
+            userCredentials = JsonSerializer.SerializeToUtf8Bytes(new
+            {
+                user_credentials = new[] { new { user_credential_code = fields["user_id"]!.GetValue<string>(), created = "2025-11-19T00:00:00+09:00", display_name = fields["user_name"]!.GetValue<string>() } },
+            }, Plain);
             sessionId = fields["session"]!.GetValue<string>();
             var steam = new JsonObject();
             foreach (var f in expected) steam[f] = fields[f]!.GetValue<string>();
@@ -121,6 +159,7 @@ public sealed class PlatformResponses
             steam["access_token"] = fields["session"]!.GetValue<string>();
             steam["refresh_token"] = fields["session_secret"]!.GetValue<string>();
             steam["expires_in"] = 86400;
+            steam["external_account"] = ExternalAccount(fields["user_id"]!.GetValue<string>(), fields["user_name"]!.GetValue<string>());
             steam["login_type"] = "steam";
             steam["auth_provider_code"] = "steam";
             steamLogin = Encoding.UTF8.GetBytes(steam.ToJsonString(Plain));
@@ -141,7 +180,7 @@ public sealed class PlatformResponses
         {
             policyTemplate = template, policyKey = aesKey, policyCustomData = options.CustomData, publicAddress = network.PublicAddress, platformPort = platformPort,
             loginPort = loginPort, chatPort = chatPort,
-            Key = keyResponse, Policy = policy, Maintenance = maintenance, Session = session, SessionId = sessionId, SteamLogin = steamLogin,
+            Key = keyResponse, Policy = policy, Maintenance = maintenance, Session = session, SessionId = sessionId, SteamLogin = steamLogin, UserCredentials = userCredentials, GameAccountId = gameAccountId,
             Authn = authn, SecondaryStart = start, SecondaryFinish = finish, LaunchAuthorization = launch,
             Geolocation = options.GeolocationFile is { } geo ? File.ReadAllBytes(geo) : null,
         };
@@ -341,8 +380,10 @@ public static partial class PlatformBootstrapEndpoints
     private static partial Regex CodePrefix();
 
     /// <summary>Answers every request on the bootstrap port in its own branch (no static files or other routes there).</summary>
-    public static void UsePlatformBootstrap(this WebApplication app, int port, PlatformResponses responses, string? requestLog)
+    public static void UsePlatformBootstrap(this WebApplication app, int port, PlatformResponses responses, string? requestLog, NetworkOptions network, string accountPageBase)
     {
+        var accountBase = accountPageBase.TrimEnd('/');
+        var platformLog = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Aion.Platform");
         var issuedSession = responses.SessionId is { } id ? "/local-api-gate/sessions/v1.0/" + Uri.EscapeDataString(id) : null;
         // A launch authorization becomes a game ticket (12 h within the account session, like the launch itself). Repeated
         // authn_token requests of the same launch get the same ticket for 15 minutes; later ones mint another, which is fine.
@@ -362,6 +403,8 @@ public static partial class PlatformBootstrapEndpoints
             }), now)).Ticket.Value;
         }
         var pairing = app.Services.GetService<LaunchPairing>();
+        var platformAuth = app.Services.GetService<IPlatformSecondaryAuth>();
+        var qunaBalance = app.Services.GetService<ShopQunaBalanceService>();
         var logLock = new object();
         app.MapWhen(context => context.Connection.LocalPort == port, branch => branch.Run(async context =>
         {
@@ -376,6 +419,29 @@ public static partial class PlatformBootstrapEndpoints
             }
             var method = request.Method;
             (int Status, byte[] Body) reply = (503, NotReady);
+            if (PlatformSynapseResponses.TryReply(method, path, out var synapseBody)) reply = (200, synapseBody);
+            static string? BearerAuth(HttpRequest request)
+            {
+                var header = request.Headers.Authorization.ToString();
+                if (header.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)) return header[7..];
+                return null;
+            }
+            static async Task<JsonObject?> ReadJson(HttpRequest request)
+            {
+                if (request.ContentLength is > 65536 or < 0) return null;
+                using var reader = new StreamReader(request.Body);
+                var text = await reader.ReadToEndAsync();
+                if (text.Length == 0) return new JsonObject();
+                return JsonNode.Parse(text) as JsonObject;
+            }
+            if (method == "GET" && path.StartsWith("/local-login-web", StringComparison.Ordinal))
+            {
+                var fragment = path.Contains("security", StringComparison.OrdinalIgnoreCase) ? "#totp" : "";
+                context.Response.StatusCode = 302;
+                context.Response.Headers.Location = accountBase + fragment;
+                context.Response.Headers.Connection = "close";
+                return;
+            }
             if (method == "GET" && path == Known[0] && responses.Key is { } key) reply = (200, key);
             else if (method == "GET" && path == Known[1] && responses.PolicyFor(code) is { } policy) reply = (200, policy);
             else if (method == "POST" && path == "/MobileAppConfigSdk/app/policy/maintenance" && responses.Maintenance is { } maintenance) reply = (200, maintenance);
@@ -390,18 +456,99 @@ public static partial class PlatformBootstrapEndpoints
             // Steam token login (the client's route when the policy says SteamShowOnlySteamLogin): answered with the same login
             // session object as a session lookup (CANDIDATE: the official reply is unrecorded; the Steam ticket in the body is not read).
             else if (method == "POST" && path == "/local-api-gate/sessions/v1.0/login_sessions;token" && responses.SteamLogin is { } steamSession) reply = (200, steamSession);
-            else if (method == "POST" && path == "/local-api-gate/secondary_auth/v1.0/my/auth;start" && responses.SecondaryStart is { } start) reply = (200, start);
-            else if (method == "POST" && path == "/local-api-gate/secondary_auth/v1.0/my/auth;finish" && responses.SecondaryFinish is { } finish) reply = (200, finish);
+            else if (method == "POST" && path == "/local-login-api/account/private-id")
+            {
+                var gpaToken = request.Query["token"].ToString();
+                if (gpaToken.Length == 0) gpaToken = null;
+                var body = await PlatformLoginApiResponses.PrivateIdBodyAsync(
+                    gpaToken, platformAuth, context.Connection.RemoteIpAddress, responses.SessionId ?? BearerAuth(request),
+                    null, context.RequestAborted);
+                reply = (200, body);
+            }
+            else if (method == "GET" && path == "/local-api-gate/backup_auth/v1.0/my/auth_types")
+            {
+                if (platformAuth is { } backup
+                    && await backup.ResolveAccountAsync(context.Connection.RemoteIpAddress, responses.SessionId ?? BearerAuth(request), CancellationToken.None) is { } accountId
+                    && await backup.AuthTypesAsync(accountId, CancellationToken.None) is { } authTypes)
+                    reply = (200, authTypes);
+                else reply = (200, PlatformLoginApiResponses.EmptyAuthTypes());
+            }
+            else if (method == "POST" && path == "/local-api-gate/secondary_auth/v1.0/my/auth;start")
+            {
+                var body = await ReadJson(request);
+                var audience = body?["audience_app_id"]?.GetValue<string>();
+                if (platformAuth is { } starter
+                    && await starter.ResolveAccountAsync(context.Connection.RemoteIpAddress, responses.SessionId ?? BearerAuth(request), CancellationToken.None) is { } accountId
+                    && await starter.StartAsync(accountId, audience, CancellationToken.None) is { } start)
+                    reply = (200, start);
+                else if (responses.SecondaryStart is { } fixtureStart) reply = (200, fixtureStart);
+                else if (platformAuth is not null) reply = (200, PlatformLoginApiResponses.SecondaryAuthNotRegisteredStart());
+            }
+            else if (method == "POST" && path == "/local-api-gate/secondary_auth/v1.0/my/auth;finish" && platformAuth is { } finisher)
+            {
+                var body = await ReadJson(request);
+                var sessionId = body?["session_id"]?.GetValue<string>();
+                var otp = body?["code"]?.GetValue<string>() ?? body?["otp"]?.GetValue<string>()
+                    ?? body?["auth_code"]?.GetValue<string>() ?? body?["verification_code"]?.GetValue<string>();
+                if (sessionId is not null && await finisher.ResolveAccountAsync(context.Connection.RemoteIpAddress, responses.SessionId ?? BearerAuth(request), CancellationToken.None) is { } accountId
+                    && await finisher.FinishAsync(accountId, sessionId, otp, body?["recovery_code"]?.GetValue<string>(), CancellationToken.None) is { } finish)
+                    reply = (200, finish);
+                else if (responses.SecondaryFinish is { } fixtureFinish) reply = (200, fixtureFinish);
+            }
+            else if (method == "POST" && path == "/local-api-gate/secondary_auth/v1.0/my/auth;start" && responses.SecondaryStart is { } startOnly) reply = (200, startOnly);
+            else if (method == "POST" && path == "/local-api-gate/secondary_auth/v1.0/my/auth;finish" && responses.SecondaryFinish is { } finishOnly) reply = (200, finishOnly);
             else if (method == "GET" && path == "/local-api-gate/geolocations/v1.0/me" && responses.Geolocation is { } geo) reply = (200, geo);
             else if (method == "GET" && responses.Session is { } session && (path == issuedSession || SessionPath().IsMatch(path))) reply = (200, session);
+            else if (method == "GET" && path == "/local-api-gate/account/v1.0/me/user_credentials" && responses.UserCredentials is { } credentials) reply = (200, credentials);
+            else if (method == "GET" && path == PlatformApiGateResponses.MeCountryPath)
+                reply = (200, PlatformApiGateResponses.MeCountry(responses.Geolocation));
+            else if (method == "GET" && path == "/local-api-gate/virtual_currency/v2.0/me/balances" && qunaBalance is not null)
+            {
+                var groupQuery = request.Query["currency_group_id"].FirstOrDefault();
+                var groupId = int.TryParse(groupQuery, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)
+                    ? parsed
+                    : GameSession.QunaBmCurrencyGroupId;
+                var balance = await qunaBalance.BalanceAsync(
+                    context.Connection.RemoteIpAddress,
+                    responses.SessionId ?? BearerAuth(request),
+                    request.Query["game_account_id"].FirstOrDefault(),
+                    context.RequestAborted);
+                var body = ShopQunaBalanceService.JsonBody(balance, groupId);
+                var bodyText = System.Text.Encoding.UTF8.GetString(body);
+                platformLog.LogInformation(
+                    "virtual_currency balances currency_group_id={CurrencyGroupId} bytes={ByteCount} hex={Hex} body={Body}",
+                    groupId, body.Length, Convert.ToHexString(body), bodyText);
+                platformLog.LogDebug(
+                    "virtual_currency balances currency_group_id={CurrencyGroupId} bytes={ByteCount} body={Body}",
+                    groupId, body.Length, bodyText);
+                reply = (200, body);
+            }
+            else if (method == "POST" && path == "/local-api-gate/mobile_warehouse/v1.0/my/items")
+                reply = (200, PlatformApiGateResponses.Warehouse(await ReadJson(request), responses.GameAccountId));
+            else if (path.StartsWith(PlatformApiGateResponses.StoragePrefix, StringComparison.Ordinal)
+                && PlatformApiGateResponses.TryStorage(method, path, method == "GET" ? null : await ReadJson(request), out var storageBody))
+                reply = (200, storageBody);            else if (PlatformApiGateResponses.TryReply(method, path, request.Query, platformLog, out var gateBody)) reply = (200, gateBody);
+            else if (PlatformLoginApiResponses.TryReply(method, path, out var loginApiBody)) reply = loginApiBody;
+            if (reply.Status == 503 && reply.Body.AsSpan().SequenceEqual(NotReady))
+                platformLog.LogWarning("Unhandled platform bootstrap request {Method} {Path}", method, path);
             if (requestLog is not null)
             {
                 var family = Known.Skip(2).FirstOrDefault(prefix => path == prefix || path.StartsWith(prefix + "/", StringComparison.Ordinal));
+                var logPath = family is not null || path.StartsWith("/MobileAppConfigSdk", StringComparison.Ordinal) ? path : "<other>";
+                if (path.StartsWith("/local-login-api", StringComparison.Ordinal) || path.StartsWith("/local-login-web", StringComparison.Ordinal))
+                    logPath = path;
+                string? responseBody = null;
+                if (reply.Status == 503 && reply.Body.AsSpan().SequenceEqual(NotReady))
+                    responseBody = System.Text.Encoding.UTF8.GetString(reply.Body);
+                else if (path.StartsWith("/local-api-gate/virtual_currency/", StringComparison.Ordinal) && reply.Status == 200)
+                    responseBody = System.Text.Encoding.UTF8.GetString(reply.Body);
                 var entry = JsonSerializer.Serialize(new
                 {
-                    utc = DateTimeOffset.UtcNow, method, path = family is not null || path.StartsWith("/MobileAppConfigSdk", StringComparison.Ordinal) ? path : "<other>",
-                    query = path.StartsWith("/MobileAppConfigSdk", StringComparison.Ordinal) ? request.QueryString.Value : null,
+                    utc = DateTimeOffset.UtcNow, method, path = logPath,
+                    query = path.StartsWith("/local-api-gate", StringComparison.Ordinal) || path.StartsWith("/MobileAppConfigSdk", StringComparison.Ordinal)
+                        ? request.QueryString.Value : null,
                     route_family = family, launch_code = code is not null, response_status = reply.Status,
+                    response_body = responseBody,
                 });
                 lock (logLock) File.AppendAllText(requestLog, entry + "\n");
             }

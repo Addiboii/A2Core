@@ -1,4 +1,4 @@
 namespace Aion.Core.Characters;
 
 public sealed record CharacterSummary(
-    Guid CharacterId, Guid AccountId, int WorldId, string Name, int Level, int Race = 0);
+    Guid CharacterId, Guid AccountId, int WorldId, string Name, int Level, int Race = 0, long LastPlayedUnixMs = 0);

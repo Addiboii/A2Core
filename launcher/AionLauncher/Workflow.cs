@@ -18,6 +18,10 @@ sealed class Workflow(LauncherConfig config, LauncherSettings settings)
     public LauncherConfig Config => config;
     public LauncherSettings Settings => settings;
     public AccountClient Account { get; } = new(config);
+    /// <summary>The client version chosen on the Play page (launcher.json "selectedClientVersion").</summary>
+    public ClientVersion Version { get; set; } = ClientVersions.Selected(config);
+    /// <summary>The folder of the client started last (for waiting until it closes).</summary>
+    public string? GameFolder { get; private set; }
 
     public static SteamInstall? FindSteam()
     {
@@ -51,7 +55,7 @@ sealed class Workflow(LauncherConfig config, LauncherSettings settings)
         {
             var mode = ClientFiles.SameVolume(app.Folder, TargetFor(app.Folder)) ? ClientFiles.Mode.HardLink : ClientFiles.Mode.Copy;
             if (mode == ClientFiles.Mode.HardLink || FreeBytes(TargetFor(app.Folder)) > Build.TotalBytes)
-                return new(app.Folder, mode, "your Steam install");
+                return new(app.Folder, mode, app.Manifest == Build.ManifestId ? LauncherLoc.SteamSourceInstall : LauncherLoc.SteamSourceInstallSizes);
         }
         return null;
     }
@@ -61,6 +65,15 @@ sealed class Workflow(LauncherConfig config, LauncherSettings settings)
     /// <summary>Bytes still to download into <paramref name="folder"/> (what an interrupted download already has counts).</summary>
     public long StillNeeded(string folder) => Build.TotalBytes - (Directory.Exists(folder) ? ClientFiles.PresentBytes(folder, Build) : 0);
 
+    public const long DownloadReserveBytes = 2L << 30;
+
+    public void EnsureDownloadSpace(string folder)
+    {
+        var needed = StillNeeded(folder) + DownloadReserveBytes;
+        if (FreeBytes(folder) < needed)
+            throw new LauncherException(LauncherLoc.ErrNotEnoughSpace(Path.GetPathRoot(Path.GetFullPath(folder))!, $"{needed / 1e9:0.#}", $"{StillNeeded(folder) / 1e9:0.#}"));
+    }
+
     /// <summary>
     /// Where the download goes: the folder of an interrupted download, else %LOCALAPPDATA% on the
     /// system drive when it has room, else &lt;drive&gt;:\A2CorePrivate\AION2 on the fixed drive with the
@@ -69,21 +82,26 @@ sealed class Workflow(LauncherConfig config, LauncherSettings settings)
     public string? DownloadFolder()
     {
         if (settings.DownloadFolder is { } previous) return previous;
-        const long reserve = 2L << 30;
         var local = TargetFor(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData));
-        if (FreeBytes(local) > Build.TotalBytes + reserve) return local;
+        if (FreeBytes(local) > StillNeeded(local) + DownloadReserveBytes) return local;
         var best = DriveInfo.GetDrives().Where(d => d.DriveType == DriveType.Fixed && d.IsReady)
             .OrderByDescending(d => d.AvailableFreeSpace).FirstOrDefault();
-        return best is not null && best.AvailableFreeSpace > Build.TotalBytes + reserve ? Path.Combine(best.RootDirectory.FullName, "A2CorePrivate", "AION2") : null;
+        return best is not null && best.AvailableFreeSpace > StillNeeded(Path.Combine(best.RootDirectory.FullName, "A2CorePrivate", "AION2")) + DownloadReserveBytes
+            ? Path.Combine(best.RootDirectory.FullName, "A2CorePrivate", "AION2") : null;
     }
 
     /// <summary>
     /// Downloads the supported build from Steam with the player's account (QR sign-in, or the
     /// saved sign-in of an interrupted download) into <see cref="DownloadFolder"/>.
     /// </summary>
-    public async Task<string> DownloadAsync(Action<string> qrCode, IProgress<SteamDownload.Status> progress, CancellationToken ct)
+    public async Task<string> DownloadAsync(Action<string> qrCode, IProgress<SteamDownload.Status> progress, CancellationToken ct) =>
+        await DownloadAsync(DownloadFolder() ?? throw new LauncherException(LauncherLoc.ErrNoDriveSpace(Build.TotalBytes / 1e9)),
+            null, qrCode, progress, ct);
+
+    /// <summary>Downloads into <paramref name="folder"/>; <paramref name="onlyPaths"/> limits files (repair / fill gaps).</summary>
+    public async Task<string> DownloadAsync(string folder, IReadOnlySet<string>? onlyPaths, Action<string> qrCode, IProgress<SteamDownload.Status> progress, CancellationToken ct)
     {
-        var folder = DownloadFolder() ?? throw new LauncherException($"No drive has {Build.TotalBytes / 1e9:0} GB free for the game.");
+        EnsureDownloadSpace(folder);
         settings.DownloadFolder = folder;
         settings.Save();
         using var steam = new SteamDownload();
@@ -91,7 +109,7 @@ sealed class Workflow(LauncherConfig config, LauncherSettings settings)
         var signIn = await steam.SignInAsync(settings.SteamSignIn(), ct);
         settings.SetSteamSignIn(signIn);
         settings.Save();
-        await steam.DownloadAsync(Build, folder, progress, ct);
+        await steam.DownloadAsync(Build, folder, progress, ct, onlyPaths);
         return folder;
     }
 
@@ -101,34 +119,70 @@ sealed class Workflow(LauncherConfig config, LauncherSettings settings)
     {
         var target = TargetFor(source.Folder);
         Directory.CreateDirectory(target);
-        status(source.Mode == ClientFiles.Mode.HardLink
-            ? "Linking the game files from your Steam install (no extra disk space)…"
-            : "Copying the game files from your Steam install (about 88 GB)…");
+        status(source.Mode == ClientFiles.Mode.HardLink ? LauncherLoc.StatusLinkingSteam : LauncherLoc.StatusCopyingSteam);
         await ClientFiles.PlaceAsync(source.Folder, target, Build, source.Mode, progress, ct);
-        status("Checking the game files…");
+        status(LauncherLoc.StatusCheckingGameFiles);
         var check = await ClientFiles.CheckAsync(target, Build, CheckLevel.Quick, progress, ct);
-        if (!check.Ok) throw new LauncherException($"The installed files do not match the supported build ({check.Problem}).");
+        if (!check.Ok) throw new LauncherException(LauncherLoc.ErrInstallMismatch(check.Problem!));
         await FinishAsync(target, status);
     }
 
     /// <summary>Uses a folder that already holds the supported build (a download, an older copy) in place: checked, not copied.</summary>
     public async Task AdoptAsync(string folder, Action<string> status, IProgress<(long, long)> progress, CancellationToken ct)
     {
-        // Accept the folder that contains the game folder, and the Aion2 folder inside it, too.
-        folder = new[] { folder, Path.Combine(folder, "AION2"), Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(folder)) }
-            .FirstOrDefault(f => f is not null && File.Exists(Path.Combine(f, Build.Executable)))
-            ?? throw new LauncherException("That folder has no game files. Choose the folder that contains the Aion2 and Engine folders.");
-        status("Checking the game files…");
+        folder = ClientFiles.ResolveGameFolder(folder, Build)
+            ?? throw new LauncherException(LauncherLoc.ErrNoGameFolder);
+        status(LauncherLoc.StatusCheckingGameFiles);
         var check = await ClientFiles.CheckAsync(folder, Build, CheckLevel.Quick, progress, ct);
-        if (!check.Ok) throw new LauncherException($"That copy is not the version this server needs ({check.Problem}).");
+        if (!check.Ok) throw new LauncherException(LauncherLoc.ErrWrongVersion(check.Problem!));
         await FinishAsync(Path.GetFullPath(folder), status);
     }
 
+    /// <summary>Reuses matching files from another folder, then downloads the rest from Steam when needed.</summary>
+    public async Task ImportExistingAsync(string pickedFolder, bool useInPlace, Action<string> qrCode, Action<string> status,
+        IProgress<SteamDownload.Status> downloadProgress, IProgress<(long, long)> checkProgress, CancellationToken ct)
+    {
+        var source = ClientFiles.ResolveGameFolder(pickedFolder, Build)
+            ?? throw new LauncherException(LauncherLoc.ErrNoGameFolder);
+        status(LauncherLoc.StatusCheckingMatches);
+        var survey = await ClientFiles.SurveyAsync(source, Build, ct);
+        if (survey.Complete)
+        {
+            await AdoptAsync(source, status, checkProgress, ct);
+            return;
+        }
+        var target = useInPlace ? source : TargetFor(source);
+        if (!useInPlace)
+        {
+            Directory.CreateDirectory(target);
+            var mode = ClientFiles.SameVolume(source, target) ? ClientFiles.Mode.HardLink : ClientFiles.Mode.Copy;
+            status(mode == ClientFiles.Mode.HardLink ? LauncherLoc.StatusLinkingMatching : LauncherLoc.StatusCopyingMatching);
+            await ClientFiles.PlaceMatchingAsync(source, target, Build, mode, checkProgress, ct);
+            survey = await ClientFiles.SurveyAsync(target, Build, ct);
+            if (survey.Complete)
+            {
+                await FinishAsync(target, status);
+                return;
+            }
+        }
+        EnsureDownloadSpace(target);
+        settings.DownloadFolder = target;
+        settings.Save();
+        status(LauncherLoc.StatusDownloadingMissing(survey.ToDownload.Count, survey.StillNeeded(Build) / 1e9));
+        await DownloadAsync(target, survey.ToDownload.ToHashSet(StringComparer.OrdinalIgnoreCase), qrCode, downloadProgress, ct);
+        var after = await ClientFiles.CheckAsync(target, Build, CheckLevel.Quick, checkProgress, ct);
+        if (!after.Ok) throw new LauncherException(LauncherLoc.ErrStillMismatch(after.Problem!));
+        TryDelete(Path.Combine(target, SteamDownload.StateFile));
+        await FinishAsync(target, status);
+    }
+
+    static void TryDelete(string path) { try { if (File.Exists(path)) File.Delete(path); } catch (IOException) { } }
+
     async Task FinishAsync(string folder, Action<string> status)
     {
-        status("Allowing the game to reach only this server (approve the Windows prompt)…");
+        status(LauncherLoc.StatusAllowFirewall);
         if (!await Elevated.RunAsync("--setup-firewall", folder, config.ServerAddress))
-            throw new LauncherException("The Windows permission prompt was declined, so the firewall rules were not added. Press Try again and choose Yes.");
+            throw new LauncherException(LauncherLoc.ErrFirewallDeclined);
         settings.InstallFolder = folder;
         settings.VerifiedStamp = QuickStamp(folder);
         // The Steam sign-in was only kept to resume the download.
@@ -154,56 +208,88 @@ sealed class Workflow(LauncherConfig config, LauncherSettings settings)
     /// </summary>
     public async Task<Process> PlayAsync(SteamInstall steam, Action<string> status, IProgress<(long, long)> progress, CancellationToken ct)
     {
-        var folder = settings.InstallFolder ?? throw new LauncherException("The game is not installed.");
-        if (Elevated.GameRunning(folder)) throw new LauncherException("The game is already running.");
+        var version = Version;
+        var folder = version.IsSteam
+            ? ClientVersions.SteamFolder(version, config, steam) ?? throw new LauncherException(LauncherLoc.ErrSteamCopyMissing)
+            : version.ClientPath ?? settings.InstallFolder ?? throw new LauncherException(LauncherLoc.ErrGameNotInstalled);
+        if (Elevated.GameRunning(folder)) throw new LauncherException(LauncherLoc.ErrGameAlreadyRunning);
+        GameFolder = folder;
         if (Process.GetProcessesByName("steam").Length == 0)
         {
-            status("Starting Steam…");
+            status(LauncherLoc.StatusStartingSteam);
             Process.Start(new ProcessStartInfo("steam://open/main") { UseShellExecute = true });
             for (var i = 0; i < 60 && Process.GetProcessesByName("steam").Length == 0; i++) await Task.Delay(1000, ct);
             await Task.Delay(5000, ct);
         }
 
-        status("Checking the game files…");
+        // Steam version: used read-only in place. No build check (it is newer than supported-build.json),
+        // no firewall rules (they would also block the official game) and no pak patch (it would write into Steam's folder).
+        if (!version.IsSteam)
+        {
+        status(LauncherLoc.StatusCheckingGameFiles);
         var sizes = await ClientFiles.CheckAsync(folder, Build, CheckLevel.Sizes, null, ct);
-        if (!sizes.Ok) throw new LauncherException($"Game files changed ({sizes.Problem}). Use Check all files, or Uninstall and set up again.");
+        if (!sizes.Ok) throw new LauncherException(LauncherLoc.ErrGameFilesChanged(sizes.Problem!));
         var stamp = QuickStamp(folder);
         if (stamp != settings.VerifiedStamp)
         {
             var quick = await ClientFiles.CheckAsync(folder, Build, CheckLevel.Quick, progress, ct);
-            if (!quick.Ok) throw new LauncherException($"Game files changed ({quick.Problem}). Uninstall and set up again.");
+            if (!quick.Ok) throw new LauncherException(LauncherLoc.ErrGameFilesChangedUninstall(quick.Problem!));
             settings.VerifiedStamp = stamp;
             settings.Save();
         }
         if (!FirewallRulesPresent())
         {
-            status("Restoring the firewall rules (approve the Windows prompt)…");
-            if (!await RepairFirewallAsync()) throw new LauncherException("The firewall rules are missing and setup was cancelled.");
+            status(LauncherLoc.StatusRestoringFirewall);
+            if (!await RepairFirewallAsync()) throw new LauncherException(LauncherLoc.ErrFirewallMissing);
+        }
         }
 
         var app = AppInfo.Read(await File.ReadAllBytesAsync(steam.AppInfoPath, ct), SteamInstall.AppId);
-        var (executable, arguments) = AppInfo.LaunchArguments(app, config.SavedDirSuffix);
+        var (executable, steamArguments) = AppInfo.LaunchArguments(app, config.SavedDirSuffix);
+        var arguments = ClientVersions.Arguments(steamArguments, version);
         if (!executable.Equals(Build.Executable, StringComparison.OrdinalIgnoreCase))
-            throw new LauncherException("Steam's launch entry for the game changed; A2Core Launcher needs an update.");
+            throw new LauncherException(LauncherLoc.ErrSteamLaunchChanged);
 
-        status("Getting a launch code from the server…");
+        status(LauncherLoc.StatusGettingLaunchCode);
         var launch = await Account.AuthorizeLaunchAsync(ct);
         GamePlatformIni.Write(GamePlatformIni.PathFor(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), config.SavedDirSuffix),
             config.BootstrapUrl(launch.Authorization));
 
-        status("Pointing the game's online services at this server (approve the Windows prompt)…");
-        var helper = Elevated.Start("--hosts-session", folder, config.ServerAddress)
-            ?? throw new LauncherException("The game needs the hosts entries for this session; the prompt was cancelled.");
-        helper.Dispose();
-        for (var i = 0; i < 30 && !HostsFile.HasBlock(await File.ReadAllTextAsync(HostsFile.SystemPath, ct)); i++) await Task.Delay(500, ct);
-        if (!HostsFile.HasBlock(await File.ReadAllTextAsync(HostsFile.SystemPath, ct)))
-            throw new LauncherException("The hosts entries were not added (see elevated.log in %LOCALAPPDATA%\\A2CorePrivate).");
+        if (!version.IsSteam) ClientPatchSupport.DeployIfEnabled(folder, settings.AllowClientPatchPaks);
+        else if (settings.AllowClientPatchPaks) status(LauncherLoc.StatusPatchNotOnSteam);
 
-        status("Starting the game…");
+        status(LauncherLoc.StatusStartingGame);
         var exe = Path.Combine(folder, executable.Replace('/', '\\'));
         var info = new ProcessStartInfo(exe) { UseShellExecute = false, WorkingDirectory = Path.GetDirectoryName(exe)! };
         foreach (var argument in arguments) info.ArgumentList.Add(argument);
-        return Process.Start(info) ?? throw new LauncherException("The game did not start.");
+
+        if (RedirectModeSelection.PreferInject(settings.RedirectMode, config))
+        {
+            var dllPath = DnsInject.PrepareRedirectBundle(config.Server);
+            if (dllPath is not null)
+            {
+                var process = DnsInject.TryStartWithInject(info, dllPath, out var injectError);
+                if (process is not null) return process;
+                DnsInject.Log($"DNS inject failed ({injectError}); falling back to hosts session.");
+                status(LauncherLoc.StatusDnsInjectFailed);
+            }
+            else DnsInject.Log("A2Core.Redirect.dll is missing; falling back to hosts session.");
+            status(LauncherLoc.StatusDnsInjectUnavailable);
+        }
+
+        status(LauncherLoc.StatusPointingHosts);
+        await EnsureHostsSessionAsync(folder, status, ct);
+        return Process.Start(info) ?? throw new LauncherException(LauncherLoc.ErrGameDidNotStart);
+    }
+
+    async Task EnsureHostsSessionAsync(string folder, Action<string> status, CancellationToken ct)
+    {
+        var helper = Elevated.Start("--hosts-session", folder, config.ServerAddress)
+            ?? throw new LauncherException(LauncherLoc.ErrHostsCancelled);
+        helper.Dispose();
+        for (var i = 0; i < 30 && !HostsFile.HasBlock(await File.ReadAllTextAsync(HostsFile.SystemPath, ct)); i++) await Task.Delay(500, ct);
+        if (!HostsFile.HasBlock(await File.ReadAllTextAsync(HostsFile.SystemPath, ct)))
+            throw new LauncherException(LauncherLoc.ErrHostsNotAdded);
     }
 
     public async Task<BuildCheck> VerifyAllAsync(IProgress<(long, long)> progress, CancellationToken ct)
@@ -211,6 +297,25 @@ sealed class Workflow(LauncherConfig config, LauncherSettings settings)
         var result = await ClientFiles.CheckAsync(settings.InstallFolder!, Build, CheckLevel.Full, progress, ct);
         if (result.Ok) { settings.VerifiedStamp = QuickStamp(settings.InstallFolder!); settings.Save(); }
         return result;
+    }
+
+    /// <summary>Full verify; when files differ, re-downloads them from Steam into the install folder.</summary>
+    public async Task RepairFilesAsync(Action<string> qrCode, IProgress<SteamDownload.Status> downloadProgress, IProgress<(long, long)> verifyProgress, CancellationToken ct)
+    {
+        var folder = settings.InstallFolder ?? throw new LauncherException(LauncherLoc.ErrGameNotInstalled);
+        var bad = await ClientFiles.FindHashMismatchesAsync(folder, Build, verifyProgress, ct);
+        if (bad.Count == 0)
+        {
+            settings.VerifiedStamp = QuickStamp(folder);
+            settings.Save();
+            return;
+        }
+        await DownloadAsync(folder, bad.ToHashSet(StringComparer.OrdinalIgnoreCase), qrCode, downloadProgress, ct);
+        var after = await ClientFiles.FindHashMismatchesAsync(folder, Build, verifyProgress, ct);
+        if (after.Count > 0) throw new LauncherException(LauncherLoc.ErrRepairFile(after[0]));
+        TryDelete(Path.Combine(folder, SteamDownload.StateFile));
+        settings.VerifiedStamp = QuickStamp(folder);
+        settings.Save();
     }
 
     /// <summary>Sizes and write times of the quick-check files: unchanged means the last hash check still holds.</summary>

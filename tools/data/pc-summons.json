@@ -1,0 +1,508 @@
+{
+  "source": {
+    "skills": "Skill.dat SkillEffectTimeDataList -> SkillEffect.dat Spawn (EffectValueList[9] NpcData id, [15] group)",
+    "templates": "NpcData.dat (RelationshipEntity PC_Summon)",
+    "npc_skills": "Skill.dat + SkillEffect.dat for the summons ActiveSkillList"
+  },
+  "skills": {
+    "14170000": {
+      "npc": 2920620,
+      "group": ""
+    },
+    "15280000": {
+      "npc": 2920011,
+      "group": ""
+    },
+    "16100000": {
+      "npc": 2920101,
+      "group": "Fire"
+    },
+    "16110000": {
+      "npc": 2920121,
+      "group": "Water"
+    },
+    "16120000": {
+      "npc": 2920141,
+      "group": "Wind"
+    },
+    "16130000": {
+      "npc": 2920161,
+      "group": "Earth"
+    },
+    "17150000": {
+      "npc": 2920637,
+      "group": ""
+    }
+  },
+  "templates": {
+    "2920011": {
+      "name": "Sorcerer_Skill028_Invisible_A",
+      "level": 10,
+      "walk_speed": 0.0,
+      "run_speed": 0.0,
+      "radius": 1,
+      "skills": [],
+      "sub_type": "NormalSummon"
+    },
+    "2920101": {
+      "name": "Elementalist_Skill010_FireEle_Lv1_1",
+      "level": 1,
+      "walk_speed": 750.0,
+      "run_speed": 750.0,
+      "radius": 20,
+      "skills": [
+        100011,
+        100015,
+        16100001,
+        16001101,
+        16151100,
+        16001301,
+        16100005,
+        16001401,
+        16001501,
+        16001601
+      ],
+      "sub_type": "NormalSummon"
+    },
+    "2920121": {
+      "name": "Elementalist_Skill011_WaterEle_Lv1_1",
+      "level": 1,
+      "walk_speed": 1000.0,
+      "run_speed": 1000.0,
+      "radius": 20,
+      "skills": [
+        100021,
+        100025,
+        16110001,
+        16001105,
+        16152100,
+        16001305,
+        16110005,
+        16001405,
+        16001505,
+        16001605
+      ],
+      "sub_type": "NormalSummon"
+    },
+    "2920141": {
+      "name": "Elementalist_Skill012_WindEle_Lv1_1",
+      "level": 1,
+      "walk_speed": 1000.0,
+      "run_speed": 1000.0,
+      "radius": 20,
+      "skills": [
+        100031,
+        100035,
+        16120001,
+        16001109,
+        16154100,
+        16001313,
+        16120005,
+        16001413,
+        16001513,
+        16001613
+      ],
+      "sub_type": "NormalSummon"
+    },
+    "2920161": {
+      "name": "Elementalist_Skill013_EarthEle_Lv1_1",
+      "level": 1,
+      "walk_speed": 750.0,
+      "run_speed": 750.0,
+      "radius": 20,
+      "skills": [
+        100041,
+        100045,
+        16130001,
+        16001113,
+        16153100,
+        16001309,
+        16130005,
+        16001409,
+        16001509,
+        16001609
+      ],
+      "sub_type": "NormalSummon"
+    },
+    "2920620": {
+      "name": "Ranger_Skill017_Trap",
+      "level": 10,
+      "walk_speed": 0.0,
+      "run_speed": 0.0,
+      "radius": 1,
+      "skills": [],
+      "sub_type": "NormalSummon"
+    },
+    "2920637": {
+      "name": "N_Invisible_Summon",
+      "level": 10,
+      "walk_speed": 0.0,
+      "run_speed": 0.0,
+      "radius": 80,
+      "skills": [],
+      "sub_type": "NormalSummon"
+    }
+  },
+  "npc_skills": {
+    "100011": {
+      "range": 400.0,
+      "follow": 130.0,
+      "cooldown": 0,
+      "cast": 0,
+      "effect": 10001111,
+      "damage_min": 3600,
+      "damage_max": 3600
+    },
+    "100015": {
+      "range": 400.0,
+      "follow": 130.0,
+      "cooldown": 0,
+      "cast": 0,
+      "effect": 10001511,
+      "damage_min": 3600,
+      "damage_max": 3600
+    },
+    "100021": {
+      "range": 0.0,
+      "follow": 0.0,
+      "cooldown": 0,
+      "cast": 0,
+      "effect": 10002111,
+      "damage_min": 4320,
+      "damage_max": 4320
+    },
+    "100025": {
+      "range": 0.0,
+      "follow": 0.0,
+      "cooldown": 0,
+      "cast": 0,
+      "effect": 10002511,
+      "damage_min": 4320,
+      "damage_max": 4320
+    },
+    "100031": {
+      "range": 0.0,
+      "follow": 0.0,
+      "cooldown": 0,
+      "cast": 0,
+      "effect": 10003111,
+      "damage_min": 3240,
+      "damage_max": 3240
+    },
+    "100035": {
+      "range": 0.0,
+      "follow": 0.0,
+      "cooldown": 0,
+      "cast": 0,
+      "effect": 10003511,
+      "damage_min": 3240,
+      "damage_max": 3240
+    },
+    "100041": {
+      "range": 0.0,
+      "follow": 0.0,
+      "cooldown": 0,
+      "cast": 0,
+      "effect": 10004111,
+      "damage_min": 4000,
+      "damage_max": 4000
+    },
+    "100045": {
+      "range": 0.0,
+      "follow": 0.0,
+      "cooldown": 0,
+      "cast": 0,
+      "effect": 10004511,
+      "damage_min": 4000,
+      "damage_max": 4000
+    },
+    "16001101": {
+      "range": 400.0,
+      "follow": 350.0,
+      "cooldown": 2000,
+      "cast": 0,
+      "effect": 1600110111,
+      "damage_min": 10100,
+      "damage_max": 10100
+    },
+    "16001105": {
+      "range": 2000.0,
+      "follow": 1900.0,
+      "cooldown": 2000,
+      "cast": 0,
+      "effect": 1600110511,
+      "damage_min": 12100,
+      "damage_max": 12100
+    },
+    "16001109": {
+      "range": 2000.0,
+      "follow": 1900.0,
+      "cooldown": 2000,
+      "cast": 0,
+      "effect": 1600110911,
+      "damage_min": 3000,
+      "damage_max": 3000
+    },
+    "16001113": {
+      "range": 400.0,
+      "follow": 350.0,
+      "cooldown": 2000,
+      "cast": 0,
+      "effect": 1600111311,
+      "damage_min": 9300,
+      "damage_max": 9300
+    },
+    "16001301": {
+      "range": 400.0,
+      "follow": 350.0,
+      "cooldown": 2000,
+      "cast": 0,
+      "effect": 1600130111,
+      "damage_min": 11600,
+      "damage_max": 11600
+    },
+    "16001305": {
+      "range": 2000.0,
+      "follow": 1900.0,
+      "cooldown": 2000,
+      "cast": 0,
+      "effect": 1600130511,
+      "damage_min": 13920,
+      "damage_max": 13920
+    },
+    "16001309": {
+      "range": 1000.0,
+      "follow": 900.0,
+      "cooldown": 2000,
+      "cast": 0,
+      "effect": 1600130911,
+      "damage_min": 12760,
+      "damage_max": 12760
+    },
+    "16001313": {
+      "range": 2000.0,
+      "follow": 1900.0,
+      "cooldown": 2000,
+      "cast": 0,
+      "effect": 1600131311,
+      "damage_min": 10440,
+      "damage_max": 10440
+    },
+    "16001401": {
+      "range": 400.0,
+      "follow": 350.0,
+      "cooldown": 2000,
+      "cast": 0,
+      "effect": 1600140111,
+      "damage_min": 16240,
+      "damage_max": 16240
+    },
+    "16001405": {
+      "range": 2000.0,
+      "follow": 1900.0,
+      "cooldown": 2000,
+      "cast": 0,
+      "effect": 1600140511,
+      "damage_min": 19488,
+      "damage_max": 19488
+    },
+    "16001409": {
+      "range": 1000.0,
+      "follow": 900.0,
+      "cooldown": 2000,
+      "cast": 0,
+      "effect": 1600140911,
+      "damage_min": 17864,
+      "damage_max": 17864
+    },
+    "16001413": {
+      "range": 2000.0,
+      "follow": 1900.0,
+      "cooldown": 2000,
+      "cast": 0,
+      "effect": 1600141311,
+      "damage_min": 14616,
+      "damage_max": 14616
+    },
+    "16001501": {
+      "range": 400.0,
+      "follow": 350.0,
+      "cooldown": 2000,
+      "cast": 0,
+      "effect": 1600150111,
+      "damage_min": 23200,
+      "damage_max": 23200
+    },
+    "16001505": {
+      "range": 2000.0,
+      "follow": 1900.0,
+      "cooldown": 2000,
+      "cast": 0,
+      "effect": 1600150511,
+      "damage_min": 27840,
+      "damage_max": 27840
+    },
+    "16001509": {
+      "range": 1000.0,
+      "follow": 900.0,
+      "cooldown": 2000,
+      "cast": 0,
+      "effect": 1600150911,
+      "damage_min": 25520,
+      "damage_max": 25520
+    },
+    "16001513": {
+      "range": 2000.0,
+      "follow": 1900.0,
+      "cooldown": 2000,
+      "cast": 0,
+      "effect": 1600151311,
+      "damage_min": 20880,
+      "damage_max": 20880
+    },
+    "16001601": {
+      "range": 400.0,
+      "follow": 350.0,
+      "cooldown": 2000,
+      "cast": 0,
+      "effect": 1600160111,
+      "damage_min": 34800,
+      "damage_max": 34800
+    },
+    "16001605": {
+      "range": 2000.0,
+      "follow": 1900.0,
+      "cooldown": 2000,
+      "cast": 0,
+      "effect": 1600160511,
+      "damage_min": 41760,
+      "damage_max": 41760
+    },
+    "16001609": {
+      "range": 1000.0,
+      "follow": 900.0,
+      "cooldown": 2000,
+      "cast": 0,
+      "effect": 1600160911,
+      "damage_min": 38280,
+      "damage_max": 38280
+    },
+    "16001613": {
+      "range": 2000.0,
+      "follow": 1900.0,
+      "cooldown": 2000,
+      "cast": 0,
+      "effect": 1600161311,
+      "damage_min": 31320,
+      "damage_max": 31320
+    },
+    "16100001": {
+      "range": 2500.0,
+      "follow": 2400.0,
+      "cooldown": 3000,
+      "cast": 0,
+      "effect": 1610000121,
+      "damage_min": 12000,
+      "damage_max": 12000
+    },
+    "16100005": {
+      "range": 0.0,
+      "follow": 0.0,
+      "cooldown": 3000,
+      "cast": 0,
+      "effect": 0,
+      "damage_min": 0,
+      "damage_max": 0
+    },
+    "16110001": {
+      "range": 2500.0,
+      "follow": 2400.0,
+      "cooldown": 3000,
+      "cast": 0,
+      "effect": 1611000111,
+      "damage_min": 14500,
+      "damage_max": 14500
+    },
+    "16110005": {
+      "range": 0.0,
+      "follow": 0.0,
+      "cooldown": 3000,
+      "cast": 0,
+      "effect": 0,
+      "damage_min": 0,
+      "damage_max": 0
+    },
+    "16120001": {
+      "range": 2500.0,
+      "follow": 2400.0,
+      "cooldown": 3000,
+      "cast": 0,
+      "effect": 1612000111,
+      "damage_min": 11100,
+      "damage_max": 11100
+    },
+    "16120005": {
+      "range": 0.0,
+      "follow": 0.0,
+      "cooldown": 3000,
+      "cast": 0,
+      "effect": 0,
+      "damage_min": 0,
+      "damage_max": 0
+    },
+    "16130001": {
+      "range": 2500.0,
+      "follow": 2400.0,
+      "cooldown": 3000,
+      "cast": 0,
+      "effect": 1613000121,
+      "damage_min": 13500,
+      "damage_max": 13500
+    },
+    "16130005": {
+      "range": 0.0,
+      "follow": 0.0,
+      "cooldown": 3000,
+      "cast": 0,
+      "effect": 0,
+      "damage_min": 0,
+      "damage_max": 0
+    },
+    "16151100": {
+      "range": 400.0,
+      "follow": 350.0,
+      "cooldown": 2000,
+      "cast": 0,
+      "effect": 1615110011,
+      "damage_min": 9500,
+      "damage_max": 9500
+    },
+    "16152100": {
+      "range": 2000.0,
+      "follow": 1900.0,
+      "cooldown": 2000,
+      "cast": 0,
+      "effect": 1615210011,
+      "damage_min": 11400,
+      "damage_max": 11400
+    },
+    "16153100": {
+      "range": 400.0,
+      "follow": 350.0,
+      "cooldown": 2000,
+      "cast": 0,
+      "effect": 1615310011,
+      "damage_min": 10300,
+      "damage_max": 10300
+    },
+    "16154100": {
+      "range": 2000.0,
+      "follow": 1900.0,
+      "cooldown": 2000,
+      "cast": 0,
+      "effect": 1615410011,
+      "damage_min": 8550,
+      "damage_max": 8550
+    }
+  }
+}

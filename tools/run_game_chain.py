@@ -43,11 +43,13 @@ try:
     from .elevated_dotnet_host import is_elevated, start_elevated_host
     from . import login_server, game_server, lime_service
     from .run_diagnostics import record_error, write_manifest
+    from .dev_defaults import ACCOUNT_SID
 except ImportError:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     from elevated_dotnet_host import is_elevated, start_elevated_host
     import login_server, game_server, lime_service
     from run_diagnostics import record_error, write_manifest
+    from dev_defaults import ACCOUNT_SID
 
 FIXTURES = ROOT / "research/local/bootstrap-fixtures"
 
@@ -287,7 +289,7 @@ def _run(args, parser):
     login_thread = threading.Thread(target=run_server, daemon=True, args=(
         login_server.serve, {
             "worlds": login_server.DEFAULT_WORLDS,
-            "account_id": "1000001",
+            "account_id": ACCOUNT_SID,
             "authenticate": bridge.login if bridge else None,
             "port": 3700,
             "save_dir": login_dir,

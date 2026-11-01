@@ -1,7 +1,7 @@
 <#
-Capture the current AION2 server using a uniquely named netsh/NDIS trace.
-Does not call PktMon or change its filters. Run in Administrator PowerShell;
--PlanOnly previews commands without starting a trace or requiring elevation.
+Passive official-server capture: uniquely named netsh/NDIS trace (pktmon is not used; netsh is built-in on all targets).
+Run in Administrator PowerShell; -PlanOnly previews commands without starting a trace or requiring elevation.
+Press Q in the capture window to stop early.
 #>
 [CmdletBinding()]
 param(
@@ -15,6 +15,8 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'capture_session.ps1')
+
 if ($MovementCues -and $DurationSeconds -lt 80) { throw 'Movement cues require at least 80 seconds.' }
 $movementSchedule = @()
 if ($MovementCues) {
@@ -27,30 +29,15 @@ if ($MovementCues) {
         @{ at_seconds = 66; action = 'sequence_complete_stay_still'; beeps = 3 }
     )
 }
-$workspace = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
-$netsh = Join-Path $env:SystemRoot 'System32\netsh.exe'
-$converter = Join-Path $workspace 'research\local\tooling\etl2pcapng-1.11.0\etl2pcapng.exe'
-$converterHash = 'C2D03AAC43EA0F5626FC8D909E6688393FEAF71BD6FACD39AAF8A637382D9043'
+$workspace = Get-CaptureWorkspace
+$converterInfo = if ($PlanOnly) { @{ Sha256 = 'C2D03AAC43EA0F5626FC8D909E6688393FEAF71BD6FACD39AAF8A637382D9043'; Version = '1.11.0' } } else { Get-VerifiedEtlConverter }
 
 # Discovery: at login the port-13700 peer; in the game (-InGame or -MovementCues) the port-13328 game server.
-# Addresses given with -ServerAddress are added to the discovered one (the login and game servers differ).
 $discoveryPort = if ($MovementCues -or $InGame) { 13328 } else { 13700 }
-# On a Wi-Fi link the physical layer alone records only the client's frames (2026-10-19: 2474 outbound, 0 inbound);
-# the multi-layer trace records both directions (the 2026-10-13 fight). Inside the game it is always on.
 if ($InGame) { $MultiLayer = $true }
-$gameIds = @(Get-Process -Name AION2 -ErrorAction SilentlyContinue | ForEach-Object { [string]$_.Id })
-$discovered = @()
-$rows = @(& "$env:SystemRoot\System32\netstat.exe" -ano -p tcp)
-if ($LASTEXITCODE -ne 0) { throw 'Could not read the TCP endpoint table.' }
-foreach ($row in $rows) {
-    $fields = $row.Trim() -split '\s+'
-    if ($fields.Count -eq 5 -and $fields[0] -eq 'TCP' -and $fields[4] -in $gameIds -and
-        $fields[3] -eq 'ESTABLISHED' -and
-        $fields[2] -match ('^(\d+\.\d+\.\d+\.\d+):' + $discoveryPort + '$')) {
-        $discovered += $Matches[1]
-    }
-}
-$discovered = @($discovered | Sort-Object -Unique)
+
+$gameIds = Get-AionGameProcessIds
+$discovered = Discover-AionServerAddresses -RemotePort $discoveryPort -ProcessIds $gameIds
 if (-not $ServerAddress -and $discovered.Count -ne 1) {
     $screen = if ($discoveryPort -eq 13328) { 'inside the game' } else { 'at login (or use -InGame inside the game)' }
     throw "Could not identify one AION2 IPv4 server on port $discoveryPort. Keep AION2 open $screen, or supply -ServerAddress with an observed server IP."
@@ -64,39 +51,37 @@ $captureAddresses = @($ServerAddress.Split(',') | ForEach-Object {
     }
     $address.ToString()
 } | Sort-Object -Unique)
-if ($captureAddresses.Count -gt 16) {
-    throw 'At most 16 observed server addresses may be supplied.'
-}
+if ($captureAddresses.Count -gt 16) { throw 'At most 16 observed server addresses may be supplied.' }
 $ServerAddress = $captureAddresses -join ','
-$addressFilter = $ServerAddress
-if ($captureAddresses.Count -gt 1) { $addressFilter = '(' + $ServerAddress + ')' }
+$addressFilter = if ($captureAddresses.Count -gt 1) { '(' + $ServerAddress + ')' } else { $ServerAddress }
+
 $traceName = 'Aion2Research-' + [Guid]::NewGuid().ToString('N')
-$directory = Join-Path $workspace ('research\local\capture-13700-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '-' + $traceName.Substring(14, 8))
+$directory = Join-Path $workspace ('research\local\capture-' + $discoveryPort + '-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '-' + $traceName.Substring(14, 8))
 $etl = Join-Path $directory 'capture.etl'
 $pcap = Join-Path $directory 'capture.pcapng'
-# netsh exposes address/protocol filters, not TCP-port filters on this system.
-# Scope collection to the observed server, then analyze only port 13700 offline.
+
 $startArguments = @('trace', 'start', "sessionname=$traceName", 'capture=yes',
     'capturetype=physical', 'report=no', 'persistent=no', 'correlation=disabled', 'perfMerge=no',
     "tracefile=$etl", "maxsize=$MaxSizeMb", 'filemode=circular', 'overwrite=no',
     'Ethernet.Type=IPv4', 'Protocol=TCP', "IPv4.Address=$addressFilter", ('CaptureMultiLayer=' + $(if ($MultiLayer) { 'yes' } else { 'no' })))
 $stopArguments = @('trace', 'stop', "sessionname=$traceName")
 $metadata = [ordered]@{
-    schema_version = 2; backend = 'netsh/NDIS'; session_name = $traceName
-    capture_multi_layer = [bool]$MultiLayer
-    server_address = $ServerAddress; analysis_port = 13700
+    schema_version = 3; backend = 'netsh/NDIS'; session_name = $traceName
+    capture_multi_layer = [bool]$MultiLayer; discovery_port = $discoveryPort
+    server_address = $ServerAddress; analysis_port = $discoveryPort
     server_addresses = $captureAddresses; suggested_analysis_ports = @(13700, 13328)
     capture_filter = "IPv4 TCP to/from $ServerAddress (all ports at capture time)"
-    duration_seconds = $DurationSeconds; started_utc = $null; stopped_utc = $null
+    duration_seconds = $DurationSeconds; started_utc = $null; stopped_utc = $null; stopped_early = $false
     file_size_limit_mb = $MaxSizeMb; log_mode = 'circular'
     capture_complete = $false; pcapng_created = $false
+    output_directory = $directory; pcapng_path = $pcap
     start_arguments = $startArguments; stop_arguments = $stopArguments
-    converter_version = '1.11.0'; converter_sha256 = $converterHash
+    converter_version = $converterInfo.Version; converter_sha256 = $converterInfo.Sha256
     movement_cue_schedule = $movementSchedule
     movement_cue_note = 'Cues request manual actions. Timestamps do not measure actual key presses or character motion.'
 }
 if ($PlanOnly) {
-    $metadata | ConvertTo-Json -Depth 5
+    $metadata | ConvertTo-Json -Depth 6
     return
 }
 
@@ -104,33 +89,19 @@ $principal = [Security.Principal.WindowsPrincipal]::new([Security.Principal.Wind
 if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
     throw 'Windows packet capture requires Administrator PowerShell. No trace changes were made.'
 }
-if (-not (Test-Path -LiteralPath $converter)) {
-    throw "The Microsoft ETL converter is missing: $converter"
-}
-if ((Get-FileHash -LiteralPath $converter -Algorithm SHA256).Hash -ne $converterHash) {
-    throw 'The ETL converter hash does not match the verified Microsoft release.'
-}
 if (Test-Path -LiteralPath $directory) { throw "Capture directory already exists: $directory" }
 $null = New-Item -ItemType Directory -Path $directory
 $captureStarted = $false
 $captureStopped = $false
-
-function Invoke-Netsh([string[]]$Arguments) {
-    $lines = @(& $netsh @Arguments 2>&1)
-    if ($LASTEXITCODE -ne 0) { throw ($lines -join [Environment]::NewLine) }
-    return ($lines -join [Environment]::NewLine)
-}
-function Save-Session {
-    $metadata | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $directory 'session.json') -Encoding UTF8
-}
+$stoppedEarly = $false
 
 try {
-    Save-Session
-    Write-Output (Invoke-Netsh -Arguments $startArguments)
+    Save-CaptureSession -Directory $directory -Metadata $metadata
+    Write-Output (Invoke-NetshTrace -Arguments $startArguments)
     $captureStarted = $true
     $metadata.started_utc = [DateTime]::UtcNow.ToString('o')
-    Save-Session
-    Write-Output "Capture active for $DurationSeconds seconds, server $ServerAddress"
+    Save-CaptureSession -Directory $directory -Metadata $metadata
+    Write-Output "Capture active for up to $DurationSeconds seconds, server $ServerAddress (port $discoveryPort filter for discovery)"
     Write-Output "Output: $directory"
     if ($MovementCues) {
         Write-Output 'Return to the existing game session and stand still in an open area. Keep the camera direction fixed.'
@@ -142,10 +113,18 @@ try {
     } else {
         Write-Output 'For an opening handshake, restart AION2 normally through Steam, select your server, and continue through startup.'
     }
-    Write-Output 'Keep this window open until conversion finishes.'
+    Write-Output 'Press Q in this window to stop early. Keep it open until conversion finishes.'
     $timer = [Diagnostics.Stopwatch]::StartNew()
     $cueIndex = 0
     while ($timer.Elapsed.TotalSeconds -lt $DurationSeconds) {
+        if ([Console]::KeyAvailable) {
+            $key = [Console]::ReadKey($true)
+            if ($key.Key -eq 'Q') {
+                $stoppedEarly = $true
+                Write-Output 'Stopping capture early (Q pressed).'
+                break
+            }
+        }
         while ($cueIndex -lt $movementSchedule.Count -and $timer.Elapsed.TotalSeconds -ge $movementSchedule[$cueIndex].at_seconds) {
             $cue = $movementSchedule[$cueIndex]
             $cueRecord = [ordered]@{ kind = 'manual_action_cue'; action = $cue.action
@@ -161,25 +140,26 @@ try {
             } catch { Write-Warning 'Audio cue unavailable; use the printed schedule.' }
             $cueIndex++
         }
-        if ($MovementCues) { Start-Sleep -Milliseconds 100 } else { Start-Sleep -Seconds 1 }
+        if ($MovementCues) { Start-Sleep -Milliseconds 100 } else { Start-Sleep -Milliseconds 250 }
     }
-    Write-Output (Invoke-Netsh -Arguments $stopArguments)
+    Write-Output (Invoke-NetshTrace -Arguments $stopArguments)
     $captureStopped = $true
     $metadata.stopped_utc = [DateTime]::UtcNow.ToString('o')
     $metadata.capture_complete = $true
-    Save-Session
-    & $converter $etl $pcap
-    if ($LASTEXITCODE -ne 0) { throw "ETL conversion failed with exit code $LASTEXITCODE. The ETL is preserved at $etl" }
-    $metadata.pcapng_created = Test-Path -LiteralPath $pcap
-    Write-Output "Ready for analysis: $pcap"
+    $metadata.stopped_early = [bool]$stoppedEarly
+    Save-CaptureSession -Directory $directory -Metadata $metadata
+    Complete-CaptureRecording -Directory $directory -SkipStop
 } finally {
     if ($captureStarted -and -not $captureStopped) {
         try {
-            Write-Output (Invoke-Netsh -Arguments $stopArguments)
+            Write-Output (Invoke-NetshTrace -Arguments $stopArguments)
             $metadata.stopped_utc = [DateTime]::UtcNow.ToString('o')
+            $metadata.capture_complete = $true
+            $metadata.stopped_early = [bool]$stoppedEarly
         } catch {
-            Write-Warning "Could not stop the research trace. Recovery command: netsh trace stop sessionname=$traceName"
+            Write-Warning "Could not stop the research trace. Recovery: tools/capture-stop.cmd or netsh trace stop sessionname=$traceName"
         }
+        Save-CaptureSession -Directory $directory -Metadata $metadata
+        try { Complete-CaptureRecording -Directory $directory -SkipStop } catch { Write-Warning $_ }
     }
-    Save-Session
 }

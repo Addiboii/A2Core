@@ -1,0 +1,62 @@
+{
+  "note": "Improvised SkillCond rows when SkillCond.dat is not exported (tools/skill_cond.py). Tables win when present.",
+  "evidence": {
+    "14070000": "Suppressing Arrow tooltip: while Precision is active; Marking Shot grants Precision (client skill text, 10s).",
+    "14090000": "Marking Shot grants Precision for 10s (SkillEffect Abnormal_True group not in committed skill-areas.json).",
+    "16340000": "Rapid Scattershot: target afflicted with Stagger (SkillCond.dat HasAbnormalEffectType, CondSelectTarget Target)."
+  },
+  "needs": {
+    "14070000": {
+      "type": "HasAbnormalGroupId",
+      "abnormal_group": 140900001,
+      "select_target": "Self"
+    },
+    "16340000": {
+      "type": "HasAbnormalEffectType",
+      "abnormal_effect": "Stagger",
+      "select_target": "Target"
+    },
+    "15010000": {
+      "type": "HasAbnormalEffectType",
+      "abnormal_effect": "Stagger",
+      "select_target": "Target"
+    },
+    "14330000": {
+      "type": "HasAbnormalEffectType",
+      "abnormal_effect": "Stagger",
+      "select_target": "Target"
+    },
+    "17370000": {
+      "type": "HasAbnormalEffectType",
+      "abnormal_effect": "Stagger",
+      "select_target": "Target"
+    },
+    "18300000": {
+      "type": "HasAbnormalEffectType",
+      "abnormal_effect": "Stagger",
+      "select_target": "Target"
+    },
+    "12340000": {
+      "type": "HasAbnormalEffectType",
+      "abnormal_effect": "Stagger",
+      "select_target": "Target"
+    },
+    "11280000": {
+      "type": "HasAbnormalEffectType",
+      "abnormal_effect": "Stagger",
+      "select_target": "Target"
+    },
+    "13340000": {
+      "type": "HasAbnormalEffectType",
+      "abnormal_effect": "Stagger",
+      "select_target": "Target"
+    }
+  },
+  "grants": {
+    "14090000": {
+      "abnormal": 140900001,
+      "duration_ms": 10000,
+      "select_target": "Self"
+    }
+  }
+}

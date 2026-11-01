@@ -1,0 +1,4 @@
+{
+  "note": "Skill.dat NeedCostAp when table export is absent. tools/skill_ap_costs.py merges into class-skills.json cost.ap.",
+  "skills": {}
+}

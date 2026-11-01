@@ -1,0 +1,23 @@
+{
+  "note": "Stagger gauge damage per skill (global client tooltip bands). OURS when SkillEffect stagger rows are not exported; tools/stagger_gauge.py patches class-skills.json stagger_gauge. Evidence: The Games Wiki spiritmaster-skills and stagger-gauge pages (Oct 2026).",
+  "default_gauge_max": 100,
+  "stagger_abnormal": 100000401,
+  "stagger_duration_ms": 4000,
+  "skills": {
+    "16040000": { "gauge": 3, "evidence": "Combustion tooltip: Stagger gauge damage 3" },
+    "16100000": { "gauge": 7, "evidence": "Summon: Fire Spirit" },
+    "16110000": { "gauge": 7, "evidence": "Summon: Water Spirit" },
+    "16120000": { "gauge": 7, "evidence": "Summon: Wind Spirit" },
+    "16130000": { "gauge": 7, "evidence": "Summon: Earth Spirit" },
+    "16140000": { "gauge": 10, "evidence": "Jointstrike: Curse" },
+    "16330000": { "gauge": 5, "evidence": "Dimensional Control" },
+    "16070000": { "gauge": 15, "evidence": "Soul's Cry" },
+    "16300000": { "gauge": 10, "evidence": "Elemental Fusion" },
+    "16220000": { "gauge": 10, "evidence": "Jointstrike: Corrode stigma" },
+    "16230000": { "gauge": 20, "evidence": "Cursed Cloud stigma" },
+    "16240000": { "gauge": 20, "evidence": "Seize Magic stigma" },
+    "16250000": { "gauge": 50, "evidence": "Jointstrike: Destructive Attack stigma" },
+    "16260000": { "gauge": 20, "evidence": "Summon: Ancient Spirit stigma" },
+    "16270000": { "gauge": 20, "evidence": "Magic Block stigma" }
+  }
+}

@@ -14,11 +14,13 @@ namespace Aion.World;
 /// landscape grid (<see cref="Terrain"/>) for NPCs spawned on it, else the straight slope to the goal. OURS (no client source): leash and active ranges,
 /// wander radius and idle times.
 /// </summary>
-public sealed class NpcAi(Random rng, GameData? data = null)
+public sealed partial class NpcAi(Random rng, GameData? data = null)
 {
     public const int UpdateMs = 1000;
     /// <summary>The 0x371d delta interval while an NPC moves (OBSERVED: 100 ms).</summary>
     public const int DeltaMs = 100;
+    /// <summary>Movement integrated per tick is capped to this many ms so a delayed AI tick does not teleport the NPC.</summary>
+    const int MaxMoveStepMs = DeltaMs;
     /// <summary>A following NPC farther than this from the player gets the speed boost (OURS; the official toggles it as it falls behind).</summary>
     public const double FollowBoostBeyond = 700.0;
     public const int FollowBoost = 8000;
@@ -28,7 +30,8 @@ public sealed class NpcAi(Random rng, GameData? data = null)
     /// <summary>Official: the NPC's hit (0x3804) followed its skill start (0x3802) by ~600 ms.</summary>
     public const int HitDelayMs = 600;
     /// <summary>Official: NPC hits were ~7.5% of the NPC's level HP (level 3: 13-17 of 199; level 7: 47-54 of 665).</summary>
-    public const double DamagePerHp = 0.075;
+    /// <summary>Legacy name; see <see cref="Combat.NpcDamageHpFraction"/>.</summary>
+    public const double DamagePerHp = Combat.NpcDamageHpFraction;
     /// <summary>The player's collision radius for reach (RecastNavMesh AgentRadius 50).</summary>
     public const double PlayerRadius = 50.0;
     /// <summary>Below the NPC, a player still counts as level with it within this height (stairs, slopes).</summary>
@@ -43,6 +46,9 @@ public sealed class NpcAi(Random rng, GameData? data = null)
     /// <summary>The current map's navigation mesh, if extracted: paths and floor heights.</summary>
     public NavMesh? Nav { get; set; }
 
+    /// <summary>NPC keys in an open player dialog (0xe240..0xe242): no patrol, follow, or scripted moves until it closes.</summary>
+    public HashSet<int> DialogPaused { get; } = [];
+
     /// <summary>A chase re-plans its path this often, or when the player moved this far from its goal.</summary>
     public const int RepathMs = 1000;
     public const double RepathDistance = 200.0;
@@ -55,7 +61,7 @@ public sealed class NpcAi(Random rng, GameData? data = null)
     /// <summary>A patrol turns toward the next waypoint this close to the current one (official: ~15-20 before each point).</summary>
     public const double ArriveRadius = 18.0;
 
-    public sealed record PendingHit(int SkillId, NpcSkill Skill, int ActionSeq, long DueMs);
+    public sealed record PendingHit(int SkillId, NpcSkill Skill, int ActionSeq, long DueMs, bool Fired = false);
 
     public sealed class Brain(Vector3d home, double homeHeading)
     {
@@ -81,6 +87,10 @@ public sealed class NpcAi(Random rng, GameData? data = null)
         public Dictionary<int, long> Cooldowns { get; } = [];
         public int ActionSeq { get; set; }
         public PendingHit? Pending { get; set; }
+        /// <summary>A summon's scheduled projectiles, hits and skill ends, by due time.</summary>
+        public List<SummonShot> Volley { get; } = [];
+        /// <summary>A summon's next basic attack (they alternate).</summary>
+        public int BasicTurn { get; set; }
         /// <summary>Whether the NPC walks on the landscape (decided from its spawn once a grid is known).</summary>
         public bool? Grounded { get; set; }
         /// <summary>Navmesh waypoints to the goal (the last one is the goal), or null for a straight line.</summary>
@@ -188,6 +198,26 @@ public sealed class NpcAi(Random rng, GameData? data = null)
         return best;
     }
 
+    /// <summary>Map-event AskNpc: leave combat/follow so the client can open step talk on a former companion.</summary>
+    public List<byte[]> DisengageForTalk(Target target, long now)
+    {
+        var brain = BrainOf(target);
+        var replies = brain.Moving ? Stop(target, brain, brain.Heading, now) : [];
+        brain.Hate.Clear();
+        brain.Engaged = false;
+        brain.CandidateKey = 0;
+        brain.VictimKey = 0;
+        brain.VictimIsNpc = false;
+        brain.Directed = false;
+        brain.FollowKey = 0;
+        brain.ResumeFollowKey = 0;
+        brain.Script = null;
+        if (brain.Mode is not Mode.Dead) brain.Mode = Mode.Idle;
+        target.Walking = false;
+        awake.Remove(target.Key);
+        return replies;
+    }
+
     /// <summary>A map event: follow the player (or stop following and stand).</summary>
     public List<byte[]> Follow(Target target, int playerKey, bool follow, long now)
     {
@@ -243,9 +273,19 @@ public sealed class NpcAi(Random rng, GameData? data = null)
         brain.Directed = true;
         brain.Script = null;
         brain.FollowKey = 0;
+        // A script sent it at this NPC. Do not walk back to the player while that target lives.
+        brain.ResumeFollowKey = 0;
         target.Walking = false;
         awake.Add(target.Key);
         return StartChase(target, brain, now);
+    }
+
+    /// <summary>A player's summon attacks the monster (the player's target); when it is gone the summon follows its owner again.</summary>
+    public List<byte[]> SummonAttack(Target summon, Target victim, int ownerKey, long now)
+    {
+        var engaged = ForceAggroNpc(summon, victim, now);
+        BrainOf(summon).ResumeFollowKey = ownerKey;
+        return engaged;
     }
 
     /// <summary>
@@ -255,8 +295,13 @@ public sealed class NpcAi(Random rng, GameData? data = null)
     List<byte[]> HitNpc(IReadOnlyDictionary<int, Target> targets, int victimKey, Target attacker, int damage, long now)
     {
         if (!targets.TryGetValue(victimKey, out var victim) || victim.Dead) return [];
+        // A friendly NPC (Maard, Elvida) helps, but the player lands the kill. Otherwise the starter
+        // packs die before anyone walks up to them and the camp looks empty.
+        if (!attacker.Hostile && attacker.OwnerKey == 0 && victim.Hostile) damage = Math.Min(damage, Math.Max(0, victim.Hp - 1));
+        if (CapNpcDamage is { } cap) damage = cap(victim, damage);
         if (!victim.Immune) victim.Hp = Math.Max(0, victim.Hp - damage);
         var replies = new List<byte[]> { GamePackets.NpcHp(victim.Key, victim.Hp) };
+        if (OnNpcHpChanged is { } hpChanged) replies.AddRange(hpChanged(victim));
         LastAttacker = attacker.Key;
         if (victim.Dead) { npcKills.Add((victim, attacker)); return replies; }
         if (!victim.Held && (!brains.TryGetValue(victim.Key, out var mind) || mind.Mode is not (Mode.Scripted or Mode.Follow)))
@@ -273,7 +318,8 @@ public sealed class NpcAi(Random rng, GameData? data = null)
         if (speed <= 0) speed = Math.Max(target.RunSpeed, target.WalkSpeed);
         if (speed <= 0) { brain.Mode = Mode.Idle; return []; }
         speed *= 1 + brain.SpeedBoost / 10000.0;
-        var budget = speed * Math.Max(0, now - brain.LastMs) / 1000.0;
+        var elapsedMs = Math.Min(Math.Max(0, now - brain.LastMs), MaxMoveStepMs);
+        var budget = speed * elapsedMs / 1000.0;
         brain.LastMs = now;
         for (var guard = 0; guard < points.Length + 2 && budget > 0; guard++)
         {
@@ -352,6 +398,7 @@ public sealed class NpcAi(Random rng, GameData? data = null)
 
     void Sync(IReadOnlyDictionary<int, Target> targets)
     {
+        if (targets is null) return;
         // Targets are only ever added, so an unchanged count means nothing new.
         if (targets.Count == brains.Count) return;
         foreach (var target in targets.Values)
@@ -369,7 +416,7 @@ public sealed class NpcAi(Random rng, GameData? data = null)
     /// </summary>
     public const double SleepRange = ActiveRange + WanderRadius;
 
-    static bool Busy(Brain brain) => brain.Mode is Mode.Chase or Mode.Return or Mode.Wander or Mode.Patrol or Mode.Scripted or Mode.Follow || brain.Pending is not null;
+    static bool Busy(Brain brain) => brain.Mode is Mode.Chase or Mode.Return or Mode.Wander or Mode.Patrol or Mode.Scripted or Mode.Follow || brain.Pending is not null || brain.Volley.Count > 0;
 
     /// <summary>
     /// Whether the NPC's aggro shape contains the player: a circle, or an arc of Angle degrees
@@ -406,14 +453,30 @@ public sealed class NpcAi(Random rng, GameData? data = null)
     /// <summary>The NPC died: it leaves combat (official 0x8d21 off after the kill) and drops a pending hit.</summary>
     /// <summary>A victim's defense by entity key (null: no reduction).</summary>
     public Func<int, int>? DefenseOf { get; set; }
+    /// <summary>Player level for level-gap damage (key 1 when solo).</summary>
+    public Func<int, int>? PlayerLevelOf { get; set; }
+    /// <summary>After an NPC-vs-NPC hit changes victim HP (map event HpRemaining from summons and SetAggroNpc fights).</summary>
+    public Func<Target, List<byte[]>>? OnNpcHpChanged { get; set; }
+    /// <summary>Caps damage from another NPC before HP is applied (map event HpRemaining talk targets).</summary>
+    public Func<Target, int, int>? CapNpcDamage { get; set; }
+
+    /// <summary>
+    /// Quest / map-event kill targets on shared maps: leash return must not full-heal them (Gravi herbs, watchstones).
+    /// Set each map tick from every player's open kill objectives.
+    /// </summary>
+    public HashSet<int>? SkipLeashHealNpcIds { get; set; }
 
     /// <summary>The NPC whose hit was applied last (the killer when that hit was fatal).</summary>
     public int LastAttacker { get; private set; }
+
+    /// <summary>The skill id of the last hit that reached a player (CharDie_NT skill field).</summary>
+    public int LastHitSkill { get; private set; }
 
     public List<byte[]> Killed(Target target)
     {
         if (!brains.TryGetValue(target.Key, out var brain)) return [];
         brain.Pending = null;
+        brain.Volley.Clear();
         brain.Cooldowns.Clear();
         if (!brain.Engaged) return [];
         brain.Engaged = false;
@@ -489,9 +552,9 @@ public sealed class NpcAi(Random rng, GameData? data = null)
     /// </summary>
     bool Step(Target target, Brain brain, (double X, double Y) goal, double goalZ, double stopAt, long now)
     {
-        var elapsed = Math.Max(0, now - brain.LastMs) / 1000.0;
+        var elapsedMs = Math.Min(Math.Max(0, now - brain.LastMs), MaxMoveStepMs);
         brain.LastMs = now;
-        var budget = (brain.Run ? target.RunSpeed : target.WalkSpeed) * (1 + brain.SpeedBoost / 10000.0) * elapsed;
+        var budget = (brain.Run ? target.RunSpeed : target.WalkSpeed) * (1 + brain.SpeedBoost / 10000.0) * (1 - target.SlowPermille / 10000.0) * elapsedMs / 1000.0;
         // Walk the waypoints in order; stopAt applies to the final goal only.
         while (true)
         {
@@ -533,7 +596,10 @@ public sealed class NpcAi(Random rng, GameData? data = null)
         int dx = (int)Math.Round(target.Position.X - brain.SentPosition.X), dy = (int)Math.Round(target.Position.Y - brain.SentPosition.Y),
             dz = (int)Math.Round(target.Position.Z - brain.SentPosition.Z);
         if (dx == 0 && dy == 0 && dz == 0) return [];
-        if (Math.Abs(dx) > 127 || Math.Abs(dy) > 127 || Math.Abs(dz) > 127) return FullMove(target, brain, now);
+        static int ClipDelta(int v) => v switch { 0 => 0, > 127 => 127, < -127 => -127, _ => v };
+        dx = ClipDelta(dx);
+        dy = ClipDelta(dy);
+        dz = ClipDelta(dz);
         brain.SentPosition = new Vector3d(brain.SentPosition.X + dx, brain.SentPosition.Y + dy, brain.SentPosition.Z + dz);
         return [GamePackets.NpcMoveDelta(target.Key, dx, dy, dz, brain.Heading, brain.Run)];
     }
@@ -565,11 +631,12 @@ public sealed class NpcAi(Random rng, GameData? data = null)
             brain.Engaged = false;
             replies.Add(GamePackets.CombatState(target.Key, false));
         }
-        if (target.Hp != target.HpMax)
+        if (!target.Dead && target.Hp != target.HpMax && SkipLeashHealNpcIds?.Contains(target.NpcId) != true)
         {
             target.Hp = target.HpMax;
             replies.Add(GamePackets.NpcHp(target.Key, target.Hp));
         }
+        ResetGroggy(target);
         brain.Mode = Mode.Idle;
         brain.VictimKey = 0;
         brain.Hate.Clear();
@@ -596,6 +663,7 @@ public sealed class NpcAi(Random rng, GameData? data = null)
         var basic = Basic(target);
         foreach (var id in target.Skills)
         {
+            if (target.Silenced) break;
             if (data.NpcSkill(id) is not { } skill || basic is { } b && b.Id == id) continue;
             // A special first becomes ready one cooldown into the fight; the basic attack opens.
             if (!brain.Cooldowns.TryGetValue(id, out var readyAt))
@@ -609,9 +677,11 @@ public sealed class NpcAi(Random rng, GameData? data = null)
         return basic is { } ready && now >= brain.Cooldowns.GetValueOrDefault(ready.Id) && distance <= AttackRange(target, ready.Skill) ? ready : null;
     }
 
-    /// <summary>Official order: a stop facing the player, then the skill start; the hit follows the cast and animation.</summary>
-    List<byte[]> Attack(Target target, Brain brain, (int Id, NpcSkill Skill) skill, double facing, long now)
+    /// <summary>Official order: a stop facing the player, then the skill start; hits follow via <see cref="MonsterVolley"/>.</summary>
+    List<byte[]> Attack(Target target, Brain brain, (int Id, NpcSkill Skill) skill, double facing, long now, Func<int, List<byte[]>>? hitPlayer = null)
     {
+        if (target.OwnerKey == 0 && current?.GetValueOrDefault(Victim(brain)) is { } victim)
+            return MonsterCast(target, brain, skill, victim, facing, now, hitPlayer);
         var replies = new List<byte[]>();
         if (!target.NoRotation) replies.AddRange(Stop(target, brain, facing, now));
         else brain.Moving = false;
@@ -620,7 +690,8 @@ public sealed class NpcAi(Random rng, GameData? data = null)
         brain.Pending = new PendingHit(skill.Id, skill.Skill, brain.ActionSeq, lands);
         brain.Cooldowns[skill.Id] = now + Math.Max(skill.Skill.Cooldown, skill.Skill.Cast + HitDelayMs);
         brain.NextAttackMs = lands;
-        replies.Add(GamePackets.SkillStart(skill.Id, brain.ActionSeq, target.NoRotation ? brain.Heading : facing, target.Position,
+        var yaw = target.NoRotation ? brain.Heading : facing;
+        replies.Add(GamePackets.SkillStart(skill.Id, brain.ActionSeq, yaw, CastLocation(target, brain, skill.Id, yaw),
             targetKey: Victim(brain), actorKey: target.Key, cooldown: skill.Skill.Cooldown));
         return replies;
     }
@@ -628,30 +699,52 @@ public sealed class NpcAi(Random rng, GameData? data = null)
     /// <summary>Centre distance at which the NPC's skill reaches the player.</summary>
     static double AttackRange(Target target, NpcSkill? skill) => (skill?.Range ?? Reach) + target.Radius + PlayerRadius;
 
-    int Damage(Target target, NpcSkill skill)
+    int VictimLevel(Brain brain)
+    {
+        var key = Victim(brain);
+        if (brain.VictimIsNpc && current?.GetValueOrDefault(key) is { } npc) return npc.Level;
+        return PlayerLevelOf?.Invoke(key) ?? 1;
+    }
+
+    int Damage(Target attacker, NpcSkill skill, int victimLevel)
     {
         var low = Math.Min(skill.DamageMin, skill.DamageMax);
         var high = Math.Max(skill.DamageMin, skill.DamageMax);
         var factor = (low + rng.NextDouble() * (high - low)) / 10000.0;
-        // The NPC's level's Grade 3 HP, not its own HP: the recording of 2026-10-19 has the lake cave boss (hero, level 5, 3000 HP)
-        // hitting 21-31 with its ordinary attacks (399 x 7.5 % = 30) and level-4 monsters 11-30; the skills' factors spread that,
-        // and the rank scales it (Combat.DamageScale).
-        return Math.Max(1, (int)Math.Round(Combat.HpForLevel(target.Level) * DamagePerHp * target.DamageScale * factor));
+        var raw = Combat.NpcFixingDamage(attacker.Level, attacker.SubType, attacker.Grade) * factor;
+        raw *= Combat.LevelDiffDamageScale(attacker.Level, victimLevel);
+        return Math.Max(1, (int)Math.Round(raw));
     }
 
     /// <summary>A due hit lands when the player is still within reach plus the skill's follow range.</summary>
     List<byte[]> Resolve(Target target, Brain brain, Vector3d? player, long now, Func<int, List<byte[]>>? hitPlayer)
     {
+        if (target.OwnerKey == 0 && brain.Volley.Count > 0) return [];
         if (brain.Pending is not { } hit || now < hit.DueMs) return [];
         brain.Pending = null;
         if (player is not { } p || hitPlayer is null) return [];
-        if (Distance(target.Position, Flat(p)) > AttackRange(target, hit.Skill) + hit.Skill.Follow) return [];
         var victim = Victim(brain);
+        var victimRadius = brain.VictimIsNpc && current?.GetValueOrDefault(victim) is { } npcVictim ? npcVictim.Radius : PlayerRadius;
+        if (Distance(target.Position, Flat(p)) > AttackRange(target, hit.Skill) + hit.Skill.Follow)
+            return Splash(target, hit, victim, p, victimRadius, now).Hits;
+        // A projectile skill (an exported SkillProjectile row: the summoned spirits' ranged attacks, archer monsters) fires its
+        // 0x3803 at the hit time and lands after the flight, as the player's arrows do.
+        if (!hit.Fired && SkillAreas.For(hit.SkillId) is { Projectile: > 0 } shot)
+        {
+            var aim = brain.VictimIsNpc && current?.GetValueOrDefault(victim) is { } npc ? npc.Position : p;
+            var flight = shot.FlightMs(Math.Sqrt(target.Position.DistanceSquared(aim)));
+            brain.Pending = hit with { DueMs = now + flight, Fired = true };
+            brain.NextAttackMs = Math.Max(brain.NextAttackMs, now + flight);
+            return [PlayerPackets.SkillFireProjectile(target.Key, victim, hit.SkillId, (byte)hit.ActionSeq, shot.ProjectileFor(0), aim, flight, 1)];
+        }
         // The victim's defense reduces the hit (the CANDIDATE 1000/(1000+defense) used for players' hits).
         var defense = brain.VictimIsNpc && current?.GetValueOrDefault(victim) is { } prey ? prey.Defense : DefenseOf?.Invoke(victim) ?? 0;
-        var damage = Math.Max(1, (int)Math.Round(Damage(target, hit.Skill) * 1000.0 / (1000 + Math.Max(0, defense))));
+        var damage = Math.Max(1, (int)Math.Round(Damage(target, hit.Skill, VictimLevel(brain)) * 1000.0 / (1000 + Math.Max(0, defense))));
         LastAttacker = target.Key;
-        return [GamePackets.NpcSkillHit(victim, target.Key, hit.SkillId, hit.ActionSeq, hit.Skill.Effect, damage), .. hitPlayer(damage)];
+        LastHitSkill = hit.SkillId;
+        var (splash, struck) = Splash(target, hit, victim, p, victimRadius, now);
+        if (!struck) return splash;
+        return [GamePackets.NpcSkillHit(victim, target.Key, hit.SkillId, hit.ActionSeq, hit.Skill.Effect, damage), .. hitPlayer(damage), .. splash];
     }
 
     static int Victim(Brain brain) => brain.VictimKey != 0 ? brain.VictimKey : PlayerKey;
@@ -674,17 +767,25 @@ public sealed class NpcAi(Random rng, GameData? data = null)
             brain.Mode = Mode.Idle;
             brain.WanderAtMs = WanderDelay(now);
         }
+        var replies = target.OwnerKey == 0 ? MonsterVolley(target, brain, now, hitPlayer) : [];
         // Held by a scripted abnormal (stun, hold, stone): it stops where it is and does nothing until released.
-        if (target.Held)
+        if (target.Held || now < target.DisplacedUntil)
         {
             brain.Pending = null;
-            return brain.Moving ? Stop(target, brain, brain.Heading, now) : [];
+            brain.Volley.Clear();
+            return brain.Moving ? Stop(target, brain, brain.Heading, now) : replies;
+        }
+        if (DialogPaused.Contains(target.Key))
+        {
+            brain.Pending = null;
+            brain.Volley.Clear();
+            return brain.Moving ? Stop(target, brain, brain.Heading, now) : replies;
         }
         // Directed by a map event: the walk, nothing else.
         if (brain.Mode == Mode.Scripted && brain.Script is not null) return ScriptedStep(target, brain, now);
         // A companion (NpcData Function Companion, aggressive: Robin in the HQ001 layer) attacks the monsters near it on its
         // own (OBSERVED: the official Robin ran to the Cherubim and cast first, #10020; live 2026-10-19 ours stood by).
-        if (CompanionPrey(target, brain, now) is { } prey)
+        if (!target.AppearNonAggressive && CompanionPrey(target, brain, now) is { } prey)
         {
             var resume = brain.Mode == Mode.Follow ? brain.FollowKey : brain.ResumeFollowKey;
             var engaged = ForceAggroNpc(target, prey, now);
@@ -692,7 +793,7 @@ public sealed class NpcAi(Random rng, GameData? data = null)
             return engaged;
         }
         if (brain.Mode == Mode.Follow) return FollowStep(target, brain, player, now);
-        var replies = Resolve(target, brain, player, now, hitPlayer);
+        replies.AddRange(Resolve(target, brain, player, now, hitPlayer));
         if (target.WalkSpeed == 0 && target.RunSpeed == 0) return replies;
         // Official: of 42 friendly NPCs in the recording only one moved, a patrol walking its MapData waypoint set;
         // townsfolk stand at their MapData spot and facing (their idle animation is in the appear). A friendly NPC
@@ -750,15 +851,21 @@ public sealed class NpcAi(Random rng, GameData? data = null)
                 replies.AddRange(Go(target, brain, Flat(brain.Home), brain.Home.Z, true, now));
                 return replies;
             }
-            var basic = Basic(target);
-            var reach = AttackRange(target, basic?.Skill);
-            var stopAt = Math.Max(target.Radius, reach - 20);   // close in to just inside melee reach
+            var summonVictim = target.OwnerKey != 0 && brain.VictimIsNpc ? current?.GetValueOrDefault(brain.VictimKey) : null;
+            var reach = summonVictim is not null ? SummonReach(target) : AttackRange(target, Basic(target)?.Skill);
+            // Close in to just inside melee reach; a ranged summon stops at its range.
+            var stopAt = Math.Max(target.Radius, reach - 20);
             var distance = Distance(target.Position, Flat(p));
             var facing = HeadingTo(target.Position, Flat(p));
-            // A ready skill that reaches the player is used at once, ranged ones while still closing in.
-            if (Choose(target, brain, distance, now) is { } skill)
+            if (summonVictim is not null && ChooseSummon(target, brain, distance, now) is { } cast)
             {
-                replies.AddRange(Attack(target, brain, skill, facing, now));
+                replies.AddRange(SummonCast(target, brain, cast, summonVictim, facing, now));
+                return replies;
+            }
+            // A ready skill that reaches the player is used at once, ranged ones while still closing in.
+            if (summonVictim is null && Choose(target, brain, distance, now) is { } skill)
+            {
+                replies.AddRange(Attack(target, brain, skill, facing, now, hitPlayer));
                 return replies;
             }
             if (!brain.Moving)
@@ -839,7 +946,7 @@ public sealed class NpcAi(Random rng, GameData? data = null)
             target.Walking = !route.Run;
             return [];
         }
-        var budget = speed * Math.Max(0, now - brain.LastMs) / 1000.0;
+        var budget = speed * Math.Min(Math.Max(0, now - brain.LastMs), MaxMoveStepMs) / 1000.0;
         brain.LastMs = now;
         for (var guard = 0; guard < points.Length * 2 + 2 && budget > 0; guard++)
         {
@@ -949,6 +1056,8 @@ public sealed class NpcAi(Random rng, GameData? data = null)
     {
         Sync(targets);
         current = targets;
+        currentPlayers = players;
+        currentHitPlayer = hitPlayer;
         var replies = new List<byte[]>();
         // The busy NPCs and those placed near a player, in key order.
         var active = new SortedSet<int>(awake);
@@ -981,6 +1090,7 @@ public sealed class NpcAi(Random rng, GameData? data = null)
             brain.CandidateKey = chosen?.Key ?? 0;
             var victim = chosen?.Key ?? 0;
             var npcVictim = brain.VictimIsNpc ? brain.VictimKey : 0;
+            if (target.OwnerKey != 0 && !target.Dead) replies.AddRange(SummonVolley(target, brain, now));
             replies.AddRange(TickOne(target, brain, chosen?.Position, now,
                 chosen is null ? null
                 : npcVictim != 0 ? damage => HitNpc(targets, npcVictim, target, damage, now)

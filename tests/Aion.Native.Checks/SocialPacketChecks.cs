@@ -69,7 +69,13 @@ public static class SocialPacketChecks
         Op((ushort)(SocialOpcodes.PartyBase + 1087), 0x9232, "EngravedTeleportArtifactList_NT");
         Op((ushort)(SocialOpcodes.LateBase + 1114), 0x9330, "BookmarkedContentList_NT");
         Op((ushort)(SocialOpcodes.FriendBase + 1413), 0xe28c, "PresetInfo_NT");
+        Op((ushort)(SocialOpcodes.E3Base + 1496), 0xe346, "TakePushReward_RQ");
+        Op((ushort)(SocialOpcodes.E3Base + 1497), 0xe347, "TakePushReward_RS");
+        Op((ushort)(SocialOpcodes.E3Base + 1498), 0xe348, "RetrievePushRewardInfo_RQ");
         Op((ushort)(SocialOpcodes.E3Base + 1499), 0xe349, "RetrievePushRewardInfo_RS");
+        Op((ushort)(SocialOpcodes.E3Base + 1500), 0xe34a, "PushRewardChanged_NT");
+        Op((ushort)(SocialOpcodes.E3Base + 1503), 0xe34d, "Attendance_RQ");
+        Op((ushort)(SocialOpcodes.E3Base + 1504), 0xe34e, "Attendance_RS");
         Check(SocialOpcodes.ClientRequests.Count == 30 && SocialOpcodes.ClientRequests.Contains(SocialOpcodes.DuelCallOutAcceptRq), "client request set");
         Same("WithOpcode", SocialPackets.WithOpcode(SocialPackets.DuelRingIn(1, 2), SocialOpcodes.Alternative(SocialOpcodes.DuelRingInNt)), "6692 01000000 02000000");
     }

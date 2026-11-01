@@ -16,11 +16,14 @@ static class Program
         try { config = LauncherConfig.Load(Path.Combine(AppContext.BaseDirectory, "launcher.json")); }
         catch (Exception error) when (error is InvalidDataException or System.Text.Json.JsonException)
         {
-            MessageBox.Show("launcher.json is invalid: " + error.Message, "Launcher", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            LauncherLoc.Apply(null);
+            MessageBox.Show(LauncherLoc.InvalidLauncherJson(error.Message), LauncherLoc.DialogTitle, MessageBoxButtons.OK, MessageBoxIcon.Error);
             return 1;
         }
+        var settings = LauncherSettings.Load();
+        LauncherLoc.Apply(settings.UiLanguage);
         // "--uninstall" is what the Apps & features entry runs.
-        Application.Run(new MainForm(new Workflow(config, LauncherSettings.Load()), uninstall: args is ["--uninstall"]));
+        Application.Run(new MainForm(new Workflow(config, settings), uninstall: args is ["--uninstall"]));
         return 0;
     }
 }

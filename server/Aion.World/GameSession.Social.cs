@@ -11,7 +11,7 @@ namespace Aion.World;
 /// </summary>
 public sealed partial class GameSession
 {
-    const int ServerId = 1204;
+    const int ServerId = DevelopmentDefaults.WorldId;
     const int Failed = 1;   // OURS: the client's failure codes are unknown; 0 is success
     /// <summary>Trade partners must stand within this distance (cm). OURS.</summary>
     public const double ExchangeRange = 1500;
@@ -45,15 +45,17 @@ public sealed partial class GameSession
             SocialOpcodes.FriendBlockRq => await FriendBlockAsync(plain, ct),
             SocialOpcodes.FriendBlockCancelRq => await FriendUnblockAsync(plain, ct),
             SocialOpcodes.FriendMemoUpdateRq => await FriendMemoAsync(plain, ct),
-            SocialOpcodes.PartyCreateRq => PartyCreate(),
-            SocialOpcodes.PartyInviteRq => PartyInvite(plain, now),
+            SocialOpcodes.PartyCreateRq => PartyCreate(plain),
+            SocialOpcodes.PartyInfoUpdateRq => PartyInfoUpdate(plain),
+            SocialOpcodes.PartyInviteRq => await PartyInviteAsync(plain, now, ct),
             SocialOpcodes.PartyInviteResponseRq => PartyInviteResponse(plain, now),
             SocialOpcodes.PartyLeaveRq => PartyLeave(PartyUpdateReason.LeaveMember, [SocialPackets.PartyLeaveReply(0)]),
             SocialOpcodes.PartyKickoutRq => PartyKick(plain),
             SocialOpcodes.PartySetLeaderRq => PartySetLeader(plain),
             SocialOpcodes.PartyDisbandRq => PartyDisband(),
             SocialOpcodes.PartyRecentMemberRq => [SocialPackets.PartyRecentMembers(0, [])],
-            SocialOpcodes.ExchangeRequestRq => ExchangeRequest(plain, now),
+            SocialOpcodes.PartyRecommendRq => PartyRecommend(plain),
+            SocialOpcodes.ExchangeRequestRq => await ExchangeRequestAsync(plain, now, ct),
             SocialOpcodes.ExchangeAcceptRq => ExchangeAccept(plain),
             SocialOpcodes.ExchangeRefuseRq or SocialOpcodes.ExchangeCancelRq => ExchangeEnd(plain, header == SocialOpcodes.ExchangeRefuseRq),
             SocialOpcodes.ExchangeItemListModifyRq => ExchangeModify(plain),
@@ -88,6 +90,7 @@ public sealed partial class GameSession
         SocialPackets.PersonalExchangeInfo(0),
         SocialPackets.FriendList(social.Where(r => r.Kind != "blocked").Select(r => FriendEntry(r, Relation(r.Kind))).ToList(),
             social.Where(r => r.Kind == "blocked").Select(r => new FriendBlockInfo(ServerId, r.WireId, r.Name)).ToList()),
+        ..SpecialDistributionWorldEntry(),
     ];
 
     /// <summary>Online friends hear this character come online or go offline (FriendInfoUpdate_NT).</summary>
@@ -134,6 +137,8 @@ public sealed partial class GameSession
             return [Reply(0)];
         }
         online?.Send([SocialPackets.FriendRequestAcceptNotice(DbId), SocialPackets.FriendInfoUpdate(MyUpdate(true))]);
+        var requesterOnline = World?.FindOnline(from.CharacterId) is not null;
+        worldPlayer?.Send(SocialPackets.FriendInfoUpdate(new FriendUpdateInfo(ServerId, from.WireId, from.Name, (byte)from.CreationId, from.Level, 0, requesterOnline)));
         return [Reply(0), SocialPackets.FriendRequestNotice(FriendEntry(from, FriendRelation.Friend)), .. Achieve("AddFriend")];
     }
 
@@ -198,35 +203,46 @@ public sealed partial class GameSession
 
     // ---------- Party ----------
 
-    PartyMember MemberInfo(byte number) => new()
+    PartyMember MemberInfo(byte number)
     {
-        Number = number, Key = playerKey, DbId = DbId, Nickname = StoredName, PcId = Profile()?.PcId ?? 1,
-        Hp = resources?.Hp ?? 1, HpMax = resources?.HpMax ?? 1, Mp = resources?.Mp ?? 0, MpMax = resources?.MpMax ?? 0,
-        MapKey = worldMap, Position = position ?? default, Level = level,
-    };
+        var online = World?.Online.ContainsKey(playerKey) == true;
+        return new()
+        {
+            Number = number, Key = playerKey, DbId = DbId, Nickname = StoredName, PcId = Profile()?.PcId ?? 1,
+            Hp = resources?.Hp ?? 1, HpMax = resources?.HpMax ?? 1, Mp = resources?.Mp ?? 0, MpMax = resources?.MpMax ?? 0,
+            MapKey = worldMap, Position = position ?? default, Level = level, Live = online, Login = online,
+        };
+    }
 
     static PartyInfo Info(Party party) => new()
     {
         Key = party.Key, LeaderDbId = party.Leader.Session.DbId, LimitMember = Party.Limit,
+        Distribution = party.Distribution, SpecialDistribution = party.SpecialDistribution,
+        SpecialDistributionGrade = party.SpecialDistributionGrade, JoinType = party.JoinType,
         Members = party.Members.Select((m, i) => m.Session.MemberInfo((byte)i)).ToList(),
     };
 
     InvitationInfo Invitation() => new(Profile()?.PcId ?? 1, level, 0, StoredName, ServerId);
 
-    List<byte[]> PartyCreate()
+    List<byte[]> PartyCreate(byte[]? plain = null)
     {
         if (Social is not { } s || worldPlayer is null) return [SocialPackets.PartyCreateReply(Failed)];
         if (s.PartyOf(worldPlayer) is not null) return [SocialPackets.PartyCreateReply(Failed)];
         var party = new Party(s.NextId(), worldPlayer);
+        if (plain is not null && SocialRequests.ParsePartyCreate(plain) is { } settings) ApplyPartySettings(party, settings);
         s.Parties[party.Key] = party;
         return [SocialPackets.PartyCreateReply(0), SocialPackets.PartyInfo(Info(party), PartyUpdateReason.Create)];
     }
 
-    List<byte[]> PartyInvite(byte[] plain, long now)
+    async Task<bool> SocialBlockedWithAsync(Guid other, CancellationToken ct) =>
+        CharacterId is { } me && Store is { } store && await StoredValue(() => store.SocialBlockedAsync(me, other, ct)) == true;
+
+    async Task<List<byte[]>> PartyInviteAsync(byte[] plain, long now, CancellationToken ct)
     {
         if (SocialRequests.ParsePartyInvite(plain) is not { } target) return [];
         byte[] Fail() => SocialPackets.PartyInviteReply(Failed, ServerId, target.Name);
         if (Social is not { } s || worldPlayer is null || World?.FindOnline(CharacterNames.Stored(target.Name)) is not { } invitee || invitee == worldPlayer) return [Fail()];
+        if (invitee.Session.CharacterId is { } other && await SocialBlockedWithAsync(other, ct)) return [Fail()];
         if (s.PartyOf(invitee) is not null) return [Fail()];
         var replies = new List<byte[]>();
         var party = s.PartyOf(worldPlayer);
@@ -242,6 +258,20 @@ public sealed partial class GameSession
         invitee.Send(SocialPackets.PartyInviteNotice(party.Key, DbId, Invitation(), expires));
         replies.Insert(0, SocialPackets.PartyInviteReply(0, ServerId, invitee.Name));
         return replies;
+    }
+
+    List<byte[]> PartyRecommend(byte[] plain)
+    {
+        var recommendType = SocialRequests.ParsePartyRecommendType(plain) ?? 0;
+        if (Social is null || worldPlayer is null || worldPlayer.Map is not { } map)
+            return [SocialPackets.PartyRecommendReply(Failed, recommendType, [])];
+        var candidates = map.Players.Values
+            .Where(p => p != worldPlayer && p.Session.CharacterId != CharacterId)
+            .Select(p => new PartyRecommendCandidate(p.Session.DbId, ServerId, ServerId, p.Name, p.Session.Profile()?.PcId ?? 1,
+                Level: p.Session.Level, Logined: true))
+            .Take(20)
+            .ToList();
+        return [SocialPackets.PartyRecommendReply(0, recommendType, candidates)];
     }
 
     List<byte[]> PartyInviteResponse(byte[] plain, long now)
@@ -268,6 +298,11 @@ public sealed partial class GameSession
 
     void DisbandParty(Party party, PartyUpdateReason reason)
     {
+        if (Social is { } s)
+        {
+            foreach (var uid in s.DiceRolls.Values.Where(r => r.PartyKey == party.Key).Select(r => r.DiceUid).ToList())
+                s.DiceRolls.Remove(uid);
+        }
         foreach (var m in party.Members) m.Send(SocialPackets.PartyDisband(reason));
         Social?.Parties.Remove(party.Key);
     }
@@ -352,7 +387,7 @@ public sealed partial class GameSession
 
     // ---------- Player trade ----------
 
-    List<byte[]> ExchangeRequest(byte[] plain, long now)
+    async Task<List<byte[]>> ExchangeRequestAsync(byte[] plain, long now, CancellationToken ct)
     {
         if (SocialRequests.ParseExchangeRequest(plain) is not { } targetKey) return [];
         byte[] Fail() => SocialPackets.ExchangeRequestReply(Failed, targetKey, 0);
@@ -360,10 +395,28 @@ public sealed partial class GameSession
             || Store is null || target.Session.Store is null || s.ExchangeOf(worldPlayer) is not null || s.ExchangeOf(target) is not null
             || Distance2D(worldPlayer.Position, target.Position) > ExchangeRange)
             return [Fail()];
+        if (target.Session.CharacterId is { } other && await SocialBlockedWithAsync(other, ct)) return [Fail()];
         var exchange = new Exchange(s.NextId(), worldPlayer, target);
         s.Exchanges[exchange.Id] = exchange;
         target.Send(SocialPackets.ExchangeRequested(playerKey, Invitation(), exchange.Id, now + 30_000));
         return [SocialPackets.ExchangeRequestReply(0, targetKey, exchange.Id)];
+    }
+
+    /// <summary>Other party members see this one go offline; the roster stays until an explicit leave or kick.</summary>
+    void PartyGoOffline()
+    {
+        if (Social is not { } s || worldPlayer is null || s.PartyOf(worldPlayer) is not { } party) return;
+        foreach (var m in party.Others(worldPlayer))
+            m.Send(SocialPackets.PartyDisconnectMember(DbId));
+    }
+
+    /// <summary>After world entry, party members see a reconnect when this one was already in the roster.</summary>
+    internal void PartyReconnectIfNeeded()
+    {
+        if (Social is not { } s || worldPlayer is null || s.PartyOf(worldPlayer) is not { } party || party.Members.Count < 2) return;
+        var member = MemberInfo((byte)Math.Max(0, party.Members.IndexOf(worldPlayer)));
+        foreach (var m in party.Others(worldPlayer))
+            m.Send(SocialPackets.PartyReconnectMember(member));
     }
 
     static double Distance2D(Vector3d a, Vector3d b) => Math.Sqrt((a.X - b.X) * (a.X - b.X) + (a.Y - b.Y) * (a.Y - b.Y));
@@ -402,8 +455,13 @@ public sealed partial class GameSession
         byte[] Reply(int result) => SocialPackets.ExchangeItemListModifyReply(result, m.ExchangeId, m.Type, m.Item, m.GameCash);
         if (MyExchange(m.ExchangeId) is not { Accepted: true } e) return [Reply(Failed)];
         var offer = e.Offers[playerKey];
+        if (m.GameCash >= 0)
+        {
+            if (m.GameCash > PacketSecurity.MaxExchangeKina) return [Reply(Failed)];
+            e.CashOffers[playerKey] = m.GameCash;
+        }
         if (m.Type == ExchangeModification.Remove) offer.Remove(m.Item.ItemKey);
-        else
+        else if (m.Item.ItemKey != 0 || m.Item.Count > 0)
         {
             // Only bag items held in that number and not soul-bound (the store checks again when it completes).
             if (!storedItems.TryGetValue(m.Item.ItemKey, out var row) || row.Location != "bag" || m.Item.Count < 1 || m.Item.Count > row.Quantity
@@ -451,9 +509,11 @@ public sealed partial class GameSession
             e.Offers[side.playerKey].Select(o => side.storedItems.TryGetValue(o.Key, out var row) ? (row.InstanceId, o.Value) : (Guid.Empty, 0L)).ToList();
         var mine = Gives(this);
         var theirs = Gives(partner);
+        var myKina = e.CashOffers.GetValueOrDefault(playerKey);
+        var theirKina = e.CashOffers.GetValueOrDefault(partner.playerKey);
         var done = Store is { } store && CharacterId is { } me && partner.Store is { } otherStore && partner.CharacterId is { } them
             && mine.Concat(theirs).All(g => g.Item1 != Guid.Empty)
-            && await StoredValue(() => store.ExchangeAsync(me, mine, otherStore, them, theirs, ct));
+            && await StoredValue(() => store.ExchangeAsync(me, mine, otherStore, them, theirs, myKina, theirKina, ct)); // givesKina / receivesKina (their offer)
         if (!done)
         {
             other.Send(SocialPackets.ExchangeCanceled(e.Id, 2));
@@ -535,7 +595,7 @@ public sealed partial class GameSession
     }
 
     /// <summary>A cast at a duel opponent in battle: PvP damage (Skill.dat PvP rows) to the opponent; at 1 HP the duel is lost.</summary>
-    List<byte[]> DuelHits(int skill, int targetKey, long now)
+    List<byte[]> DuelHits(int skill, int targetKey, long now, byte actionUid)
     {
         if (Social is not { } s || worldPlayer is null || s.DuelOf(worldPlayer) is not { State: DuelState.InBattle } duel) return [];
         var opponent = duel.Other(worldPlayer);
@@ -543,10 +603,10 @@ public sealed partial class GameSession
         var replies = new List<byte[]>();
         var seq = 0;
         // The opponent's defense counts as it does against NPC hits (it was ignored before).
-        foreach (var hit in Combat.SkillHits(data, skill, className, level, equippedWeapon, opponent.Session.Defense, rng, pvp: true))
+        foreach (var hit in PlayerSkillHits(skill, opponent.Session.Defense, pvp: true))
         {
             theirs.Hp = Math.Max(1, theirs.Hp - hit.Amount);
-            replies.Add(GamePackets.SkillHit(opponent.Key, playerKey, skill, hit.EffectId, hit.Amount, hit.Critical, ++seq));
+            replies.Add(GamePackets.SkillHit(opponent.Key, playerKey, skill, hit.EffectId, hit.Amount, hit.Critical, actionUid, ++seq));
         }
         if (replies.Count == 0) return [];
         opponent.Send([.. replies, theirs.Update()]);
@@ -559,10 +619,11 @@ public sealed partial class GameSession
     {
         if (Social is not { } s || worldPlayer is null) return;
         TellFriends(false);
-        PartyLeave(PartyUpdateReason.LeaveMemberBySystem, []);
+        PartyGoOffline();
         if (s.ExchangeOf(worldPlayer) is { } exchange) CancelExchange(exchange, 3);
         if (s.DuelOf(worldPlayer) is { } duel) EndDuel(duel, DuelCompleteReason.MapOut, duel.Other(worldPlayer), now);
         LeaveArena(now);
+        LeaveDungeonRoomSocial(now);
         s.Invites.Remove(playerKey);
     }
 }

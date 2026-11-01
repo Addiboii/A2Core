@@ -1,15 +1,11 @@
 """Write the launcher's reference for the supported client build (launcher/supported-build.json).
 
-Source: research/local/dev-client/verification.json, the verified copy of Steam depot 3393111
-manifest 1699273097574069541 (research/client-installer.md). The output lists every file's
-relative path, size and SHA-256 (hashes only, no game data). The launcher checks sizes of all
-files at each launch, hashes the "quick" set (AION2.exe and the pak index/signature files) and
-offers a full verification.
+Preferred: `dotnet run --project launcher/Aion.Launcher.BuildTool -- --out launcher/supported-build.json`
+(sign in with Steam QR, reads the latest public manifest from Steam, hashes the quick set).
 
-With --depot-manifest (Steam's depotcache/3393111_<manifest>.manifest, written when the player
-runs download_depot or updates), only the files the depot itself contains are listed. A copy that
-has been run also holds files the game creates (Aion2/InstallLog.txt, and NCGuard's own
-Aion2/Binaries/Win64/NCGuard/bb64.dll); a fresh download does not have them.
+Legacy path: research/local/dev-client/verification.json plus optional Steam depotcache manifest
+(`research/client-installer.md`). The output lists every file's relative path, size and hashes
+(SHA-256 for quick files; SHA-1 from the depot manifest for others when using the BuildTool schema).
 """
 import argparse
 import hashlib
@@ -20,8 +16,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / 'research/local/dev-client/verification.json'
 OUTPUT = ROOT / 'launcher/supported-build.json'
-BUILD = {'appId': 3393110, 'depotId': 3393111, 'manifestId': '1699273097574069541',
-         'executable': 'Aion2/Binaries/Win64/AION2.exe'}
+BUILD = {'appId': 3393110, 'depotId': 3393111, 'executable': 'Aion2/Binaries/Win64/AION2.exe'}
 
 
 def quick(path):
@@ -87,7 +82,7 @@ def depot_manifest(data):
     return {'depotId': meta.get(1), 'manifestId': str(meta.get(2)), 'files': files}
 
 
-def build(verification, depot=None):
+def build(verification, manifest_id, depot=None):
     if verification.get('status') != 'verified' or verification.get('errors'):
         raise ValueError('verification.json is not a clean verified copy')
     files = sorted(({'path': f['path'].replace('\\', '/'), 'size': f['bytes'], 'sha256': f['sha256'].lower()}
@@ -95,8 +90,8 @@ def build(verification, depot=None):
     if len(files) != verification['file_count'] or not any(f['path'] == BUILD['executable'] for f in files):
         raise ValueError('File list incomplete')
     if depot is not None:
-        if depot['depotId'] != BUILD['depotId'] or depot['manifestId'] != BUILD['manifestId']:
-            raise ValueError(f"Depot manifest is {depot['depotId']}/{depot['manifestId']}, not the supported build")
+        if depot['depotId'] != BUILD['depotId'] or depot['manifestId'] != manifest_id:
+            raise ValueError(f"Depot manifest is {depot['depotId']}/{depot['manifestId']}, not {manifest_id}")
         listed = {path.lower(): size for path, size in depot['files'].items()}
         have = {f['path'].lower(): f for f in files}
         missing = sorted(set(listed) - set(have))
@@ -111,7 +106,7 @@ def build(verification, depot=None):
     for f in files:
         if f['quick']:
             digest.update(f"{f['path'].lower()}\0{f['size']}\0{f['sha256']}\n".encode())
-    return {**BUILD, 'fingerprint': digest.hexdigest(), 'fileCount': len(files),
+    return {**BUILD, 'manifestId': manifest_id, 'fingerprint': digest.hexdigest(), 'fileCount': len(files),
             'totalBytes': sum(f['size'] for f in files), 'files': files}
 
 
@@ -119,10 +114,12 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--source', type=Path, default=SOURCE)
     parser.add_argument('--output', type=Path, default=OUTPUT)
+    parser.add_argument('--manifest-id', required=True,
+                        help='Steam depot manifest GID (BuildTool reads the latest public manifest from Steam)')
     parser.add_argument('--depot-manifest', type=Path, help='Steam depotcache/3393111_<manifest>.manifest')
     args = parser.parse_args(argv)
     depot = depot_manifest(args.depot_manifest.read_bytes()) if args.depot_manifest else None
-    result = build(json.loads(args.source.read_text(encoding='utf-8')), depot)
+    result = build(json.loads(args.source.read_text(encoding='utf-8')), args.manifest_id, depot)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(result, separators=(',', ':')) + '\n', encoding='utf-8')
     print(f"{args.output}: {result['fileCount']} files, {sum(f['quick'] for f in result['files'])} quick, "

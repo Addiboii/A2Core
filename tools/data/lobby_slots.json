@@ -1,0 +1,8 @@
+{
+  "source": "Global client GlobalSetting.dat (pinned usmap AION2-5.3.2.0-2.0.6.0 field names lobby_pc_slot_*)",
+  "default_open_count": 4,
+  "max_extended_count": 4,
+  "total_slot_count": 8,
+  "item_unlock_category": "CharacterSlotUnlock",
+  "item_result_max": "kItem_CharacterSlotUnlock_Max"
+}

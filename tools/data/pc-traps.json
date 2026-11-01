@@ -1,0 +1,28 @@
+{
+  "source": "Hand entry from the client tables (Skill.dat / SkillEffect.dat read 2026-10-30); tools/skill_areas.py and tools/pc_summons.py do not export trap detonations yet",
+  "traps": {
+    "14170000": {
+      "name": "Explosion Trap",
+      "npc": 2920620,
+      "lifetime_ms": 10000,
+      "trigger_radius": 250,
+      "radius": 500,
+      "max": 8,
+      "damage": {
+        "flat": [344, 344],
+        "ratio": [19200, 19200],
+        "effect_id": 1417000111
+      },
+      "debuffs": [[100000311, 3000, 3000, 1]],
+      "notes": {
+        "lifetime_ms": "Spawn effect group 141700001 values 0,10000 (INFERRED: the trap's lifetime)",
+        "damage": "detonation group 141700011 Damage row 344/344 + 19200",
+        "effect_id": "INFERRED: the group's first SkillEffect row id (group * 10 + 1)",
+        "debuffs": "group 141700011 Abnormal_Cc 100000311 3000 ms (the 4000 / 10000 ms rows are object-type conditional variants)",
+        "trigger_radius": "OURS (improvised): no trigger range in the exported tables",
+        "radius": "OURS (improvised) unless skill-areas.json carries a SkillEffectFilter shape for 14170000",
+        "max": "OURS (improvised) unless skill-areas.json carries TargetCountMax for 14170000"
+      }
+    }
+  }
+}

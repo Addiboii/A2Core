@@ -1,0 +1,31 @@
+{
+  "pin": {
+    "steam_build": 25767555,
+    "level_cap": 45,
+    "date": "2026-10-07"
+  },
+  "dark": {
+    "max_recommended_level": 10,
+    "side_quest_order": [
+      "EQ2820001",
+      "EQ2820002",
+      "EQ2820003",
+      "EQ2820004",
+      "EQ2820005",
+      "EQ2820006",
+      "EQ2820007",
+      "EQ2820008",
+      "EQ2820009",
+      "EQ2820010",
+      "EQ2820011",
+      "EQ2820012",
+      "EQ2820013",
+      "EQ2820014",
+      "EQ2820015"
+    ]
+  },
+  "light": {
+    "max_recommended_level": 10,
+    "side_quest_order": []
+  }
+}

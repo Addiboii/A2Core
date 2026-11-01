@@ -32,9 +32,10 @@ def fog_group(value):
 
 
 def subzone_rows(table):
-    """Subzone id -> (fog group or 0, priority) for every row (EnterSubZone objectives name any subzone)."""
+    """Subzone id -> (fog group or 0, priority, UseRide) for every row."""
     rows = table['Properties']['Data']
-    return {row['ID']['Value']: (fog_group(row.get('WorldMapFogGroupId')), row.get('Priority', 0)) for row in rows}
+    return {row['ID']['Value']: (fog_group(row.get('WorldMapFogGroupId')), row.get('Priority', 0), bool(row.get('UseRide', True)))
+            for row in rows}
 
 
 def volumes(mapdata, rows):
@@ -46,8 +47,9 @@ def volumes(mapdata, rows):
         subzone = value.get('SubzoneTableId')
         if subzone not in rows or not value.get('Points'):
             continue
-        group, priority = rows[subzone]
+        group, priority, use_ride = rows[subzone]
         areas.append({'subzone': subzone, 'name': value.get('LabelName') or entry['Key'], 'group': group, 'priority': priority,
+                      'use_ride': use_ride,
                       'z': [round(value.get('HeightMin', -1e9), 1), round(value.get('HeightMax', 1e9), 1)],
                       'points': [[round(p['X'], 1), round(p['Y'], 1)] for p in value['Points']]})
     return data['MapId'], areas
@@ -62,7 +64,7 @@ def build(source=MAPDATA, table=SUBZONE_TABLE):
         map_id, areas = volumes(json.loads(path.read_text(encoding='utf-8')), rows)
         if areas:
             maps.setdefault(str(map_id), []).extend(areas)
-    groups = sorted({g for g, _ in rows.values() if g})
+    groups = sorted({g for g, _, _ in rows.values() if g})
     return {'source': 'MapData.dat SubzoneVolumeInfoMap + Subzone.dat WorldMapFogGroupId', 'groups': groups, 'maps': maps}
 
 

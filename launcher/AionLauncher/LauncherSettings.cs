@@ -33,6 +33,12 @@ sealed class LauncherSettings
     public string? SteamAccount { get; set; }
     /// <summary>Steam refresh token, DPAPI-protected (current Windows user), base64.</summary>
     public string? SteamToken { get; set; }
+    /// <summary>When true, copy z_A2Core_Patch-Windows_P.* from the client editor deploy folder before starting the game.</summary>
+    public bool AllowClientPatchPaks { get; set; }
+    /// <summary>DNS redirect for NC hostnames: <c>inject</c> (DLL hook, no UAC) or <c>hosts</c> (legacy). Null uses launcher.json.</summary>
+    public string? RedirectMode { get; set; }
+    /// <summary>UI language override: <c>en</c> or <c>ru</c>. Null follows Windows UI culture on next start.</summary>
+    public string? UiLanguage { get; set; }
 
     /// <summary>The kept account session, when there is one that has not ended yet.</summary>
     public string? Session()

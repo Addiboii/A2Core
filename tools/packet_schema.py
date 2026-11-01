@@ -206,7 +206,17 @@ class PacketSchema:
             return [self.read_value(reader, payload[0], payload[1], _depth=_depth + 1)
                     for _ in range(count)]
         if kind == "map":
-            raise WireError("MapProperty wire encoding is not yet known")
+            count = reader.varuint()
+            if count > len(reader.data) - reader.offset + 1:
+                raise WireError("Map count exceeds remaining body")
+            key_kind, key_payload = payload[0]
+            val_kind, val_payload = payload[1]
+            result = {}
+            for _ in range(count):
+                k = self.read_value(reader, key_kind, key_payload, _depth=_depth + 1)
+                v = self.read_value(reader, val_kind, val_payload, _depth=_depth + 1)
+                result[k] = v
+            return result
         raise WireError("Unknown field kind: " + kind)
 
     def read_struct(self, name, reader, _depth=0):
@@ -276,7 +286,17 @@ class PacketSchema:
             for item in items:
                 self.write_value(buf, payload[0], payload[1], item, _depth + 1)
         elif kind == "map":
-            raise SchemaError("MapProperty wire encoding is not yet known")
+            try:
+                from .aion_protocol import encode_varint
+            except ImportError:
+                from aion_protocol import encode_varint
+            key_kind, key_payload = payload[0]
+            val_kind, val_payload = payload[1]
+            items = value.items() if isinstance(value, dict) else value
+            buf += encode_varint(len(items))
+            for k, v in items:
+                self.write_value(buf, key_kind, key_payload, k, _depth + 1)
+                self.write_value(buf, val_kind, val_payload, v, _depth + 1)
         else:
             raise SchemaError("Unknown field kind: " + kind)
         return buf

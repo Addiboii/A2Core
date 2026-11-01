@@ -37,6 +37,9 @@ public sealed class ChatRelay(TimeProvider clock, IChatDirectory? directory = nu
     /// <summary>Mutes and the chat log (set by the host when staff tools are available).</summary>
     public IChatModeration? Moderation { get; set; }
 
+    /// <summary>When set, whispers between two character ids are refused (friend block list).</summary>
+    public Func<Guid, Guid, bool>? WhisperBlocked { get; set; }
+
     void CheckMute(ChatIdentity sender)
     {
         if (sender.AccountId is { } account && Moderation?.MuteMessage(account) is { } refusal) throw new ChatRejectedException(refusal);
@@ -44,7 +47,7 @@ public sealed class ChatRelay(TimeProvider clock, IChatDirectory? directory = nu
 
     sealed class Session(ChatIdentity identity)
     {
-        public ChatIdentity Identity { get; } = identity;
+        public ChatIdentity Identity { get; set; } = identity;
         public HashSet<ChatRoomKey> Rooms { get; } = [];
         /// <summary>Development identities: the stored form of the last user name the client sent.</summary>
         public string? DeclaredName { get; set; }
@@ -147,6 +150,9 @@ public sealed class ChatRelay(TimeProvider clock, IChatDirectory? directory = nu
         CheckMute(sender.Identity);
         Validate(sender.Identity, message.Content);
         var receiver = receivers[0].Value;
+        if (sender.Identity.Character is { } from && receiver.Identity.Character is { } to
+            && WhisperBlocked?.Invoke(from.Id, to.Id) == true)
+            throw new ChatRejectedException("That player cannot receive your whispers.");
         var receiverName = receiver.Identity.Character?.Name ?? receiver.DeclaredName ?? name;
         var notification = Notify(sender.Identity, speaker, room, message with
         {
@@ -185,6 +191,12 @@ public sealed class ChatRelay(TimeProvider clock, IChatDirectory? directory = nu
         if (identity.AccountId is { } account)
         {
             var now = identity.Character is { } character ? directory?.Current(character.Id, account) : null;
+            if (now is null && directory?.CurrentOfAccount(account) is { } switched)
+            {
+                // Character switch without a new chat login: the client reuses its old mtalk token.
+                now = switched;
+                session.Identity = identity with { Character = switched };
+            }
             if (now is null) throw new ChatRejectedException("Enter the world first.");
             return new Speaker(now.Name, now.DisplayName);
         }
@@ -211,6 +223,7 @@ public sealed class ChatRelay(TimeProvider clock, IChatDirectory? directory = nu
         if (content.Any(c => char.GetUnicodeCategory(c) is UnicodeCategory.Control or UnicodeCategory.Format))
             throw new ChatRejectedException("Control characters are not allowed.");
         if (content.Trim().Length == 0) throw new ChatRejectedException("Enter a message.");
+        if (ChatProfanity.Rejects(content)) throw new ChatRejectedException("That message is not allowed.");
         var now = clock.GetUtcNow();
         // Account identities are limited per stored character (a new chat login does not reset it).
         var key = sender.Character is { } character ? "c:" + character.Id : sender.ServerKey + ":" + sender.CharacterId;

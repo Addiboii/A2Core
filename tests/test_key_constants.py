@@ -1,6 +1,6 @@
 import unittest
 
-from tools.key_constants import binary_key_candidates
+from tools.key_constants import binary_key_candidates, raw_key_prefilter
 
 
 class KeyConstantTests(unittest.TestCase):
@@ -40,3 +40,6 @@ class KeyConstantTests(unittest.TestCase):
         # r13-32 ... r13-4, each a C7 /0 dword immediate store.
         code = b"".join(b"\x41\xc7\x45" + bytes([224 + i * 4]) + key[i * 4:i * 4 + 4] for i in range(8))
         self.assertEqual(list(binary_key_candidates(code))[0][0], key)
+
+    def test_raw_prefilter_accepts_typical_key_material(self):
+        self.assertTrue(raw_key_prefilter(bytes(range(32))))

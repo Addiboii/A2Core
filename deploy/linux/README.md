@@ -57,10 +57,12 @@ Certificate choices for the account site (port 8780), exactly one:
 - `--proxy`: your own TLS proxy on this machine forwards to `127.0.0.1:8780` (the host then
   listens on loopback for the account site and trusts X-Forwarded-For from loopback). The proxy
   must use another public port: 443 belongs to the NCGuard sink.
+- `--open-registration`: anyone can create an account on the account page (default: admins create
+  accounts on the staff dashboard). Stored in `/etc/aion/install-args` and kept across `update.sh`.
 
 What install.sh does:
 
-1. Installs `dotnet-sdk-10.0`, `postgresql`, `python3`, `openssl`, `nodejs`, `npm` (and `certbot` with `--domain`).
+1. Installs `dotnet-sdk-10.0`, `postgresql`, `python3`, `openssl`, `nodejs`, `npm`, `mingw-w64`, `cmake`, `git` (and `certbot` with `--domain`).
 2. Creates the `aion` service account and `/var/lib/aion` (state, data, database), `/etc/aion`
    (configuration, certificate), `/opt/aion` (published host, database tools).
 3. Unpacks the data archive into `/var/lib/aion/data`.
@@ -70,7 +72,14 @@ What install.sh does:
    `credentials.json`), applies migrations, imports the catalogue, installs starter profiles,
    class skills and the equipment rules (`tools/equipment_rules.py`). Later runs apply new migrations only.
 6. Writes `/etc/aion/aion.env` (`tools/server_env.py`; mode 640, contains database passwords).
-7. Installs and starts `aion-postgres.service` and `aion-host.service`.
+   Server and debug log files go to `/var/lib/aion/logs` (writable; not under `/opt/aion/host`).
+7. Builds **A2Core Launcher** for Windows on the server (`deploy/linux/build_launcher.sh`: cross-builds
+   `A2Core.Redirect.dll` with mingw-w64, then `dotnet publish` with `EnableWindowsTargeting`, embeds
+   `launcher.json` with your account URL and address; pins the self-signed certificate thumbprint when
+   you used `--self-signed`) and installs the exe and `A2Core Launcher.exe.version` into
+   `/var/lib/aion/downloads` so signed-in players can download it and installed copies can self-update.
+   Default play uses DNS inject (no hosts-file UAC); `redirectMode: "hosts"` keeps the legacy path.
+8. Installs and starts `aion-postgres.service` and `aion-host.service`.
 
 ## Dashboard icons and 3D preview
 
@@ -101,8 +110,12 @@ sudo deploy/linux/update.sh
 From the development PC, `tools/deploy.ps1` does this over SSH (ssh config host `aion`: the server's
 address, `User root`, a dedicated key `~/.ssh/id_ed25519_aion` whose public half is in the server's
 `authorized_keys`): `-Server` pushes the current branch and runs update.sh; `-Launcher` publishes
-A2Core Launcher and copies the exe and its version file to `/var/lib/aion/downloads`; `-Status` shows the
+A2Core Launcher on Windows and copies the exe and its version file to `/var/lib/aion/downloads`
+(use this when you change the launcher without redeploying the whole server); `-Status` shows the
 services and the last log lines.
+
+Every `install.sh` / `update.sh` run also rebuilds the launcher on the server (Linux cross-publish),
+so a fresh install already offers the download button without a Windows dev PC.
 
 It backs up the database (`/var/lib/aion/backups`, newest 10 kept), pulls, then repeats install.sh
 with the options of the last install: rebuilds the host, applies new migrations, restarts.

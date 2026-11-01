@@ -57,18 +57,20 @@ def environment(args, credentials):
         'Aion__Native__LoginPort': PORTS['login'],
         'Aion__Native__GamePort': PORTS['game'],
         'Aion__Native__Logins': 'accounts',
+        'Aion__Progression__LevelCap': '45',
         'Aion__Native__MaxConnections': args.max_connections,
         'Aion__ChatPort': PORTS['chat'],
         'Aion__Platform__Port': PORTS['bootstrap'],
         'Aion__Platform__FixtureDirectory': data / 'bootstrap/keys',
         'Aion__Platform__PolicyFile': data / 'bootstrap/policy/app-policy.json',
-        # Policy custom_data switches of the game (its key table, read from the client 2026-10-18). The title screen's
-        # Security Settings button is governed by SecondaryAuthCheckType (value CANDIDATE until a launch confirms).
+        # Policy custom_data switches of the game (its key table, read from the client 2026-10-18). SecondaryAuthCheckType
+        # 'OTP' makes the title screen show the NC account menu (Security Settings, Manage Account, Credits) that the
+        # official Steam title does not show; 'None' is also the host's default. TOTP is checked at the account login.
         # SteamShowOnlySteamLogin=true is NOT set: it moves the client to the Steam token login route
         # (sessions/v1.0/login_sessions;token); the bootstrap answers it with the login session object, which the client
         # rejected on 2026-10-18 (200, then "failed to login"), so the reply shape is still unknown.
         'Aion__Platform__CustomData__SecondaryAuthCheckType': 'None',
-        'Aion__NcGuard__Port': PORTS['ncguard'],
+        'Aion__NcGuard__Port': getattr(args, 'ncguard_port', None) or PORTS['ncguard'],
         'Aion__NcGuard__FixtureFile': data / 'ncguard/fixture.json',
         'Aion__NcGuard__DataDirectory': args.state / 'ncguard',
         # Players' anti-cheat requests are answered, never recorded.
@@ -86,6 +88,9 @@ def environment(args, credentials):
     # The game's world-map paintings for the dashboard's live map (tools/MapImageExport: <id>.webp and maps.json).
     if (data / 'map-images/maps.json').exists():
         env['Aion__MapImagesPath'] = data / 'map-images'
+    logs = args.state / 'logs'
+    env['Aion__ServerLog__LogDirectory'] = logs
+    env['Aion__Debug__LogDirectory'] = logs
     # Dashboard backups (Server page): pg_dump through postgres_dev.py into the state folder update.sh uses too.
     env['Aion__Backups__Directory'] = args.state / 'backups'
     env['Aion__Backups__Tool'] = Path(__file__).resolve().parent / 'postgres_dev.py'
@@ -97,8 +102,16 @@ def environment(args, credentials):
     else:
         env['Aion__Https__CertificateFile'] = args.certificate.resolve()
         env['Aion__Https__KeyFile'] = args.key.resolve()
+        if getattr(args, 'legacy_certificate', None):
+            env['Aion__Https__LegacyCertificateFile'] = args.legacy_certificate.resolve()
+            env['Aion__Https__LegacyKeyFile'] = args.legacy_key.resolve()
     # The staff dashboard's private address; kept across updates (install.sh passes the current one).
     env['Aion__Web__StaffPath'] = getattr(args, 'staff_path', None) or '/' + ''.join(secrets.choice(string.ascii_lowercase + string.digits) for _ in range(16))
+    totp_key_file = getattr(args, 'config', Path('/etc/aion')) / 'totp.key'
+    if totp_key_file.is_file():
+        key = totp_key_file.read_text(encoding='utf-8').strip()
+        if key:
+            env['Aion__Totp__EncryptionKey'] = key
     for index, map_id in enumerate(args.preload):
         env[f'Aion__Native__PreloadMaps__{index}'] = map_id
     return env
@@ -110,10 +123,16 @@ def main(argv=None):
     parser.add_argument('--bind', default='0.0.0.0', help='listen address (default every interface)')
     parser.add_argument('--data', type=Path, required=True, help='unpacked server data (pack_server_data.py)')
     parser.add_argument('--state', type=Path, required=True, help='writable service directory (NCGuard state, geolocation)')
+    parser.add_argument('--config', type=Path, default=Path('/etc/aion'),
+                        help='configuration directory (totp.key for account TOTP)')
     tls = parser.add_mutually_exclusive_group(required=True)
     tls.add_argument('--proxy', action='store_true', help='a TLS proxy on this machine serves the account site')
     tls.add_argument('--certificate', type=Path, help='PEM certificate for the account port (with --key)')
     parser.add_argument('--key', type=Path, help='PEM private key for --certificate')
+    parser.add_argument('--ncguard-port', type=int, help='NCGuard sink port (default 443; set when a proxy owns 443)')
+    parser.add_argument('--legacy-certificate', type=Path,
+                        help='PEM certificate served to clients without a host name (with --legacy-key)')
+    parser.add_argument('--legacy-key', type=Path, help='PEM private key for --legacy-certificate')
     parser.add_argument('--open-registration', action='store_true', help='let anyone create an account on the account page')
     parser.add_argument('--staff-path', help='staff dashboard address, e.g. /k3x9... (default: a new random one)')
     parser.add_argument('--max-connections', type=int, default=200, help='per native port')
@@ -129,6 +148,8 @@ def main(argv=None):
         parser.error('--public-address must be a non-loopback IPv4 address')
     if args.certificate and not args.key:
         parser.error('--certificate needs --key')
+    if bool(args.legacy_certificate) != bool(args.legacy_key) or (args.legacy_certificate and not args.certificate):
+        parser.error('--legacy-certificate needs --legacy-key and --certificate')
     if args.staff_path is not None and (len(args.staff_path) < 9 or not args.staff_path.startswith('/')
                                         or not all(c.isalnum() or c in '-_' for c in args.staff_path[1:])):
         parser.error('--staff-path must be / followed by at least 8 letters, digits, - or _')

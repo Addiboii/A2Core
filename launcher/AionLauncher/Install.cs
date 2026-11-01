@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.ComTypes;
 using System.Text;
+using Aion.Launcher;
 using Microsoft.Win32;
 
 #pragma warning disable SYSLIB1096   // the classic COM interop for IShellLink is what single-file publishing supports
@@ -33,7 +34,7 @@ static class Install
     /// <summary>Copies this exe into place, makes the shortcuts and the Apps &amp; features entry. Returns the installed exe.</summary>
     public static string Run()
     {
-        var source = Environment.ProcessPath ?? throw new LauncherException("The running program's path is unknown.");
+        var source = Environment.ProcessPath ?? throw new LauncherException(LauncherLoc.ErrUnknownExePath);
         Directory.CreateDirectory(Folder);
         var staged = ExePath + ".new";
         File.Copy(source, staged, overwrite: true);
@@ -41,10 +42,10 @@ static class Install
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {
             File.Delete(staged);
-            throw new LauncherException($"{Name} is already running from {Folder}. Close it and try again.");
+            throw new LauncherException(LauncherLoc.ErrAlreadyRunning(Folder));
         }
         try { Shortcut(DesktopShortcut); Shortcut(StartMenuShortcut); }
-        catch (COMException error) { throw new LauncherException($"The shortcuts could not be made ({error.Message})."); }
+        catch (COMException error) { throw new LauncherException(LauncherLoc.ErrShortcuts(error.Message)); }
         using var key = Registry.CurrentUser.CreateSubKey(UninstallKey);
         key.SetValue("DisplayName", Name);
         key.SetValue("DisplayVersion", Version);

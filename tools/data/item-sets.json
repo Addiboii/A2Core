@@ -1,0 +1,97 @@
+{
+  "source": "ItemSetEffect.dat via tools/item_set_data.py (arcana split CANDIDATE on template id)",
+  "sets": {
+    "Arcana_A_Set_001": {
+      "name": "Primal Vigor",
+      "tiers": [
+        {
+          "pieces": 2,
+          "if": {
+            "hp_pct_min": 70
+          },
+          "stats": [
+            [
+              "PveAttack",
+              60
+            ]
+          ]
+        },
+        {
+          "pieces": 4,
+          "if": {
+            "hp_pct_min": 70
+          },
+          "stats": [
+            [
+              "PveAttack",
+              150
+            ]
+          ]
+        }
+      ]
+    },
+    "Arcana_A_Set_002": {
+      "name": "Magic Armor",
+      "tiers": [
+        {
+          "pieces": 4,
+          "if": {
+            "mp_pct_min": 50
+          },
+          "stats": [
+            [
+              "PveDefense",
+              1000
+            ]
+          ]
+        }
+      ]
+    }
+  },
+  "items": {
+    "810130001": "Arcana_A_Set_001",
+    "810140001": "Arcana_A_Set_001",
+    "810150001": "Arcana_A_Set_001",
+    "810160001": "Arcana_A_Set_001",
+    "810230001": "Arcana_A_Set_001",
+    "810240001": "Arcana_A_Set_001",
+    "810250001": "Arcana_A_Set_001",
+    "810260001": "Arcana_A_Set_001",
+    "810330001": "Arcana_A_Set_001",
+    "810340001": "Arcana_A_Set_001",
+    "810350001": "Arcana_A_Set_001",
+    "810360001": "Arcana_A_Set_001",
+    "810430001": "Arcana_A_Set_001",
+    "810440001": "Arcana_A_Set_001",
+    "810450001": "Arcana_A_Set_001",
+    "810460001": "Arcana_A_Set_001",
+    "810530001": "Arcana_A_Set_001",
+    "810540001": "Arcana_A_Set_001",
+    "810550001": "Arcana_A_Set_001",
+    "810560001": "Arcana_A_Set_001",
+    "810130002": "Arcana_A_Set_002",
+    "810140002": "Arcana_A_Set_002",
+    "810150002": "Arcana_A_Set_002",
+    "810160002": "Arcana_A_Set_002",
+    "810230002": "Arcana_A_Set_002",
+    "810240002": "Arcana_A_Set_002",
+    "810250002": "Arcana_A_Set_002",
+    "810260002": "Arcana_A_Set_002",
+    "810330002": "Arcana_A_Set_002",
+    "810340002": "Arcana_A_Set_002",
+    "810350002": "Arcana_A_Set_002",
+    "810360002": "Arcana_A_Set_002",
+    "810430002": "Arcana_A_Set_002",
+    "810440002": "Arcana_A_Set_002",
+    "810450002": "Arcana_A_Set_002",
+    "810460002": "Arcana_A_Set_002",
+    "810530002": "Arcana_A_Set_002",
+    "810540002": "Arcana_A_Set_002",
+    "810550002": "Arcana_A_Set_002",
+    "810560002": "Arcana_A_Set_002"
+  },
+  "stat_map": {
+    "PveAttack": "FixingDamage",
+    "PveDefense": "Defense"
+  }
+}

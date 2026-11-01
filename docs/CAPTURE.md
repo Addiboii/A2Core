@@ -12,8 +12,9 @@ modified, and nothing is sent to the server or to other players.
 - **Server to client (readable).** After the handshake the game server's stream (port 13328) is plaintext apart from
   LZ4 compression, which the tools unpack. A recording settles what the server sends: replies, notices, values and
   their timing.
-- **Client to server (not readable).** The client ciphers its own direction after the handshake. Request layouts come
-  from our own client traces (the server logs what the client sends to A2Core) and from the client's type mappings.
+- **Client to server (not readable).** The client ciphers its own direction after the handshake. The timeline lists
+  ciphered client frames as **opaque** wire chunks (length only). Request layouts come from our own client traces and
+  from the client's type mappings.
 
 ## Setup (Windows)
 
@@ -25,49 +26,56 @@ modified, and nothing is sent to the server or to other players.
 
 ## Record
 
-Start the game normally through Steam on the official server and enter the world. Then, in Administrator PowerShell in
-the repository folder:
+Start the game normally through Steam on the official server and enter the world. Then run an elevated capture:
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./tools/capture.ps1 -InGame -DurationSeconds 1800 -MaxSizeMb 1024
 ```
 
-- `-InGame` finds the game server your client is connected to (port 13328) and records both link layers, which a
-  Wi-Fi connection needs to see the server's direction. Without it the script records the login server (port 13700);
-  restart the game while it runs to capture the opening handshake.
-- `-ServerAddress '<ip>,<ip>'` adds servers to the one discovered, for example the login server and other game servers
-  a map change may move you to. Quote the list.
-- `-DurationSeconds` up to 7200; the trace stops by itself. Allow about 4 MB per minute in `-MaxSizeMb` (a 10-minute
-  fight was 36 MB), or the buffer wraps.
-- `-MovementCues` plays beeps that tell you when to walk and stop (for movement timing).
+Or double-click `tools/capture-game.cmd` (self-elevates and passes `-InGame`).
+
+- `-InGame` uses `Get-NetTCPConnection` to find the game server your client uses on port **13328** and records both
+  link layers (needed on Wi-Fi). Without it the script targets the login server (port **13700**); restart the game
+  while it runs to capture the opening handshake.
+- `-ServerAddress '<ip>,<ip>'` adds servers to the one discovered (login plus game servers after a map change). Quote
+  the list.
+- `-DurationSeconds` up to **7200**; the trace stops by itself. Press **Q** in the capture window to stop early.
+- `-MaxSizeMb` caps the circular `.etl` buffer (allow about 4 MB per minute; a 10-minute fight was ~36 MB).
+- `-MovementCues` plays beeps that tell you when to walk and stop (movement timing).
 - `-PlanOnly` prints what would run without recording or needing elevation.
 
-The trace records only TCP traffic to and from those server addresses. Keep the window open when it ends: Windows
-takes a few minutes to finish the trace, then `capture.pcapng` appears in `research/local/capture-13700-<date>-<id>/`.
+Output lands in `research/local/capture-<port>-<date>-<id>/capture.pcapng` (port is 13700 or 13328 depending on mode).
+Keep the window open when recording ends: Windows finishes the trace, then the script converts to pcapng.
 
-Between activities (not during a fight), an ordinary PowerShell can timestamp a note into the recording:
+If the capture window closed before conversion finished, run `tools/capture-stop.cmd` (elevates when needed) to stop
+the orphaned netsh session and convert `capture.etl`.
+
+Between activities (not during a fight), timestamp a note into the recording folder:
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./tools/capture_mark.ps1 "died to the elite, reviving"
+tools/capture-mark.cmd "died to the elite, reviving"
 ```
 
-The note's time is when you typed it, not when the thing happened, so treat it as a cue.
+The note's time is when you typed it, not when the thing happened, so treat it as a cue. Track progress locally with
+the checklist in [CAPTURE-PROGRESS.md](CAPTURE-PROGRESS.md).
 
 ## Decode
 
 ```powershell
-python tools/capture_timeline.py research/local/capture-13700-<date>-<id>/capture.pcapng
-python tools/capture_timeline.py research/local/capture-13700-<date>-<id>/timeline-13328 --grep 0x3642,0x8d00 --dir s2c --limit 50
+python tools/capture_timeline.py research/local/capture-13328-<date>-<id>/capture.pcapng
+python tools/capture_timeline.py research/local/capture-13328-<date>-<id>/timeline-13328 --grep 0x3642,0x8d00 --dir s2c --limit 50
+python tools/capture_timeline.py research/local/capture-13328-<date>-<id>/timeline-13328 --summary --limit 200
 ```
 
 The first command writes `timeline-13328/` next to the capture:
 
-- `timeline.jsonl`: every message in stream order, with capture time, direction, opcode, name, length and body (hex).
-- `counts.json`: opcode counts per direction, and reassembly problems (gaps, retransmissions).
+- `timeline.jsonl`: every message in stream order, with capture time, direction, opcode (s2c), name, length and body
+  (hex). Ciphered c2s lines are `opaque` without decoded opcodes.
+- `counts.json`: opcode counts per direction, reassembly problems (gaps, retransmissions).
 - `large/`: bodies too big to inline.
 
-The second command prints the messages you are interested in. Opcode names come from `tools/data/opcode-names.json`;
-the server code that builds each message is in `server/Aion.Protocol/Native/*Packets.cs` (search for the opcode).
+The second command prints matching s2c messages with body prefixes. `--summary` omits body hex (safe for quick counts).
+Opcode names come from `tools/data/opcode-names.json`; server code is in `server/Aion.Protocol/Native/*Packets.cs`.
 Comparing an official body with what A2Core sends for the same situation is how a CANDIDATE or OURS value becomes
 OBSERVED. `tools/inspect_capture.py` and `tools/summarize_session.py` check framing and summarize a session without
 printing bodies.
@@ -86,47 +94,48 @@ your inventory, the names and positions of players near you, and chat.
 
 ## What is still wanted
 
-Grouped by priority, with what to do in game. The code marks the current guess as OURS or CANDIDATE at each place.
+Grouped by priority. The code marks the current guess as OURS or CANDIDATE at each place. Use
+[CAPTURE-PROGRESS.md](CAPTURE-PROGRESS.md) to log what you tried.
 
 **High**
 
-1. **Death and revive**: die to a monster, wait on the death screen, revive at the respawn point (also with a
-   Resurrection Spiritstone). Settles the death notice, the revive messages, auto-revive timing and the revive teleport.
-2. **Monsters hitting you**: take hits from a few monsters of known level. Their hit messages use variants not yet
-   decoded, and monster damage is our formula.
-3. **Loot on the ground and gathering**: pick up a monster's drop and gather one node. Neither reply has been seen;
-   also the bonus-material rate and how long a node stays used up.
-4. **Shop**: buy one item, sell one, buy it back. The replies, the buy-back price, when purchase limits reset.
-5. **Quest dungeon relog**: log out in the middle of a solo quest dungeon and log back in.
-6. **Kill experience**: kill monsters of known levels, solo and in a party (no table holds it; ours is invented, as is
-   the party split).
+1. **Death and revive**: die to a monster, wait on the death screen, revive at the respawn point, auto-revive timing,
+   and **Resurrection Spiritstone** revive. Settles death notices, revive messages, and revive teleport.
+2. **Monsters hitting you**: block, parry, and evade as well as damage from monsters of known level. Several hit
+   variants are not decoded; monster damage is still our formula.
+3. **Projectiles**: ranged skill flight time and hit confirmation on you and on monsters.
+4. **Loot on the ground and gathering**: pick up a monster drop and gather one node. Replies and bonus-material rate;
+   how long a node stays exhausted.
+5. **Shop**: buy one item, sell one, buy it back. Replies, buy-back price, purchase-limit reset.
+6. **Quest dungeon relog**: log out mid solo quest dungeon and log back in.
+7. **Kill experience**: kill monsters of known levels solo and in party (no table; party split is OURS).
 
 **Flight and movement**
 
-7. Wind streams: do they spend or restore flight points?
-8. Flight rings: how fast the gauge refills.
-9. Swimming and diving near another player: what the other player receives.
-10. Monster respawn time, aggro range, and how far they chase before returning.
-11. HP/MP regeneration while sitting, and the auto-potion threshold.
+8. Wind streams: spend or restore flight points?
+9. Flight rings: gauge refill rate.
+10. Swimming and diving near another player: what the other client receives.
+11. Monster respawn time, aggro range, chase leash.
+12. HP/MP regeneration while sitting vs in combat; auto-potion threshold.
 
-**Systems that run on guessed message layouts** (a short session of each settles it)
+**Systems on guessed layouts** (a short session each)
 
-12. Party dungeon entry, the item-level requirement, the hold after a clear, mid-boss rewards.
-13. Enchanting (success and failure) and item restore cost.
-14. Mail: read, take attachments, delete.
-15. Storage: account-wide or per character.
-16. Legion create and join; the arena queue.
-17. Battle pass and daily/weekly missions: which are offered and how rewards are claimed.
-18. Titles, crafting (experience per craft, recipe unlocks), gathering levels.
-19. Rides: level-up, soul crystals, option rolls; polymorph.
-20. Character delete and cancelling a delete.
-21. Skill points per level and skill option slots.
-22. Boss challenge points and season keys.
-23. Killing another player: Abyss Points, and what the killed player sees.
+13. Party dungeons: entry, item-level gate, post-clear hold, mid-boss rewards.
+14. **Groggy** / stagger break and related notices.
+15. Enchanting (success and failure) and item restore cost.
+16. Mail: read, take attachments, delete.
+17. Storage (account-wide vs per character).
+18. Legion create/join; arena queue.
+19. Battle pass and daily/weekly missions: offers and reward claim.
+20. Titles; crafting (XP per craft, recipe unlocks); gathering levels.
+21. Rides: level-up, soul crystals, option rolls; polymorph.
+22. Character delete and cancel-delete.
+23. Skill points per level; **combat power updates (`0x3656`)**; boss challenge points; season keys.
+24. PvP kill: Abyss Points and what the killed player sees.
 
 **Cosmetic**
 
-24. Notices and kicks (colour format and size), chat copies of on-screen messages, emotes on NPCs, teleport statue and
+25. Notices and kicks (colour and size), chat copies of on-screen messages, emotes on NPCs, teleport statue and
     return scroll effects.
 
-Items 1 to 6 fit in one 20 to 30 minute session with a note between activities.
+Items 1–7 fit one 20–30 minute session with a note between activities.

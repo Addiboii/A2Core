@@ -1,6 +1,7 @@
 using System.Buffers;
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
+using Aion.Launcher;
 using SteamKit2;
 using SteamKit2.Authentication;
 using SteamKit2.CDN;
@@ -22,7 +23,10 @@ public sealed class SteamDownload : IDisposable
     public const string StateFile = ".download-state";
     const int ParallelFiles = 6, ParallelChunks = 16, Attempts = 8;
 
-    public sealed record Status(long Bytes, long Total, string Phase);
+    public sealed record Status(long Bytes, long Total, string Phase)
+    {
+        public long Remaining => Math.Max(0, Total - Bytes);
+    }
     public sealed record SignIn(string Account, string RefreshToken);
 
     readonly SteamClient client = new();
@@ -33,6 +37,10 @@ public sealed class SteamDownload : IDisposable
     readonly CancellationTokenSource stop = new();
     TaskCompletionSource connected = new(TaskCreationOptions.RunContinuationsAsynchronously);
     TaskCompletionSource<EResult> loggedOn = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    Client? depotCdn;
+    IReadOnlyList<Server>? depotServers;
+    byte[]? depotKeyBytes;
 
     /// <summary>The URL to show as a QR code; raised again when Steam renews it.</summary>
     public event Action<string>? QrCode;
@@ -47,8 +55,8 @@ public sealed class SteamDownload : IDisposable
         callbacks.Subscribe<SteamClient.DisconnectedCallback>(c =>
         {
             if (c.UserInitiated) return;
-            connected.TrySetException(new SteamDownloadException("Could not connect to Steam."));
-            loggedOn.TrySetException(new SteamDownloadException("Steam closed the connection."));
+            connected.TrySetException(new SteamDownloadException(LauncherLoc.ErrSteamConnect));
+            loggedOn.TrySetException(new SteamDownloadException(LauncherLoc.ErrSteamDisconnected));
         });
         callbacks.Subscribe<SteamUser.LoggedOnCallback>(c => loggedOn.TrySetResult(c.Result));
         new Thread(() => { while (!stop.IsCancellationRequested) callbacks.RunWaitCallbacks(TimeSpan.FromMilliseconds(250)); })
@@ -80,7 +88,7 @@ public sealed class SteamDownload : IDisposable
             QrCode?.Invoke(session.ChallengeURL);
             try { result = await session.PollingWaitForResultAsync(ct); break; }
             catch (AuthenticationException error) when (error.Result is not (EResult.Expired or EResult.Timeout))
-            { throw new SteamDownloadException($"Steam sign-in was not approved ({error.Result})."); }
+            { throw new SteamDownloadException(LauncherLoc.ErrSteamSignInNotApproved(error.Result.ToString())); }
             catch (Exception error) when (!ct.IsCancellationRequested && error is AuthenticationException or AsyncJobFailedException or TaskCanceledException)
             {
                 client.Disconnect();
@@ -89,7 +97,7 @@ public sealed class SteamDownload : IDisposable
         }
         var signIn = new SignIn(result.AccountName, result.RefreshToken);
         var logOn = await LogOnAsync(signIn, ct);
-        if (logOn != EResult.OK) throw new SteamDownloadException($"Steam sign-in failed ({logOn}).");
+        if (logOn != EResult.OK) throw new SteamDownloadException(LauncherLoc.ErrSteamSignInFailed(logOn.ToString()));
         return signIn;
     }
 
@@ -116,60 +124,167 @@ public sealed class SteamDownload : IDisposable
         return result;
     }
 
-    /// <summary>Downloads every file of the build into <paramref name="target"/> (signed in first).</summary>
-    public async Task DownloadAsync(SupportedBuild build, string target, IProgress<Status> progress, CancellationToken ct)
+    /// <summary>Latest public manifest gid for a depot, and the app's public branch build id when present.</summary>
+    public async Task<(ulong ManifestId, uint? SteamBuildId)> GetLatestPublicManifestAsync(uint appId, uint depotId, CancellationToken ct)
     {
-        uint appId = (uint)build.AppId, depotId = (uint)build.DepotId;
-        var manifestId = ulong.Parse(build.ManifestId);
-        progress.Report(new(0, build.TotalBytes, "Asking Steam for the game version…"));
+        var tokens = await apps.PICSGetAccessTokens([appId], []);
+        var request = new SteamApps.PICSRequest(appId);
+        if (tokens.AppTokens.TryGetValue(appId, out var token)) request = new SteamApps.PICSRequest(appId, token);
+        var product = await apps.PICSGetProductInfo([request], []);
+        var app = product.Results?.SelectMany(r => r.Apps).FirstOrDefault(p => p.Key == appId).Value
+            ?? throw new SteamDownloadException(LauncherLoc.ErrSteamNoProductInfo(appId));
+        var depots = app.KeyValues["depots"];
+        if (depots == KeyValue.Invalid) throw new SteamDownloadException(LauncherLoc.ErrSteamNoDepotList);
+        var depotNode = depots[depotId.ToString()];
+        if (depotNode == KeyValue.Invalid) throw new SteamDownloadException(LauncherLoc.ErrSteamDepotNotListed(depotId, appId));
+        var gid = depotNode["manifests"]?["public"]?["gid"].Value
+            ?? throw new SteamDownloadException(LauncherLoc.ErrSteamNoPublicManifest(depotId));
+        uint? buildId = null;
+        var branch = depots["branches"]?["public"];
+        if (branch is not null && branch != KeyValue.Invalid && branch["buildid"].Value is { } buildText && uint.TryParse(buildText, out var parsed))
+            buildId = parsed;
+        return (ulong.Parse(gid), buildId);
+    }
 
+    /// <summary>Depot key, CDN client and manifest for downloading files (call once per manifest).</summary>
+    public async Task<DepotManifest> PrepareDepotManifestAsync(uint appId, uint depotId, ulong manifestId, CancellationToken ct)
+    {
         var key = await apps.GetDepotDecryptionKey(depotId, appId);
         if (key.Result != EResult.OK)
             throw new SteamDownloadException(key.Result == EResult.AccessDenied
-                ? "This Steam account does not have the game. Add it to your Steam library, then try again."
-                : $"Steam refused the game files ({key.Result}).");
+                ? LauncherLoc.ErrSteamNoGameInLibrary
+                : LauncherLoc.ErrSteamRefusedFiles(key.Result.ToString()));
         var code = await content.GetManifestRequestCode(depotId, appId, manifestId, "public", null);
-        if (code == 0) throw new SteamDownloadException("Steam did not allow downloading this game version.");
+        if (code == 0) throw new SteamDownloadException(LauncherLoc.ErrSteamDownloadNotAllowed);
 
         var servers = (await content.GetServersForSteamPipe())
             .Where(s => s.Type is "SteamCache" or "CDN" && (s.AllowedAppIds.Length == 0 || s.AllowedAppIds.Contains(appId)))
             .OrderBy(s => s.WeightedLoad).ToList();
-        if (servers.Count == 0) throw new SteamDownloadException("Steam offered no download servers.");
-        using var cdn = new Client(client);
+        if (servers.Count == 0) throw new SteamDownloadException(LauncherLoc.ErrSteamNoServers);
+        depotCdn?.Dispose();
+        depotCdn = new Client(client);
+        depotServers = servers;
+        depotKeyBytes = key.DepotKey;
 
         DepotManifest? manifest = null;
         for (var attempt = 0; manifest is null; attempt++)
         {
-            try { manifest = await cdn.DownloadManifestAsync(depotId, manifestId, code, servers[attempt % servers.Count], key.DepotKey); }
+            try { manifest = await depotCdn.DownloadManifestAsync(depotId, manifestId, code, servers[attempt % servers.Count], key.DepotKey); }
             catch (Exception error) when (attempt < Attempts && error is HttpRequestException or SteamKitWebRequestException or TaskCanceledException && !ct.IsCancellationRequested) { }
         }
+        return manifest ?? throw new SteamDownloadException(LauncherLoc.ErrSteamManifestDownload);
+    }
+
+    /// <summary>Downloads one depot file into <paramref name="targetPath"/> (parent directory must exist).</summary>
+    public async Task DownloadDepotFileAsync(uint depotId, DepotManifest.FileData file, string targetPath, CancellationToken ct)
+    {
+        if (depotCdn is null || depotServers is null || depotKeyBytes is null)
+            throw new InvalidOperationException("Call PrepareDepotManifestAsync first.");
+        Directory.CreateDirectory(Path.GetDirectoryName(targetPath)!);
+        var servers = depotServers;
+        var key = depotKeyBytes;
+        var cdn = depotCdn;
+        var chunkSlots = new SemaphoreSlim(ParallelChunks);
+        var serverIndex = 0;
+        using var handle = File.OpenHandle(targetPath, FileMode.Create, FileAccess.ReadWrite, FileShare.Read, FileOptions.Asynchronous);
+        RandomAccess.SetLength(handle, (long)file.TotalSize);
+        await Parallel.ForEachAsync(file.Chunks, new ParallelOptions { MaxDegreeOfParallelism = ParallelChunks, CancellationToken = ct }, async (chunk, chunkToken) =>
+        {
+            var buffer = ArrayPool<byte>.Shared.Rent((int)chunk.UncompressedLength);
+            try
+            {
+                await chunkSlots.WaitAsync(chunkToken);
+                try
+                {
+                    for (var attempt = 1; ; attempt++)
+                    {
+                        var server = servers[(Interlocked.Increment(ref serverIndex) & int.MaxValue) % servers.Count];
+                        try
+                        {
+                            var length = await cdn.DownloadDepotChunkAsync(depotId, chunk, server, buffer, key);
+                            if (length != chunk.UncompressedLength || !SHA1.HashData(buffer.AsSpan(0, length)).AsSpan().SequenceEqual(chunk.ChunkID))
+                                throw new InvalidDataException("Chunk does not match its id");
+                            await RandomAccess.WriteAsync(handle, buffer.AsMemory(0, length), (long)chunk.Offset, chunkToken);
+                            break;
+                        }
+                        catch (Exception error) when (attempt < Attempts && !chunkToken.IsCancellationRequested
+                            && error is HttpRequestException or SteamKitWebRequestException or InvalidDataException or TaskCanceledException or IOException)
+                        {
+                            await Task.Delay(TimeSpan.FromMilliseconds(250 * attempt), chunkToken);
+                        }
+                    }
+                }
+                finally { chunkSlots.Release(); }
+            }
+            finally { ArrayPool<byte>.Shared.Return(buffer); }
+        });
+    }
+
+    /// <summary>Downloads every file of the build into <paramref name="target"/> (signed in first).</summary>
+    public Task DownloadAsync(SupportedBuild build, string target, IProgress<Status> progress, CancellationToken ct) =>
+        DownloadAsync(build, target, progress, ct, onlyPaths: null);
+
+    /// <summary>Downloads all files, or only those listed in <paramref name="onlyPaths"/> (repair / fill gaps).</summary>
+    public async Task DownloadAsync(SupportedBuild build, string target, IProgress<Status> progress, CancellationToken ct, IReadOnlySet<string>? onlyPaths)
+    {
+        uint appId = (uint)build.AppId, depotId = (uint)build.DepotId;
+        var manifestId = ulong.Parse(build.ManifestId);
+        progress.Report(new(0, build.TotalBytes, LauncherLoc.SteamAskingVersion));
+
+        var manifest = await PrepareDepotManifestAsync(appId, depotId, manifestId, ct);
+        var cdn = depotCdn!;
+        var servers = depotServers!;
+        var key = depotKeyBytes!;
         var files = (manifest.Files ?? []).Where(f => !f.Flags.HasFlag(EDepotFileFlag.Directory))
             .ToDictionary(f => f.FileName.Replace('\\', '/'), StringComparer.OrdinalIgnoreCase);
         foreach (var file in build.Files)
             if (!files.TryGetValue(file.Path, out var listed) || (long)listed.TotalSize != file.Size)
-                throw new SteamDownloadException($"Steam's file list differs from this server's version ({file.Path}).");
+                throw new SteamDownloadException(LauncherLoc.ErrSteamFileListDiff(file.Path));
+
+        var work = onlyPaths is null ? build.Files : build.Files.Where(f => onlyPaths.Contains(f.Path)).ToList();
+        if (work.Count == 0)
+        {
+            progress.Report(new(build.TotalBytes, build.TotalBytes, LauncherLoc.SteamDownloadFinished));
+            return;
+        }
 
         Directory.CreateDirectory(target);
         var statePath = Path.Combine(target, StateFile);
         var finished = new ConcurrentDictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
         if (File.Exists(statePath))
-            foreach (var line in await File.ReadAllLinesAsync(statePath, ct)) finished[line] = true;
-        var stateLock = new object();
+        {
+            var stateOk = true;
+            foreach (var line in await File.ReadAllLinesAsync(statePath, ct))
+            {
+                if (line.StartsWith("manifest=", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (!line.Equals($"manifest={build.ManifestId}", StringComparison.OrdinalIgnoreCase)) { finished.Clear(); stateOk = false; }
+                    continue;
+                }
+                if (line.Length > 0 && stateOk) finished[line] = true;
+            }
+        }
+        if (onlyPaths is not null)
+            foreach (var path in onlyPaths) finished.TryRemove(path, out _);
 
+        var stateLock = new object();
         long done = 0, total = build.TotalBytes, reported = 0;
+        var resumeAt = onlyPaths is null ? ClientFiles.PresentBytes(target, build) : Math.Max(0, total - work.Sum(f => f.Size));
+        if (resumeAt > 0)
+            progress.Report(new(resumeAt, total, onlyPaths is null ? LauncherLoc.SteamResuming : LauncherLoc.SteamDownloadingMissing));
         void Add(long bytes)
         {
             var now = Interlocked.Add(ref done, bytes);
             if (now - Interlocked.Read(ref reported) > 8 << 20 || now == total)
             {
                 Interlocked.Exchange(ref reported, now);
-                progress.Report(new(now, total, "Downloading…"));
+                progress.Report(new(now, total, LauncherLoc.SteamDownloading));
             }
         }
 
         var chunkSlots = new SemaphoreSlim(ParallelChunks);
         var serverIndex = 0;
-        await Parallel.ForEachAsync(build.Files, new ParallelOptions { MaxDegreeOfParallelism = ParallelFiles, CancellationToken = ct }, async (file, token) =>
+        await Parallel.ForEachAsync(work, new ParallelOptions { MaxDegreeOfParallelism = ParallelFiles, CancellationToken = ct }, async (file, token) =>
         {
             var path = Path.Combine(target, file.Path);
             var info = new FileInfo(path);
@@ -194,7 +309,7 @@ public sealed class SteamDownload : IDisposable
                                 var server = servers[(Interlocked.Increment(ref serverIndex) & int.MaxValue) % servers.Count];
                                 try
                                 {
-                                    var length = await cdn.DownloadDepotChunkAsync(depotId, chunk, server, buffer, key.DepotKey);
+                                    var length = await cdn.DownloadDepotChunkAsync(depotId, chunk, server, buffer, key);
                                     if (length != chunk.UncompressedLength || !SHA1.HashData(buffer.AsSpan(0, length)).AsSpan().SequenceEqual(chunk.ChunkID))
                                         throw new InvalidDataException("Chunk does not match its id");
                                     await RandomAccess.WriteAsync(handle, buffer.AsMemory(0, length), (long)chunk.Offset, chunkToken);
@@ -213,10 +328,16 @@ public sealed class SteamDownload : IDisposable
                     finally { ArrayPool<byte>.Shared.Return(buffer); }
                 });
             }
-            lock (stateLock) File.AppendAllText(statePath, file.Path + "\n");
+            lock (stateLock)
+            {
+                finished[file.Path] = true;
+                var lines = new List<string> { $"manifest={build.ManifestId}" };
+                lines.AddRange(finished.Keys.OrderBy(p => p, StringComparer.OrdinalIgnoreCase));
+                File.WriteAllLines(statePath, lines);
+            }
         });
-        File.Delete(statePath);
-        progress.Report(new(total, total, "Download finished."));
+        if (onlyPaths is null) File.Delete(statePath);
+        progress.Report(new(total, total, LauncherLoc.SteamDownloadFinished));
     }
 
     static async Task<bool> HasChunkAsync(Microsoft.Win32.SafeHandles.SafeFileHandle handle, DepotManifest.ChunkData chunk, byte[] buffer, CancellationToken ct)
@@ -235,6 +356,7 @@ public sealed class SteamDownload : IDisposable
     public void Dispose()
     {
         stop.Cancel();
+        depotCdn?.Dispose();
         if (client.IsConnected) { user.LogOff(); client.Disconnect(); }
     }
 }

@@ -97,6 +97,34 @@ class QuestConverterTests(unittest.TestCase):
         o = quests.objective(goal('KillPC', 'LastHit,Contribute', '50', '22'), {}, {}, {})
         self.assertEqual(o['value'], ['LastHit,Contribute', '50', '22', '', ''])
 
+    def test_item_acquire_exports_acquire_value_as_item(self):
+        rows = [quest_row('UQ1', 9001, AcquireType='EQuestAcquireType::Item', AcquireValue='Scroll_A',
+                          CompleteType='EQuestCompleteType::UI')]
+        data = quests.convert(rows, [], npc_ids={}, item_ids={'Scroll_A': 530199001}, env_ids={}, text={})
+        q = data['quests']['UQ1']
+        self.assertEqual(q['acquire'], 'Item')
+        self.assertEqual(q['acquire_items'], [[530199001, 1]])
+
+    def test_mark_progression_cap_flags_high_level_quests(self):
+        data = {'quests': {'HQ1': {'level': 10}, 'HQ2': {'level': 46, 'unavailable': False}}}
+        quests.mark_progression_cap(data, cap=45)
+        self.assertNotIn('unavailable', data['quests']['HQ1'])
+        self.assertTrue(data['quests']['HQ2']['unavailable'])
+        self.assertEqual(data['progression']['unavailable_quests'], 1)
+
+    def test_mark_progression_cap_flags_event_no_longer_valid_quests(self):
+        data = {'quests': {
+            'DQ1202072': {'id': 1202072, 'level': 99, 'type': 'District', 'race': 'Light',
+                          'steps': [{'text': 'This quest is no longer valid.\nCheck the Journal.'}]},
+            'HQ1': {'id': 1, 'level': 10, 'type': 'Hero', 'race': 'Light', 'steps': [{'text': 'Go'}]},
+        }}
+        quests.mark_progression_cap(data, cap=45)
+        retired = data['quests']['DQ1202072']
+        self.assertTrue(retired['unavailable'])
+        self.assertEqual(retired['unavailable_reason'], quests.EVENT_INVALID_UNAVAILABLE_REASON)
+        self.assertIn('DQ1202072', data['progression']['event_no_longer_valid_codes'])
+        self.assertNotIn('unavailable', data['quests']['HQ1'])
+
     def test_spawn_check_counts_spawned_npcs(self):
         with tempfile.TemporaryDirectory() as tmp:
             spawns = Path(tmp) / 'npcs.json'

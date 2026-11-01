@@ -32,6 +32,7 @@ public sealed partial class GameSession
 
     List<byte[]>? ClientRequest(byte[] plain, long now)
     {
+        if (AbyssClientRequest(plain, now) is { } abyssReplies) return abyssReplies;
         switch (Opcode(plain))
         {
             // LoadMessageCardBlockList_RQ (no body): no blocked message-card senders (usmap: result, MessageCardBlock list). CANDIDATE.
@@ -40,9 +41,8 @@ public sealed partial class GameSession
             // SkinDecoInstanceList_RQ (no body): the reply carries only a result (usmap). CANDIDATE.
             case SkinDecoInstanceListRq when plain.Length == 2:
                 return [PacketWriter.Opcode(SkinDecoInstanceListRs).U16(0).ToArray()];
-            // AbyssArtifactEventInfo_RQ (no body): no Abyss events, no artifacts (usmap: result, two lists). CANDIDATE.
-            case AbyssArtifactEventInfoRq when plain.Length == 2:
-                return [PacketWriter.Opcode(AbyssArtifactEventInfoRs).U16(0).Varint(0).Varint(0).ToArray()];
+            case WorldMapAbyssRankerInfoRq when plain.Length == 2:
+                return WorldMapAbyssRankerInfo(plain);
             // RetrieveMyLatestSeasonRanking_RQ {contents type u8, class u8}: no ranking, the official empty reply.
             case MySeasonRankingRq when plain.Length >= 4:
             {
@@ -51,13 +51,7 @@ public sealed partial class GameSession
                 body[3] = plain[3];
                 return [PacketWriter.Opcode(MySeasonRankingRs).Raw(body).I64(now + 3_600_000).ToArray()];
             }
-            // CoinShopOpen_RQ {coin shop id i32}: coin shops are not served (result 1; usmap fields: id, purchased map, open time). CANDIDATE.
-            case CoinShopOpenRq when plain.Length >= 6:
-                return [PacketWriter.Opcode(CoinShopOpenRs).U16(1).I32(BitConverter.ToInt32(plain, 2)).Varint(0).I64(0).ToArray()];
-            // QuickSlotContextSkillUpdate_RQ {slot u8, context slot u8, skill i32}: accepted as sent (usmap reply fields; no swap).
-            // The context skills of a hotbar slot are not stored yet, so a relog forgets them. CANDIDATE.
-            case QuickSlotContextSkillRq when plain.Length >= 8:
-                return [PacketWriter.Opcode(QuickSlotContextSkillRs).U16(0).U8(plain[2]).U8(plain[3]).I32(BitConverter.ToInt32(plain, 4)).Bool(false).U8(0).U8(0).I32(0).ToArray()];
+            // QuickSlotContextSkill (0x5607) and CoinShopOpen (0x8c06) are handled in HandleAsync main switch (persistence + shop parity).
             // LockOnTarget_RQ: 00 | target varint (as SetMainTarget_RQ; no request sample, CANDIDATE). The reply is the
             // OBSERVED form 0000 | target varint | 0000 (target 0 = unlock); others see 0x3832 key | 00 | target varint.
             case LockOnTargetRq when plain.Length >= 3:
@@ -66,11 +60,11 @@ public sealed partial class GameSession
                 if (plain.Length > 3)
                     try { target = new PacketReader(plain) { Offset = 3 }.Varint(); } catch (ProtocolException) { return []; }
                 worldPlayer?.Map?.Broadcast(worldPlayer, [PacketWriter.Opcode(LockOnTargetNt).Varint(playerKey).U8(0).Varint(target).ToArray()]);
-                return [PacketWriter.Opcode(LockOnTargetRs).U16(0).Varint(target).U16(0).ToArray()];
+                var replies = new List<byte[]> { PacketWriter.Opcode(LockOnTargetRs).U16(0).Varint(target).U16(0).ToArray() };
+                if (target > 0 && options.MapEventAskNpcProximityFallback)
+                    replies.AddRange(TryMapEventAskNpcInteractFallback((int)target, now));
+                return replies;
             }
-            // RetrievePushRewardInfo_RQ (no body): no push rewards; ask again in an hour (OBSERVED form 0000 | i64 next | list).
-            case PushRewardInfoRq when plain.Length == 2:
-                return [PacketWriter.Opcode(PushRewardInfoRs).U16(0).I64(now + 3_600_000).Varint(0).ToArray()];
             // Reports without a reply (SilentRequests).
             case 0x3651 or 0x3601 or 0xe350 or 0xe259 or 0xffa0 or 0xffa1:
                 return [];

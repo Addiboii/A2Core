@@ -42,3 +42,9 @@ launcher/**/obj/
 /research/local/tooling/*
 !/research/local/tooling/opcodes.json
 !/research/local/tooling/mappings/
+
+# Local Windows deploy launcher (machine-specific; never commit).
+/deploy/windows/start.ps1
+
+# Gamers4Life parity crawler cache (tools/audit_gamers4life.py)
+tools/.cache/gamers4life/

@@ -16,10 +16,10 @@ from dataclasses import dataclass
 
 try:
     from . import class_skills
-    from .aion_protocol import encode_varint
+    from .aion_protocol import encode_varint, varuint
 except ImportError:
     import class_skills
-    from aion_protocol import encode_varint
+    from aion_protocol import encode_varint, varuint
 
 CRITICAL_MULTIPLIER = 1.5
 CRITICAL_CAP = 0.5
@@ -100,20 +100,118 @@ def apply_hits(target, hits):
 
 
 # ---------- Wire (server -> client) ----------
-# Layouts follow the public a2kit decoder (pinned fb693ba0) and the Aether/RATmeter
-# DPS-meter notes; our own captures contain no fights. Field names come from usmap
-# SkillEffect_NT. CANDIDATE: which key is the target (first) vs the attacker follows
-# those three public sources; the live client has not been observed receiving these.
+# Layouts follow PlayerPackets.SkillEffect / NpcSkillEffect (usmap SkillEffect_NT). CANDIDATE until
+# every capture is replayed; parsers round-trip the fixtures in tests/test_combat.py.
+def _parse_skill_effect_body(body):
+    """Parse 0x3804 body after the opcode (switch 04 player, 06 NPC, 14 projectile)."""
+    off = 0
+    target_key, off = varuint(body, off)
+    switch = body[off]
+    off += 1
+    mask = body[off]
+    off += 1
+    caster_key, off = varuint(body, off)
+    skill_id = struct.unpack_from('<i', body, off)[0]
+    off += 4
+    action_uid = body[off]
+    off += 1
+    hit_type, off = varuint(body, off)
+    plotter = None
+    if switch == 6 and (mask & 0x02):
+        plotter = body[off:off + 3]
+        off += 3
+    effect_id = struct.unpack_from('<I', body, off)[0]
+    off += 4
+    effect_seq = struct.unpack_from('<I', body, off)[0]
+    off += 4
+    attack_speed, off = varuint(body, off)
+    damage, off = varuint(body, off)
+    effect_seq_u8 = body[off]
+    off += 1
+    tail = body[off:]
+    return {
+        'target_key': target_key,
+        'switch': switch,
+        'mask': mask,
+        'caster_key': caster_key,
+        'skill_id': skill_id,
+        'action_uid': action_uid,
+        'hit_type': hit_type,
+        'plotter': plotter,
+        'effect_id': effect_id,
+        'effect_seq': effect_seq,
+        'attack_speed': attack_speed,
+        'damage': damage,
+        'effect_seq_u8': effect_seq_u8,
+        'tail': tail,
+    }
+
+
+def parse_skill_hit(packet):
+    """Decode a full 0x3804 SkillEffect_NT packet (opcode + body)."""
+    if len(packet) < 4 or packet[0:2] != b'\x04\x38':
+        raise ValueError('Not a 0x3804 packet')
+    return _parse_skill_effect_body(packet[2:])
+
+
 def build_skill_hit(target_key, actor_key, skill_id, effect_id, damage, critical=False,
-                    seq=1, attack_speed=10000):
-    """0x3804 hit: target, switch 04, 0, actor, skill, hit count, type, effect ID,
-    sequence, attack speed, damage, then the sequence byte and 00."""
+                    action_uid=0, seq=1, attack_speed=10000):
+    """0x3804 player hit (PlayerPackets.SkillEffect switch 04): action uid matches 0x3802."""
     if not 0 <= seq <= 255:
         raise ValueError('Hit sequence must fit one byte')
-    return (b'\x04\x38' + encode_varint(target_key) + b'\x04\x00' + encode_varint(actor_key)
-            + struct.pack('<IB', skill_id, 0) + encode_varint(3 if critical else 2)
+    if not 0 <= action_uid <= 255:
+        raise ValueError('Action uid must fit one byte')
+    hit_type = 3 if critical else 2
+    body = (encode_varint(target_key) + bytes([4, 0]) + encode_varint(actor_key)
+            + struct.pack('<iB', skill_id, action_uid) + encode_varint(hit_type)
             + struct.pack('<II', effect_id, seq) + encode_varint(attack_speed)
             + encode_varint(damage) + bytes([seq, 0]))
+    return b'\x04\x38' + body
+
+
+def build_npc_skill_hit(target_key, actor_key, skill_id, effect_id, damage, action_uid=1, seq=1,
+                        attack_speed=10000, hit_type=2, include_plotter=True):
+    """0x3804 NPC hit (PlayerPackets.NpcSkillEffect switch 06)."""
+    if not 0 <= seq <= 255:
+        raise ValueError('Hit sequence must fit one byte')
+    if not 0 <= action_uid <= 255:
+        raise ValueError('Action uid must fit one byte')
+    mask = 0x04 | (0x02 if include_plotter else 0)
+    body = encode_varint(target_key) + bytes([6, mask]) + encode_varint(actor_key)
+    body += struct.pack('<iB', skill_id, action_uid) + encode_varint(hit_type)
+    if include_plotter:
+        body += b'\x00\x00\x02'
+    body += struct.pack('<II', effect_id, seq) + encode_varint(attack_speed) + encode_varint(damage) + bytes([seq, 0])
+    return b'\x04\x38' + body
+
+
+def parse_npc_appear(packet):
+    """Decode 0x3641 NpcAppear_NT enough for HP/level calibration (level is the i32 before spawn tag)."""
+    if len(packet) < 4 or packet[0:2] != b'\x41\x36':
+        raise ValueError('Not a 0x3641 packet')
+    body = packet[2:]
+    off = 0
+    key, off = varuint(body, off)
+    mask = struct.unpack_from('<H', body, off)[0]
+    off += 2
+    off += 1  # reserved u8 after mask
+    npc_id = struct.unpack_from('<I', body, off)[0]
+    off += 4
+    off += 2  # state bytes observed 00 02
+    off += struct.calcsize('<4fHB')  # position + direction + angle + live flag
+    hp, off = varuint(body, off)
+    hp_max, off = varuint(body, off)
+    off += 13 * 4  # resource ints
+    relationship = body[off]
+    off += 3
+    if mask & 0x08:
+        off += 1  # aggressive byte
+    off += 1  # trailing 00 before level
+    level = struct.unpack_from('<i', body, off)[0]
+    off += 4
+    spawn_tag = struct.unpack_from('<I', body, off)[0]
+    return {'key': key, 'npc_id': npc_id, 'hp': hp, 'hp_max': hp_max, 'relationship': relationship,
+            'level': level, 'spawn_tag': spawn_tag, 'aggressive': bool(mask & 0x08)}
 
 
 TRAINING_DUMMY_KEY = 1000

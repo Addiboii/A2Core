@@ -10,15 +10,26 @@ namespace Aion.World;
 // layouts are the usmap structs, no official sample (CANDIDATE).
 public sealed partial class GameSession
 {
-    sealed record GroundDrop(int Key, long Uid, int ItemId, long Count, Vector3d Center, Vector3d At, long ExpiresAt);
+    internal sealed record GroundDrop(int Key, long Uid, int ItemId, long Count, Vector3d Center, Vector3d At, long ExpiresAt,
+        byte OwnerType = 2, long Owner = 0);
 
     readonly Dictionary<long, GroundDrop> drops = [];
     int dropCounter;
-    public const int DropLifetimeMs = 60_000, FirstDropKey = 950_000;
+    /// <summary>
+    /// Drop actor keys: one server-wide sequence in their own block. Drops are shown to the whole map, and trigger actors
+    /// (WorldObjects.FirstTriggerKey, up to 93 per map) and the boss challenge use 950,000+, so a per-session counter from
+    /// 950,000 gave two players' drops, or a drop and a live trigger actor, the same key on one client.
+    /// </summary>
+    public const int DropLifetimeMs = 60_000, FirstDropKey = 960_000, DropKeys = 30_000;
+    static int dropKeySequence;
+    static int NextDropKey() => FirstDropKey + (int)((uint)Interlocked.Increment(ref dropKeySequence) % DropKeys);
     /// <summary>A drop is picked up within this distance (cm), with room for latency.</summary>
     public const double LootRange = 1500;
     const byte IncreaseDropItemGet = 5;   // EIncreaseReason kDropItemGet
     public IReadOnlyCollection<long> GroundDrops => drops.Keys;
+
+    internal void RegisterGroundDrop(GroundDrop drop) => drops[drop.Uid] = drop;
+    internal void RemoveGroundDrop(long uid) => drops.Remove(uid);
 
     /// <summary>The loot of a killed monster: the drops for the killer (0x561e), or nothing.</summary>
     List<byte[]> DropLoot(Target target, long now)
@@ -30,21 +41,15 @@ public sealed partial class GameSession
         var rolled = new List<(int, long)>();
         for (var i = 0; i < rolls; i++) rolled.AddRange(LootTables.Embedded.Roll(target.NpcId, profileRace, rng));
         if (rolled.Count == 0) return [];
-        var placed = new List<DropItem>();
-        foreach (var (item, count) in rolled)
+        if (Social is { } social && worldPlayer is not null && social.PartyOf(worldPlayer) is { } party)
         {
-            dropCounter++;
-            var key = FirstDropKey + dropCounter % 40_000;
-            var uid = ((long)playerKey << 32) | (uint)dropCounter;
-            var angle = rng.NextDouble() * 2 * Math.PI;
-            var radius = 60 + rng.NextDouble() * 90;
-            var at = target.Position with { X = target.Position.X + Math.Cos(angle) * radius, Y = target.Position.Y + Math.Sin(angle) * radius };
-            var drop = new GroundDrop(key, uid, item, count, target.Position, at, now + DropLifetimeMs);
-            drops[uid] = drop;
-            placed.Add(new DropItem(key, target.Position, at, uid, item, (int)Math.Min(int.MaxValue, count), selected?.WireId ?? playerKey,
-                now + DropLifetimeMs, (byte)profileRace));
+            var force = social.ForceOf(worldPlayer);
+            if (force is not null && force.Parties.Sum(p => p.Members.Count) > 1)
+                return DropLootParty(party, target, now, rolled, []);
+            if (party.Members.Count > 1)
+                return DropLootParty(party, target, now, rolled, []);
         }
-        return [LootPackets.DropItems(placed)];
+        return DropLootSolo(target, now, rolled, []);
     }
 
     /// <summary>0x5620 ItemLooting_RQ {array of drop uids (i64), auto looting bool}.</summary>
@@ -65,7 +70,8 @@ public sealed partial class GameSession
         foreach (var uid in uids.Distinct())
         {
             var ok = drops.TryGetValue(uid, out var drop) && now < drop.ExpiresAt && !dead
-                && (position is not { } p || (p.X - drop.At.X) * (p.X - drop.At.X) + (p.Y - drop.At.Y) * (p.Y - drop.At.Y) <= LootRange * LootRange);
+                && (position is not { } p || (p.X - drop.At.X) * (p.X - drop.At.X) + (p.Y - drop.At.Y) * (p.Y - drop.At.Y) <= LootRange * LootRange)
+                && CanPickupDrop(drop);
             if (ok) taken.Add(drop!);
             else replies.Add(LootPackets.LootReply(1, uid, auto));
         }
@@ -75,15 +81,18 @@ public sealed partial class GameSession
             var granted = await Stored(async () => await store.GrantLootAsync(character, taken.Select(d => (d.ItemId, d.Count)).ToList(), ct) ? [[]] : []);
             if (granted.Count == 0) return [.. replies, .. taken.Select(d => LootPackets.LootReply(1, d.Uid, auto))];
         }
-        foreach (var d in taken) drops.Remove(d.Uid);
+        foreach (var d in taken)
+        {
+            drops.Remove(d.Uid);
+            RemoveSharedDrop(d.Uid);
+        }
         replies.AddRange(taken.Select(d => LootPackets.LootReply(0, d.Uid, auto)));
         replies.Add(LootPackets.DropsRemoved(taken.Select(d => (d.Key, d.Uid, (long)(selected?.WireId ?? playerKey), auto)).ToList()));
-        replies.AddRange(await InventoryChangesAsync(ct, IncreaseDropItemGet, 0));
-        // Pet souls (and pets) are used as soon as they are acquired (Item.dat AutoUseWhenAcquire).
-        foreach (var d in taken)
-            if (Boxes.Use(d.ItemId) is { AutoUse: true, Effect: "GetVehicle" or "GetVehicleSoul" })
-                foreach (var key in storedItems.Where(s => s.Value.TemplateId == d.ItemId && s.Value.Location == "bag").Select(s => s.Key).ToList())
-                    replies.AddRange(await UseItemAsync(key, now, ct, reply: false));
+        var inventory = await InventoryChangesAsync(ct, IncreaseDropItemGet, 0);
+        var autoUse = await AutoUseAcquiredItemsAsync(taken.Select(d => d.ItemId), now, ct);
+        // Official solo pickup order after 0x5621: 0x561f, 0x561b, then 0x5616 when auto-use applies.
+        replies.AddRange(inventory);
+        replies.AddRange(autoUse);
         return replies;
     }
 

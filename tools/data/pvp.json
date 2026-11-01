@@ -1,0 +1,47 @@
+{
+  "pin": {
+    "steam_build": 25767555,
+    "manifest": "1699273097574069541",
+    "date": "2026-10-07"
+  },
+  "source": "map-events.json FieldEvent dungeons with invasion_* events; protect level OURS pending dat export",
+  "abyss_maps": [
+    20,
+    22,
+    23
+  ],
+  "invasion_maps": [
+    111002,
+    111003,
+    500001,
+    500002,
+    500005,
+    500006,
+    500017,
+    500018,
+    500019,
+    500020,
+    500021,
+    500031,
+    500032,
+    500033,
+    502001,
+    510002,
+    510008,
+    510009,
+    510013,
+    510014,
+    510015,
+    510026,
+    510027,
+    510028
+  ],
+  "rift_subzone_prefix": "RiftEvent_Garrison_",
+  "protect_below_level": 20,
+  "arena_rewards_ap": {
+    "join_single": 300,
+    "win_single": 500,
+    "join_team": 300,
+    "win_team": 500
+  }
+}

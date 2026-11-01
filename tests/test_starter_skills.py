@@ -3,7 +3,7 @@ from pathlib import Path
 import struct
 import unittest
 
-from tools.starter_skills import starter_profile, build_skill_list, build_skill_slots
+from tools.starter_skills import normalize_creation_id, starter_profile, build_skill_list, build_skill_slots
 from tools.game_server import game_followup_replies
 
 
@@ -15,6 +15,13 @@ class StarterSkillTests(unittest.TestCase):
         self.assertEqual(male["class"], "Gladiator")
         self.assertEqual(male["resource"], "MP")
         self.assertIsNone(starter_profile(99999, 1))
+
+    def test_asmodian_gladiator_from_light_creation_id(self):
+        self.assertEqual(normalize_creation_id(1, 2), 9)
+        profile = starter_profile(1, 1, account_race=2)
+        self.assertEqual(profile["class"], "Gladiator")
+        self.assertEqual(profile["race"], 2)
+        self.assertEqual(profile["pc_id"], 7)
 
     def test_only_free_level_one_starter_skills_on_hotbar(self):
         p = starter_profile(1, 1)

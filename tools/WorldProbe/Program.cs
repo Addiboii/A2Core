@@ -1,10 +1,6 @@
 ﻿using System.Text.Json;
-using CUE4Parse.Compression;
-using CUE4Parse.Encryption.Aes;
+using AionClientProbe;
 using CUE4Parse.FileProvider;
-using CUE4Parse.MappingsProvider.Usmap;
-using CUE4Parse.UE4.Objects.Core.Misc;
-using CUE4Parse.UE4.Versions;
 using Newtonsoft.Json;
 using CUE4Parse.GameTypes.Aion2.Objects;
 using Newtonsoft.Json.Linq;
@@ -21,15 +17,8 @@ if (selection.Length > (mapSummary ? 4096 : 64)) throw new ArgumentException("Se
 if (mapSummary && selection.Any(p => !p.Contains("/Data/Map/", StringComparison.OrdinalIgnoreCase)
     || !p.EndsWith("/MapData.dat", StringComparison.OrdinalIgnoreCase)))
     throw new ArgumentException("Summary mode accepts only Data/Map/.../MapData.dat paths");
-using var key = JsonDocument.Parse(File.ReadAllText(args[1]));
-OodleHelper.Initialize(Path.GetFullPath(args[2]));
-CUE4Parse.Globals.FatalObjectSerializationErrors = true;
-using var provider = new DefaultFileProvider(args[0], SearchOption.AllDirectories,
-    new VersionContainer(EGame.GAME_Aion2), StringComparer.OrdinalIgnoreCase);
-provider.MappingsContainer = new FileUsmapTypeMappingsProvider(args[3]);
-provider.Initialize();
-provider.SubmitKey(new FGuid(), new FAesKey(key.RootElement.GetProperty("key_hex").GetString()!));
-provider.PostMount();
+using var session = AionClientSession.Open(args[0], args[1], args[2], args[3]);
+var provider = session.Provider;
 Directory.CreateDirectory(output);
 // Mount-visible inventory is separate from the IoStore-only asset catalog.
 // Paths do not establish payload readability or class semantics.

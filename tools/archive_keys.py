@@ -11,9 +11,9 @@ from pathlib import Path
 import re
 
 try:
-    from .inspect_formats import pak_metadata
+    from .inspect_formats import pak_metadata, utoc_metadata
 except ImportError:
-    from inspect_formats import pak_metadata
+    from inspect_formats import pak_metadata, utoc_metadata
 
 HEX = rb"[0-9a-fA-F]"
 KEY_PATTERNS = (
@@ -99,6 +99,66 @@ class AES256:
         self.close()
 
 
+def load_utoc_targets(install, count=2):
+    targets = []
+    for path in sorted(install.rglob("*.utoc")):
+        if "Paks" not in path.parts:
+            continue
+        meta = utoc_metadata(path)
+        if not meta.get("parsed") or not meta.get("encrypted") or not meta.get("directory_index_size"):
+            continue
+        size = meta["directory_index_size"]
+        if not 16 <= size <= 4 * 1024 * 1024 or size % 16 != 0:
+            continue
+        data = path.read_bytes()
+        start = meta["header_size"]
+        count_entries = meta["entry_count"]
+        chunk_end = start + count_entries * 12
+        offset = start + count_entries * 22 + 4 * (
+            meta["perfect_hash_seed_count"] + meta["perfect_hash_overflow_count"])
+        offset += meta["compression_block_count"] * 12
+        method_width = struct.unpack_from("<I", data, 40)[0]
+        offset += len(meta["compression_methods"]) * method_width
+        if meta["signed"]:
+            if offset + 4 > len(data):
+                continue
+            sig_size = struct.unpack_from("<I", data, offset)[0]
+            if not 1 <= sig_size <= 8192:
+                continue
+            offset += 4 + sig_size * 2 + meta["compression_block_count"] * 20
+        end = offset + size
+        if end > len(data) or chunk_end > len(data):
+            continue
+        ciphertext = data[offset:end]
+        chunk_ids = [data[i:i + 12] for i in range(start, chunk_end, 12)]
+        targets.append({"path": path.relative_to(install).as_posix(), "ciphertext": ciphertext,
+                        "chunk_ids": chunk_ids, "directory_offset": offset,
+                        "ciphertext_sha256": hashlib.sha256(ciphertext).hexdigest()})
+        if len(targets) == count:
+            break
+    return targets
+
+
+def validate_utoc(key, targets, decrypt):
+    if not targets:
+        return []
+    try:
+        from .catalog_assets import directory_entries
+    except ImportError:
+        from catalog_assets import directory_entries
+    matches = []
+    for target in targets:
+        plain = decrypt(key, target["ciphertext"])
+        try:
+            summary, _rows = directory_entries(plain, target["chunk_ids"], True)
+        except ValueError:
+            return []
+        matches.append({"path": target["path"], "mount": summary["mount"],
+                        "files": summary["files"], "directories": summary["directories"],
+                        "kind": "utoc_directory_index"})
+    return matches if len(matches) >= min(2, len(targets)) else []
+
+
 def load_targets(install, count=3):
     candidates = []
     for path in sorted(install.rglob("*.pak")):
@@ -131,7 +191,7 @@ def load_targets(install, count=3):
     return targets
 
 
-def validate(key, targets, decrypt):
+def validate(key, targets, decrypt, utoc_targets=None):
     matches = []
     for target in targets:
         plain = decrypt(key, target["ciphertext"])
@@ -142,5 +202,13 @@ def validate(key, targets, decrypt):
         if not lengths:
             return []
         matches.append({"path": target["path"], "index_sha1": target["index_sha1"],
-                        "hash_matched_bytes": lengths[0], "storage_bytes": len(plain)})
-    return matches if len(matches) >= 2 else []
+                        "hash_matched_bytes": lengths[0], "storage_bytes": len(plain),
+                        "kind": "pak_index"})
+    if len(matches) < 2:
+        return []
+    if utoc_targets:
+        utoc_matches = validate_utoc(key, utoc_targets, decrypt)
+        if not utoc_matches:
+            return []
+        return matches + utoc_matches
+    return matches

@@ -420,7 +420,7 @@ def main(argv=None):
     parser.add_argument("--output", type=Path, default=None)
     parser.add_argument("--seconds", type=int, default=1800)
     parser.add_argument("--followup-seconds", type=int, default=300)
-    parser.add_argument("--account-id", default="1000001")
+    parser.add_argument("--account-id", default=None)
     parser.add_argument("--characters", type=int, default=0,
                         help="How many local-only characters to list (0 for an empty list)")
     parser.add_argument("--pre-generated-intro", action="store_true",
@@ -449,7 +449,11 @@ def main(argv=None):
     if args.ready_file is not None:
         def on_ready(port):
             args.ready_file.write_text(str(port), encoding="ascii")
-    serve(DEFAULT_WORLDS, args.account_id, port=args.port, save_dir=args.output,
+    try:
+        from .dev_defaults import ACCOUNT_SID
+    except ImportError:
+        from dev_defaults import ACCOUNT_SID
+    serve(DEFAULT_WORLDS, args.account_id or ACCOUNT_SID, port=args.port, save_dir=args.output,
           seconds=args.seconds, followup_seconds=args.followup_seconds,
           characters=characters, redirect_host=args.redirect_host,
           redirect_port=args.redirect_port, on_ready=on_ready)

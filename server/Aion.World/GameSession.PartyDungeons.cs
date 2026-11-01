@@ -10,8 +10,10 @@ namespace Aion.World;
 // OpenSubzoneGroupIDs 0x56ac and AddSubzoneGroupID 0x56ad in the official recording): OdEnergyCubeRewardStart_NT 0x56cc,
 // OdEnergyCubeReward_RQ/RS 0x56cd/0x56ce. The dungeon state family is OBSERVED at 0x6100-0x610b (catalogue 573-584 at
 // 0x5ec3 + index): DungeonState_NT 0x6100, DungeonCompleteResult_NT 0x6101, DungeonClearKillNpc_NT 0x6108, DungeonDeathLimit_NT 0x6109.
-// Their bodies are the usmap fields (CANDIDATE: none observed). Not modelled: entry tickets, the weekly currency
-// limit, the cube's ceiling, DungeonCoolTimes (every party dungeon's Cooltime is 0), DeathLimit (0 everywhere).
+// Their bodies are the usmap fields (CANDIDATE: none observed). PartyDungeonClear_NT 0x3A69 and middle-boss 0x3829 on
+// clear/kill; ContentsTicket weekly cap via tools/data/expedition.json (stub until ContentsTicket.dat export); death
+// count on 0x6109 after each fall. Frenzy on pin: MapEvent SetMapEnvState (boss phases), not the Oct 21 Hard timer.
+// Not modelled: cube ceiling, DungeonCoolTimes (0 in dat), formal DeathLimit rows (0 in dat).
 
 /// <summary>The shared state of one dungeon copy.</summary>
 public sealed class DungeonCopy(GameSession host, int dungeonId, long now)
@@ -30,6 +32,10 @@ public sealed class DungeonCopy(GameSession host, int dungeonId, long now)
     public HashSet<int> CubeBossesKilled { get; } = [];
     /// <summary>Player deaths in this copy (the death-limit achievements).</summary>
     public int Deaths { get; set; }
+    /// <summary>Revives each player used in this copy (player key → count), for the Hard Expedition revive limit.</summary>
+    public Dictionary<int, int> Revives { get; } = [];
+    /// <summary>The bosses' Frenzy clocks (the new Hard modes: 4 minutes).</summary>
+    public BossFrenzy Frenzy { get; } = new();
     /// <summary>The final boss's cube reward each player took (player key → items), once per run.</summary>
     public Dictionary<int, List<(int ItemId, long Count)>> CubeTaken { get; } = [];
 }
@@ -84,20 +90,37 @@ public sealed partial class GameSession
     /// MapEntrance.dat: the character's level and equipment item level, and the quest step the entry needs (one of
     /// QuestStepIdList active, or that quest done); staff and development logins (no stored character) pass.
     /// </summary>
-    bool MeetsEntry(DungeonInfo room, out string why)
+    bool MeetsEntry(DungeonInfo room, long now, out string why)
     {
         why = "";
-        if (!Timed(room) || Store is null) return true;
-        if (room.MinLevel > 0 && level < room.MinLevel) { why = $"level {level} < {room.MinLevel}"; return false; }
-        if (room.MaxLevel > 0 && level > room.MaxLevel) { why = $"level {level} > {room.MaxLevel}"; return false; }
-        if (room.ItemLevel > 0 && EquipItemLevel() < room.ItemLevel) { why = $"item level {EquipItemLevel()} < {room.ItemLevel}"; return false; }
-        if (room.QuestGate is { Length: > 0 } gates && questLog is not null)
+        if (Store is null) return true;
+        if (Timed(room))
         {
-            var open = gates.Any(g => g.Length >= 2 && g[0].GetString() is { } code && questLog.Get(code) is { } record
-                && (record.Status != QuestLog.Incomplete || record.Step == g[1].GetInt32()));
-            if (!open) { why = $"quest step {string.Join('/', gates.Select(g => g[0].GetString()))} not reached"; return false; }
+            if (room.MinLevel > 0 && level < room.MinLevel) { why = $"level {level} < {room.MinLevel}"; return false; }
+            if (room.MaxLevel > 0 && level > room.MaxLevel) { why = $"level {level} > {room.MaxLevel}"; return false; }
+            var gate = Patch20261028.EntryItemLevel(room);
+            if (gate > 0 && EquipItemLevel() < gate) { why = $"item level {EquipItemLevel()} < {gate}"; return false; }
+            if (!HasExpeditionTicket(room, now, out var ticket)) { why = $"no {ticket?.Name ?? "expedition"} entries left"; return false; }
+        }
+        if (room.QuestGate is { Length: > 0 } gates)
+        {
+            if (questLog is null && room.Type == "InstanceLayer") { why = "quest gate (no journal)"; return false; }
+            if (questLog is null) return true;
+            if (!questLog.InstanceLayerGateOpen(room) && !LayerUseEnvObjEntryOpen(room.Map))
+            {
+                why = $"quest step {string.Join('/', gates.Select(g => g[0].GetString()))} not open";
+                return false;
+            }
         }
         return true;
+    }
+
+    /// <summary>An active UseEnvObj step targets an object placed on the instance layer map (supplies after the script).</summary>
+    bool LayerUseEnvObjEntryOpen(int layerMap)
+    {
+        if (questLog is null) return false;
+        var envs = WorldObjects.ObjectsOn(layerMap).Select(o => o.Env).ToHashSet();
+        return questLog.OpenUseEnvObjIds().Any(envs.Contains);
     }
 
     /// <summary>The copy a party member would join is full (MapEntrance MaxMember).</summary>
@@ -181,6 +204,7 @@ public sealed partial class GameSession
             mapEventOut.Add(PacketWriter.Opcode(CubeRewardStartNt).Varint(1).I32(target.NpcId).ToArray());
             return;
         }
+        mapEventOut.Add(PartyDungeonMiddleBossKill(target.NpcId));
         foreach (var session in CopyMembers().Prepend(this))
             session.pendingRewards.Add(RollRewards(table, session.Rng));
     }
@@ -197,7 +221,7 @@ public sealed partial class GameSession
         return items;
     }
 
-    async Task<List<byte[]>> GrantPendingRewardsAsync(CancellationToken ct)
+    async Task<List<byte[]>> GrantPendingRewardsAsync(long now, CancellationToken ct)
     {
         var batches = pendingRewards.ToList();
         pendingRewards.Clear();
@@ -207,7 +231,9 @@ public sealed partial class GameSession
         {
             var granted = await Stored(async () => await store.GrantLootAsync(character, items, ct) ? [[]] : []);
             if (granted.Count == 0) return [];
-            return await InventoryChangesAsync(ct, IncreaseDropItemGet, 0);
+            var replies = await InventoryChangesAsync(ct, IncreaseDropItemGet, 0);
+            replies.AddRange(await AutoUseAcquiredItemsAsync(items.Select(i => i.Item1), now, ct));
+            return replies;
         }
         return [];
     }
@@ -232,7 +258,7 @@ public sealed partial class GameSession
             c.CubeTaken[playerKey] = items;
             pendingRewards.Add(items);
         }
-        var replies = await GrantPendingRewardsAsync(ct);
+        var replies = await GrantPendingRewardsAsync(now, ct);
         if (plain is null) return replies;
         var writer = PacketWriter.Opcode(CubeRewardRs).U16(0).U8(1).Varint((uint)items.Count);
         foreach (var (item, count) in items) writer.I32(item).I32((int)Math.Min(count, int.MaxValue));

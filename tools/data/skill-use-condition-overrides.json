@@ -1,0 +1,11 @@
+{
+  "note": "Improvised Skill.dat use conditions when table export is absent (tools/skill_use_conditions.py).",
+  "evidence": {
+    "16140000": "Jointstrike: Curse needs a summoned spirit; CanUseWhenElementalSummonSpawned groups not in committed export (any spirit counts, OURS)."
+  },
+  "skills": {
+    "16140000": {
+      "needs_spirit": ["Fire", "Water", "Wind", "Earth", "Ancient"]
+    }
+  }
+}

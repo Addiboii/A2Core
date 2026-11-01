@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <ApplicationIcon>..\..\launcher\AionLauncher\icon.ico</ApplicationIcon>
+    <AssemblyName>A2Core Client Editor</AssemblyName>
+    <Product>A2Core Client Editor</Product>
+    <AssemblyTitle>A2Core Client Editor</AssemblyTitle>
+    <Description>Edit AION2 client tables and build patch paks for a private A2Core server.</Description>
+    <Version>0.1.0</Version>
+    <SelfContained Condition="'$(RuntimeIdentifier)' != ''">true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../AionClientEditor.Core/AionClientEditor.Core.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Bcl.Memory" Version="9.0.22" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\launcher\AionLauncher\emblem.png" Link="emblem.png" LogicalName="emblem.png" />
+  </ItemGroup>
+</Project>

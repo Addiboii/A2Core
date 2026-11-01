@@ -12,18 +12,21 @@ public sealed partial class PostgresCharacterRepository(NpgsqlDataSource dataSou
 {
     private const string SummaryColumns = "c.character_id,c.account_id,c.world_id,c.name,c.level";
     private const string StateColumns = SummaryColumns +
-        ",c.creation_id,c.race,c.gender,c.appearance,c.experience,c.map_id,c.position::text,c.resources::text,c.revision,c.wire_id,c.voice_type,c.lobby_slot,c.ascension::int,c.staff";
+        ",c.creation_id,c.race,c.gender,c.appearance,c.experience,c.map_id,c.position::text,c.resources::text,c.revision,c.wire_id,c.voice_type,c.lobby_slot,c.ascension::int,c.staff" +
+        ",c.return_map,c.return_x,c.return_y,c.return_z,c.created_at,c.last_login_at,c.last_logout_at";
+    private const string LastPlayedMs = "(EXTRACT(EPOCH FROM GREATEST(COALESCE(c.last_login_at,c.created_at),COALESCE(c.last_logout_at,c.created_at)))*1000)::bigint";
 
     public async Task<IReadOnlyList<CharacterSummary>> ListOwnedAsync(Guid accountId, CancellationToken cancellationToken)
     {
         await using var command = dataSource.CreateCommand($"""
-            SELECT {SummaryColumns},c.race FROM game.characters c JOIN auth.accounts a USING(account_id)
+            SELECT {SummaryColumns},c.race,{LastPlayedMs} FROM game.characters c JOIN auth.accounts a USING(account_id)
             WHERE c.account_id=$1 AND a.disabled_at IS NULL ORDER BY c.created_at,c.character_id
             """);
         command.Parameters.AddWithValue(accountId);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         var result = new List<CharacterSummary>();
-        while (await reader.ReadAsync(cancellationToken)) result.Add(ReadSummary(reader) with { Race = reader.GetInt32(5) });
+        while (await reader.ReadAsync(cancellationToken))
+            result.Add(ReadSummary(reader) with { Race = reader.GetInt32(5), LastPlayedUnixMs = reader.GetInt64(6) });
         return result;
     }
 
@@ -53,8 +56,8 @@ public sealed partial class PostgresCharacterRepository(NpgsqlDataSource dataSou
     {
         await using var command = dataSource.CreateCommand($"""
             INSERT INTO game.characters AS c
-                (account_id,world_id,name,creation_id,race,gender,appearance,map_id,position,resources,voice_type,lobby_slot)
-            SELECT account_id,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12 FROM auth.accounts
+                (account_id,world_id,name,creation_id,race,gender,appearance,map_id,position,resources,voice_type,lobby_slot,last_logout_at,last_login_at)
+            SELECT account_id,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,now(),now() FROM auth.accounts
             WHERE account_id=$1 AND disabled_at IS NULL
             RETURNING {StateColumns}
             """);
@@ -101,6 +104,40 @@ public sealed partial class PostgresCharacterRepository(NpgsqlDataSource dataSou
         return result is long revision ? revision : null;
     }
 
+    public async Task<long?> SavePositionOwnedAsync(Guid accountId, Guid characterId, long expectedRevision, int mapId,
+        JsonElement position, CancellationToken cancellationToken)
+    {
+        await using var command = dataSource.CreateCommand("""
+            UPDATE game.characters c SET map_id=$4,position=$5
+            FROM auth.accounts a WHERE c.account_id=$1 AND c.character_id=$2 AND c.revision=$3
+            AND a.account_id=c.account_id AND a.disabled_at IS NULL RETURNING c.revision
+            """);
+        Scope(command, accountId, characterId);
+        command.Parameters.AddWithValue(expectedRevision);
+        Map(command, mapId);
+        Json(command, position);
+        var result = await command.ExecuteScalarAsync(cancellationToken);
+        return result is long revision ? revision : null;
+    }
+
+    public async Task<long?> SaveInstanceReturnOwnedAsync(Guid accountId, Guid characterId, long expectedRevision,
+        int? returnMap, double? returnX, double? returnY, double? returnZ, CancellationToken cancellationToken)
+    {
+        await using var command = dataSource.CreateCommand("""
+            UPDATE game.characters c SET return_map=$4,return_x=$5,return_y=$6,return_z=$7
+            FROM auth.accounts a WHERE c.account_id=$1 AND c.character_id=$2 AND c.revision=$3
+            AND a.account_id=c.account_id AND a.disabled_at IS NULL RETURNING c.revision
+            """);
+        Scope(command, accountId, characterId);
+        command.Parameters.AddWithValue(expectedRevision);
+        Map(command, returnMap);
+        Double(command, returnX);
+        Double(command, returnY);
+        Double(command, returnZ);
+        var result = await command.ExecuteScalarAsync(cancellationToken);
+        return result is long revision ? revision : null;
+    }
+
     private static void Scope(NpgsqlCommand command, Guid accountId, Guid characterId)
     {
         command.Parameters.AddWithValue(accountId);
@@ -108,15 +145,27 @@ public sealed partial class PostgresCharacterRepository(NpgsqlDataSource dataSou
     }
     private static void Map(NpgsqlCommand command, int? map) =>
         command.Parameters.AddWithValue(NpgsqlDbType.Integer, (object?)map ?? DBNull.Value);
+    private static void Double(NpgsqlCommand command, double? value) =>
+        command.Parameters.AddWithValue(NpgsqlDbType.Double, (object?)value ?? DBNull.Value);
     private static void Json(NpgsqlCommand command, JsonElement json) =>
         command.Parameters.AddWithValue(NpgsqlDbType.Jsonb, json.GetRawText());
     private static CharacterSummary ReadSummary(NpgsqlDataReader reader) =>
         new(reader.GetGuid(0), reader.GetGuid(1), reader.GetInt32(2), reader.GetString(3), reader.GetInt32(4));
     private static CharacterState ReadState(NpgsqlDataReader reader) =>
         new(ReadSummary(reader), reader.GetInt32(5), reader.GetInt32(6), reader.GetInt32(7),
-            reader.GetFieldValue<byte[]>(8), new CharacterProgress(reader.GetInt32(4), reader.GetInt64(9),
-                reader.IsDBNull(10) ? null : reader.GetInt32(10),
-                JsonSerializer.Deserialize<JsonElement>(reader.GetString(11)),
-                JsonSerializer.Deserialize<JsonElement>(reader.GetString(12))), reader.GetInt64(13),
-                reader.GetInt32(14),reader.GetInt32(15),reader.IsDBNull(16)?null:reader.GetInt32(16),reader.GetInt32(17),reader.GetBoolean(18));
+            reader.GetFieldValue<byte[]>(8), ReadProgress(reader), reader.GetInt64(13),
+            reader.GetInt32(14), reader.GetInt32(15), reader.IsDBNull(16) ? null : reader.GetInt32(16), reader.GetInt32(17),
+            reader.GetBoolean(18), ToUnixMs(reader, 24), ToUnixMs(reader, 25), ToUnixMs(reader, 23));
+
+    private static CharacterProgress ReadProgress(NpgsqlDataReader reader) =>
+        new(reader.GetInt32(4), reader.GetInt64(9), reader.IsDBNull(10) ? null : reader.GetInt32(10),
+            JsonSerializer.Deserialize<JsonElement>(reader.GetString(11)),
+            JsonSerializer.Deserialize<JsonElement>(reader.GetString(12)),
+            reader.IsDBNull(19) ? null : reader.GetInt32(19),
+            reader.IsDBNull(20) ? null : reader.GetDouble(20),
+            reader.IsDBNull(21) ? null : reader.GetDouble(21),
+            reader.IsDBNull(22) ? null : reader.GetDouble(22));
+
+    private static long ToUnixMs(NpgsqlDataReader reader, int ordinal) =>
+        reader.IsDBNull(ordinal) ? 0 : new DateTimeOffset(DateTime.SpecifyKind(reader.GetDateTime(ordinal), DateTimeKind.Utc)).ToUnixTimeMilliseconds();
 }

@@ -8,8 +8,14 @@ public sealed record NewCharacter(int WorldId, string Name, int CreationId,
     int VoiceType = 0, int? LobbySlot = null);
 
 public sealed record CharacterProgress(int Level, long Experience, int? MapId,
-    JsonElement Position, JsonElement Resources);
+    JsonElement Position, JsonElement Resources, int? ReturnMap = null, double? ReturnX = null, double? ReturnY = null,
+    double? ReturnZ = null);
 
 public sealed record CharacterState(CharacterSummary Summary, int CreationId,
     int Race, int Gender, byte[] Appearance, CharacterProgress Progress, long Revision,
-    int WireId = 0, int VoiceType = 0, int? LobbySlot = null, int Ascension = 1, bool Staff = false);
+    int WireId = 0, int VoiceType = 0, int? LobbySlot = null, int Ascension = 1, bool Staff = false,
+    long LastLoginUnixMs = 0, long LastLogoutUnixMs = 0, long RegisteredUnixMs = 0)
+{
+    public long LastPlayedUnixMs => CharacterSessionTimes.LastPlayedUnixMs(LastLoginUnixMs, LastLogoutUnixMs, RegisteredUnixMs);
+    public long LobbyLogoutWireMs => CharacterSessionTimes.LobbyLogoutWireMs(LastLoginUnixMs, LastLogoutUnixMs, RegisteredUnixMs);
+}

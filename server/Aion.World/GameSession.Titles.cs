@@ -40,7 +40,7 @@ public sealed class TitleTables
 public sealed partial class GameSession
 {
     public const ushort TitleListNt = 0x5679, TitleChangeRq = 0x567a, TitleChangeRs = 0x567b, TitleChangeNt = 0x567c, TitleAcquireNt = 0x567d,
-        TitleEquipRq = 0x567f, TitleEquipRs = 0x5680;
+        TitleEquipRq = 0x567f, TitleEquipRs = 0x5680, TitleEquipChangeNt = 0x5681;
     static TitleTables Titles => TitleTables.Embedded;
 
     readonly SortedSet<int> titles = [];
@@ -85,16 +85,22 @@ public sealed partial class GameSession
     /// <summary>A GetTitle item [title id]: used up, the title acquired.</summary>
     async Task<List<byte[]>?> UseTitleItemAsync(INativeCharacterStore store, Guid character, ItemState row, int titleId, bool reply, CancellationToken ct)
     {
-        if (Titles.Of(titleId) is not { } title || title.Race != 0 && title.Race != profileRace || titles.Contains(titleId)) return null;
+        if (Titles.Of(titleId) is not { } title || title.Race != 0 && title.Race != profileRace) return null;
         var used = await Stored(async () => await store.ConsumeItemAsync(character, row.InstanceId, row.Revision, 1, ct) ? [[]] : []);
         if (used.Count == 0) return null;
         var replies = Used(row, reply);
         replies.AddRange(await InventoryChangesAsync(ct, 0, DecreaseItemUse));
+        if (titles.Contains(titleId)) return replies;
         replies.AddRange(await AcquireTitleAsync(titleId, ct));
         return replies;
     }
 
-    /// <summary>0x567f TitleEquip_RQ {category u8, title i32}: an owned title of that category (0 clears) -> 0x5680 {result u16, category, title}; the stats follow.</summary>
+    /// <summary>
+    /// 0x567f TitleEquip_RQ {equip slot u8 (ETitleEquipCategory), title i32}, the title window's Equip Effect (F): an owned title
+    /// of that category (0 clears) -> 0x5680 {result u16, slot, title}, then 0x5681 TitleEquipChange_NT {slot u8, title i32}
+    /// (catalogue index after TitleEquip_RS, usmap layout) and the stats. Like 0x567c after TitleChange, the notice is what
+    /// moves the client's equipped-effect slot (AionEventParam_TitleEquipped); the reply alone left the window unchanged.
+    /// </summary>
     async Task<List<byte[]>> TitleEquipAsync(byte[] plain, CancellationToken ct)
     {
         if (plain.Length < 7) return [];
@@ -102,7 +108,7 @@ public sealed partial class GameSession
         byte[] Reply(int result) => PacketWriter.Opcode(TitleEquipRs).U16(result).U8((byte)category).I32(titleId).ToArray();
         if (category is < 1 or > 3 || titleId != 0 && (!titles.Contains(titleId) || Titles.Of(titleId)?.Category != category)) return [Reply(1)];
         if (!await SaveTitleAsync(category, titleId, ct)) return [Reply(1)];
-        return [Reply(0), .. RefreshStats()];
+        return [Reply(0), PacketWriter.Opcode(TitleEquipChangeNt).U8((byte)category).I32(titleId).ToArray(), .. RefreshStats()];
     }
 
     /// <summary>0x567a TitleChange_RQ {title i32}: the shown title (0 none) -> 0x567b {result u16, title}; 0x567c {key, title} to those nearby.</summary>

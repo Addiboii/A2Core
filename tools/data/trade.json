@@ -1,0 +1,17 @@
+{
+  "pin": {
+    "steam_build": 25767555,
+    "manifest": "1699273097574069541",
+    "date": "2026-10-07"
+  },
+  "default_trade_server_id": 83,
+  "listing_duration_ms": 604800000,
+  "listing_fee_rate_bp": 500,
+  "listing_fee_min_kina": 10,
+  "sale_tax_rate_bp": 500,
+  "max_active_listings_per_character": 20,
+  "player_mail_fee_kina": 100,
+  "player_mail_expire_days": 30,
+  "cod_post_data_id": 107,
+  "staff_post_data_id": 106
+}

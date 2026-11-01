@@ -45,12 +45,12 @@ if ($Launcher) {
     Run "dotnet publish `"$(Join-Path $root 'launcher/AionLauncher')`" -c Release -r win-x64 -o `"$out`" -p:DebugType=none -m:1 -p:UseSharedCompilation=false" | Out-Null
     $exe = Join-Path $out "A2Core Launcher.exe"
     $version = (Get-Item $exe).VersionInfo.ProductVersion.Split('+')[0]
-    [IO.File]::WriteAllText("$exe.version", "$version`n")
+    [IO.File]::WriteAllText("${exe}.version", "$version`n")
     $hash = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLowerInvariant()
     $size = (Get-Item $exe).Length
     Write-Host "A2Core Launcher $version, $size bytes, SHA-256 $hash"
     Write-Host "Uploading to ${SshHost}:$DownloadsOnServer ..."
-    Run "scp -o BatchMode=yes `"$exe`" `"$exe.version`" `"${SshHost}:$DownloadsOnServer/`""
+    Run "scp -o BatchMode=yes `"$exe`" `"${exe}.version`" `"${SshHost}:$DownloadsOnServer/`""
     # The host serves the files as the aion user; the old launcher name is no longer served.
     Invoke-Ssh "cd '$DownloadsOnServer' && chown aion:aion 'A2Core Launcher.exe' 'A2Core Launcher.exe.version' && chmod 644 'A2Core Launcher.exe' 'A2Core Launcher.exe.version' && rm -f Launcher.exe Launcher.exe.version && ls -la"
     Write-Host "Done. Update the pinned message in Discord #downloads with version $version and hash $hash."

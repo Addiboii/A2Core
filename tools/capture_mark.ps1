@@ -4,7 +4,8 @@
 [CmdletBinding()]
 param([Parameter(Mandatory = $true, Position = 0)][string]$Note)
 $workspace = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
-$directory = Get-ChildItem -LiteralPath (Join-Path $workspace 'research\local') -Directory -Filter 'capture-13700-*' |
+$directory = Get-ChildItem -LiteralPath (Join-Path $workspace 'research\local') -Directory -Filter 'capture-*' |
+    Where-Object { Test-Path -LiteralPath (Join-Path $_.FullName 'session.json') } |
     Sort-Object Name -Descending | Select-Object -First 1
 if (-not $directory) { throw 'No recording directory under research/local.' }
 $record = [ordered]@{ kind = 'manual_note'; note = $Note; cue_utc = [DateTime]::UtcNow.ToString('o') }

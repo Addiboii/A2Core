@@ -6,6 +6,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Connections.Features;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
+using Microsoft.Extensions.Logging;
 
 namespace Aion.Host.NcGuard;
 
@@ -32,6 +33,7 @@ public sealed class NcGuardSink : BackgroundService
         int Status, string ContentType, byte[] Body);
     private readonly NcGuardOptions options;
     private readonly IHostApplicationLifetime lifetime;
+    private readonly ILogger<NcGuardSink> logger;
     private readonly Dictionary<string, X509Certificate2> certificates = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<Rule> rules = [];
     private readonly SemaphoreSlim captureLock = new(1);
@@ -42,8 +44,9 @@ public sealed class NcGuardSink : BackgroundService
     private readonly DateTimeOffset startedAt = DateTimeOffset.UtcNow;
     public string RunDirectory { get; }
 
-    public NcGuardSink(NcGuardOptions options, IHostApplicationLifetime lifetime)
+    public NcGuardSink(NcGuardOptions options, IHostApplicationLifetime lifetime, ILogger<NcGuardSink> logger)
     {
+        this.logger = logger;
         this.options = options = options.Hosts.Length == 0 ? options with { Hosts =
             ["bladnoch.ncsoft.com", "lagavulin.ncsoft.com", "atp-json.ncsoft.com",
              "sdk.gpa.ncsoft.com", "stun.gpa.ncsoft.com", "nccr-api.global.nc.com"] } : options;
@@ -162,12 +165,30 @@ public sealed class NcGuardSink : BackgroundService
             body.Write(buffer, 0, Math.Min(count, options.BodyCap - (int)body.Length));
         }
         var bytes = body.ToArray();
-        var response = rule?.Body ?? "loopback-mitm: not answered\n"u8.ToArray();
-        var status = rule?.Status ?? 404;
+        byte[] response;
+        int status;
+        string? contentTypeOverride = null;
+        if (rule is not null)
+        {
+            response = rule.Body;
+            status = rule.Status;
+        }
+        else if (NcGuardBuiltinResponses.TryReply(host, context.Request.Method, PathOnly(target), out var builtIn, out contentTypeOverride))
+        {
+            response = builtIn;
+            status = 200;
+        }
+        else
+        {
+            response = "loopback-mitm: not answered\n"u8.ToArray();
+            status = 404;
+            if (string.Equals(host, "sdk.gpa.ncsoft.com", StringComparison.OrdinalIgnoreCase))
+                logger.LogWarning("Unhandled GPA SDK request {Method} {Path}", context.Request.Method, PathOnly(target));
+        }
         if (!options.Capture)
         {
             Interlocked.Increment(ref records);
-            await Respond(context, rule, status, response);
+            await Respond(context, rule, status, response, contentTypeOverride);
             return;
         }
         await captureLock.WaitAsync(context.RequestAborted);
@@ -186,13 +207,19 @@ public sealed class NcGuardSink : BackgroundService
             await File.AppendAllTextAsync(Path.Combine(RunDirectory, "mitm-records.jsonl"), JsonSerializer.Serialize(record) + "\n", context.RequestAborted);
         }
         finally { captureLock.Release(); }
-        await Respond(context, rule, status, response);
+        await Respond(context, rule, status, response, contentTypeOverride);
     }
 
-    private static async Task Respond(HttpContext context, Rule? rule, int status, byte[] response)
+    static string PathOnly(string target)
+    {
+        var q = target.IndexOf('?');
+        return q >= 0 ? target[..q] : target;
+    }
+
+    private static async Task Respond(HttpContext context, Rule? rule, int status, byte[] response, string? contentTypeOverride = null)
     {
         context.Response.StatusCode = status;
-        context.Response.ContentType = rule?.ContentType ?? "text/plain";
+        context.Response.ContentType = contentTypeOverride ?? rule?.ContentType ?? "text/plain";
         context.Response.ContentLength = response.Length;
         await context.Response.Body.WriteAsync(response, context.RequestAborted);
     }

@@ -17,8 +17,8 @@ class WorldNpcTests(unittest.TestCase):
         self.assertEqual(world_npcs.hp_for_level(6), 532)    # between 5 (399) and 7 (665)
         self.assertGreater(world_npcs.hp_for_level(40), world_npcs.hp_for_level(30))
         boss = next(t for t in world_npcs.map_targets(210016, combat.Target).values() if t.npc_id == 2701034)
-        self.assertEqual(boss.hp_max, 3000)   # the Grade 5 hero monster: 1000 HP per level unit (recorded 2026-10-19)
-        self.assertEqual(world_npcs.hp_for(6, 'EliteMonster', 1), 3200)
+        self.assertEqual(boss.hp_max, 2100)   # CANDIDATE hero unit 700 (was OBSERVED 1000×3 at level 5)
+        self.assertEqual(world_npcs.hp_for(6, 'EliteMonster', 1), 2400)
         self.assertEqual((world_npcs.hp_for(7, 'NormalMonster', 1), world_npcs.hp_for(4, 'NormalMonster', 2), world_npcs.hp_for(8)), (250, 150, 798))
 
     def test_appear_bytes_follow_npc_data(self):

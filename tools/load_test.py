@@ -1,15 +1,17 @@
-"""Load test: many simulated players on a development-login game port.
+"""Load test: many simulated players on a development-login game port (SharedWorld).
 
-Each bot does the development login (greeting, 0x3613, name check, creation, selection, world entry), then walks
-around the start point at running speed sending position reports (0x3700 start, 0x3701 updates), and measures
-round trips: a ping (0x3602 -> 0x3603, map work on the server) and a legion info request (0x8a1c -> 0x8a1d, world
-work). Bots are spread over worker processes (asyncio inside each); the server's world-lock totals are read from
-the loopback /internal/world endpoint before and after when --stats-url is given.
+Each bot logs in, enters the world, walks with position reports (0x3700/0x3701), pings (0x3602), legion info (0x8a1c),
+optionally guild search (0x8a08) and combat casts (0x3800 at the training dummy when --combat). Measures RTT and,
+with --stats-url, CPU/world-lock/GC from GET /internal/world on the chat port.
 
-Start a development host first, for example (PowerShell):
-  $env:Aion__Native__Logins='development'; $env:Aion__Native__GamePort='23328'; $env:Aion__Native__MaxConnections='500'
-  $env:Aion__Native__DevelopmentStartMap='1110'; dotnet server/Aion.Host/bin/Debug/net10.0/Aion.Host.dll
-then:  python tools/load_test.py --port 23328 --bots 100 --seconds 60 --stats-url http://127.0.0.1:8091/internal/world
+Example host (bash):
+  export ASPNETCORE_ENVIRONMENT=Development
+  export Aion__Native__Logins=development
+  export Aion__Native__MaxConnections=512
+  export Aion__Native__DevelopmentStartMap=1110
+  export AION_SKIP_WEB=1
+  dotnet run --project server/Aion.Host/Aion.Host.csproj
+  python3 tools/load_test.py --port 13328 --bots 300 --seconds 45 --stats-url http://127.0.0.1:8091/internal/world --combat
 """
 import argparse
 import asyncio
@@ -27,7 +29,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from tools.aion_protocol import encode_varint, split_frames  # noqa: E402
 from tools.probe_login_reply import RC4  # noqa: E402
 
-SESSION = '1000001:0b4f6a3c-1d2e-4f50-8a9b-0c1d2e3f4a5b'
+from tools.dev_defaults import ACCOUNT_SID
+
+SESSION = f'{ACCOUNT_SID}:0b4f6a3c-1d2e-4f50-8a9b-0c1d2e3f4a5b'
 
 
 def _probable_prime(bits, rng):
@@ -104,7 +108,10 @@ class Bot:
         self.waiters = {}      # opcode -> future of the next body with it
         self.pings = {}        # counter -> send time
         self.guild_sent = None
+        self.search_sent = None
+        self.combat_sent = None
         self.received = 0
+        self.combat_replies = 0
 
     async def run(self):
         try:
@@ -141,6 +148,12 @@ class Bot:
                     if self.in_world:
                         self.results['world'].append((now - self.guild_sent) * 1000)
                     self.guild_sent = None
+                elif op == 0x8a09 and self.search_sent is not None:
+                    if self.in_world:
+                        self.results['search'].append((now - self.search_sent) * 1000)
+                    self.search_sent = None
+                elif op in (0x3801, 0x3802, 0x3804) and self.combat_sent is not None:
+                    self.combat_replies += 1
                 if op in self.waiters and self.waiters[op]:
                     future = self.waiters[op].pop(0)
                     if not future.done():
@@ -203,8 +216,11 @@ class Bot:
         step = 1.0 / a.rate
         speed = a.speed
         deadline = time.perf_counter() + a.seconds
-        next_ping = next_world = time.perf_counter() + rng.uniform(0, 1)
+        next_ping = next_world = next_search = time.perf_counter() + rng.uniform(0, 1)
+        next_combat = time.perf_counter() + rng.uniform(0, 2)
         counter = self.index * 1_000_000
+        dummy_key = 1000
+        keen_strike = struct.pack('<HBI', 0x3800, 16, 11020000) + b'\x02' + encode_varint(dummy_key) + struct.pack('<ffff', 0.0, 0.0, 0.0, 0.0) + b'\x09'
 
         def report(opcode):
             yaw = int(heading / 360 * 65536) & 0xffff
@@ -229,13 +245,22 @@ class Bot:
                 self.guild_sent = now
                 self.send(b'\x1c\x8a')
                 next_world = now + 2
+            if now >= next_search and self.search_sent is None:
+                self.search_sent = now
+                self.send(b'\x08\x8a' + encode_varint(0) + b'\x00')
+                next_search = now + 3
+            if a.combat and now >= next_combat:
+                self.combat_sent = now
+                self.send(keen_strike)
+                next_combat = now + 2.5
             await self.writer.drain()
         self.results['received'] += self.received
+        self.results['combat_replies'] += self.combat_replies
 
 
 def _worker(indexes, args, keys, queue, start_at):
     async def main():
-        results = {'ping': [], 'world': [], 'errors': [], 'entered': 0, 'received': 0}
+        results = {'ping': [], 'world': [], 'search': [], 'errors': [], 'entered': 0, 'received': 0, 'combat_replies': 0}
         bots = []
         for i in indexes:
             delay = start_at + i * args.ramp - time.time()
@@ -268,8 +293,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     parser.add_argument('--host', default='127.0.0.1')
     parser.add_argument('--port', type=int, default=13328)
-    parser.add_argument('--bots', type=int, default=20)
-    parser.add_argument('--seconds', type=float, default=60, help='play time per bot after world entry')
+    parser.add_argument('--bots', type=int, default=64)
+    parser.add_argument('--seconds', type=float, default=45, help='play time per bot after world entry')
+    parser.add_argument('--combat', action='store_true', help='periodic 0x3800 casts at training dummy key 1000')
     parser.add_argument('--rate', type=float, default=4, help='position reports per second per bot')
     parser.add_argument('--speed', type=float, default=500, help='walking speed, cm/s (the server allows ~800)')
     parser.add_argument('--spread', type=float, default=4000, help='bots turn back this far from the start point (cm)')
@@ -293,22 +319,32 @@ def main():
 
     ping = [v for p in parts for v in p['ping']]
     world = [v for p in parts for v in p['world']]
+    search = [v for p in parts for v in p['search']]
+    combat_replies = sum(p.get('combat_replies', 0) for p in parts)
     errors = [v for p in parts for v in p['errors']]
     entered = sum(p['entered'] for p in parts)
     received = sum(p['received'] for p in parts)
     print(f'{entered}/{args.bots} bots entered the world; {len(errors)} errors')
     for e in errors[:5]:
         print('  ', e)
-    for label, values in (('ping (map work)', ping), ('legion info (world work)', world)):
+    for label, values in (('ping (map work)', ping), ('legion info (world work)', world), ('guild search (world work)', search)):
         print(f'{label:26s} n={len(values):6d}  p50={_percentile(values, 0.5):7.1f} ms  p95={_percentile(values, 0.95):7.1f} ms  '
               f'p99={_percentile(values, 0.99):7.1f} ms  max={max(values) if values else float("nan"):7.1f} ms')
     print(f'received {received / 1e6:.1f} MB from the server ({received / 1e3 / max(1, args.seconds) / max(1, entered):.1f} kB/s per bot)')
+    if args.combat:
+        print(f'combat skill replies seen: {combat_replies}')
     if before and after:
         b, a = before['locks'], after['locks']
-        seconds = a['seconds'] - b['seconds']
+        seconds = max(0.001, a['seconds'] - b['seconds'])
         cpu = (after['cpuSeconds'] - before['cpuSeconds']) / seconds
         ex_turns, sh_turns = a['exclusiveTurns'] - b['exclusiveTurns'], a['sharedTurns'] - b['sharedTurns']
-        print(f'server: CPU {cpu:.0%} of one core; world turn busy {(a["exclusiveHoldMs"] - b["exclusiveHoldMs"]) / 10 / seconds:.1f}% '
+        heap_mb = after.get('gcHeapBytes', 0) / 1e6
+        print(f'server: CPU {cpu:.0%} of one core; heap ~{heap_mb:.0f} MB; '
+              f'GC gen0/1/2 +{after.get("gen0", 0) - before.get("gen0", 0)}/'
+              f'{after.get("gen1", 0) - before.get("gen1", 0)}/'
+              f'{after.get("gen2", 0) - before.get("gen2", 0)}; '
+              f'connections {after.get("connections", "?")}; '
+              f'world turn busy {(a["exclusiveHoldMs"] - b["exclusiveHoldMs"]) / 10 / seconds:.1f}% '
               f'({ex_turns} turns, avg wait {(a["exclusiveWaitMs"] - b["exclusiveWaitMs"]) / max(1, ex_turns):.2f} ms); '
               f'map turns busy {(a["sharedHoldMs"] - b["sharedHoldMs"]) / 10 / seconds:.1f}% '
               f'({sh_turns} turns, avg wait {(a["sharedWaitMs"] - b["sharedWaitMs"]) / max(1, sh_turns):.2f} ms)')

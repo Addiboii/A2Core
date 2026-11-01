@@ -112,19 +112,23 @@ def cast_control_replies(body, state, now_ms):
     # Recovered Skill.dat cost, cooldown and weapon requirement for any learned
     # skill. Playback only: no targets are hit and no effects are applied.
     definition = class_skills.skill(skill)
-    cooldown_ms = definition['cooldown_ms'] if definition else 0
+    cooldown_ms = class_skills.effective_cooldown_ms(definition)
     cost = definition['cost'] if definition else {'mp': 0, 'hp': 0, 'sp': 0}
     weapons = [w for w in (definition or {}).get('weapons', []) if w != 'None']
     resources = state.get('resources')
     cooldowns = state.setdefault("skill_cooldowns", {})
-    accepted = (definition is not None and resources is not None
-                and resources['mp'] >= cost['mp'] and resources['sp'] >= cost['sp']
-                and resources['hp'] > cost['hp']
-                and skill in state.get("learned_skills", ())
-                and (not weapons or class_skills.weapon_type(state.get("equipped_weapon")) in weapons)
-                and now_ms >= cooldowns.get(skill, 0))
+    tolerance = class_skills.COOLDOWN_CHECK_TOLERANCE_MS
+    meets = (definition is not None and resources is not None
+             and resources['mp'] >= cost['mp'] and resources['sp'] >= cost['sp']
+             and resources['hp'] > cost['hp']
+             and skill in state.get("learned_skills", ())
+             and (not weapons or class_skills.weapon_type(state.get("equipped_weapon")) in weapons))
+    on_cooldown = skill in cooldowns and now_ms + tolerance < cooldowns[skill]
+    accepted = meets and not on_cooldown
     if accepted:
-        cooldowns[skill] = now_ms + cooldown_ms
+        lockout = class_skills.lockout_ms(definition) if definition else 0
+        if lockout > 0:
+            cooldowns[skill] = now_ms + lockout
         resources['mp'] -= cost['mp']
         resources['sp'] -= cost['sp']
         resources['hp'] -= cost['hp']

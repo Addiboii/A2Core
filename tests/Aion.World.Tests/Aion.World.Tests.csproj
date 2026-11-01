@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../server/Aion.World/Aion.World.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="../../tools/data/hero-chains.json" Link="hero-chains.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../tools/data/quest-reference.json" Link="quest-reference.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../tools/data/starter-playthrough.json" Link="starter-playthrough.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

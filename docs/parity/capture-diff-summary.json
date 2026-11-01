@@ -1,0 +1,13 @@
+{
+  "build_pin": {
+    "steam_build": 25767555,
+    "manifest": "1699273097574069541"
+  },
+  "discover": {
+    "pcapng": [],
+    "timelines": [],
+    "server_prefix_bins": [],
+    "chain_runs": []
+  },
+  "mode": "discover_only"
+}

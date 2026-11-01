@@ -14,6 +14,7 @@ public interface IClientHandoff
 {
     Task<ClientLaunch?> AuthorizeLaunchAsync(string sessionToken, int worldId, CancellationToken ct);
     Task<GameTicket?> RedeemLaunchAsync(string authorization, CancellationToken ct);
+    Task<Guid?> ResolveLaunchAccountAsync(string authorization, CancellationToken ct);
     Task<ClientLoginGrant?> BeginLoginAsync(string ticket, int worldId, CancellationToken ct);
     // Read-only: the enabled account a live game ticket belongs to (chat login binding); no expiry change, no grant.
     Task<Guid?> ResolveTicketAsync(string ticket, int worldId, CancellationToken ct);

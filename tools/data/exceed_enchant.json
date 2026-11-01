@@ -1,0 +1,73 @@
+{
+  "source": "ExceedEnchant.dat (Global manifest 1699273097574069541); rebuild with tools/exceed_enchant_data.py when research tables are present. Odds ladder: aion2.gg Amplified Unique ◆0..◆5 (matches Enchant export scale /10000).",
+  "amplify_stone_item": 930100024,
+  "unique_enchant_group_prefix": "Enchant_Unique_",
+  "max_surpass_by_item_level": [
+    [
+      54,
+      1
+    ],
+    [
+      70,
+      3
+    ],
+    [
+      86,
+      5
+    ]
+  ],
+  "steps": [
+    [
+      6600,
+      500,
+      0,
+      600000,
+      6
+    ],
+    [
+      5000,
+      400,
+      0,
+      900000,
+      9
+    ],
+    [
+      3300,
+      300,
+      0,
+      1400000,
+      12
+    ],
+    [
+      2500,
+      200,
+      0,
+      2000000,
+      15
+    ],
+    [
+      2000,
+      100,
+      0,
+      3000000,
+      20
+    ]
+  ],
+  "effect_reference_level": 102,
+  "effect_reference": {
+    "Weapon": {
+      "WeaponMinDamage": 73,
+      "WeaponDamage": 73,
+      "AmplifyWeaponDamage": 500
+    },
+    "Armor": {
+      "ArmorDefense": 149,
+      "HPMax": 149
+    },
+    "Accessory": {
+      "WeaponDamage": 36,
+      "ArmorDefense": 73,
+      "AmplifyAllDamage": 250
+    }
+  }
+}

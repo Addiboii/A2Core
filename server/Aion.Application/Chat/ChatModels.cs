@@ -10,7 +10,7 @@ public sealed record ChatRoomKey(string Type, string ServerKey, string RoomKey);
 /// <param name="Name">The stored name (whispers are addressed to it).</param>
 /// <param name="DisplayName">The name shown in the world (staff tag in front, see CharacterNames.Display).</param>
 /// <param name="GuildId">The legion the character is in now (0 none): legion chat rooms reach its members only.</param>
-public sealed record ChatCharacter(Guid Id, string Name, string DisplayName, long GuildId = 0);
+public sealed record ChatCharacter(Guid Id, string Name, string DisplayName, long GuildId = 0, int Race = 1);
 
 /// <summary>
 /// A verified chat participant. Built by an <see cref="IChatLoginVerifier"/>, never from request JSON.
@@ -66,6 +66,12 @@ public interface IChatDirectory
 
     /// <summary>The character as it is now, when it is in the world for this account; else null.</summary>
     ChatCharacter? Current(Guid character, Guid account);
+
+    /// <summary>
+    /// The account's character in the world now, if exactly one is. The client keeps its chat
+    /// session across a character switch, so the session is rebound to this character.
+    /// </summary>
+    ChatCharacter? CurrentOfAccount(Guid account) => null;
 }
 
 /// <summary>

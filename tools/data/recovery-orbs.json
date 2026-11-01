@@ -1,0 +1,442 @@
+{
+ "source": "EnvObjData.dat (Basic_RecoveryOrb_*, *RecoveryOrbBox*) -> HitSkillIdList -> Skill.dat / SkillEffect.dat / SkillEffectFilter.dat",
+ "orbs": {
+  "1000277": {
+   "name": "Basic_RecoveryOrb_01",
+   "usage": "Overlap",
+   "interact_range": 40,
+   "collision_radius": 45,
+   "lifetime_ms": 30000,
+   "despawn": true,
+   "relationship": "EnvObj_MonsterEnemy",
+   "hit_skills": [
+    1801510,
+    1801520,
+    1801531
+   ]
+  },
+  "1000278": {
+   "name": "Basic_RecoveryOrb_02",
+   "usage": "Overlap",
+   "interact_range": 40,
+   "collision_radius": 45,
+   "lifetime_ms": 30000,
+   "despawn": true,
+   "relationship": "EnvObj_MonsterEnemy",
+   "hit_skills": [
+    1801510,
+    1801520,
+    1801531
+   ]
+  },
+  "1000279": {
+   "name": "Basic_RecoveryOrb_03",
+   "usage": "Overlap",
+   "interact_range": 40,
+   "collision_radius": 45,
+   "lifetime_ms": 30000,
+   "despawn": true,
+   "relationship": "EnvObj_MonsterEnemy",
+   "hit_skills": [
+    1801510,
+    1801520,
+    1801531
+   ]
+  },
+  "1000280": {
+   "name": "Basic_RecoveryOrb_04",
+   "usage": "Overlap",
+   "interact_range": 40,
+   "collision_radius": 45,
+   "lifetime_ms": 30000,
+   "despawn": true,
+   "relationship": "EnvObj_MonsterEnemy",
+   "hit_skills": [
+    1801510,
+    1801520,
+    1801531
+   ]
+  },
+  "1000307": {
+   "name": "Basic_RecoveryOrb_05",
+   "usage": "Overlap",
+   "interact_range": 40,
+   "collision_radius": 45,
+   "lifetime_ms": 30000,
+   "despawn": true,
+   "relationship": "EnvObj_MonsterEnemy",
+   "hit_skills": [
+    1801510,
+    1801520,
+    1801531
+   ]
+  }
+ },
+ "boxes": {
+  "1400603": {
+   "name": "E_All_RecoveryOrbBox_01",
+   "usage": "Normal",
+   "interact_range": 80,
+   "interact_time": 0,
+   "interact_count": 1,
+   "despawn": false,
+   "hit_skills": []
+  },
+  "1400604": {
+   "name": "E_All_RecoveryOrbBox_02",
+   "usage": "Normal",
+   "interact_range": 80,
+   "interact_time": 0,
+   "interact_count": 1,
+   "despawn": false,
+   "hit_skills": []
+  },
+  "1400605": {
+   "name": "E_All_RecoveryOrbBox_03",
+   "usage": "Normal",
+   "interact_range": 80,
+   "interact_time": 0,
+   "interact_count": 1,
+   "despawn": false,
+   "hit_skills": []
+  },
+  "1400606": {
+   "name": "E_All_RecoveryOrbBox_04",
+   "usage": "Normal",
+   "interact_range": 80,
+   "interact_time": 0,
+   "interact_count": 1,
+   "despawn": false,
+   "hit_skills": []
+  },
+  "1400607": {
+   "name": "E_All_RecoveryOrbBoxRandom_01",
+   "usage": "Normal",
+   "interact_range": 80,
+   "interact_time": 0,
+   "interact_count": 1,
+   "despawn": false,
+   "hit_skills": []
+  },
+  "1401730": {
+   "name": "E_PD_DDN_RecoveryOrbBox_04",
+   "usage": "Normal",
+   "interact_range": 80,
+   "interact_time": 0,
+   "interact_count": 1,
+   "despawn": false,
+   "hit_skills": []
+  }
+ },
+ "hit_skills": {
+  "1801510": [
+   {
+    "filter": 18015104,
+    "shape": "Ring",
+    "values": [
+     0,
+     0,
+     0,
+     0,
+     6000,
+     3500,
+     10000
+    ],
+    "max": 10,
+    "enemy": true,
+    "friendly": false,
+    "effects": [
+     {
+      "id": 180151041,
+      "type": "Abnormal_True",
+      "values": [
+       "150",
+       "150",
+       "18015101",
+       "1",
+       "10000",
+       "None",
+       "75",
+       "-1"
+      ]
+     }
+    ]
+   },
+   {
+    "filter": 18015101,
+    "shape": "Circle",
+    "values": [
+     0,
+     500,
+     0,
+     0,
+     500,
+     10000
+    ],
+    "max": 100,
+    "enemy": true,
+    "friendly": false,
+    "effects": [
+     {
+      "id": 180151011,
+      "type": "Damage",
+      "values": [
+       "0",
+       "0",
+       "14000",
+       "15400",
+       "1"
+      ]
+     }
+    ]
+   },
+   {
+    "filter": 18015102,
+    "shape": "Ring",
+    "values": [
+     0,
+     0,
+     0,
+     0,
+     6000,
+     3500,
+     10000
+    ],
+    "max": 100,
+    "enemy": true,
+    "friendly": false,
+    "effects": [
+     {
+      "id": 180151021,
+      "type": "Damage",
+      "values": [
+       "0",
+       "0",
+       "14000",
+       "15400",
+       "1"
+      ]
+     }
+    ]
+   },
+   {
+    "filter": 18015103,
+    "shape": "Self",
+    "values": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "max": 1,
+    "enemy": false,
+    "friendly": false,
+    "effects": [
+     {
+      "id": 180151031,
+      "type": "Spawn",
+      "values": [
+       "0",
+       "Vacant",
+       "1",
+       "1",
+       "AllOverrideParent",
+       "TRUE",
+       "TRUE",
+       "0,10000",
+       "FALSE",
+       "2920449",
+       "1",
+       "Random",
+       "None",
+       "0"
+      ]
+     }
+    ]
+   }
+  ],
+  "1801520": [
+   {
+    "filter": 18015203,
+    "shape": "Ring",
+    "values": [
+     0,
+     0,
+     0,
+     0,
+     3500,
+     2500,
+     10000
+    ],
+    "max": 10,
+    "enemy": true,
+    "friendly": false,
+    "effects": [
+     {
+      "id": 180152031,
+      "type": "Abnormal_True",
+      "values": [
+       "150",
+       "150",
+       "18015101",
+       "1",
+       "10000",
+       "None",
+       "75",
+       "-1"
+      ]
+     }
+    ]
+   },
+   {
+    "filter": 18015201,
+    "shape": "Circle",
+    "values": [
+     0,
+     500,
+     0,
+     0,
+     500,
+     10000
+    ],
+    "max": 100,
+    "enemy": true,
+    "friendly": false,
+    "effects": [
+     {
+      "id": 180152011,
+      "type": "Damage",
+      "values": [
+       "0",
+       "0",
+       "14000",
+       "15400",
+       "1"
+      ]
+     }
+    ]
+   },
+   {
+    "filter": 18015202,
+    "shape": "Ring",
+    "values": [
+     0,
+     0,
+     0,
+     0,
+     3500,
+     2500,
+     10000
+    ],
+    "max": 100,
+    "enemy": true,
+    "friendly": false,
+    "effects": [
+     {
+      "id": 180152021,
+      "type": "Damage",
+      "values": [
+       "0",
+       "0",
+       "14000",
+       "15400",
+       "1"
+      ]
+     }
+    ]
+   }
+  ],
+  "1801531": [
+   {
+    "filter": 18015303,
+    "shape": "Circle",
+    "values": [
+     0,
+     0,
+     0,
+     0,
+     2500,
+     10000
+    ],
+    "max": 100,
+    "enemy": true,
+    "friendly": false,
+    "effects": [
+     {
+      "id": 180153031,
+      "type": "Abnormal_True",
+      "values": [
+       "150",
+       "150",
+       "18015101",
+       "1",
+       "10000",
+       "None",
+       "75",
+       "-1"
+      ]
+     }
+    ]
+   },
+   {
+    "filter": 18015301,
+    "shape": "Circle",
+    "values": [
+     0,
+     0,
+     0,
+     0,
+     2500,
+     10000
+    ],
+    "max": 100,
+    "enemy": true,
+    "friendly": false,
+    "effects": [
+     {
+      "id": 180153021,
+      "type": "Damage",
+      "values": [
+       "0",
+       "0",
+       "0",
+       "0",
+       "1"
+      ]
+     }
+    ]
+   },
+   {
+    "filter": 18015301,
+    "shape": "Circle",
+    "values": [
+     0,
+     0,
+     0,
+     0,
+     2500,
+     10000
+    ],
+    "max": 100,
+    "enemy": true,
+    "friendly": false,
+    "effects": [
+     {
+      "id": 180153011,
+      "type": "Damage",
+      "values": [
+       "0",
+       "0",
+       "14000",
+       "15400",
+       "1"
+      ]
+     }
+    ]
+   }
+  ]
+ }
+}

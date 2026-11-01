@@ -1,5 +1,7 @@
 import json
+import sys
 import threading
+import types
 import unittest
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from unittest.mock import patch
@@ -61,16 +63,22 @@ class AccountLoginTests(unittest.TestCase):
         with self.assertRaisesRegex(AccountLoginError, 'not running'):
             AccountSession(65000).sign_in('hero', 'x')   # nothing listens there
 
+    def _fake_tkinter(self):
+        """Headless Linux CI has no python3-tk; stub tkinter so login_window patches apply."""
+        module = types.ModuleType('tkinter')
+        module.TclError = Exception
+        return patch.dict(sys.modules, {'tkinter': module})
+
     def test_window_retries_until_success_and_returns_authorization(self):
         def window(attempt, username=''):
             self.assertEqual(attempt('hero', 'wrong'), 'Wrong username or password.')
             self.assertEqual(attempt('', ''), 'Enter your username and password.')
             return attempt('hero', 'correct horse') is None
-        with patch.object(account_login, 'login_window', window):
+        with self._fake_tkinter(), patch.object(account_login, 'login_window', window):
             self.assertEqual(sign_in_for_launch(self.session)['authorization'], 'A' * 64)
 
     def test_cancelled_window_launches_nothing(self):
-        with patch.object(account_login, 'login_window', lambda attempt, username='': False):
+        with self._fake_tkinter(), patch.object(account_login, 'login_window', lambda attempt, username='': False):
             self.assertIsNone(sign_in_for_launch(self.session))
 
 

@@ -55,6 +55,10 @@ class PersistentCharacters:
                 raise ValueError('Character has no assigned lobby slot')
             progress = state['progress']
             weapon = starter_weapon(profile)
+            last_login = int(state.get('lastLoginUnixMs') or 0)
+            last_logout = int(state.get('lastLogoutUnixMs') or 0)
+            registered = int(state.get('registeredUnixMs') or 0)
+            logout_time = last_logout or last_login or registered
             records.append(dict(
                 key=state['wireId'], dbid=state['wireId'], nickname=state['summary']['name'],
                 pc_id=profile['pc_id'], race=state['race'], gender=state['gender'],
@@ -62,7 +66,9 @@ class PersistentCharacters:
                 equip_item_level=1 if weapon else 0, zone_id=3009,
                 equips=((weapon, 0, 1),) if weapon else (),
                 position=self._position(state), voice_type=state['voiceType'], slot_no=state['lobbySlot'],
+                logout_time=logout_time, reg_time=registered,
                 customizing_data=base64.b64decode(state['appearance'], validate=True)))
+        records.sort(key=lambda row: (row['slot_no'], -row['logout_time']))
         return records
 
     def lobby_records(self):
@@ -77,12 +83,15 @@ class PersistentCharacters:
         races = {state['race'] for state in self.store.lobby()}
         return races.pop() if len(races) == 1 else 0
 
-    def login_reply(self, account_session, world_id=1204, now_ms=None):
+    def login_reply(self, account_session, world_id=None, now_ms=None):
         """0x3615 listing this account's stored characters in the connection world.
 
         `_server_race` carries the account's race on this server (official sample: 1
         with Light characters); 0 for a new account leaves the choice open (CANDIDATE).
         """
+        if world_id is None:
+            from .dev_defaults import WORLD_ID
+            world_id = WORLD_ID
         characters = self.lobby_characters()
         races = {c['race'] for c in characters}
         return wire.build_login_characters(characters, account_session, str(world_id), wire.COMM_SERVER_KEY,

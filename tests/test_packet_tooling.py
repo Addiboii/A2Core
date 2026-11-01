@@ -1,4 +1,6 @@
 import json
+import subprocess
+import sys
 import unittest
 from pathlib import Path
 
@@ -96,6 +98,21 @@ class BindOpcodeTests(unittest.TestCase):
 
 
 class UsmapCodegenTests(unittest.TestCase):
+    def test_take_achievement_reward_batch_rs_consumes_body(self):
+        body = bytes.fromhex(
+            "00000000" "01" "00000000" "00" "00" "01"
+            "66a3e111" "00" "01" "0c6df211" "02")
+        parsed, consumed = packet_structs.parse_GameServerTakeAchievementRewardBatchRS(body)
+        self.assertEqual(consumed, len(body))
+        self.assertEqual(parsed["_result"], 0)
+        self.assertEqual(parsed["_category"], 1)
+        self.assertEqual(parsed["_group_id"], 0)
+        self.assertFalse(parsed["_only_character_achievement"])
+        take = parsed["_take_result"]
+        self.assertEqual(len(take), 1)
+        self.assertEqual(take[0]["_group_id"], 0x11E1A366)
+        self.assertEqual(take[0]["_taken_achievement_steps"], {0x11F26D0C: 2})
+
     def test_generated_module_roundtrip_ping(self):
         values = {"_result": 0, "_client_sent_time": 0x1122334455667788,
                   "_server_game_clock": 1234567890123}
@@ -107,9 +124,8 @@ class UsmapCodegenTests(unittest.TestCase):
 
     def test_codegen_check(self):
         # usmap_codegen --check must not report drift.
-        import subprocess
         result = subprocess.run(
-            ["python", "tools/usmap_codegen.py", "--check"],
+            [sys.executable, "tools/usmap_codegen.py", "--check"],
             cwd=str(ROOT), capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 

@@ -11,8 +11,8 @@ envelopes and writes, next to the capture (``timeline-<port>/``):
 - ``timeline.jsonl``: one line per message, in stream order per flow:
   {i, t (capture UTC), ms (since the first message of the capture), dir (s2c|c2s), flow (client
   port), op, name, len, body (hex, bodies up to --body-hex bytes) | file (larger bodies)}.
-  ``t`` is when the last byte of the message was first seen on the wire, not when the
-  application processed it.
+  Client->server on port 13328 is RC4-ciphered on the wire: entries are ``opaque`` wire frames without
+  decoded opcodes. Server->client is plaintext apart from LZ4 envelopes.
 - ``counts.json``: per flow and direction the opcode counts, reassembly diagnostics (SYN seen,
   conflicting retransmission bytes, a gap and the bytes after it, trailing partial frame).
 - ``large/``: bodies above the hex limit, ``<i>-<op>.bin``.
@@ -24,7 +24,7 @@ raw bodies belong under ignored research/local; this tool prints hex only with -
 """
 import argparse
 from array import array
-from collections import Counter, defaultdict
+from collections import Counter
 from datetime import datetime, timezone
 import json
 from pathlib import Path
@@ -163,7 +163,56 @@ def iter_frames(data):
             break
         yield offset, end, data[body_start:end]
         offset = end
-    return
+
+
+def iter_opaque_frames(data):
+    """Whole wire frames on ciphered client->server streams (length prefix kept, opcode not decoded)."""
+    offset = 0
+    while offset < len(data):
+        start = offset
+        try:
+            logical, body_start = varuint(data, offset)
+        except Incomplete:
+            if offset < len(data):
+                yield start, len(data), data[start:]
+            break
+        if logical < 6 or logical > 16 * 1024 * 1024:
+            raise ValueError(f'frame length {logical} at {offset} outside bounds')
+        end = body_start + logical - 4
+        if end > len(data):
+            break
+        yield start, end, data[start:end]
+        offset = end
+
+
+def decode_direction(direction, port, data, arrival, segments, names):
+    counts = Counter()
+    errors = []
+    messages = []
+    used = 0
+    ciphered_c2s = direction == 'c2s' and port == 13328
+    try:
+        if ciphered_c2s:
+            for start, end, wire in iter_opaque_frames(data):
+                used = end
+                last_segment = max(arrival[start:end]) - 1 if end > start else 0
+                timestamp = segments[last_segment][2]
+                counts['opaque'] += 1
+                messages.append((timestamp, {'dir': direction, 'opaque': True, 'ciphered': True,
+                                             'len': len(wire), 'raw': wire}))
+        else:
+            for start, end, body in iter_frames(data):
+                used = end
+                last_segment = max(arrival[start:end]) - 1 if end > start else 0
+                timestamp = segments[last_segment][2]
+                for message in expand(body):
+                    opcode = int.from_bytes(message[:2], 'little')
+                    counts[f'0x{opcode:04x}'] += 1
+                    messages.append((timestamp, {'dir': direction, 'op': f'0x{opcode:04x}',
+                                                 'name': names.get(opcode, ''), 'len': len(message), 'raw': message}))
+    except ValueError as error:
+        errors.append(str(error))
+    return messages, counts, used, errors
 
 
 def expand(body, depth=0):
@@ -200,24 +249,13 @@ def decode(path, port=13328, out=None, body_hex=4096, max_stream_bytes=512 * 102
         for direction in ('c2s', 's2c'):
             segments = flow[direction]
             data, arrival, diagnostics = reassemble(segments, flow['syn'].get(direction), max_stream_bytes)
-            counts = Counter()
-            errors = []
-            used = 0
-            try:
-                for start, end, body in iter_frames(data):
-                    used = end
-                    last_segment = max(arrival[start:end]) - 1 if end > start else 0
-                    timestamp = segments[last_segment][2]
-                    for message in expand(body):
-                        opcode = int.from_bytes(message[:2], 'little')
-                        counts[f'0x{opcode:04x}'] += 1
-                        messages.append((timestamp, len(messages), {'dir': direction, 'flow': key[1], 'op': f'0x{opcode:04x}',
-                                                                      'name': names.get(opcode, ''), 'len': len(message), 'raw': message}))
-            except ValueError as error:
-                errors.append(str(error))
+            decoded, counts, used, errors = decode_direction(direction, port, data, arrival, segments, names)
+            for timestamp, record in decoded:
+                messages.append((timestamp, len(messages), {**record, 'flow': key[1]}))
             diagnostics['trailing_bytes'] = len(data) - used
             diagnostics['messages'] = sum(counts.values())
             diagnostics['errors'] = errors
+            diagnostics['ciphered_opaque'] = direction == 'c2s' and port == 13328
             diagnostics['opcodes'] = dict(sorted(counts.items()))
             report['directions'][direction] = diagnostics
         summary['flows'].append(report)
@@ -230,7 +268,8 @@ def decode(path, port=13328, out=None, body_hex=4096, max_stream_bytes=512 * 102
             if len(raw) <= body_hex:
                 record['body'] = raw.hex()
             else:
-                file = out / 'large' / f'{index}-{record["op"]}.bin'
+                tag = record.get('op', 'opaque')
+                file = out / 'large' / f'{index}-{tag}.bin'
                 file.write_bytes(raw)
                 record['file'] = str(file.relative_to(out))
             sink.write(json.dumps(record) + '\n')
@@ -243,18 +282,26 @@ def iso(timestamp):
     return datetime.fromtimestamp(timestamp, timezone.utc).isoformat(timespec='milliseconds')
 
 
-def grep(out, opcodes, direction=None, limit=200, width=64):
-    """Print matching timeline lines: ms, dir, op, name, len and the first bytes."""
+def grep(out, opcodes, direction=None, limit=200, width=64, summary=False):
+    """Print matching timeline lines: ms, dir, op, name, len and optionally the first body bytes."""
     wanted = {f'0x{int(op, 16):04x}' for op in opcodes} if opcodes else None
     shown = 0
     for line in (Path(out) / 'timeline.jsonl').open(encoding='utf-8'):
         record = json.loads(line)
-        if wanted and record['op'] not in wanted:
+        if record.get('opaque'):
+            if wanted:
+                continue
+        elif wanted and record.get('op') not in wanted:
             continue
         if direction and record['dir'] != direction:
             continue
-        body = record.get('body', '')
-        print(f"{record['ms']:>9} {record['dir']} {record['op']} {record['name']:<28} {record['len']:>5} {body[:width * 2]}")
+        label = 'opaque' if record.get('opaque') else record.get('op', '')
+        name = record.get('name', 'ciphered' if record.get('opaque') else '')
+        if summary or record.get('opaque'):
+            print(f"{record['ms']:>9} {record['dir']} {label} {name:<28} {record['len']:>5}")
+        else:
+            body = record.get('body', '')
+            print(f"{record['ms']:>9} {record['dir']} {label} {name:<28} {record['len']:>5} {body[:width * 2]}")
         shown += 1
         if shown >= limit:
             break
@@ -270,6 +317,7 @@ def main(argv=None):
     parser.add_argument('--grep', help='comma-separated opcodes to print from the timeline (decodes first unless the directory exists)')
     parser.add_argument('--dir', choices=('s2c', 'c2s'))
     parser.add_argument('--limit', type=int, default=200)
+    parser.add_argument('--summary', action='store_true', help='query/grep without body hex (also the default for opaque c2s lines)')
     args = parser.parse_args(argv)
     if args.capture.is_dir():
         out = args.capture
@@ -282,7 +330,9 @@ def main(argv=None):
                       f"conflicts={d.get('conflicting_bytes', 0)}, gap_at={d.get('gap_at')}, trailing={d['trailing_bytes']}"
                       + (f", errors={d['errors']}" if d['errors'] else ''))
     if args.grep is not None:
-        grep(out, [op for op in args.grep.split(',') if op], args.dir, args.limit)
+        grep(out, [op for op in args.grep.split(',') if op], args.dir, args.limit, summary=args.summary)
+    elif args.summary and args.capture.is_dir():
+        grep(out, None, args.dir, args.limit, summary=True)
     return 0
 
 

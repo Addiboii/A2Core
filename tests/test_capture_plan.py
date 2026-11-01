@@ -25,9 +25,18 @@ class CapturePlanTests(unittest.TestCase):
         for expected in ("Ethernet.Type=IPv4", "Protocol=TCP", "IPv4.Address=198.51.100.25", "persistent=no"):
             self.assertIn(expected, plan["start_arguments"])
         self.assertEqual(plan["analysis_port"], 13700)
-        self.assertFalse(plan["capture_complete"])
         trace_file = next(arg.split("=", 1)[1] for arg in plan["start_arguments"] if arg.startswith("tracefile="))
+        self.assertIn("\\capture-13700-", trace_file.replace('/', '\\'))
+        self.assertFalse(plan["capture_complete"])
         self.assertFalse(Path(trace_file).parent.exists(), "Preview must not create capture files")
+
+    def test_ingame_plan_targets_game_port_directory(self):
+        result = self.run_plan("198.51.100.25", "-InGame")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        plan = json.loads(result.stdout)
+        self.assertEqual(plan["analysis_port"], 13328)
+        trace_file = next(arg.split("=", 1)[1] for arg in plan["start_arguments"] if arg.startswith("tracefile="))
+        self.assertIn("\\capture-13328-", trace_file.replace('/', '\\'))
 
     def test_loopback_and_ipv6_are_rejected_before_capture(self):
         for address in ("127.0.0.1", "::1", "198.51.100.25,127.0.0.1"):

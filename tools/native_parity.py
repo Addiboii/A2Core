@@ -15,9 +15,11 @@ from unittest import mock
 try:
     from . import aion_protocol, combat, game_server as g, login_server as l, npc_ai, probe_login_reply as p
     from . import starter_casts, starter_equipment, starter_skills
+    from .dev_defaults import ACCOUNT_SID, WORLD_ID, WORLD_ID_STRING, account_session
 except ImportError:
     import aion_protocol, combat, game_server as g, login_server as l, npc_ai, probe_login_reply as p
     import starter_casts, starter_equipment, starter_skills
+    from dev_defaults import ACCOUNT_SID, WORLD_ID, WORLD_ID_STRING, account_session
 
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / 'tests/fixtures/native-parity.json'
@@ -43,7 +45,7 @@ def cases():
         out['login_reply'] = p.build_reply(MODULUS, 3, KEY)
         out['game_reply'] = g.build_game_reply(MODULUS, 3, KEY)
     # Login port
-    out['account'] = l.build_account('1000001', GUID, 1361)
+    out['account'] = l.build_account(ACCOUNT_SID, GUID, 1361)
     rows = [{'server_id': 1361, 'name': f'Dev_{i}', 'level': i, 'exp': i * 10, 'code': 5, 'flags': 1,
              'last_played_unix_ms': NOW} for i in range(1, 6)]
     out['characters_empty'] = l.build_characters([])
@@ -62,9 +64,9 @@ def cases():
                  slot_no=1, customizing_data=bytes(range(12)), dbid=7, logout_time=NOW, reg_time=NOW)
     out['lobby_record'] = g._lobby_char_desc(**lobby)
     out['login_characters'] = g.build_login_characters([lobby, dict(lobby, key=8, nickname='Second', equips=())],
-                                                       '1000001:' + GUID, '1204', g.COMM_SERVER_KEY, now_ms=NOW,
+                                                       account_session(GUID), WORLD_ID_STRING, g.COMM_SERVER_KEY, now_ms=NOW,
                                                        server_race=1)
-    out['login_characters_lobby'] = g.build_login_characters([], '1000001:' + GUID, '1204', g.COMM_SERVER_KEY,
+    out['login_characters_lobby'] = g.build_login_characters([], account_session(GUID), WORLD_ID_STRING, g.COMM_SERVER_KEY,
                                                              now_ms=NOW, is_born_server=True, chat_enable_level=0)
     out['select_character'] = g.build_select_character(key=65536, dbid=7, char_key=1, last_using_pc_id=5,
                                                        customizing_data=b'\x0c\x64\x65', server_start_time=NOW)
@@ -85,13 +87,13 @@ def cases():
     out['unlock_update'] = g.build_contents_unlock_update()
     out['comm_key'] = g.build_comm_server_key()
     out['all_stats'] = g.build_char_all_stats(stats=g.spawn_stats(), stat_hpmax=g.SPAWN_HP_MAX)
-    out['game_login_dev'] = g.build_game_login('$local', (0.0, 0.0, 0.0), world_id=1204, level=1, zone_id=3000,
-                                               account_sid='1000001', guid=GUID, now_ms=NOW)
+    out['game_login_dev'] = g.build_game_login('$local', (0.0, 0.0, 0.0), world_id=WORLD_ID, level=1, zone_id=3000,
+                                               account_sid=ACCOUNT_SID, guid=GUID, now_ms=NOW)
     out['game_login_intro'] = g.build_game_login('$abcdefghijk', g.SPAWN_POSITION, world_id=1361, name_code=42,
                                                  race=1, gender=2, detail_flag=1, equip_level=12, level=5,
-                                                 zone_id=3000, account_sid='1000001', guid=GUID, now_ms=NOW)
+                                                 zone_id=3000, account_sid=ACCOUNT_SID, guid=GUID, now_ms=NOW)
     out['game_login_wire'] = g.build_game_login_wire('$local', (0.0, 0.0, 0.0), level=1, zone_id=3000,
-                                                     account_sid='1000001', guid=GUID, now_ms=NOW)
+                                                     account_sid=ACCOUNT_SID, guid=GUID, now_ms=NOW)
     out['skill_list'] = starter_skills.build_skill_list([(11020000, 1), (11010000, 2)])
     out['skill_slots'] = starter_skills.build_skill_slots([[0, 11020000], [1, 11010000]])
     out['equipped_inventory'] = starter_equipment.build_equipped_inventory(110160001)

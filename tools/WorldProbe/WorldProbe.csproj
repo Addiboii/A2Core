@@ -4,6 +4,6 @@
     <ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="../../third_party/CUE4Parse/CUE4Parse/CUE4Parse.csproj" />
+    <ProjectReference Include="../AionClientProbe/AionClientProbe.csproj" />
   </ItemGroup>
 </Project>

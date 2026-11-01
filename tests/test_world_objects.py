@@ -31,6 +31,87 @@ class WorldObjectTests(unittest.TestCase):
             {'Value': {'Name': 'Sound', 'Location': {'X': 0, 'Y': 0, 'Z': 0}, 'FuncType': 'ETriggerActorFuncType::Sound'}}]}, wanted=set())
         self.assertEqual([(a['name'], a['shape'], a['box']) for a in areas], [('Trigger_Q_A', 'Box', [100, 50])])
 
+    def test_bomb_box_carries_its_abnormal_group(self):
+        rows = world_objects.envobj_rows({'Properties': [
+            {'ID': {'Value': 1400823}, 'Name': 'E_L0_Layer_2_BombBox_01', 'Usage': 'EEnvObjectUsage::Normal', 'InteractRange': 80,
+             'InteractCount': 1, 'FinishDuration': 10000, 'bDespawn': True,
+             'InteractConditionList': [{'ConditionType': 'EEnvObjInteractConditionType::NotHaveAbnormalGroup', 'Value': 1196}]},
+            {'ID': {'Value': 2}, 'Name': 'Plain', 'Usage': 'EEnvObjectUsage::Normal'}]})
+        self.assertEqual(rows[1400823]['not_have_abnormal_group'], 1196)
+        self.assertEqual(rows[2]['not_have_abnormal_group'], 0)
+        spawn = {'SpawnInfoList': [{'Name': 'Box', 'EnvObjIdList': [{'Value': 1400823}, {'Value': 2}],
+                                    'Positions': [{'Location': {'X': 0, 'Y': 0, 'Z': 0}, 'Rotation': {'Yaw': 0}}]}]}
+        placed = world_objects.objects(spawn, rows, wanted=set(), everything=True)
+        self.assertEqual(placed[0]['carry'], {'group': 1196, 'despawn': True, 'finish_duration': 10000})
+        self.assertNotIn('carry', placed[1])
+
+    def test_combat_power_interact_condition_is_exported(self):
+        rows = world_objects.envobj_rows({'Properties': [
+            {'ID': {'Value': 1200602}, 'Name': 'E_L1_Layer_HQ004_EtheriaCrack_1', 'Usage': 'EEnvObjectUsage::Normal',
+             'InteractConditionList': [{'ConditionType': 'EEnvObjInteractConditionType::CombatPower', 'Value': 3200}]}]})
+        self.assertEqual(rows[1200602]['required_combat_power'], 3200)
+
+    def test_enter_door_with_an_unserved_target_uses_the_layer_named_after_it(self):
+        dungeons = {'2': {'name': 'World_L_A_Layer_01', 'type': 'InstanceLayer'},
+                    '23': {'name': 'Abyss_Reshanta_C', 'type': 'Abyss'},
+                    '51': {'name': 'World_L_A_Layer_CommandPost_01', 'type': 'InstanceLayer'}}
+        rows = {1200002: {'name': 'World_L_A_Layer_01_EnterDoor', 'usage': 'EnterInstanceLayer', 'usage_value': '23'},
+                1200006: {'name': 'EnvObj_Dawn_CP_EnterDoor_1', 'usage': 'EnterInstanceLayer', 'usage_value': '51'},
+                1: {'name': 'Unknown_EnterDoor', 'usage': 'EnterDungeon', 'usage_value': '23'}}
+        portals = world_objects.party_portals(rows, dungeons)
+        self.assertEqual(portals, {1200002: [2], 1200006: [51]})
+
+    def test_generated_portals_only_enter_served_dungeons(self):
+        events = json.loads((ROOT / 'tools/data/map-events.json').read_text(encoding='utf-8'))
+        served = set(events['served_maps'])
+        maps = json.loads((ROOT / 'tools/data/world-objects.json').read_text(encoding='utf-8'))['maps']
+        for map_id, entry in maps.items():
+            for obj in entry['objects']:
+                for dungeon in obj.get('portal') or []:
+                    self.assertIn(events['dungeons'][str(dungeon)]['map'], served, f"{obj['name']} on {map_id} enters dungeon {dungeon}")
+        door = next(o for o in maps['1010']['objects'] if o['name'] == 'World_L_A_Layer_01_EnterDoor')
+        self.assertEqual(door['portal'], [2])
+
+    def test_move_map_condition_exports_move_to(self):
+        rows = world_objects.envobj_rows({'Properties': [
+            {'ID': {'Value': 1100489}, 'Name': 'Portal', 'Usage': 'EEnvObjectUsage::MoveMapCondition',
+             'UsageValue': 'Teleport_MoveMap_L1_EltnenEnterPortal_01', 'InteractRange': 150}]})
+        spawn = {'SpawnInfoList': [{'Name': 'P', 'EnvObjIdList': [{'Value': 1100489}],
+                                    'Positions': [{'Location': {'X': 0, 'Y': 0, 'Z': 0}, 'Rotation': {'Yaw': 0}}]}]}
+        placed = world_objects.objects(spawn, rows, wanted={1100489})
+        self.assertEqual(placed[0]['move_to'], 'Teleport_MoveMap_L1_EltnenEnterPortal_01')
+
+    def test_spacetime_rift_flag_on_district_portals(self):
+        rows = world_objects.envobj_rows({'Properties': [
+            {'ID': {'Value': 1100007}, 'Name': 'E_L1_RiftPortal_001', 'Usage': 'EEnvObjectUsage::Rift', 'InteractRange': 150}]})
+        spawn = {'SpawnInfoList': [{'Name': 'R', 'EnvObjIdList': [{'Value': 1100007}],
+                                    'Positions': [{'Location': {'X': 0, 'Y': 0, 'Z': 0}, 'Rotation': {'Yaw': 0}}]}]}
+        placed = world_objects.objects(spawn, rows, wanted={1100007})
+        self.assertTrue(placed[0]['spacetime_rift'])
+
+    def test_monolith_usage_objects_are_kept(self):
+        rows = world_objects.envobj_rows({'Properties': [
+            {'ID': {'Value': 1200863}, 'Name': 'E_L1_Verteron_MonoLith', 'Usage': 'EEnvObjectUsage::Monolith',
+             'InteractTime': 0, 'InteractRange': 80, 'RelationshipEntity': 'ERelationshipEntity::EnvObj_Light'},
+            {'ID': {'Value': 9}, 'Name': 'Plain', 'Usage': 'EEnvObjectUsage::None'}]})
+        spawn = {'SpawnInfoList': [
+            {'Name': 'Mono', 'EnvObjIdList': [{'Value': 1200863}],
+             'Positions': [{'Location': {'X': 1, 'Y': 2, 'Z': 3}, 'Rotation': {'Yaw': 0}}]},
+            {'Name': 'Plain', 'EnvObjIdList': [{'Value': 9}],
+             'Positions': [{'Location': {'X': 0, 'Y': 0, 'Z': 0}, 'Rotation': {'Yaw': 0}}]}]}
+        placed = world_objects.objects(spawn, rows, wanted=set())
+        self.assertEqual([p['env'] for p in placed], [1200863])
+        self.assertTrue(placed[0]['monolith'])
+        self.assertEqual(placed[0]['interact_time'], world_objects.MONOLITH_INTERACT_MS)
+        self.assertEqual(placed[0]['interact_range'], world_objects.MONOLITH_INTERACT_RANGE)
+
+    def test_generated_verteron_monolith_is_present(self):
+        maps = json.loads((ROOT / 'tools/data/world-objects.json').read_text(encoding='utf-8'))['maps']
+        mono = next(o for o in maps['1010']['objects'] if o.get('env') == 1200863)
+        self.assertTrue(mono.get('monolith'))
+        self.assertEqual(mono['interact_time'], 5000)
+        self.assertEqual(mono['interact_range'], 160)
+
     def test_generated_poeta(self):
         data = json.loads((ROOT / 'tools/data/world-objects.json').read_text(encoding='utf-8'))['maps']['1000']
         self.assertIn(1200530, [o['env'] for o in data['objects']])

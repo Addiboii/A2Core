@@ -1,0 +1,9 @@
+{
+  "source": "Resurrect.dat (tools/resurrect_data.py). Rebuild when a WorldProbe export lands under research/local/.",
+  "auto_resurrect_sec": 60,
+  "default_wait_sec_by_max_level": [
+    {"max_level": 10, "wait_sec": 0},
+    {"max_level": 45, "wait_sec": 0},
+    {"max_level": 999, "wait_sec": 0}
+  ]
+}

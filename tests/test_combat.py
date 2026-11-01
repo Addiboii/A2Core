@@ -77,10 +77,38 @@ class WireTests(unittest.TestCase):
     def test_hit_and_death_match_public_fixtures(self):
         # a2kit parse_test.go TestParseHit / death samples (commit fb693ba0), opcode prefix added.
         hit = bytes.fromhex("c77c0400f5a302e026a80000024bed9f4101000000904e240100")
-        self.assertEqual(combat.build_skill_hit(15943, 37365, 11020000, 1101000011, 36)[2:], hit)
+        built = combat.build_skill_hit(15943, 37365, 11020000, 1101000011, 36)
+        self.assertEqual(built[2:], hit)
         self.assertEqual(combat.build_death(37365)[2:], bytes.fromhex("f5a3020003"))
         critical = combat.build_skill_hit(15943, 37365, 11020000, 1101000011, 36, critical=True)
         self.assertEqual(critical[2:][12], 3)
+
+    def test_skill_hit_parser_round_trips_player_and_npc_fixtures(self):
+        player = combat.build_skill_hit(15943, 37365, 11020000, 1101000011, 36, action_uid=0, seq=1)
+        parsed = combat.parse_skill_hit(player)
+        self.assertEqual(parsed['target_key'], 15943)
+        self.assertEqual(parsed['caster_key'], 37365)
+        self.assertEqual(parsed['skill_id'], 11020000)
+        self.assertEqual(parsed['switch'], 4)
+        self.assertEqual(parsed['damage'], 36)
+        self.assertEqual(parsed['effect_id'], 1101000011)
+        official_npc = bytes.fromhex("04388e2c060686f302d09f120001020000024b6d460701000000904e360100")
+        npc = combat.parse_skill_hit(official_npc)
+        self.assertEqual((npc['target_key'], npc['caster_key'], npc['skill_id']), (5646, 47494, 1220560))
+        self.assertEqual(npc['switch'], 6)
+        self.assertEqual(npc['damage'], 0x36)
+        self.assertEqual(npc['effect_id'], 122056011)
+        rebuilt = combat.build_npc_skill_hit(5646, 47494, 1220560, 122056011, 0x36, action_uid=1, seq=1)
+        self.assertEqual(rebuilt, official_npc)
+
+    def test_npc_appear_parser_reads_level_and_hp(self):
+        plain = combat.Target(39829, '', 665, 665, position=(-1842.2103271484375, -32727.173828125, 19021.0),
+                              npc_id=2101095, level=7, direction=147.33645629882812)
+        body = combat.build_npc_appear(plain, spawn_tag=0xc4ed40f5)
+        parsed = combat.parse_npc_appear(body)
+        self.assertEqual(parsed['level'], 7)
+        self.assertEqual((parsed['hp'], parsed['hp_max']), (665, 665))
+        self.assertEqual(parsed['npc_id'], 2101095)
 
     def test_npc_appear_and_hp_match_official_recording(self):
         # research/official-combat-capture.md (2026-10-13): two ordinary monsters, one

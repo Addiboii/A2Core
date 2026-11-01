@@ -1,0 +1,49 @@
+{
+  "source": {
+    "table": "ElementalSummon.dat (ElementalGroup, NpcList, DeactivateSkillId)",
+    "enum": "EElementalSummonGroupType usmap: None=0, Fire=1, Water=2, Wind=3, Earth=4, Ancient=5"
+  },
+  "enum": {
+    "Fire": 1,
+    "Water": 2,
+    "Wind": 3,
+    "Earth": 4,
+    "Ancient": 5
+  },
+  "rows": [
+    {
+      "group": "Fire",
+      "deactivate_skill": 16290000,
+      "npcs": [
+        2920101
+      ]
+    },
+    {
+      "group": "Water",
+      "deactivate_skill": 16290001,
+      "npcs": [
+        2920121
+      ]
+    },
+    {
+      "group": "Wind",
+      "deactivate_skill": 16290003,
+      "npcs": [
+        2920141
+      ]
+    },
+    {
+      "group": "Earth",
+      "deactivate_skill": 16290002,
+      "npcs": [
+        2920161
+      ]
+    }
+  ],
+  "by_npc": {
+    "2920101": 1,
+    "2920121": 2,
+    "2920141": 3,
+    "2920161": 4
+  }
+}

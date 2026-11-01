@@ -171,13 +171,24 @@ public sealed partial class PostgresAccountAuthentication : IAccountAuthenticati
         return expires is DateTime expiry ? new(token, worldId, new DateTimeOffset(expiry)) : null;
     }
 
+    public async Task<string?> LookupUsernameAsync(Guid accountId, CancellationToken cancellationToken)
+    {
+        await using var command = source.CreateCommand("SELECT username FROM auth.local_credentials WHERE account_id=$1");
+        command.Parameters.AddWithValue(accountId);
+        return await command.ExecuteScalarAsync(cancellationToken) as string;
+    }
+
     public async Task PruneExpiredAsync(CancellationToken cancellationToken)
     {
         await using var command = source.CreateCommand("""
             WITH expired_tickets AS (DELETE FROM auth.game_tickets WHERE expires_at<=now()),
                  expired_launches AS (DELETE FROM auth.client_launches WHERE expires_at<=now()),
                  expired_handoffs AS (DELETE FROM auth.client_handoffs WHERE expires_at<=now()),
-                 expired_worlds AS (DELETE FROM auth.world_sessions WHERE expires_at<=now())
+                 expired_worlds AS (DELETE FROM auth.world_sessions WHERE expires_at<=now()),
+                 expired_totp AS (DELETE FROM auth.totp_enrollment WHERE expires_at<=now()),
+                 expired_challenges AS (DELETE FROM auth.totp_login_challenges WHERE expires_at<=now()),
+                 expired_platform AS (DELETE FROM auth.platform_secondary_auth WHERE expires_at<=now()),
+                 expired_context AS (DELETE FROM auth.platform_client_context WHERE expires_at<=now())
             DELETE FROM auth.sessions WHERE expires_at<=now()
             """);
         await command.ExecuteNonQueryAsync(cancellationToken);

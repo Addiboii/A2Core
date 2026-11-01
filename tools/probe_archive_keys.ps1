@@ -1,6 +1,9 @@
 # Tests textual and compiled-constant candidates against Pak hashes; read-only.
 [CmdletBinding()]
-param([Parameter(Mandatory=$true)][string]$Install)
+param(
+    [Parameter(Mandatory=$true)][string]$Install,
+    [switch]$Deep
+)
 $ErrorActionPreference = 'Stop'
 $workspace = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $probe = Join-Path $PSScriptRoot 'probe_archive_keys.py'
@@ -9,7 +12,9 @@ $stamp = (Get-Date -Format 'yyyyMMdd-HHmmss') + '-' + [Guid]::NewGuid().ToString
 $failed = 0
 foreach ($aionProcess in $processes) {
     $output = Join-Path $workspace ('research/local/archive-keys-' + $stamp + '-' + $aionProcess.Id + '.json')
-    & python $probe --pid $aionProcess.Id --install $Install --output $output
+    $args = @('--pid', $aionProcess.Id, '--install', $Install, '--output', $output)
+    if ($Deep) { $args += '--deep' }
+    & python @args
     if ($LASTEXITCODE -ne 0) { $failed++ }
 }
 if ($failed) { exit 1 }

@@ -1,0 +1,324 @@
+{
+  "by_template": {
+    "534310048": {
+      "deco_id": 534310048,
+      "name": "AgitDeco_Frame_048a_b"
+    },
+    "534310049": {
+      "deco_id": 534310049,
+      "name": "AgitDeco_Frame_049a_b"
+    },
+    "534310050": {
+      "deco_id": 534310050,
+      "name": "AgitDeco_Frame_050a_b"
+    },
+    "534310045": {
+      "deco_id": 534310045,
+      "name": "AgitDeco_Frame_045a_b"
+    },
+    "534310046": {
+      "deco_id": 534310046,
+      "name": "AgitDeco_Frame_046a_b"
+    },
+    "534310047": {
+      "deco_id": 534310047,
+      "name": "AgitDeco_Frame_047a_b"
+    },
+    "534310003": {
+      "deco_id": 534310003,
+      "name": "AgitDeco_Frame_003a_b"
+    },
+    "534310001": {
+      "deco_id": 534310001,
+      "name": "AgitDeco_Frame_001a_b"
+    },
+    "534310015": {
+      "deco_id": 534310015,
+      "name": "AgitDeco_Frame_015a_b"
+    },
+    "534310044": {
+      "deco_id": 534310044,
+      "name": "AgitDeco_Frame_044a_b"
+    },
+    "514310119": {
+      "deco_id": 514310119,
+      "name": "AgitDeco_Frame_119a_f"
+    },
+    "514310035": {
+      "deco_id": 514310035,
+      "name": "AgitDeco_Frame_035a_f"
+    },
+    "514310052": {
+      "deco_id": 514310052,
+      "name": "AgitDeco_Frame_052a_f"
+    },
+    "514310054": {
+      "deco_id": 514310054,
+      "name": "AgitDeco_Frame_054a_f"
+    },
+    "514310118": {
+      "deco_id": 514310118,
+      "name": "AgitDeco_Frame_118a_f"
+    },
+    "514310120": {
+      "deco_id": 514310120,
+      "name": "AgitDeco_Frame_120a_f"
+    },
+    "534320032": {
+      "deco_id": 534320032,
+      "name": "AgitDeco_Small_032a_b"
+    },
+    "534320035": {
+      "deco_id": 534320035,
+      "name": "AgitDeco_Small_035a_b"
+    },
+    "534320029": {
+      "deco_id": 534320029,
+      "name": "AgitDeco_Small_029a_b"
+    },
+    "534320047": {
+      "deco_id": 534320047,
+      "name": "AgitDeco_Small_047a_b"
+    },
+    "534320055": {
+      "deco_id": 534320055,
+      "name": "AgitDeco_Small_055a_b"
+    },
+    "534320056": {
+      "deco_id": 534320056,
+      "name": "AgitDeco_Small_056a_b"
+    },
+    "534330011": {
+      "deco_id": 534330011,
+      "name": "AgitDeco_Large_011a_b"
+    },
+    "514310064": {
+      "deco_id": 514310064,
+      "name": "AgitDeco_Frame_064a_f"
+    },
+    "514310065": {
+      "deco_id": 514310065,
+      "name": "AgitDeco_Frame_065a_f"
+    },
+    "514310066": {
+      "deco_id": 514310066,
+      "name": "AgitDeco_Frame_066a_f"
+    },
+    "514310067": {
+      "deco_id": 514310067,
+      "name": "AgitDeco_Frame_067a_f"
+    },
+    "514310068": {
+      "deco_id": 514310068,
+      "name": "AgitDeco_Frame_068a_f"
+    },
+    "514310069": {
+      "deco_id": 514310069,
+      "name": "AgitDeco_Frame_069a_f"
+    },
+    "514310070": {
+      "deco_id": 514310070,
+      "name": "AgitDeco_Frame_070a_f"
+    },
+    "514310071": {
+      "deco_id": 514310071,
+      "name": "AgitDeco_Frame_071a_f"
+    },
+    "514310072": {
+      "deco_id": 514310072,
+      "name": "AgitDeco_Frame_072a_f"
+    },
+    "514310073": {
+      "deco_id": 514310073,
+      "name": "AgitDeco_Frame_073a_f"
+    },
+    "514310074": {
+      "deco_id": 514310074,
+      "name": "AgitDeco_Frame_074a_f"
+    },
+    "514310075": {
+      "deco_id": 514310075,
+      "name": "AgitDeco_Frame_075a_f"
+    },
+    "514310077": {
+      "deco_id": 514310077,
+      "name": "AgitDeco_Frame_077a_f"
+    },
+    "514310078": {
+      "deco_id": 514310078,
+      "name": "AgitDeco_Frame_078a_f"
+    },
+    "514310079": {
+      "deco_id": 514310079,
+      "name": "AgitDeco_Frame_079a_f"
+    },
+    "514310080": {
+      "deco_id": 514310080,
+      "name": "AgitDeco_Frame_080a_f"
+    },
+    "514310081": {
+      "deco_id": 514310081,
+      "name": "AgitDeco_Frame_081a_f"
+    },
+    "514310082": {
+      "deco_id": 514310082,
+      "name": "AgitDeco_Frame_082a_f"
+    },
+    "514310083": {
+      "deco_id": 514310083,
+      "name": "AgitDeco_Frame_083a_f"
+    },
+    "514310084": {
+      "deco_id": 514310084,
+      "name": "AgitDeco_Frame_084a_f"
+    },
+    "514310085": {
+      "deco_id": 514310085,
+      "name": "AgitDeco_Frame_085a_f"
+    },
+    "514310086": {
+      "deco_id": 514310086,
+      "name": "AgitDeco_Frame_086a_f"
+    },
+    "514310087": {
+      "deco_id": 514310087,
+      "name": "AgitDeco_Frame_087a_f"
+    },
+    "514310088": {
+      "deco_id": 514310088,
+      "name": "AgitDeco_Frame_088a_f"
+    },
+    "514310089": {
+      "deco_id": 514310089,
+      "name": "AgitDeco_Frame_089a_f"
+    },
+    "514310090": {
+      "deco_id": 514310090,
+      "name": "AgitDeco_Frame_090a_f"
+    },
+    "514310091": {
+      "deco_id": 514310091,
+      "name": "AgitDeco_Frame_091a_f"
+    },
+    "514310092": {
+      "deco_id": 514310092,
+      "name": "AgitDeco_Frame_092a_f"
+    },
+    "514310093": {
+      "deco_id": 514310093,
+      "name": "AgitDeco_Frame_093a_f"
+    },
+    "514310094": {
+      "deco_id": 514310094,
+      "name": "AgitDeco_Frame_094a_f"
+    },
+    "514310095": {
+      "deco_id": 514310095,
+      "name": "AgitDeco_Frame_095a_f"
+    },
+    "514310096": {
+      "deco_id": 514310096,
+      "name": "AgitDeco_Frame_096a_f"
+    },
+    "514310097": {
+      "deco_id": 514310097,
+      "name": "AgitDeco_Frame_097a_f"
+    },
+    "514310098": {
+      "deco_id": 514310098,
+      "name": "AgitDeco_Frame_098a_f"
+    },
+    "514310099": {
+      "deco_id": 514310099,
+      "name": "AgitDeco_Frame_099a_f"
+    },
+    "514310100": {
+      "deco_id": 514310100,
+      "name": "AgitDeco_Frame_100a_f"
+    },
+    "514310101": {
+      "deco_id": 514310101,
+      "name": "AgitDeco_Frame_101a_f"
+    },
+    "514310102": {
+      "deco_id": 514310102,
+      "name": "AgitDeco_Frame_102a_f"
+    },
+    "514310103": {
+      "deco_id": 514310103,
+      "name": "AgitDeco_Frame_103a_f"
+    },
+    "514310110": {
+      "deco_id": 514310110,
+      "name": "AgitDeco_Frame_110a_f"
+    },
+    "514310111": {
+      "deco_id": 514310111,
+      "name": "AgitDeco_Frame_111a_f"
+    },
+    "514310112": {
+      "deco_id": 514310112,
+      "name": "AgitDeco_Frame_112a_f"
+    },
+    "514310113": {
+      "deco_id": 514310113,
+      "name": "AgitDeco_Frame_113a_f"
+    },
+    "514310114": {
+      "deco_id": 514310114,
+      "name": "AgitDeco_Frame_114a_f"
+    },
+    "514310115": {
+      "deco_id": 514310115,
+      "name": "AgitDeco_Frame_115a_f"
+    },
+    "514310116": {
+      "deco_id": 514310116,
+      "name": "AgitDeco_Frame_116a_f"
+    },
+    "514310117": {
+      "deco_id": 514310117,
+      "name": "AgitDeco_Frame_117a_f"
+    },
+    "514310121": {
+      "deco_id": 514310121,
+      "name": "AgitDeco_Frame_121a_f"
+    },
+    "534310040": {
+      "deco_id": 534310040,
+      "name": "AgitDeco_Frame_040a_b"
+    },
+    "534310041": {
+      "deco_id": 534310041,
+      "name": "AgitDeco_Frame_041a_b"
+    },
+    "534310042": {
+      "deco_id": 534310042,
+      "name": "AgitDeco_Frame_042a_b"
+    },
+    "534310033": {
+      "deco_id": 534310033,
+      "name": "AgitDeco_Frame_033a_b"
+    },
+    "534310038": {
+      "deco_id": 534310038,
+      "name": "AgitDeco_Frame_038a_b"
+    },
+    "534310039": {
+      "deco_id": 534310039,
+      "name": "AgitDeco_Frame_039a_b"
+    },
+    "534310056": {
+      "deco_id": 534310056,
+      "name": "AgitDeco_Frame_056a_b"
+    },
+    "534310036": {
+      "deco_id": 534310036,
+      "name": "AgitDeco_Frame_036a_b"
+    },
+    "534310055": {
+      "deco_id": 534310055,
+      "name": "AgitDeco_Frame_055a_b"
+    }
+  }
+}

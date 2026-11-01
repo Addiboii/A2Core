@@ -6,7 +6,7 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
   <ItemGroup>
-    <!-- Reference of the supported client build (tools/launcher_build.py). -->
+    <!-- Reference of the supported client build (Aion.Launcher.BuildTool, legacy tools/launcher_build.py). -->
     <EmbeddedResource Include="../supported-build.json" LogicalName="supported-build.json" />
     <EmbeddedResource Include="../launcher.json" LogicalName="launcher.json" />
   </ItemGroup>

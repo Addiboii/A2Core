@@ -23,6 +23,19 @@ public sealed partial class PostgresAccountAuthentication
         return expires is DateTime date ? new(token, worldId, new DateTimeOffset(date)) : null;
     }
 
+    public async Task<Guid?> ResolveLaunchAccountAsync(string authorization, CancellationToken ct)
+    {
+        if (!ValidToken(authorization)) return null;
+        await using var command = source.CreateCommand("""
+            SELECT s.account_id FROM auth.client_launches l
+            JOIN auth.sessions s ON s.token_hash=l.session_hash
+            JOIN auth.accounts a ON a.account_id=s.account_id
+            WHERE l.token_hash=$1 AND l.expires_at>now() AND s.expires_at>now() AND a.disabled_at IS NULL
+            """);
+        command.Parameters.AddWithValue(Hash(authorization));
+        return await command.ExecuteScalarAsync(ct) as Guid?;
+    }
+
     public async Task<GameTicket?> RedeemLaunchAsync(string authorization, CancellationToken ct)
     {
         if (!ValidToken(authorization)) return null;

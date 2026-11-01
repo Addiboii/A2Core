@@ -6,6 +6,10 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
   <ItemGroup>
+    <EmbeddedResource Include="../../tools/data/opcode-names.json" LogicalName="opcode-names.json" />
+    <EmbeddedResource Include="../../tools/data/official_shop.json" LogicalName="official_shop.json" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="../Aion.Infrastructure/Aion.Infrastructure.csproj" />
     <ProjectReference Include="../Aion.Protocol/Aion.Protocol.csproj" />
     <ProjectReference Include="../Aion.World/Aion.World.csproj" />

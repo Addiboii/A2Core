@@ -44,10 +44,13 @@ static class MapEventChecks
         public void Message(string key, string argument) => Call($"Message {key}");
         public void Abnormal(int id, int durationMs, string target, bool remove) => Call($"Abnormal {id} {durationMs} {(target.Length == 0 ? "player" : target)} {(remove ? "remove" : "add")}");
         public void EnvObjState(string spawner, string state) => Call($"ObjState {spawner} {state}");
+        public void EnvObjChangePhase(string spawner, int phase) => Call($"ObjPhase {spawner} {phase}");
+        public void SetEnvObjCanInteract(string spawner, bool canInteract) => Call($"ObjInteract {spawner} {canInteract}");
         public void DynamicTerrain(string spawner, bool block) => Call($"Terrain {spawner} {block}");
         public void Progress(MapEventRun run) => Progressed++;
         public void Unsupported(MapEventRun run, string what) => Call($"Unsupported {what}");
         public bool QuestStepActive(int questId, int step) => QuestSteps.Contains((questId, step));
+        public bool MapEventStartAllowed(MapEventDefinition definition) => true;
         public bool NpcInCombat(string spawner) => false;
         public bool SpawnerAlive(string spawner) => !Dead.Contains(spawner);
         public bool SpawnerExists(string spawner) => Spawned.Contains(spawner);
@@ -202,6 +205,25 @@ static class MapEventChecks
         cave.Killed(2701034, "Dungeon_L_0016_Spawn_Boss_1", true, false, 16_000);
         C(hostC.Calls.Contains("Clear") && hostC.Calls.Contains("Teleport Dungeon_0005_StartPoint") && hostC.LastTeleportCutscene == "Cutscene_L_A_Seq_1291",
           "the boss kill clears the dungeon and the exit teleport carries its cutscene (the directive's value 3)");
+        // DQ1202013 step 8: Belgor's HpRemaining goals must credit when he dies in an NPC fight (Kalid / renegades), not only on player hits.
+        {
+            var belgorCombat = new MapEventDefinition(840001, [], [], [
+                new MapEventStage(2, "", [
+                    new MapEventStep(4, [], [
+                        new MapEventObjective(7, "HpRemaining", ["N_L1_Q_Belgor_01", "50"], Optional: true, Npcs: [2931177]),
+                        new MapEventObjective(8, "KillNpc", ["M_L1_FQ_DaevaAss_02", "4"], Npcs: [2200035, 2200036]),
+                        new MapEventObjective(9, "HpRemaining", ["N_L1_Q_Belgor_01", "1"], Npcs: [2931177]),
+                    ], []),
+                    new MapEventStep(5, [], [new MapEventObjective(10, "AskNpc", ["N_L1_Q_Kalid_56", "DQ1202013_08_INS_16"], Npcs: [2931178])], []),
+                ]),
+            ]) { Name = "BelgorCombatSlice" };
+            var hb = new FakeHost();
+            var rb = new MapEventRun(belgorCombat, 99, hb, 0);
+            rb.Start(0);
+            for (var i = 0; i < 4; i++) rb.Killed(2200035, "M_L1_FQ_DaevaAss_02", true, i < 3, 100 + i);
+            rb.Killed(2931177, "N_L1_Q_Belgor_01", true, false, 200);
+            C(rb.StepOrder == 5, "Belgor killed without a player hit credits HpRemaining and opens the Kalid talk step");
+        }
         // HQ002 (the Balaur vessel): the whole script runs to Nania's talk after the reinforcements (step 14) and on, each objective fed.
         {
             var h = new FakeHost();

@@ -23,7 +23,8 @@ public sealed class BuilderCommands(WorldPresence presence, GmPolicy policy, Act
     public static readonly IReadOnlyList<string> Supported =
         ["SetInvisible", "SetInvincible", "SetInvincibleHP", "NoCool", "DashVariant", "Hp", "Mp", "Sp", "FixHpPercent",
          "Teleport", "TeleportTo", "MoveMap", "LayerTest", "Dev", "AcquireItem", "SetLevel", "ClassChange", "SetAscension", "ContentsUnlock", "ContentsUnlockAll", "AcquireWingAll",
-         "QuestAdd", "QuestComplete", "QuestCompleteStep", "QuestReward", "QuestDelete", "RevealMap", "AcquireTitle", "AcquireSkin", "SetMastery", "Mail", "EnterDungeon"];
+         "QuestAdd", "QuestComplete", "QuestCompleteStep", "QuestSetStep", "QuestReward", "QuestDelete", "RevealMap", "AcquireTitle", "AcquireSkin", "SetMastery", "Mail", "Gift", "EnterDungeon",
+         "GrantShopCurrency", "Membership", "BattlePassExp"];
 
     /// <summary>usmap EContentsUnlockType, 1..64 (0 None, 65 Max).</summary>
     public static readonly IReadOnlyList<string> UnlockTypes =
@@ -39,6 +40,7 @@ public sealed class BuilderCommands(WorldPresence presence, GmPolicy policy, Act
     {
         ["SetInvisible"] = "SetInvisible [true|false]",
         ["Mail"] = "Mail <character> <item id|0> <count> <text...> (the text is the mail's title and body)",
+        ["Gift"] = "Gift <item> <count> <days> <sender>|<title>|<body> (a push reward every character can take once)",
         ["SetInvincible"] = "SetInvincible [true|false] or HP:true MP:true SP:true",
         ["SetInvincibleHP"] = "SetInvincibleHP [true|false]",
         ["NoCool"] = "NoCool [true|false]",
@@ -59,9 +61,13 @@ public sealed class BuilderCommands(WorldPresence presence, GmPolicy policy, Act
         ["ContentsUnlockAll"] = "ContentsUnlockAll",
         ["AcquireWingAll"] = "AcquireWingAll",
         ["QuestAdd"] = "QuestAdd [quest code or id]", ["QuestComplete"] = "QuestComplete [quest code or id]",
-        ["QuestCompleteStep"] = "QuestCompleteStep [quest code or id]", ["QuestReward"] = "QuestReward [quest code or id]",
+        ["QuestCompleteStep"] = "QuestCompleteStep [quest code or id]", ["QuestSetStep"] = "QuestSetStep [quest code or id] [step order]",
+        ["QuestReward"] = "QuestReward [quest code or id]",
         ["QuestDelete"] = "QuestDelete [quest code or id]",
         ["RevealMap"] = "RevealMap (uncovers every world-map area for this character)",
+        ["GrantShopCurrency"] = "GrantShopCurrency kina|quna|<currency item id> [count] (dev BM shop wallet)",
+        ["Membership"] = "Membership on|off (the account's Special Quai Membership until the host restarts)",
+        ["BattlePassExp"] = "BattlePassExp <exp> (Daeva Pass exp to every active pass)",
     };
 
     static string UnknownMap(int mapId) => $"Map {mapId} is not one the client knows (not in Map.dat); loading it would log you out.";
@@ -179,10 +185,16 @@ public sealed class BuilderCommands(WorldPresence presence, GmPolicy policy, Act
             // 0xe258 ContentsUnlockUpdate: the packet that unlocks chat (45) at world entry.
             case "ContentsUnlock" when args is [var value] && UnlockType(value) is { } type:
                 return BuilderOutcome.Ok($"Unlocked {UnlockTypes[type]}.", [GamePackets.ContentsUnlockUpdate([(byte)type])]);
+            case "QuestSetStep" when args is [var quest, var stepText] && int.TryParse(stepText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var stepOrder) && stepOrder > 0:
+            {
+                var (message, packets) = await actor.QuestCommandAsync("QuestSetStep", quest, ct, stepOrder);
+                return message.Contains("not in journal", StringComparison.Ordinal) ? BuilderOutcome.Fail(message) : BuilderOutcome.Ok(message, packets);
+            }
             case "QuestAdd" or "QuestComplete" or "QuestCompleteStep" or "QuestReward" or "QuestDelete" when args is [var quest]:
             {
                 var (message, packets) = await actor.QuestCommandAsync(command, quest, ct);
-                return BuilderOutcome.Ok(message, packets);
+                return message.Contains("not in journal", StringComparison.Ordinal) || message.StartsWith("No quest", StringComparison.Ordinal)
+                    ? BuilderOutcome.Fail(message) : BuilderOutcome.Ok(message, packets);
             }
             case "RevealMap" when args.Length == 0:
                 return BuilderOutcome.Ok($"Map revealed ({Subzones.AllGroups.Count} areas).", await actor.RevealMapAsync(ct));
@@ -193,6 +205,21 @@ public sealed class BuilderCommands(WorldPresence presence, GmPolicy policy, Act
                 var attachments = mailItem > 0 && mailCount > 0 ? new List<(int, long)> { (mailItem, mailCount) } : [];
                 var sent = await actor.SendMailAsync(args[0], text, text, attachments, ct);
                 return sent ? BuilderOutcome.Ok($"Mail sent to {args[0]}.", []) : BuilderOutcome.Fail($"Mail: no character named {args[0]}.");
+            }
+            case "Gift" when args.Length >= 4 && int.TryParse(args[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out var giftItem) && giftItem > 0
+                && long.TryParse(args[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out var giftCount) && giftCount > 0
+                && int.TryParse(args[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out var giftDays) && giftDays is > 0 and <= 365:
+            {
+                var meta = string.Join(' ', args.Skip(3));
+                var parts = meta.Split('|', 3);
+                if (parts.Length < 3) return BuilderOutcome.Fail("Usage: " + Usage["Gift"]);
+                var (sender, title, body) = (parts[0], parts[1], parts[2]);
+                if (actor.Store is not { }) return BuilderOutcome.Fail("Gift requires a stored account.");
+                var expireMs = now + giftDays * 86_400_000L;
+                var added = await actor.AddPushRewardAsync(1, sender, title, body, giftItem, giftCount, expireMs, ct);
+                if (added is null) return BuilderOutcome.Fail("Gift could not be saved.");
+                actor.NotifyPushRewardChanged();
+                return BuilderOutcome.Ok($"Push reward {added.Id} added ({giftDays} days).", [GameSession.PushRewardChangedPacket()]);
             }
             case "AcquireTitle" when args is [var titleText] && int.TryParse(titleText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var titleId):
             {
@@ -227,9 +254,15 @@ public sealed class BuilderCommands(WorldPresence presence, GmPolicy policy, Act
             case "ContentsUnlockAll" when args.Length == 0:
                 return BuilderOutcome.Ok("Unlocked all contents.",
                     [GamePackets.ContentsUnlockUpdate(Enumerable.Range(1, UnlockTypes.Count - 1).Select(i => (byte)i).ToArray())]);
+            case "Membership" when args is [var value] && Flag(value) is { } on:
+                return BuilderOutcome.Ok(on ? "Membership active for 30 days." : "Membership off.", actor.SetMembership(on, now));
+            case "BattlePassExp" when args is [var value] && int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var passExp) && passExp is > 0 and <= 1_000_000:
+                return BuilderOutcome.Ok($"{passExp} pass exp.", actor.GrantBattlePassExp(passExp, now));
+            case "GrantShopCurrency" when args.Length is >= 1 and <= 2:
+                return await GrantShopCurrencyAsync(actor, args, ct);
             case "AcquireItem" when args.Length is >= 1 and <= 3:
                 return await AcquireItemAsync(actor, args, ct);
-            case "SetLevel" when args is [var value] && int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var level) && level >= 1 && level <= GameData.Embedded.MaxLevel:
+            case "SetLevel" when args is [var value] && int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var level) && level >= 1 && level <= (data ?? GameData.Embedded).MaxLevel:
             {
                 if (actor.Store is not { } store || actor.CharacterId is not { } character || policy.SetLevel is not { } setLevel)
                     return BuilderOutcome.Fail("SetLevel needs an account login.");
@@ -297,6 +330,26 @@ public sealed class BuilderCommands(WorldPresence presence, GmPolicy policy, Act
         }
         var detail = skipped.Count == 0 ? "" : "; not available here: " + string.Join(", ", skipped.Select(s => s.Value > 1 ? $"{s.Key} x{s.Value}" : s.Key));
         return new BuilderOutcome(ran > 0 ? 0 : 1, $"{name}: ran {ran} of {lines.Count} commands{detail}.", packets);
+    }
+
+    async Task<BuilderOutcome?> GrantShopCurrencyAsync(GameSession actor, string[] args, CancellationToken ct)
+    {
+        if (actor.Store is not { } store || actor.CharacterId is not { } character || policy.GrantItem is not { } grant)
+            return BuilderOutcome.Fail("GrantShopCurrency needs an account login.");
+        long count = 100_000;
+        if (args.Length == 2 && (!long.TryParse(args[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out count) || count is < 1 or > 1_000_000_000))
+            return BuilderOutcome.Fail("Count must be 1..1000000000.");
+        var token = args[0].ToLowerInvariant();
+        var template = token switch
+        {
+            "kina" => GameSession.KinaItemId,
+            "quna" => PlatformGoodsTables.Embedded.QunaItemId,
+            _ when int.TryParse(token, NumberStyles.Integer, CultureInfo.InvariantCulture, out var id) => id,
+            _ => 0,
+        };
+        if (template <= 0) return BuilderOutcome.Fail("Use kina, quna, or a currency template id.");
+        await grant(store.AccountId, character, template, count, ct);
+        return BuilderOutcome.Ok($"Granted {count} of currency item {template}.", await actor.InventoryChangesAsync(ct));
     }
 
     async Task<BuilderOutcome?> AcquireItemAsync(GameSession actor, string[] args, CancellationToken ct)

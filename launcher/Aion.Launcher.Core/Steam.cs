@@ -71,11 +71,34 @@ public sealed class SteamInstall(string root)
     public IReadOnlyList<string> Libraries()
     {
         var libraries = new List<string> { Root };
-        var file = Path.Combine(Root, "steamapps", "libraryfolders.vdf");
-        if (File.Exists(file) && KeyValuesText.Parse(File.ReadAllText(file)).Object("libraryfolders") is { } folders)
-            foreach (var entry in folders.Values.OfType<Dictionary<string, object>>())
-                if (entry.String("path") is { } path && !libraries.Any(l => SamePath(l, path))) libraries.Add(path);
+        foreach (var file in new[]
+        {
+            Path.Combine(Root, "steamapps", "libraryfolders.vdf"),
+            Path.Combine(Root, "config", "libraryfolders.vdf"),
+        })
+            AddLibraryPaths(libraries, file);
         return libraries;
+    }
+
+    static void AddLibraryPaths(List<string> libraries, string file)
+    {
+        if (!File.Exists(file)) return;
+        var parsed = KeyValuesText.Parse(File.ReadAllText(file));
+        var folders = parsed.Object("libraryfolders") ?? parsed;
+        foreach (var (key, value) in folders)
+        {
+            if (value is Dictionary<string, object> entry && entry.String("path") is { } nested)
+                TryAddLibrary(libraries, nested);
+            else if (key.Equals("path", StringComparison.OrdinalIgnoreCase) && value is string direct)
+                TryAddLibrary(libraries, direct);
+        }
+    }
+
+    static void TryAddLibrary(List<string> libraries, string path)
+    {
+        path = Environment.ExpandEnvironmentVariables(path.Trim());
+        if (path.Length == 0) return;
+        if (!libraries.Any(l => SamePath(l, path))) libraries.Add(path);
     }
 
     /// <summary>The installed game folder and its manifest ID, when Steam has the app installed.</summary>
@@ -88,11 +111,22 @@ public sealed class SteamInstall(string root)
             var state = KeyValuesText.Parse(File.ReadAllText(manifest)).Object("AppState");
             if (state?.String("installdir") is not { } installDir) continue;
             var folder = Path.Combine(library, "steamapps", "common", installDir);
-            var depot = state.Object("InstalledDepots")?.Values.OfType<Dictionary<string, object>>().FirstOrDefault();
-            if (Directory.Exists(folder)) return (folder, depot?.String("manifest"), state.String("buildid"));
+            var depots = state.Object("InstalledDepots");
+            string? manifestId = depots?.Object("3393111")?.String("manifest")
+                ?? depots?.Object(DepotId.ToString())?.String("manifest")
+                ?? depots?.Values.OfType<Dictionary<string, object>>().FirstOrDefault()?.String("manifest");
+            if (Directory.Exists(folder)) return (folder, manifestId, state.String("buildid"));
+        }
+        foreach (var library in Libraries())
+        {
+            var folder = Path.Combine(library, "steamapps", "common", "AION2");
+            if (Directory.Exists(folder) && File.Exists(Path.Combine(folder, "Aion2", "Binaries", "Win64", "AION2.exe")))
+                return (folder, null, null);
         }
         return null;
     }
+
+    public const int DepotId = 3393111;
 
     public string AppInfoPath => Path.Combine(Root, "appcache", "appinfo.vdf");
 

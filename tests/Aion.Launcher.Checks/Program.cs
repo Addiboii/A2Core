@@ -2,6 +2,7 @@
 // settings/hosts/firewall text, and file placement. Uses temporary folders; when this PC has
 // Steam with AION2 cached, the real appinfo.vdf is parsed too (read-only).
 using System.Net;
+using System.Security.Cryptography;
 using System.Text;
 using Aion.Launcher;
 
@@ -16,11 +17,38 @@ void Check(bool condition, string label)
 var config = LauncherConfig.Load();
 Check(config.Server.ToString() == config.ServerAddress && config.AccountUrl.StartsWith("https://"), "embedded config");
 Check(config.BootstrapUrl(new string('A', 64)) == $"http://{config.ServerAddress}:{config.BootstrapPort}/c/{new string('A', 64)}", "bootstrap URL carries the code");
-foreach (var bad in new[] { config with { ServerAddress = "example.com" }, config with { AccountUrl = "http://x" }, config with { SavedDirSuffix = "Steam" } })
+(config with { CertificateThumbprint = new string('a', 40) }).Validate();
+checks++;
+foreach (var bad in new[] { config with { ServerAddress = "example.com" }, config with { AccountUrl = "http://x" }, config with { SavedDirSuffix = "Steam" }, config with { CertificateThumbprint = "zz" } })
 {
     try { bad.Validate(); Check(false, "invalid config accepted"); } catch (InvalidDataException) { checks++; }
 }
 
+// ---------- Client versions ----------
+Check(ClientVersions.Selected(config).Id == ClientVersion.DefaultId && !ClientVersions.Selected(config).IsSteam, "default client version is 2.0.6.0");
+Check(ClientVersions.Selected(config with { SelectedClientVersion = "steam-latest" }).IsSteam, "steam version selectable");
+Check(ClientVersions.Selected(config with { SelectedClientVersion = "nope" }).Id == ClientVersion.DefaultId, "unknown selection falls back");
+Check(ClientVersions.Arguments(["-steam", "-lp:x"], new("a", "a", "steam", null, ["-foo", "-steam"])).SequenceEqual(["-steam", "-lp:x", "-foo"]), "extra launch args appended once");
+try { (config with { ClientVersions = [new("x", "x", "other")] }).Validate(); Check(false, "bad kind accepted"); } catch (InvalidDataException) { checks++; }
+{
+    var temp = Directory.CreateTempSubdirectory("a2versions").FullName;
+    var cvSteamRoot = Path.Combine(temp, "Steam"); var library = Path.Combine(temp, "Lib");
+    Directory.CreateDirectory(Path.Combine(cvSteamRoot, "steamapps")); Directory.CreateDirectory(Path.Combine(library, "steamapps", "common", "AION2"));
+    File.WriteAllText(Path.Combine(cvSteamRoot, "steamapps", "libraryfolders.vdf"), "\"libraryfolders\"\n{\n\"1\"\n{\n\"path\" \"" + library.Replace("\\", "\\\\") + "\"\n}\n}\n");
+    File.WriteAllText(Path.Combine(library, "steamapps", "appmanifest_3393110.acf"), "\"AppState\"\n{\n\"installdir\" \"AION2\"\n\"buildid\" \"26262663\"\n}\n");
+    var steamVersion = ClientVersion.Defaults[1];
+    Check(ClientVersions.SteamFolder(steamVersion, config, new SteamInstall(cvSteamRoot)) == Path.Combine(library, "steamapps", "common", "AION2"), "steam client found via libraryfolders.vdf");
+    Check(ClientVersions.SteamFolder(steamVersion, config with { SteamClientPath = temp }, new SteamInstall(cvSteamRoot)) == temp, "steamClientPath overrides detection");
+    var json = Path.Combine(temp, "launcher.json");
+    File.WriteAllText(json, """{"name":"N","custom":1}""");
+    ClientVersions.SaveSelection(json, config, "steam-latest");
+    var saved = File.ReadAllText(json);
+    Check(saved.Contains("\"selectedClientVersion\": \"steam-latest\"") && saved.Contains("\"custom\": 1"), "selection persisted, other keys kept");
+    File.Delete(json);
+    ClientVersions.SaveSelection(json, config, "2.0.6.0");
+    Check(LauncherConfig.Load(json).SelectedClientVersion == "2.0.6.0", "new launcher.json loads with selection");
+    Directory.Delete(temp, true);
+}
 // ---------- Account API: kept session, launcher manifest and self-update ----------
 var requests = new List<(string Method, string Path, string Body, string? Bearer)>();
 var launcherBytes = "new launcher"u8.ToArray();
@@ -33,6 +61,7 @@ using (var account = new AccountClient(config, new StubHandler(async request =>
     return request.RequestUri.PathAndQuery switch
     {
         "/api/accounts/login" => Json(200, """{"token":"TOKEN1","accountId":"a","expiresAt":"2030-01-01T00:00:00Z"}"""),
+        "/api/accounts/login/totp" => Json(200, """{"token":"TOKEN2","expiresAt":"2030-01-02T00:00:00Z"}"""),
         "/api/accounts/me" => request.Headers.Authorization?.Parameter == "TOKEN1" ? Json(200, """{"accountId":"a"}""") : Json(401, "{}"),
         "/api/downloads/launcher/manifest" => Json(200, $$"""{"sha256":"{{launcherHash}}","size":{{launcherBytes.Length}},"version":"0.4.0"}"""),
         "/api/downloads/launcher" => Json(200, """{"url":"/download/Launcher.exe?ticket=T"}"""),
@@ -71,11 +100,66 @@ using (var account = new AccountClient(config, new StubHandler(async request =>
     finally { updateRoot.Delete(recursive: true); }
 }
 
+using (var totpAccount = new AccountClient(config, new StubHandler(async request =>
+{
+    var body = request.Content is null ? "" : await request.Content.ReadAsStringAsync();
+    requests.Add((request.Method.Method, request.RequestUri!.PathAndQuery, body, request.Headers.Authorization?.Parameter));
+    return request.RequestUri.PathAndQuery switch
+    {
+        "/api/accounts/login" => Json(200, """{"requiresTotp":true,"challengeToken":"CHALL","expiresAt":"2030-01-01T00:00:00Z"}"""),
+        "/api/accounts/login/totp" => Json(200, """{"token":"TOKENTOTP","expiresAt":"2030-01-03T00:00:00Z"}"""),
+        "/api/client-launches" => request.Headers.Authorization?.Parameter == "TOKENTOTP"
+            ? Json(200, """{"authorization":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","worldId":1204,"expiresAt":"2030-01-01T00:00:00Z"}""")
+            : Json(401, """{"error":"unauthorized"}"""),
+        _ => new HttpResponseMessage(HttpStatusCode.NotFound),
+    };
+})))
+{
+    var challenge = await totpAccount.SignInAsync("player", "secret");
+    Check(challenge.RequiresTotp && challenge.ChallengeToken == "CHALL" && !totpAccount.SignedIn, "password step returns TOTP challenge without session");
+    try
+    {
+        await totpAccount.AuthorizeLaunchAsync();
+        Check(false, "launch without TOTP should fail");
+    }
+    catch (AccountException) { checks++; }
+    await totpAccount.CompleteTotpAsync("CHALL", "123456", null);
+    Check(totpAccount.SignedIn && totpAccount.Token == "TOKENTOTP", "TOTP step creates session");
+    var launch = await totpAccount.AuthorizeLaunchAsync();
+    Check(launch.Authorization.Length == 64, "launch after TOTP succeeds");
+}
+
 // ---------- Supported build ----------
 var build = SupportedBuild.Embedded;
 Check(build.ManifestId == "1699273097574069541" && build.Files.Count == build.FileCount && build.FileCount > 1000, "supported build reference");
 Check(build.Files.Single(f => f.Path == build.Executable).Sha256 == "d93b050d623550fcf509888a9afe9cb8bd3864869f06dd3fe9ecaa697337f1ba", "supported AION2.exe hash");
 Check(build.Files.Count(f => f.Quick) > 500 && build.DownloadCommand == "download_depot 3393110 3393111 1699273097574069541", "quick set and download command");
+
+// ---------- supported-build.json schema (sha1 for non-quick) ----------
+{
+    var roundTrip = SupportedBuildJson.Read(SupportedBuildJson.WriteText(build));
+    Check(roundTrip.ManifestId == build.ManifestId && roundTrip.Files.Count == build.FileCount, "supported-build JSON round trip");
+    Check(SupportedBuildJson.IsQuickFile("Aion2/Content/Paks/foo.utoc") && SupportedBuildJson.IsQuickFile(build.Executable), "quick file rules");
+    var jsonWithSha1 = """
+{"appId":3393110,"depotId":3393111,"manifestId":"1","executable":"Aion2/Binaries/Win64/AION2.exe","fingerprint":"00","fileCount":2,"totalBytes":7,"files":[
+{"path":"Aion2/Binaries/Win64/AION2.exe","size":3,"sha256":"9095bdb859308b62acf04036ffd4adfe366d7f737d276eb6c46ae434f3816c9b","quick":true},
+{"path":"Aion2/Content/Paks/a.ucas","size":4,"sha1":"a17c9aaa61e80a1bf71d0d850af4e5baa9800bbd","quick":false}]}
+""";
+    var sha1Build = SupportedBuildJson.Read(jsonWithSha1);
+    var sha1Root = Directory.CreateTempSubdirectory("aion-launcher-sha1");
+    try
+    {
+        var folder = sha1Root.FullName;
+        Directory.CreateDirectory(Path.Combine(folder, "Aion2/Binaries/Win64"));
+        Directory.CreateDirectory(Path.Combine(folder, "Aion2/Content/Paks"));
+        File.WriteAllBytes(Path.Combine(folder, "Aion2/Binaries/Win64/AION2.exe"), "exe"u8.ToArray());
+        File.WriteAllBytes(Path.Combine(folder, "Aion2/Content/Paks/a.ucas"), "data"u8.ToArray());
+        Check((await ClientFiles.CheckAsync(folder, sha1Build, CheckLevel.Full)).Ok, "full verify accepts manifest sha1 when sha256 absent");
+        File.WriteAllBytes(Path.Combine(folder, "Aion2/Content/Paks/a.ucas"), "DATA"u8.ToArray());
+        Check(!(await ClientFiles.CheckAsync(folder, sha1Build, CheckLevel.Full)).Ok, "full verify detects bad sha1 content");
+    }
+    finally { sha1Root.Delete(recursive: true); }
+}
 
 // ---------- Text KeyValues ----------
 var kv = KeyValuesText.Parse("""
@@ -105,6 +189,24 @@ var legacy = original + "# >>> AION2 private server (added by AionLauncher; remo
 Check(HostsFile.HasBlock(legacy) && HostsFile.Without(legacy) == original, "hosts block from an older launcher removed");
 Check(!withBlock.Contains("AION", StringComparison.OrdinalIgnoreCase), "hosts block does not name the game");
 
+// ---------- DNS redirect map and mode ----------
+var redirectServer = IPAddress.Parse("203.0.113.5");
+var formatted = RedirectMap.FormatForServer(redirectServer);
+Check(formatted.Contains("sdk.gpa.ncsoft.com=203.0.113.5") && formatted.Split(';').Length == HostsFile.Hostnames.Length, "redirect map lists every NC hostname");
+var parsed = RedirectMap.Parse(formatted);
+Check(parsed["bladnoch.ncsoft.com"].Equals(redirectServer) && parsed.Count == HostsFile.Hostnames.Length, "redirect map parses");
+Check(RedirectMap.Parse("Host.EXAMPLE=1.2.3.4")["host.example"].ToString() == "1.2.3.4", "redirect hostnames are case-insensitive");
+try { RedirectMap.Parse("bad"); Check(false, "bad redirect accepted"); } catch (FormatException) { checks++; }
+Check(RedirectModeSelection.Resolve(null, config) == RedirectModeSelection.Inject, "default redirect mode is inject");
+Check(RedirectModeSelection.Resolve("hosts", config) == RedirectModeSelection.Hosts, "settings redirect mode hosts");
+Check(RedirectModeSelection.Resolve(null, config with { RedirectMode = "hosts" }) == RedirectModeSelection.Hosts, "launcher.json redirect mode");
+Check(RedirectModeSelection.Resolve("inject", config with { RedirectMode = "hosts" }) == RedirectModeSelection.Inject, "settings override launcher.json");
+try { (config with { RedirectMode = "dns" }).Validate(); Check(false, "bad redirectMode accepted"); } catch (InvalidDataException) { checks++; }
+var mapDir = Directory.CreateTempSubdirectory("a2redirect");
+RedirectMap.WriteMapFile(Path.Combine(mapDir.FullName, "A2Core.Redirect.map"), redirectServer);
+Check(File.ReadAllText(Path.Combine(mapDir.FullName, "A2Core.Redirect.map")).Contains("nccr-api.global.nc.com="), "redirect map file written");
+mapDir.Delete(recursive: true);
+
 // ---------- Firewall ----------
 var ranges = FirewallRules.BlockedRanges(server);
 Check(ranges.SequenceEqual(["0.0.0.0-126.255.255.255", "128.0.0.0-203.0.113.4", "203.0.113.6-255.255.255.255", "::2-ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff"]), "firewall leaves loopback and the server open");
@@ -120,10 +222,13 @@ try
     var source = Path.Combine(root.FullName, "source");
     var files = new Dictionary<string, byte[]> { ["Aion2/Binaries/Win64/AION2.exe"] = "exe"u8.ToArray(), ["Aion2/Content/Paks/a.utoc"] = "toc"u8.ToArray(), ["Aion2/Content/Paks/a.ucas"] = "big data"u8.ToArray() };
     foreach (var (path, bytes) in files) { Directory.CreateDirectory(Path.GetDirectoryName(Path.Combine(source, path))!); File.WriteAllBytes(Path.Combine(source, path), bytes); }
+    var testFiles = files.Select(f => new BuildFile(
+        f.Key, f.Value.Length, !f.Key.EndsWith(".ucas"),
+        Sha256: Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(f.Value)))).ToList();
     var test = build with
     {
-        Files = files.Select(f => new BuildFile(f.Key, f.Value.Length, Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(f.Value)), !f.Key.EndsWith(".ucas"))).ToList(),
-        TotalBytes = files.Values.Sum(v => v.Length), FileCount = files.Count,
+        Files = testFiles,
+        TotalBytes = files.Values.Sum(v => v.Length), FileCount = files.Count
     };
     Check((await ClientFiles.CheckAsync(source, test, CheckLevel.Full)).Ok, "full check passes");
     Check(ClientFiles.PresentBytes(source, test) == test.TotalBytes, "download progress: all present");
@@ -147,6 +252,69 @@ try
     Check(!(await ClientFiles.CheckAsync(source, test, CheckLevel.Sizes)).Ok, "missing files fail the size check");
 }
 finally { root.Delete(recursive: true); }
+
+// ---------- Download state (resume) ----------
+{
+    var temp = Directory.CreateTempSubdirectory("aion-dl-state").FullName;
+    var target = Path.Combine(temp, "AION2");
+    Directory.CreateDirectory(Path.Combine(target, "Aion2/Binaries/Win64"));
+    File.WriteAllBytes(Path.Combine(target, "Aion2/Binaries/Win64/AION2.exe"), "exe"u8.ToArray());
+    var tiny = build with
+    {
+        Files = [new BuildFile("Aion2/Binaries/Win64/AION2.exe", 3, true, Sha256: Convert.ToHexStringLower(SHA256.HashData("exe"u8.ToArray())))],
+        TotalBytes = 3, FileCount = 1,
+    };
+    var statePath = Path.Combine(target, SteamDownload.StateFile);
+    File.WriteAllLines(statePath, [$"manifest={tiny.ManifestId}", "Aion2/Binaries/Win64/AION2.exe"]);
+    Check(File.ReadAllText(statePath).Contains("manifest="), "download state stores manifest id");
+    Check(ClientFiles.PresentBytes(target, tiny) == 3, "present bytes counts partial download folder");
+    Directory.Delete(temp, true);
+}
+
+// ---------- Existing folder survey ----------
+{
+    var temp = Directory.CreateTempSubdirectory("aion-survey").FullName;
+    var game = Path.Combine(temp, "copy", "Aion2/Binaries/Win64");
+    Directory.CreateDirectory(game);
+    File.WriteAllBytes(Path.Combine(game, "AION2.exe"), "exe"u8.ToArray());
+    Check(ClientFiles.ResolveGameFolder(temp, build) is null, "parent without exe is not resolved");
+    Check(ClientFiles.ResolveGameFolder(Path.Combine(temp, "copy"), build) == Path.Combine(temp, "copy"), "game root resolved");
+    var mini = build with
+    {
+        Files = [new BuildFile("Aion2/Binaries/Win64/AION2.exe", 3, true, Sha256: Convert.ToHexStringLower(SHA256.HashData("exe"u8.ToArray()))),
+            new BuildFile("Aion2/Content/Paks/a.pak", 4, true, Sha256: Convert.ToHexStringLower(SHA256.HashData("pak"u8.ToArray())))],
+        TotalBytes = 7, FileCount = 2,
+    };
+    var survey = await ClientFiles.SurveyAsync(Path.Combine(temp, "copy"), mini);
+    Check(survey.ToDownload.Count == 1 && survey.ToDownload[0].EndsWith("a.pak"), "survey lists missing pak");
+    Check(survey.StillNeeded(mini) == 4, "survey still needed bytes");
+    Directory.Delete(temp, true);
+}
+
+// ---------- Steam libraries ----------
+{
+    var temp = Directory.CreateTempSubdirectory("aion-libraries").FullName;
+    var libSteamRoot = Path.Combine(temp, "Steam");
+    Directory.CreateDirectory(Path.Combine(libSteamRoot, "steamapps"));
+    Directory.CreateDirectory(Path.Combine(libSteamRoot, "config"));
+    var libA = Path.Combine(temp, "LibA"); var libB = Path.Combine(temp, "LibB");
+    Directory.CreateDirectory(Path.Combine(libA, "steamapps", "common", "AION2"));
+    Directory.CreateDirectory(Path.Combine(libB, "steamapps"));
+    File.WriteAllText(Path.Combine(libSteamRoot, "steamapps", "libraryfolders.vdf"),
+        "\"libraryfolders\"\n{\n\"1\"\n{\n\"path\" \"" + libA.Replace("\\", "\\\\") + "\"\n}\n}\n");
+    File.WriteAllText(Path.Combine(libSteamRoot, "config", "libraryfolders.vdf"),
+        "\"libraryfolders\"\n{\n\"2\"\n{\n\"path\" \"" + libB.Replace("\\", "\\\\") + "\"\n}\n}\n");
+    File.WriteAllText(Path.Combine(libB, "steamapps", "appmanifest_3393110.acf"),
+        "\"AppState\"\n{\n\"installdir\" \"AION2\"\n\"InstalledDepots\"\n{\n\"3393111\"\n{\n\"manifest\" \"1699273097574069541\"\n}\n}\n}\n");
+    Directory.CreateDirectory(Path.Combine(libB, "steamapps", "common", "AION2", "Aion2/Binaries/Win64"));
+    File.WriteAllText(Path.Combine(libB, "steamapps", "common", "AION2", "Aion2/Binaries/Win64/AION2.exe"), "");
+    var libInstall = new SteamInstall(libSteamRoot);
+    var libs = libInstall.Libraries();
+    Check(libs.Count >= 3 && libs.Any(l => LibSamePath(l, libA)) && libs.Any(l => LibSamePath(l, libB)), "libraries merged from steamapps and config vdf");
+    Check(libInstall.FindApp() is { Folder: var f } && f.Contains("LibB"), "app found on secondary library with depot manifest");
+    Directory.Delete(temp, true);
+    static bool LibSamePath(string a, string b) => string.Equals(Path.GetFullPath(a).TrimEnd('\\', '/'), Path.GetFullPath(b).TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase);
+}
 
 // ---------- Real Steam cache (this PC, read-only) ----------
 var steamRoot = Environment.GetEnvironmentVariable("AION_STEAM_ROOT") ?? @"C:\Program Files (x86)\Steam";
