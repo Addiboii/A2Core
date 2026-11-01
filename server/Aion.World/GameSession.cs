@@ -2101,20 +2101,30 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             + BuffStat("HPMax") + BoardStat("HPMax") + TitleStat("HPMax") + SetStat("HPMax") + D(193));
         var weapon = data.WeaponStatsOf(equippedWeapon);
         int WeaponStat(string name, int fallback) => Math.Max(fallback, EquipStat(name));
+        int WeaponAccuracySheet() =>
+            Math.Max(weapon.Accuracy, EquipStat("WeaponAccuracy") + EquipStat("Accuracy"))
+            + TitleStat("Accuracy") + SetStat("Accuracy") + D(318);
         var byType = GamePackets.DefaultStats.Select(s => s.Type switch
         {
             31 => (Type: s.Type, Value: WeaponStat("WeaponDamage", weapon.Max) + TitleStat("FixingDamage") + EnchantStat("WeaponDamage") + ExceedStat("WeaponDamage") + D(31)),
             33 => (Type: s.Type, Value: WeaponStat("WeaponMinDamage", weapon.Min) + TitleStat("FixingDamage") + EnchantStat("WeaponMinDamage") + ExceedStat("WeaponMinDamage") + D(33)),
             128 => (Type: s.Type, Value: WeaponStat("Critical", weapon.Critical) + RideStat("Critical") + BuffStat("Critical") + BoardStat("Critical") + TitleStat("Critical") + SetStat("Critical") + D(128)),
-            318 => (Type: s.Type, Value: WeaponStat("WeaponAccuracy", weapon.Accuracy) + EquipStat("Accuracy") + TitleStat("Accuracy") + D(318)),
+            318 => (Type: s.Type, Value: WeaponAccuracySheet()),
             193 => (Type: s.Type, Value: hpMax), 199 => (Type: s.Type, Value: MpMax), 242 => (Type: s.Type, Value: GamePackets.SpawnSp + BuffStat("SPMax")),
             307 => (Type: s.Type, Value: Defense),
-            _ => (Type: s.Type, Value: s.Value + D(s.Type)),
+            _ => (Type: s.Type, Value: (ItemStats.NameOfWire(s.Type) is { } statName && basis.GetValueOrDefault(statName) is var fromBasis && fromBasis != 0
+                ? fromBasis : s.Value) + D(s.Type)),
         }).ToDictionary(p => p.Type, p => p.Value);
         foreach (var (wire, value) in daevanion)
             if (!byType.ContainsKey(wire)) byType[wire] = value;
         foreach (var (wire, value) in ExtraSheetStats())
             byType[wire] = value;
+        foreach (var attr in ItemStats.AttributeStats)
+        {
+            if (ItemStats.WireOf(attr) is not { } attrWire) continue;
+            var value = AttributeStat(attr);
+            if (value != 0) byType[attrWire] = value;
+        }
         if (wingId != 0 && resources is { FpMax: > 0 })
         {
             byType[247] = resources.Fp;   // FlyCost: current flight time (usmap; pairs with FPMax on the gauge)

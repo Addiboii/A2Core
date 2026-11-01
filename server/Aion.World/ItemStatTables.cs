@@ -9,6 +9,7 @@ public sealed class ItemStatTables
     sealed record File(
         [property: JsonPropertyName("stat_wire")] Dictionary<string, string> StatWire,
         [property: JsonPropertyName("combat_stats")] string[] CombatStats,
+        [property: JsonPropertyName("attribute_stats")] string[]? AttributeStats,
         [property: JsonPropertyName("percent_stats")] string[] PercentStats,
         [property: JsonPropertyName("aliases")] Dictionary<string, string>? Aliases,
         [property: JsonPropertyName("rolled_fields")] string[]? RolledFields);
@@ -38,6 +39,8 @@ public sealed class ItemStatTables
     public static ItemStatTables Embedded => embedded.Value;
 
     public IReadOnlyList<string> CombatStats => file.CombatStats;
+
+    public IReadOnlyList<string> AttributeStats => file.AttributeStats ?? [];
 
     public bool IsPercent(string stat) => percent.Contains(stat);
 

@@ -1,6 +1,12 @@
 {
   "source": "usmap EStat + tools/item_stat_data.py",
   "stat_wire": {
+    "1": "STR",
+    "2": "DEX",
+    "3": "INT",
+    "4": "CON",
+    "5": "AGI",
+    "6": "WIS",
     "158": "AbnormalAccuracy",
     "159": "AbnormalResistance",
     "104": "Accuracy",
@@ -40,6 +46,14 @@
     "317": "WeaponFixingDamage",
     "33": "WeaponMinDamage"
   },
+  "attribute_stats": [
+    "STR",
+    "DEX",
+    "INT",
+    "CON",
+    "AGI",
+    "WIS"
+  ],
   "combat_stats": [
     "WeaponMinDamage",
     "WeaponDamage",

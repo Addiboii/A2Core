@@ -10,11 +10,25 @@ public static class ItemRoller
     {
         var table = data.SubstatRolls(templateId);
         if (table.Count == 0) return new Dictionary<string, int>();
-        var picked = WeightedPick(table, rng);
-        if (picked is null) return new Dictionary<string, int>();
-        var (stat, min, max) = picked.Value;
-        var value = min == max ? min : rng.Next(Math.Min(min, max), Math.Max(min, max) + 1);
-        return new Dictionary<string, int> { [stat] = value };
+        var result = new Dictionary<string, int>();
+        var variable = new List<(string Stat, int Min, int Max, int Weight)>();
+        foreach (var row in table)
+        {
+            if (row.Min == row.Max)
+                result[row.Stat] = row.Min;
+            else
+                variable.Add(row);
+        }
+        if (variable.Count > 0)
+        {
+            var picked = WeightedPick(variable, rng);
+            if (picked is { } pick)
+            {
+                var value = pick.Min == pick.Max ? pick.Min : rng.Next(Math.Min(pick.Min, pick.Max), Math.Max(pick.Min, pick.Max) + 1);
+                result[pick.Stat] = value;
+            }
+        }
+        return result;
     }
 
     public static JsonElement RollJson(GameData data, int templateId, Random rng)

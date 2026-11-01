@@ -103,7 +103,7 @@ public sealed record MyCharacterAppear
     public int MpMax { get; init; } = GamePackets.SpawnMp;
     public int MapId { get; init; } = GamePackets.SpawnMapId;
     /// <summary>Subzone.dat id at the spawn (_subzone_id on MyCharAppear).</summary>
-    public int SubzoneId { get; init; }
+    public int SubzoneId { get; init; } = 3000;
     public long CombatPower { get; init; }
     public int AppearReason { get; init; }
     /// <summary>
@@ -431,8 +431,11 @@ public static class GamePackets
         if (a.TeleportEffect != 0) w.U8(a.TeleportEffect);
         w.Bytes(a.CustomizingData);
         if (equips.Count == 0) w.U8(0);  // purchased-customizing = false
+        // Tail after voice (usmap order): conqueror, rift/polymorph, succession, then _combat_power pair.
+        // Writing CP immediately after conqueror misaligns the client when CP != 0 (HUD shows ~9999M).
         w.U8(a.VoiceType).I32(0).I32(0).I64(0);
-        if (a.RideDataId != 0) w.I32(a.RideDataId);
+        w.U8(0).I64(0).I32(0);
+        w.I32(0).I32(0).I32(0).I32(0);
         return w.I64(a.CombatPower).I64(a.CombatPower).U8(0).U8(0).ToArray();
     }
 

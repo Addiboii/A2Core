@@ -36,6 +36,28 @@ public sealed partial class GameSession
         return total;
     }
 
+    static bool RolledStatsEmpty(JsonElement rolled) =>
+        rolled.ValueKind != JsonValueKind.Object || !rolled.EnumerateObject().Any();
+
+    /// <summary>Fixed SubStats rows (min == max) when the instance has not been rolled yet.</summary>
+    int EquipFixedSubstatStat(string stat)
+    {
+        stat = ItemStats.Canonical(stat);
+        var total = 0;
+        foreach (var item in inventory.Values.Where(i => i.Container == InventoryItem.Equipped))
+        {
+            if (data.Item(item.ItemId) is not { } info) continue;
+            if (storedItems.TryGetValue(item.Key, out var row) && !RolledStatsEmpty(row.RolledStats)) continue;
+            foreach (var (name, min, max, _) in info.SubstatRolls())
+            {
+                if (min != max || ItemStats.Canonical(name) != stat) continue;
+                if (ItemStats.KeysFor(name).Any(key => info.Stats.ContainsKey(key))) continue;
+                total += min;
+            }
+        }
+        return total;
+    }
+
     /// <summary>Random options, arcana lines, manastones stored on the item instance.</summary>
     int EquipInstanceStat(string stat)
     {
@@ -50,7 +72,11 @@ public sealed partial class GameSession
     }
 
     /// <summary>All equipped-item contributions for one combat stat (template + instance rolls).</summary>
-    int EquipStat(string stat) => EquipTemplateStat(stat) + EquipInstanceStat(stat);
+    int EquipStat(string stat) => EquipTemplateStat(stat) + EquipInstanceStat(stat) + EquipFixedSubstatStat(stat);
+
+    int AttributeStat(string stat) =>
+        data.BaseStats(className, level).GetValueOrDefault(stat) + EquipStat(stat) + BuffStat(stat) + TitleStat(stat)
+        + SetStat(stat) + BoardStat(stat) + (ItemStats.WireOf(stat) is int wire ? DaevanionWireStat(wire) : 0);
 
     /// <summary>Combat stat total used in formulas and the stat sheet.</summary>
     int AggregatedStat(string stat, int daevanionWire) =>
@@ -149,6 +175,10 @@ public sealed partial class GameSession
     internal int ExtraFixingForTests => ExtraFixing;
 
     internal WeaponStats WeaponStatsForTests() => PlayerWeaponStats();
+
+    internal (IReadOnlyList<(int Type, int Value)> Stats, int HpMax) StatSheetForTests() => StatSheet();
+
+    internal int SetStatForTests(string stat) => SetStat(stat);
 
     internal IReadOnlyList<Hit> PlayerRowHitsForTests(IEnumerable<DamageRow> rows, int targetDefense) =>
         PlayerRowHits(rows, targetDefense);

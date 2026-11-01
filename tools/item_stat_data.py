@@ -19,6 +19,8 @@ ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / 'tools/data/item-stats.json'
 
 # Same normalization as daevanion_data.STAT_MAP values plus armour / weapon MainStats.
+ATTRIBUTE_STATS = ['STR', 'DEX', 'INT', 'CON', 'AGI', 'WIS']
+
 COMBAT_STATS = [
     'WeaponMinDamage', 'WeaponDamage', 'WeaponFixingDamage', 'FixingDamage', 'WeaponAccuracy', 'Accuracy',
     'Critical', 'CriticalResist', 'ArmorDefense', 'Defense', 'HPMax', 'MPMax', 'Block',
@@ -56,7 +58,7 @@ def stat_wire_ids() -> dict[str, int]:
     by_name = {name: num for num, name in PacketSchema().parser.enums['EStat'].items()}
     missing = []
     wire: dict[str, int] = {}
-    for name in sorted(set(COMBAT_STATS)):
+    for name in sorted(set(COMBAT_STATS + ATTRIBUTE_STATS)):
         if name not in by_name:
             missing.append(name)
         else:
@@ -72,6 +74,7 @@ def build() -> dict:
         'source': 'usmap EStat + tools/item_stat_data.py',
         'stat_wire': {str(v): k for k, v in wire.items()},
         'combat_stats': COMBAT_STATS,
+        'attribute_stats': ATTRIBUTE_STATS,
         'percent_stats': sorted(PERCENT_STATS),
         'aliases': STAT_ALIASES,
         'rolled_fields': [
