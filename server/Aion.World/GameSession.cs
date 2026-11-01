@@ -1930,7 +1930,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         ScheduleSkillEnd(skill, (byte)actionUid, definition!, now);
         replies.AddRange(SummonFromSkill(skill, request, now));
         replies.AddRange(JointStrike(definition!, request, now));
-        replies.AddRange(DismissFromSkill(skill));
+        replies.AddRange(DismissFromSkill(skill, now));
         replies.AddRange(PlaceTrap(skill, request, (byte)actionUid, now));
         replies.AddRange(PlaceZone(skill, request, (byte)actionUid, now));
         return replies;
@@ -2033,7 +2033,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         var replies = new List<byte[]>();
         foreach (var (victim, killer) in fights.TakeNpcKills())
         {
-            if (victim.OwnerKey != 0) { replies.AddRange(fights.Killed(victim)); replies.AddRange(SummonDied(victim)); continue; }
+            if (victim.OwnerKey != 0) { replies.AddRange(fights.Killed(victim)); replies.AddRange(SummonDied(victim, now)); continue; }
             if (killer.OwnerKey == playerKey) { replies.AddRange(PlayerKilledNpc(victim, 0, killer.Key, now)); continue; }
             respawnAt[victim.Key] = now + RespawnMs;
             replies.Add(GamePackets.TargetUpdate(victim.Key));
@@ -2274,7 +2274,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             // 0x3647 reason 1 for the rest after the burst). Live 2026-10-18: without it the base map's Robin stood in the layer.
             sameLevelMove = data.GeometryMap(mapId) == data.GeometryMap(worldMap);
             sameLevelRemovals = sameLevelMove ? SameLevelRemovals() : [];
-            DismissAllSummons();
+            ending.AddRange(DismissAllSummons(now));
             targets = null;  // the new map's NPCs appear on 0x3622
             respawnAt = [];
             // Hits still due land on the old map's NPCs: the next map reuses their keys (2000 onward), so they would hit (and kill) its NPCs.
@@ -2359,7 +2359,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
     /// <summary>Leaves the shared map (lobby, disconnect): others see this player disappear. Call under the world gate.</summary>
     public void ExitSharedWorld()
     {
-        DismissAllSummons();
+        _ = DismissAllSummons(lastNow);
         HandOverCopy();
         if (worldPlayer is not null && options.World?.Online.ContainsKey(playerKey) == true) LeaveSocial(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
         if (worldPlayer?.Map is { } map) map.Leave(worldPlayer);

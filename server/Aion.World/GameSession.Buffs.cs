@@ -366,9 +366,14 @@ public sealed partial class GameSession
     public IReadOnlyList<AbnormalWire> BuffWires() => buffs.Select(Wire).ToList();
 
     /// <summary>After a map load the client draws the player anew: the active buffs and the speed again.</summary>
-    List<byte[]> BuffsAfterLoad() =>
-        buffs.Count == 0 ? [] : [PlayerPackets.AbnormalAdd(playerKey, buffs.Select(Wire).ToList()),
-            .. BuffStat("MoveSpeed") is var speed and not 0 ? [PlayerPackets.MoveSpeedUpdate(playerKey, [(MoveSpeedStat, speed)])] : Array.Empty<byte[]>()];
+    List<byte[]> BuffsAfterLoad()
+    {
+        var replies = SyncSpiritSummonStateAbnormal(lastNow);
+        if (buffs.Count == 0) return replies;
+        replies.Add(PlayerPackets.AbnormalAdd(playerKey, buffs.Select(Wire).ToList()));
+        if (BuffStat("MoveSpeed") is var speed and not 0) replies.Add(PlayerPackets.MoveSpeedUpdate(playerKey, [(MoveSpeedStat, speed)]));
+        return replies;
+    }
 
     void MarkBuffSettingsDirty() => buffSettingsDirty = true;
 
@@ -409,6 +414,7 @@ public sealed partial class GameSession
                     var info = AbnormalSpecs.Info(row.AbnormalId);
                     // A carried bomb stays with the map copy it was taken on: a relog drops it.
                     if (WorldObjects.IsCarryGroup(info?.Group ?? row.AbnormalId)) { MarkBuffSettingsDirty(); continue; }
+                    if (IsSpiritSummonStateAbnormal(row.AbnormalId)) continue;
                     var buff = new Buff
                     {
                         Uid = row.Uid, AbnormalId = row.AbnormalId, SkillId = row.SkillId, Group = AbnormalStackRules.GroupOf(row.AbnormalId),
@@ -436,7 +442,7 @@ public sealed partial class GameSession
         catch (JsonException) { buffs.Clear(); itemCooldowns.Clear(); }
     }
 
-    SavedBuff[] SerializeBuffs() => buffs.Select(b => new SavedBuff(b.Uid, b.AbnormalId, b.SkillId, b.ExpireAt, b.Rebirth, b.Polymorph, b.Scripted, b.Relationship,
+    SavedBuff[] SerializeBuffs() => buffs.Where(b => !IsSpiritSummonStateAbnormal(b.AbnormalId)).Select(b => new SavedBuff(b.Uid, b.AbnormalId, b.SkillId, b.ExpireAt, b.Rebirth, b.Polymorph, b.Scripted, b.Relationship,
         new Dictionary<string, int>(b.Stats), b.Heals.Select(h => new SavedHeal(h.EffectId, h.IntervalMs, h.PerTick, h.Remaining, h.NextAt)).ToList(),
         b.Combat is { } c ? new SavedCombat(c.BarrierAmount, c.ReflectPermille, c.Held, c.Silence, c.Rooted) : null,
         b.Combat?.Dots.Select(d => new SavedDot(d.EffectId, d.IntervalMs, d.PerTick, d.Remaining, d.NextAt)).ToList() ?? [])).ToArray();

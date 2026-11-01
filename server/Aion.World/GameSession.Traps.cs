@@ -18,7 +18,7 @@ partial class GameSession
         if (targets is null || PcTraps.For(skillId) is not { } trap) return [];
         var group = $"trap{skillId}";
         traps.RemoveAll(t => t.Group == group);
-        var replies = Dismiss(group);
+        var replies = Dismiss(group, now);
         var slot = Enumerable.Range(0, SummonSlots).FirstOrDefault(s => !targets.ContainsKey(SummonKey(s)));
         var key = SummonKey(slot);
         var t = new Target
@@ -72,7 +72,7 @@ partial class GameSession
             replies.AddRange(ApplyScheduledCombatHit(new ScheduledCombatHit(placed.SkillId, placed.Request, placed.ActionUid, victim.Key, hit, 1, now,
                 CombatHitKind.Npc, questKill, mapEventKill), now));
         }
-        replies.AddRange(Dismiss(placed.Group));
+        replies.AddRange(Dismiss(placed.Group, now));
         return replies;
     }
 

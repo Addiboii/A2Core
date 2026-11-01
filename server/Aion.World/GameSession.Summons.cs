@@ -25,7 +25,14 @@ partial class GameSession
     /// <summary>0xe239 after the spirit's appear and aggro/target packets (client Jointstrike gate).</summary>
     readonly List<(int SummonKey, byte Group, long DueMs)> pendingElementalActivates = [];
     /// <summary>SkillEffect Caster_HasAbnormalId while a spirit is out (Jointstrike client gate; 0x382a on the player).</summary>
-    public const int SpiritSummonStateAbnormal = 1_004_901;
+    public const int SpiritSummonStateAbnormalBase = 1_004_900;
+    /// <summary>Fire spirit (EElementalSummonGroupType 1); kept for tests and SkillCond references.</summary>
+    public const int SpiritSummonStateAbnormal = SpiritSummonStateAbnormalBase + 1;
+
+    static int SpiritSummonStateAbnormalId(byte group) => SpiritSummonStateAbnormalBase + group;
+
+    static bool IsSpiritSummonStateAbnormal(int abnormalId) =>
+        abnormalId > SpiritSummonStateAbnormalBase && abnormalId <= SpiritSummonStateAbnormalBase + 5;
     int lastSummonSlot = SummonSlots - 1;
 
     int SummonKey(int slot) => FirstSummonKey + (playerKey % 1_000_000) * SummonSlots + slot;
@@ -41,11 +48,11 @@ partial class GameSession
     }
 
     /// <summary>The spirit's mode icon goes (0xe23a) when it leaves.</summary>
-    List<byte[]> EndElementalMode(int key)
+    List<byte[]> EndElementalMode(int key, long now)
     {
         elementalExpiry.Remove(key);
         CancelPendingElementalActivate(key);
-        return EndElementalModeIcon(key, lastNow);
+        return EndElementalModeIcon(key, now);
     }
 
     List<byte[]> EndElementalModeIcon(int key, long now)
@@ -53,22 +60,56 @@ partial class GameSession
         var replies = elementalModes.Remove(key, out var mode)
             ? new List<byte[]> { GamePackets.ElementalSummonDeactivate(mode, key) }
             : [];
-        if (elementalModes.Count == 0) replies.AddRange(ClearSpiritSummonState(now));
+        replies.AddRange(SyncSpiritSummonStateAbnormal(now));
         return replies;
     }
 
-    List<byte[]> ApplySpiritSummonState(long now)
+    /// <summary>True while an elemental spirit entity is still on the map (mode row matches a live target key).</summary>
+    bool HasActiveElementalSpirit() =>
+        targets is not null && elementalModes.Keys.Any(targets.ContainsKey);
+
+    void PurgeStaleElementalState()
     {
-        if (buffs.Any(b => b.AbnormalId == SpiritSummonStateAbnormal)) return [];
-        var replies = new List<byte[]>();
-        AddBuff(SpiritSummonStateAbnormal, -1, 0, now, replies, path: SelfAbnormalPath.Scripted);
+        if (targets is null)
+        {
+            elementalModes.Clear();
+            elementalExpiry.Clear();
+            pendingElementalActivates.Clear();
+            return;
+        }
+        foreach (var key in elementalModes.Keys.Where(k => !targets.ContainsKey(k)).ToList())
+        {
+            elementalModes.Remove(key);
+            elementalExpiry.Remove(key);
+            CancelPendingElementalActivate(key);
+        }
+        pendingElementalActivates.RemoveAll(p => !elementalModes.ContainsKey(p.SummonKey));
+    }
+
+    /// <summary>Drop spirit-state buffs and pending activates when no spirit is out; sends 0x382c when anything is removed.</summary>
+    internal List<byte[]> SyncSpiritSummonStateAbnormal(long now)
+    {
+        PurgeStaleElementalState();
+        if (HasActiveElementalSpirit()) return [];
+        elementalModes.Clear();
+        elementalExpiry.Clear();
+        pendingElementalActivates.Clear();
+        return ClearSpiritSummonState(now);
+    }
+
+    /// <summary>One elemental spirit-state abnormal on the caster (replace, never stack).</summary>
+    List<byte[]> ApplySpiritSummonState(long now, byte group)
+    {
+        if (group is 0 or > 5) return [];
+        var replies = ClearSpiritSummonState(now);
+        AddBuff(SpiritSummonStateAbnormalId(group), -1, 0, now, replies, path: SelfAbnormalPath.Scripted);
         return replies;
     }
 
     List<byte[]> ClearSpiritSummonState(long now)
     {
         _ = now;
-        var gone = buffs.Where(b => b.AbnormalId == SpiritSummonStateAbnormal).ToList();
+        var gone = buffs.Where(b => IsSpiritSummonStateAbnormal(b.AbnormalId)).ToList();
         return gone.Count == 0 ? [] : RemoveBuffs(gone, ExpireEtc);
     }
 
@@ -77,13 +118,18 @@ partial class GameSession
     public const int ReturnAllSpiritsSkill = 16009999;
 
     /// <summary>A cast Dismiss or Return skill: the matching spirit leaves (its icon with it).</summary>
-    List<byte[]> DismissFromSkill(int skillId)
+    List<byte[]> DismissFromSkill(int skillId, long now)
     {
-        if (skillId == ReturnAllSpiritsSkill) return Dismiss("Elemental");
+        if (skillId == ReturnAllSpiritsSkill)
+        {
+            var replies = DismissAllSummons(now);
+            replies.AddRange(SyncSpiritSummonStateAbnormal(now));
+            return replies;
+        }
         var mode = ElementalSummons.GroupTypeForDismissSkill(skillId);
         if (mode == 0 || !summonKeys.TryGetValue("Elemental", out var key)
             || !elementalModes.TryGetValue(key, out var current) || current != mode) return [];
-        return Dismiss("Elemental");
+        return Dismiss("Elemental", now);
     }
 
     /// <summary>The spirit whose life time ran out leaves, as if dismissed.</summary>
@@ -97,7 +143,7 @@ partial class GameSession
         }
         if (elementalExpiry.Count == 0) return replies;
         foreach (var key in elementalExpiry.Where(p => now >= p.Value).Select(p => p.Key).ToList())
-            foreach (var group in summonKeys.Where(p => p.Value == key).Select(p => p.Key).ToList()) replies.AddRange(Dismiss(group));
+            foreach (var group in summonKeys.Where(p => p.Value == key).Select(p => p.Key).ToList()) replies.AddRange(Dismiss(group, now));
         return replies;
     }
 
@@ -128,7 +174,7 @@ partial class GameSession
         if (group == "Elemental" && summonKeys.TryGetValue("Elemental", out var prevKey) && targets.TryGetValue(prevKey, out var prev))
             replies.AddRange(ReplaceElementalSpirit(prevKey, prev, now));
         else
-            replies.AddRange(Dismiss(group));
+            replies.AddRange(Dismiss(group, now));
         // A fresh key for every spirit: the client still holds the despawning spirit of the same key while its icon turns off.
         var slot = Enumerable.Range(1, SummonSlots).Select(i => (lastSummonSlot + i) % SummonSlots).FirstOrDefault(s => !targets.ContainsKey(SummonKey(s)));
         lastSummonSlot = slot;
@@ -173,8 +219,13 @@ partial class GameSession
         {
             pendingElementalActivates.Remove(pending);
             if (!elementalModes.TryGetValue(pending.SummonKey, out var mode) || mode != pending.Group) continue;
+            if (targets is null || !targets.ContainsKey(pending.SummonKey))
+            {
+                replies.AddRange(SyncSpiritSummonStateAbnormal(now));
+                continue;
+            }
             replies.Add(GamePackets.ElementalSummonActivate(mode, pending.SummonKey));
-            replies.AddRange(ApplySpiritSummonState(now));
+            replies.AddRange(ApplySpiritSummonState(now, mode));
         }
         return replies;
     }
@@ -191,7 +242,8 @@ partial class GameSession
         if (skillId > 0 && PcSummons.For(skillId) is { Skill.Group: { Length: > 0 } })
             return true;
         return definition?.NeedsSpirit is not { Length: > 0 } groups
-            || elementalModes.Values.Any(mode => groups.Any(group => ElementalGroupType(group) == mode));
+            || elementalModes.Where(p => targets?.ContainsKey(p.Key) == true).Select(p => p.Value)
+                .Any(mode => groups.Any(group => ElementalGroupType(group) == mode));
     }
 
     /// <summary>A spirit-conditioned attack is made together with the spirit: it strikes the same target at once.</summary>
@@ -206,47 +258,53 @@ partial class GameSession
     }
 
     /// <summary>The summon of the group leaves (0x3642 flag 7, as an ended spawner).</summary>
-    List<byte[]> Dismiss(string group)
+    List<byte[]> Dismiss(string group, long now)
     {
-        if (!summonKeys.Remove(group, out var key) || targets is null || !targets.Remove(key, out var old)) return [];
+        if (!summonKeys.Remove(group, out var key))
+            return SyncSpiritSummonStateAbnormal(now);
         pendingElementalDespawn.Remove(key);
+        if (targets is null || !targets.Remove(key, out var old))
+            return EndElementalMode(key, now);
         old.Hp = 0;
         old.CorpseRemoved = true;
         respawnAt.Remove(key);
         seenNpcs.Remove(key);
-        return [.. EndElementalMode(key), .. SummonAi.Killed(old), GamePackets.Death(key, 7)];
+        return [.. EndElementalMode(key, now), .. SummonAi.Killed(old), GamePackets.Death(key, 7)];
     }
 
     /// <summary>Every summon of this character leaves: on map change, character switch, logout and disconnect. Summons are
     /// owned by the character; the session (and its player key) outlives it, so a summon left in the shared map followed
     /// the session's next character (live 2026-10-30 14:26: Zakl's Fire Spirit followed Strel).</summary>
-    internal List<byte[]> DismissAllSummons()
+    internal List<byte[]> DismissAllSummons(long now)
     {
         var replies = new List<byte[]>();
-        foreach (var group in summonKeys.Keys.ToList()) replies.AddRange(Dismiss(group));
+        foreach (var group in summonKeys.Keys.ToList()) replies.AddRange(Dismiss(group, now));
         summonKeys.Clear();
-        if (targets is null) return replies;
-        foreach (var stray in targets.Values.Where(t => t.OwnerKey == playerKey).ToList())
+        if (targets is not null)
         {
-            targets.Remove(stray.Key);
-            respawnAt.Remove(stray.Key);
-            seenNpcs.Remove(stray.Key);
-            pendingElementalDespawn.Remove(stray.Key);
-            replies.AddRange(EndElementalMode(stray.Key));
-            replies.AddRange(SummonAi.Killed(stray));
-            replies.Add(GamePackets.Death(stray.Key, 7));
+            foreach (var stray in targets.Values.Where(t => t.OwnerKey == playerKey).ToList())
+            {
+                targets.Remove(stray.Key);
+                respawnAt.Remove(stray.Key);
+                seenNpcs.Remove(stray.Key);
+                pendingElementalDespawn.Remove(stray.Key);
+                replies.AddRange(EndElementalMode(stray.Key, now));
+                replies.AddRange(SummonAi.Killed(stray));
+                replies.Add(GamePackets.Death(stray.Key, 7));
+            }
         }
+        replies.AddRange(SyncSpiritSummonStateAbnormal(now));
         return replies;
     }
 
     /// <summary>A summon that died: it is gone (no corpse respawn).</summary>
-    List<byte[]> SummonDied(Target summon)
+    List<byte[]> SummonDied(Target summon, long now)
     {
         foreach (var (group, key) in summonKeys.Where(p => p.Value == summon.Key).ToList()) summonKeys.Remove(group);
         targets?.Remove(summon.Key);
         respawnAt.Remove(summon.Key);
         seenNpcs.Remove(summon.Key);
-        return [.. EndElementalMode(summon.Key), GamePackets.Death(summon.Key, 7)];
+        return [.. EndElementalMode(summon.Key, now), GamePackets.Death(summon.Key, 7)];
     }
 }
 
@@ -256,7 +314,22 @@ partial class GameSession
     /// <summary>Tests: the summon a cast of <paramref name="skillId"/> at <paramref name="targetKey"/> places.</summary>
     internal List<byte[]> SummonFromSkillForTest(int skillId, int targetKey, long now) =>
         SummonFromSkill(skillId, new CastRequest(skillId, 0, 0, false, targetKey, 0, position ?? (targets is not null && targets.TryGetValue(targetKey, out var at) ? at.Position with { X = at.Position.X - 300 } : Vector3d.Zero)), now);
-    internal List<byte[]> DismissFromSkillForTest(int skillId) => DismissFromSkill(skillId);
+    internal List<byte[]> DismissFromSkillForTest(int skillId, long now) => DismissFromSkill(skillId, now);
+    internal List<byte[]> DismissAllSummonsForTest(long now) => DismissAllSummons(now);
+    /// <summary>Tests: spirit entity gone but buff row left (stale icon repro).</summary>
+    internal void OrphanSpiritEntityKeepStateAbnormalForTest()
+    {
+        if (targets is null) return;
+        foreach (var owned in targets.Values.Where(t => t.OwnerKey == playerKey).ToList()) targets.Remove(owned.Key);
+        summonKeys.Clear();
+        elementalModes.Clear();
+        elementalExpiry.Clear();
+        pendingElementalActivates.Clear();
+        pendingElementalDespawn.Clear();
+    }
+
+    internal List<byte[]> SummonDiedForTest(long now) =>
+        targets?.Values.FirstOrDefault(t => t.OwnerKey == playerKey) is { } spirit ? SummonDied(spirit, now) : [];
     /// <summary>The AI that ticks this map's NPCs: the shared map's one in the world, else the session's.</summary>
     NpcAi SummonAi => worldPlayer?.Map?.Ai ?? ai;
 }

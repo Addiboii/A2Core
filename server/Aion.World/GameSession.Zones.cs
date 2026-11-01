@@ -18,7 +18,7 @@ partial class GameSession
         if (targets is null || PcZones.For(skillId) is not { } zone) return [];
         var group = $"zone{skillId}";
         zones.RemoveAll(z => z.Group == group);
-        var replies = Dismiss(group);
+        var replies = Dismiss(group, now);
         var slot = Enumerable.Range(1, SummonSlots).Select(i => (lastSummonSlot + i) % SummonSlots).FirstOrDefault(s => !targets.ContainsKey(SummonKey(s)));
         lastSummonSlot = slot;
         var key = SummonKey(slot);
@@ -58,7 +58,7 @@ partial class GameSession
             zones[zones.IndexOf(placed)] = current;
             if (current.TicksLeft > 0) continue;
             zones.Remove(current);
-            replies.AddRange(Dismiss(current.Group));
+            replies.AddRange(Dismiss(current.Group, now));
         }
         return replies;
     }
