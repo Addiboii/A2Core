@@ -35,6 +35,13 @@ SIDE_TYPES = frozenset({'District', 'DutyMission'})
 SIDE_CAP_UNAVAILABLE_REASON = (
     'cap_45: requires hero quest progress above live level gate (UnlockLevel 46+ / post-gate hero chain)'
 )
+EVENT_INVALID_STEP_TEXT = 'This quest is no longer valid'
+EVENT_INVALID_UNAVAILABLE_REASON = 'event_no_longer_valid'
+# Shugo festival detective chain (DQ*2072–2074): field AskNpc NPCs are not in MapData SpawnInfoList on 1010/1110.
+FESTIVAL_DETECTIVE_CODES = (
+    'DQ1202072', 'DQ1202073', 'DQ1202074',
+    'DQ2202072', 'DQ2202073', 'DQ2202074',
+)
 NPCDATA = ROOT / 'research/local/npc-table/table-000.json'
 ENVOBJ = ROOT / 'research/local/world/gameplay-tables/table-000.json'
 LOCALIZATION = ROOT / 'research/local/catalog-localization-20261013/localization-000.json'
@@ -403,6 +410,15 @@ def side_cap_unavailable_codes(data, cap=DEFAULT_LEVEL_CAP):
     return sorted(marked)
 
 
+def event_no_longer_valid(quest: dict) -> bool:
+    """Client QuestString marks retired event/district rows with this step text."""
+    return any(EVENT_INVALID_STEP_TEXT in (step.get('text') or '') for step in quest.get('steps') or [])
+
+
+def event_no_longer_valid_codes(data) -> list[str]:
+    return sorted(code for code, quest in data['quests'].items() if event_no_longer_valid(quest))
+
+
 def mark_progression_cap(data, cap=DEFAULT_LEVEL_CAP):
     """Mark quests above the live cap unavailable; keep rows in the export (not deleted)."""
     unavailable_level = 0
@@ -421,13 +437,22 @@ def mark_progression_cap(data, cap=DEFAULT_LEVEL_CAP):
         quest['unavailable'] = True
         quest['unavailable_reason'] = SIDE_CAP_UNAVAILABLE_REASON
 
+    event_invalid = event_no_longer_valid_codes(data)
+    for code in event_invalid:
+        quest = data['quests'][code]
+        quest['unavailable'] = True
+        quest['unavailable_reason'] = EVENT_INVALID_UNAVAILABLE_REASON
+
+    unavailable_count = sum(1 for q in data['quests'].values() if q.get('unavailable'))
     data['progression'] = {
         'level_cap': cap,
-        'unavailable_quests': unavailable_level + len(side_codes),
+        'unavailable_quests': unavailable_count,
         'unavailable_above_level_cap': unavailable_level,
         'unavailable_side_hero_gate_at_cap': len(side_codes),
+        'unavailable_event_no_longer_valid': len(event_invalid),
+        'event_no_longer_valid_codes': event_invalid,
         'side_cap_unavailable_codes': side_codes,
-        'note': 'UnlockLevel above cap plus side quests gated on post-gate hero progress at cap %d' % cap,
+        'note': 'UnlockLevel above cap, side hero gate @ cap %d, and retired event quests (step text)' % cap,
     }
     return data
 

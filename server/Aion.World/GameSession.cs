@@ -1629,13 +1629,12 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             if (unlockTypes.Contains(RideContentsUnlock)) rideContentsUnlocked = true;
             if (unlockTypes.Contains(DaevanionContentsUnlock)) daevanionContentsUnlocked = true;
             replies.Add(GamePackets.ContentsUnlockList(unlockTypes));
-            // Rewarded quests go in too (EQuestStatus 4): the client builds its acquirable list (Quest_AddedToAcquirableList,
+            // Rewarded quests go in too (EQuestStatus 4): acquirable list and HUD part progress both read journal status per Quest.dat Part.
             // NPC markers, Alt+1) from Quest.dat PreQuest/NextQuestName against this list. Without them it took the opening
             // HQ1100010 as never done and offered it, and never offered the next NPC-acquired story quest (HQ1101030 after HQ1101021).
             if (questLog is not null)
                 replies.AddRange(await QuestRecheckAsync(ct));
-            if (questLog?.All.Select(Wire).ToList() is { Count: > 0 } open)
-                replies.Add(GamePackets.QuestList(open));
+            replies.AddRange(QuestJournalAtEntry());
         }
         if (reloading)
         {

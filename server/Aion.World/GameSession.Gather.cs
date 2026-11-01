@@ -146,10 +146,11 @@ public sealed partial class GameSession
         var index = (int)key - WorldObjects.FirstKey;
         byte[] Reply(int result, int attempts, bool won, IReadOnlyList<GatherTurn> turns)
         {
+            var masteryGradeQuest = TryElevateGatherCollect(out _, out var stepId) ? stepId : 0;
             var w = PacketWriter.Opcode(GatherStartRs).U16(result).Varint(key).I32(attempts).Bool(won).Bool(false).Varint(0)
                 .Bool(false).Varint(0).I32(1).Varint(turns.Count);
             foreach (var t in turns) w.U8(t.Result).Bool(false).Varint(0).I32(t.SuccessBefore).I32(t.SuccessAfter).I32(t.FailBefore).I32(t.FailAfter);
-            return w.Bool(false).ToArray();
+            return w.I32(masteryGradeQuest).Bool(false).ToArray();
         }
         byte[] GatherCompletedFail(long[] gatherNode) =>
             PacketWriter.Opcode(GatherCompletedNt).U16(1).Varint(key).I32((int)gatherNode[0]).I32(0).I32(0).I32(0).I32(0).ToArray();
@@ -215,6 +216,8 @@ public sealed partial class GameSession
         var bonus = g.Length >= 4 && g[2] > 0 && GatherBonusRoll() == 0 ? ((int)g[2], (int)g[3]) : (0, 0);
         var rewards = new List<(int, long)> { (item, count) };
         if (bonus.Item1 > 0) rewards.Add((bonus.Item1, bonus.Item2));
+        if (TryElevateGatherCollect(out var elevateItem, out _) && HeldCount(elevateItem) < 1)
+            rewards.Add((elevateItem, 1));
         var replies = new List<byte[]>();
         if (Store is { } store && CharacterId is { } character)
         {

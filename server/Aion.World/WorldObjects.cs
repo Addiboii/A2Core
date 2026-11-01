@@ -20,11 +20,13 @@ public sealed record WorldObject(
     [property: JsonPropertyName("long_range")] bool LongRange = false,
     [property: JsonPropertyName("flight_ring")] bool FlightRing = false,
     [property: JsonPropertyName("move_to")] string? MoveTo = null,
+    [property: JsonPropertyName("spacetime_rift")] bool SpacetimeRift = false,
     [property: JsonPropertyName("env_name")] string? EnvName = null,
     [property: JsonPropertyName("hit_limit")] int HitLimit = 0,
     [property: JsonPropertyName("hit_skills")] int[]? HitSkills = null,
     [property: JsonPropertyName("carry")] CarryBox? Carry = null,
-    [property: JsonPropertyName("required_combat_power")] int RequiredCombatPower = 0)
+    [property: JsonPropertyName("required_combat_power")] int RequiredCombatPower = 0,
+    [property: JsonPropertyName("monolith")] bool Monolith = false)
 {
     public Vector3d At => new(Position[0], Position[1], Position[2]);
 

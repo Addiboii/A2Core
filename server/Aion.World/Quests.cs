@@ -59,8 +59,10 @@ public sealed record QuestDefinition(
     [property: JsonPropertyName("conditions")] QuestCondition[]? Conditions = null,
     [property: JsonPropertyName("acquire_items")] long[][]? AcquireItems = null,
     [property: JsonPropertyName("unavailable")] bool Unavailable = false,
+    [property: JsonPropertyName("unavailable_reason")] string? UnavailableReason = null,
     [property: JsonPropertyName("finish_map")] int? FinishMap = null,
-    [property: JsonPropertyName("finish_teleport")] string? FinishTeleport = null);
+    [property: JsonPropertyName("finish_teleport")] string? FinishTeleport = null,
+    [property: JsonPropertyName("part")] string? Part = null);
 
 /// <summary>An AcquirableConditions row other than ClearQuest (those are Prerequisites): IncompleteQuest, ClearQuestStep, SubZone, CloseEnvObj, the masteries.</summary>
 public sealed record QuestCondition(
@@ -110,7 +112,23 @@ public sealed class QuestBook
                 if (!list.Contains(code, StringComparer.OrdinalIgnoreCase)) list.Add(code);
             }
         }
+
+        partMembers = quests.Where(kv => !string.IsNullOrEmpty(kv.Value.Part))
+            .GroupBy(kv => kv.Value.Part!, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.OrderBy(x => x.Value.Id).Select(x => x.Key).ToArray(), StringComparer.OrdinalIgnoreCase);
+        partRollIndex = partMembers.SelectMany(kv => kv.Value.Select((code, i) => (code, Index: i + 1)))
+            .ToDictionary(x => x.code, x => x.Index, StringComparer.OrdinalIgnoreCase);
     }
+
+    readonly Dictionary<string, string[]> partMembers;
+    readonly Dictionary<string, int> partRollIndex;
+
+    /// <summary>Quest codes in a Quest.dat Part (episode chapter), ordered by quest id (matches OBSERVED Common_Quest _roll_count 1..N).</summary>
+    public IReadOnlyList<string> PartQuests(string part) =>
+        partMembers.TryGetValue(part, out var codes) ? codes : [];
+
+    /// <summary>Common_Quest _roll_count: 1-based index within the quest's Part; 0 when Part is empty.</summary>
+    public int PartRollIndex(string code) => partRollIndex.GetValueOrDefault(code);
 
     readonly Dictionary<int, (int Quest, int Step)> stepsById;
 
@@ -234,6 +252,18 @@ public sealed class QuestLog(QuestBook book, int race)
     public IEnumerable<string> OfferedBy(int npcId, int level) =>
         book.Quests.Where(q => q.Value.StartNpc == npcId && q.Value.Acquire == "Npc" && CanAccept(q.Key, level)).Select(q => q.Key);
 
+    /// <summary>
+    /// The follow-up a turn-in adds by itself (0x8d11 after the reward), or null. Quest.dat gate: only when the next quest's
+    /// AcquireType is Auto (see <see cref="QuestBook.ChainsWithoutAccept"/>). AcquireType Npc — including when the start NPC is
+    /// the turn-in NPC (e.g. HQ2101020 → HQ2101030 at Stellan) — waits for an explicit accept at that NPC. None/Item follow-ups
+    /// are taken where the data says (dialog, item, trigger).
+    /// </summary>
+    public string? FollowUpOnReward(QuestDefinition finished, int level, Func<QuestDefinition, bool>? conditionsHold = null)
+    {
+        if (finished.Next is not { } next || book.Find(next) is not { } quest || !CanAccept(next, level, conditionsHold)) return null;
+        return QuestBook.ChainsWithoutAccept(quest) ? next : null;
+    }
+
     /// <summary>Quests that start by themselves now (acquire Auto).</summary>
     public IEnumerable<string> AutoAcquirable(int level) =>
         book.Quests.Where(q => q.Value.Acquire == "Auto" && CanAccept(q.Key, level)).Select(q => q.Key);
@@ -244,6 +274,51 @@ public sealed class QuestLog(QuestBook book, int race)
     /// </summary>
     public int UnifiedObjectiveScore() =>
         quests.Values.Where(q => q.Status >= Rewarded).Sum(q => book.Find(q.Code)?.RecommendedLevel ?? 0);
+
+    /// <summary>
+    /// Episode (QuestPartTableItem / Quest.dat Part) completion for the HUD tracker bar: rewarded quests in the part,
+    /// with partial credit for the active quest's step progress. CANDIDATE denominator: quest count in part.
+    /// </summary>
+    public int PartProgressPercent(string? part)
+    {
+        if (string.IsNullOrEmpty(part) || book.PartQuests(part).Count == 0) return 0;
+        var codes = book.PartQuests(part);
+        var total = codes.Count;
+        var units = 0.0;
+        foreach (var code in codes)
+        {
+            if (book.Find(code) is not { } def) continue;
+            if (!quests.TryGetValue(code, out var rec))
+                continue;
+            if (rec.Status >= Rewarded)
+            {
+                units += 1;
+                continue;
+            }
+            if (rec.Status == Complete)
+            {
+                units += 1;
+                continue;
+            }
+            if (rec.Status != Incomplete) continue;
+            units += StepProgressFraction(rec, def);
+        }
+        return total == 0 ? 0 : (int)Math.Clamp(Math.Round(units / total * 100), 0, 100);
+    }
+
+    static double StepProgressFraction(QuestRecord record, QuestDefinition quest)
+    {
+        var steps = quest.Steps;
+        if (steps.Length == 0) return 0;
+        var idx = Array.FindIndex(steps, s => s.Order == record.Step);
+        if (idx < 0) return 0;
+        var step = steps[idx];
+        var required = step.Objectives.Select((o, i) => (o, i)).Where(x => !x.o.Optional && x.i < 6).ToList();
+        var stepDone = required.Count == 0
+            ? 0.5
+            : required.Count(x => record.Goals[x.i] >= x.o.Count) / (double)required.Count;
+        return (idx + stepDone) / steps.Length;
+    }
 
     public static QuestRecord New(string code, QuestDefinition quest) => new(code, quest.Id, 0, Incomplete, 1, new int[6]);
 
@@ -262,7 +337,15 @@ public sealed class QuestLog(QuestBook book, int race)
             for (var i = 0; i < Math.Min(6, step.Objectives.Length); i++)
             {
                 var objective = step.Objectives[i];
-                if (goals[i] >= objective.Count || !matches(objective)) continue;
+                if (!matches(objective)) continue;
+                if (objective.Type == "UseEnvObj" && objective.Count == 0)
+                {
+                    if (goals[i] > 0) continue;
+                    goals[i] = 1;
+                    touched = true;
+                    continue;
+                }
+                if (goals[i] >= objective.Count) continue;
                 goals[i] = Math.Min(objective.Count, goals[i] + amount);
                 touched = true;
             }
@@ -404,8 +487,39 @@ public sealed class QuestLog(QuestBook book, int race)
         quests.Values.Where(q => q.Status == Incomplete).SelectMany(record =>
             CurrentStep(record) is { } step
                 ? step.Objectives.Take(6).SelectMany((o, i) =>
-                    o.Type == "UseEnvObj" && record.Goals[i] < o.Count && o.Envs is { } envs ? envs : [])
+                    o.Type == "UseEnvObj" && UseEnvObjOpen(record.Goals[i], o) && o.Envs is { } envs ? envs : [])
                 : []);
+
+    /// <summary>Count 0 UseEnvObj rows track use with goal 1; positive counts use the usual goal &lt; count gate.</summary>
+    internal static bool UseEnvObjOpen(int goal, QuestObjective objective) =>
+        objective.Count == 0 ? goal == 0 : goal < objective.Count;
+
+    /// <summary>
+    /// Env objects usable again while a CollectItem step is open but the item is missing (Empyrean Monolith after step-2
+    /// UseEnvObj before env loot existed): prior UseEnvObj on the env or loot from its reward_manual table.
+    /// </summary>
+    public bool OpenCollectItemRescueEnv(int envId, Func<int, long> heldCount, Func<int, int, bool> envGrantsItem)
+    {
+        foreach (var record in quests.Values.Where(q => q.Status == Incomplete))
+        {
+            if (book.Find(record.Code) is not { } quest || !QuestBook.RaceMatches(quest, race)) continue;
+            if (CurrentStep(record) is not { } step) continue;
+            for (var i = 0; i < Math.Min(6, step.Objectives.Length); i++)
+            {
+                var objective = step.Objectives[i];
+                if (objective.Type != "CollectItem" || objective.Item is not { } itemId || record.Goals[i] >= objective.Count) continue;
+                if (heldCount(itemId) >= objective.Count) continue;
+                if (envGrantsItem(envId, itemId) || PreviousStepUsedEnv(quest, record.Step, envId)) return true;
+            }
+        }
+        return false;
+    }
+
+    static bool PreviousStepUsedEnv(QuestDefinition quest, int stepOrder, int envId)
+    {
+        var prev = quest.Steps.FirstOrDefault(s => s.Order == stepOrder - 1);
+        return prev is not null && prev.Objectives.Any(o => o.Type == "UseEnvObj" && o.Envs?.Contains(envId) == true);
+    }
 
     /// <summary>
     /// KillNpc / CollectFakeItem targets on a later step of an incomplete quest: visible in the world but not

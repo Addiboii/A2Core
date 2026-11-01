@@ -61,10 +61,26 @@ public sealed partial class GameSession
     bool PlayerMayUseEnvObj(int index, WorldObject o)
     {
         if (questLog is not null && questLog.IsQuestUseEnvObj(o.Env))
-            return questLog.OpenUseEnvObjIds().Contains(o.Env);
+        {
+            if (questLog.OpenUseEnvObjIds().Contains(o.Env)) return true;
+            if (QuestCollectItemRescueEnv(o)) return true;
+            return false;
+        }
         if (!EnvObjInteractAllowed(index)) return false;
         return MapEventUseEnvObjAllowed(EventName(o));
     }
+
+    /// <summary>CollectItem step open, item not held, and this env's prior UseEnvObj or manual loot table supplies it.</summary>
+    bool QuestCollectItemRescueEnv(WorldObject o)
+    {
+        if (questLog is null) return false;
+        var envDataName = o.EnvName is { Length: > 0 } n ? n : o.Name;
+        return questLog.OpenCollectItemRescueEnv(o.Env, QuestHeldCount,
+            (envId, itemId) => LootTables.Embedded.EnvCanGrantItem(envId, itemId, profileRace)
+                || LootTables.Embedded.ManualEnvTableGrantsItem(envDataName, itemId, profileRace));
+    }
+
+    long QuestHeldCount(int itemId) => inventory.Values.Where(i => i.ItemId == itemId).Sum(i => i.Count);
 
     /// <summary>Dead NPCs the current step still needs, brought back when their step opens (early watchstone kills).</summary>
     List<byte[]> RespawnOpenQuestKillTargets(long now)
@@ -145,7 +161,10 @@ public sealed partial class GameSession
     bool QuestEnvInteractAllowed(int envId)
     {
         if (questLog is null || !questLog.IsQuestUseEnvObj(envId)) return true;
-        return questLog.OpenUseEnvObjIds().Contains(envId);
+        if (questLog.OpenUseEnvObjIds().Contains(envId)) return true;
+        var objects = WorldObjects.ObjectsOn(worldMap);
+        var o = objects.FirstOrDefault(x => x.Env == envId);
+        return o is not null && QuestCollectItemRescueEnv(o);
     }
 
     /// <summary>

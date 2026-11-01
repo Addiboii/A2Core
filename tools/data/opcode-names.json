@@ -145,6 +145,7 @@
   "0x8d10": "QuestUpdateProgress_NT",
   "0x8d11": "QuestAdd_NT",
   "0x8d12": "QuestRemove_NT",
+  "0x8fbc": "QuestCompleteByItemUse_NT",
   "0x8d15": "EventFuncAction_NT",
   "0x8d22": "CharRespawn_RQ",
   "0x8d23": "CharRespawn_RS",

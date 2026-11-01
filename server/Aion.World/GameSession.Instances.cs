@@ -123,11 +123,12 @@ public sealed partial class GameSession
     List<byte[]> MoveMapDoor(string point, long now)
     {
         if (resources is null || reloading || dead) return [];
+        (int Map, Vector3d At)? dest = null;
+        foreach (var (name, map, at) in data.Destinations())
+            if (string.Equals(name, point, StringComparison.OrdinalIgnoreCase)) { dest = (map, at); break; }
         var preferred = instanceReturn?.Map ?? MapEventData.Volume(worldMap)?.Base ?? worldMap;
-        (int Map, Vector3d At)? dest = data.MapPoints(preferred).TryGetValue(point, out var p) ? (preferred, new Vector3d(p[0], p[1], p[2])) : null;
-        if (dest is null)
-            foreach (var (name, map, at) in data.Destinations())
-                if (string.Equals(name, point, StringComparison.OrdinalIgnoreCase)) { dest = (map, at); break; }
+        if (dest is null && data.MapPoints(preferred).TryGetValue(point, out var p))
+            dest = (preferred, new Vector3d(p[0], p[1], p[2]));
         // A door out is the PCTeleport counterpart of the way in (reason 2, SeamlessDoorTeleport_heavy_out = TeleportEffect.dat 41);
         // the seamless layer move (12 / 0x41) left the client inside the storage while the server put it on Ishalgen (2026-10-30).
         if (instanceKey != 0) return LeaveInstance(now, to: dest, teleportEffect: DoorExitTeleportEffect);

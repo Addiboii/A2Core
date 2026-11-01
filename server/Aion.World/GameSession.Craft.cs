@@ -233,7 +233,10 @@ public sealed partial class GameSession
             PacketWriter.Opcode(CraftStartRs).U16(result).Varint(worktable).I32(recipeId)
             .Bool(success).Bool(failReward).Bool(combo).Bool(comboSuccess).Varint(0).Varint(0).Varint(0).Varint(0).I32(0).I32(0).I32(0)
             .U8(0).I32(0).Varint(0).Varint(0).U8(0).I32(0).Varint(0).Varint(0).ToArray();
-        if (Crafts.Of(recipeId) is not { } recipe || recipe.Race != profileRace || !recipe.Auto || recipe.Mastery > CraftLevelOf(recipe.Worktable)) return [Reply(1, false)];
+        if (Crafts.Of(recipeId) is not { } recipe || recipe.Race != profileRace) return [Reply(1, false)];
+        var elevateCraft = AllowsElevateCraftRecipe(recipe);
+        if (!recipe.Auto && !elevateCraft) return [Reply(1, false)];
+        if (recipe.Mastery > CraftLevelOf(recipe.Worktable) && !elevateCraft) return [Reply(1, false)];
         if (targets?.TryGetValue((int)worktable, out var table) != true || table!.Function != recipe.Worktable
             || position is { } at && at.Distance2d(table.Position) > WorktableRange) return [Reply(2, false)];
         var costs = new List<(Guid, long, int)>();
@@ -252,6 +255,10 @@ public sealed partial class GameSession
         if (Store is { } store && CharacterId is { } character)
         {
             List<(int Item, long Count)> goods = outcome.GrantsProduct ? [(outcome.Product, outcome.ProductCount)] : [];
+            if (outcome.GrantsProduct && TryElevateCraftCollect(out var elevateItem, out _)
+                && ElevateCraftWorktable(elevateItem) == recipe.Worktable && HeldCount(elevateItem) < 1
+                && goods.All(g => g.Item != elevateItem))
+                goods.Add((elevateItem, 1));
             var done = await Stored(async () => await store.ShopBuyAsync(character, costs, goods, [], ct) ? [[]] : []);
             if (done.Count == 0) return [Reply(1, false)];
         }

@@ -10,11 +10,11 @@ Sources:
   NotHaveAbnormalGroup, FinishDuration and bDespawn.
 - tools/data/quests.json: which objects UseEnvObj objectives name, which triggers EnterVolumePC names.
 
-Objects kept: every placement of an object a quest uses, of Quest-usage objects, and of gather nodes
+Objects kept: every placement of an object a quest uses, of Quest-usage objects, of gather nodes
 (Usage GatherSource: UsageValue names a GatherSource row, whose MaterialGroup gives the material, count and bonus
-item; research/local/craft-legion-20261016/tables table-010 GatherSource, table-011 GatherSourceMaterial). Teleport
-artifacts stay in tools/teleport_artifacts.py. Triggers kept: Quest-function triggers and any a
-quest names.
+item; research/local/craft-legion-20261016/tables table-010 GatherSource, table-011 GatherSourceMaterial), and of
+field Monoliths (Usage Monolith: Empyrean Monolith resonate on open maps). Teleport artifacts stay in
+tools/teleport_artifacts.py. Triggers kept: Quest-function triggers and any a quest names.
 
     python tools/world_objects.py build    # writes tools/data/world-objects.json
 """
@@ -34,6 +34,9 @@ QUESTS = ROOT / 'tools/data/quests.json'
 GATHER_TABLES = ROOT / 'research/local/craft-legion-20261016/tables'
 CATALOG = ROOT / 'research/local/game-catalog-v2/entries.jsonl'
 DATA = ROOT / 'tools/data/world-objects.json'
+MONOLITH_PLACEMENTS = ROOT / 'tools/data/monolith-placements.json'
+MONOLITH_INTERACT_MS = 5000
+MONOLITH_INTERACT_RANGE = 160
 
 RELATIONSHIP = {'NoRelation': 0, 'EnvObj_Neutral': 7, 'EnvObj_Light': 8, 'EnvObj_Dark': 9, 'Rift': 10, 'EnvObj_Destroy': 15,
                 'EnvObj_RoleA': 26, 'EnvObj_RoleB': 27, 'EnvObj_MonsterEnemy': 28}
@@ -189,13 +192,16 @@ def objects(data, rows, wanted, gathers=None, everything=False, portals=None, ev
             row = rows.get(env)
             gather = gathers.get(row['usage_value']) if row is not None and row['usage'] == 'GatherSource' else None
             portal = portals.get(env)
-            if row is None or row['usage'] == 'TeleportArtifact' or not (everything or env in wanted or row['usage'] == 'Quest' or gather or portal):
+            monolith = row is not None and row['usage'] == 'Monolith'
+            if row is None or row['usage'] == 'TeleportArtifact' or not (everything or env in wanted or row['usage'] == 'Quest' or gather or portal or monolith):
                 continue
             for position in record.get('Positions') or []:
                 loc, rot = position['Location'], position['Rotation']
+                interact_time = MONOLITH_INTERACT_MS if monolith else row['interact_time']
+                interact_range = MONOLITH_INTERACT_RANGE if monolith else row['interact_range']
                 found.append({'env': env, 'name': record.get('Name'), 'unique_key': record.get('UniqueKey', 0),
                               'position': [round(loc['X'], 1), round(loc['Y'], 1), round(loc['Z'], 1)], 'yaw': round(rot['Yaw'], 3),
-                              'interact_time': row['interact_time'], 'interact_range': row['interact_range'],
+                              'interact_time': interact_time, 'interact_range': interact_range,
                               'relationship': row['relationship']})
                 # Map events name some objects by their EnvObjData name, not the spawner's (110005: UseEnvObj
                 # E_D0_Layer_2_PrisonDoorSmall_001 is the spawner D_Starter_Layer_2_EnvObj_DoorSmall_1).
@@ -221,9 +227,12 @@ def objects(data, rows, wanted, gathers=None, everything=False, portals=None, ev
                 # Flight rings (Usage FlightRing): flying through refills the flight points (OBSERVED 2026-10-19).
                 if row['usage'] == 'FlightRing':
                     found[-1]['flight_ring'] = True
-                # Exit doors (Usage MoveMap): UsageValue names the MapData teleport point the door leads to.
-                if row['usage'] == 'MoveMap' and row.get('usage_value'):
+                # Exit doors and region portals (Usage MoveMap / MoveMapCondition): UsageValue names the MapData teleport point.
+                if row['usage'] in ('MoveMap', 'MoveMapCondition') and row.get('usage_value'):
                     found[-1]['move_to'] = row['usage_value']
+                # District Spacetime Rift quest portals (DQ1202026 / DQ2202026): the env teleports across faction maps.
+                if env in (1100006, 1100007):
+                    found[-1]['spacetime_rift'] = True
                 # Carried-item boxes (BombBox: InteractConditionList NotHaveAbnormalGroup 1196): using one gives the player that
                 # abnormal group; bDespawn hides the box until FinishDuration has passed.
                 if row.get('not_have_abnormal_group'):
@@ -231,6 +240,8 @@ def objects(data, rows, wanted, gathers=None, everything=False, portals=None, ev
                                           'finish_duration': row['finish_duration']}
                 if row.get('required_combat_power'):
                     found[-1]['required_combat_power'] = row['required_combat_power']
+                if monolith:
+                    found[-1]['monolith'] = True
     return found
 
 
@@ -274,6 +285,20 @@ def served_instance_maps(path=ROOT / 'tools/data/map-events.json'):
         return ()
 
 
+def merge_monolith_placements(maps):
+    """MapData export may be absent locally; committed placements fill field Monolith env objs (tools/data/monolith-placements.json)."""
+    if not MONOLITH_PLACEMENTS.is_file():
+        return
+    supplement = json.loads(MONOLITH_PLACEMENTS.read_text(encoding='utf-8'))
+    for row in supplement.get('objects') or []:
+        map_id = str(row['map'])
+        obj = {k: v for k, v in row.items() if k != 'map'}
+        entry = maps.setdefault(map_id, {'objects': [], 'triggers': []})
+        if any(o.get('env') == obj.get('env') and o.get('position') == obj.get('position') for o in entry['objects']):
+            continue
+        entry['objects'].append(obj)
+
+
 def build():
     rows = envobj_rows(json.loads(ENVOBJDATA.read_text(encoding='utf-8')))
     envs, trigger_names = quest_targets(json.loads(QUESTS.read_text(encoding='utf-8')))
@@ -296,6 +321,7 @@ def build():
             entry = maps.setdefault(str(data['MapId']), {'objects': [], 'triggers': []})
             entry['objects'].extend(placed)
             entry['triggers'].extend(areas)
+    merge_monolith_placements(maps)
     return {'source': 'MapData.dat SpawnInfoList/TriggerActorDataMap + EnvObjData.dat', 'maps': maps}
 
 

@@ -30,7 +30,23 @@ public sealed partial class GameSession
         var step = quest.Steps.FirstOrDefault(s => s.Order == q.Step);
         var wireStep = step is null ? q.Step : QuestBook.WireStep(quest, step);
         var publisher = publisherId != 0 ? publisherId : quest.StartNpc ?? 0;
-        return new(q.QuestId, (byte)q.Status, wireStep, q.Goals, (int)q.Uid, publisher);
+        var roll = questLog.Book.PartRollIndex(q.Code);
+        return new(q.QuestId, (byte)q.Status, wireStep, q.Goals, (int)q.Uid, publisher, roll);
+    }
+
+    /// <summary>0x8d09 at world entry plus part HUD sync (0x8fbc cleared rows, 0x8d11 rewarded re-merge).</summary>
+    List<byte[]> QuestJournalAtEntry()
+    {
+        if (questLog is null) return [];
+        var wires = questLog.All.Select(Wire).ToList();
+        if (wires.Count == 0) return [];
+        var replies = new List<byte[]> { GamePackets.QuestList(wires) };
+        var cleared = questLog.All.Where(q => q.Status >= QuestLog.Rewarded && questLog.Book.Find(q.Code)?.Part is not null).Select(Wire).ToList();
+        if (cleared.Count > 0)
+            replies.Add(GamePackets.QuestCompleteByItemUse(cleared));
+        foreach (var record in questLog.All.Where(q => q.Status == QuestLog.Rewarded && questLog.Book.Find(q.Code)?.Part is not null))
+            replies.Add(GamePackets.QuestAdd(Wire(record)));
+        return replies;
     }
 
     List<byte[]> QuestAcceptPackets(QuestRecord saved, int acceptNpcKey) =>
@@ -73,7 +89,9 @@ public sealed partial class GameSession
     {
         if (questLog is null) return [];
         var changed = questLog.Recheck(level);
-        return changed.Count == 0 ? [] : await QuestChangesAsync(changed, ct);
+        var replies = changed.Count == 0 ? [] : await QuestChangesAsync(changed, ct);
+        replies.AddRange(await SyncQuestCollectItemsAsync(ct));
+        return replies;
     }
 
     async Task LoadQuestsAsync(INativeCharacterStore store, Guid character, int race, CancellationToken ct)
@@ -151,6 +169,7 @@ public sealed partial class GameSession
             if (rechecked.Count > 0)
                 replies.AddRange(await QuestChangesAsync(rechecked, ct));
         }
+        replies.AddRange(await SyncQuestCollectItemsAsync(ct));
         return replies;
     }
 

@@ -43,7 +43,7 @@ public sealed record LobbyCharacter
 
 /// <summary>The player's own spawn (0x3633) inputs.</summary>
 /// <summary>A quest on the wire (Common_Quest): EQuestStatus 2 Incomplete, 3 Complete, 4 Rewarded.</summary>
-public sealed record QuestWire(int QuestId, byte Status, int Step, int[] Goals, int Uid, int PublisherId = 0);
+public sealed record QuestWire(int QuestId, byte Status, int Step, int[] Goals, int Uid, int PublisherId = 0, int RollCount = 0);
 
 /// <summary>ECharPointType: the resources in 0x8d00 (OP oxygen, FP flight).</summary>
 public enum CharPoint : byte { Hp, Mp, Ap, Sp, Dp, Op, Fp, MaxHp, MaxMp, MaxAp, MaxSp, MaxDp, MaxOp, MaxFp }
@@ -1002,12 +1002,12 @@ public static class GamePackets
     // Decoded from the official recordings: 0x8d09/0x8d10/0x8d11/0x8d0f/0x8d2c/0x8d07/0x8d08,
     // 0xe241/0xe243 OBSERVED byte-exact; the others anchored by catalogue position.
 
-    /// <summary>Common_Quest: i32 id, u8 status, v step, v goal1..6, i32 uid, then roll/publisher/reward-list (6 zero bytes observed; split CANDIDATE).</summary>
+    /// <summary>Common_Quest: i32 id, u8 status, v step, v goal1..6, i32 uid, v _roll_count, i32 _publisher_id, reward list (Quest.dat Part ordinal on the wire; OBSERVED 2026-10-15).</summary>
     static PacketWriter WriteQuest(PacketWriter w, QuestWire q)
     {
         w.I32(q.QuestId).U8(q.Status).Varint(q.Step);
         for (var i = 0; i < 6; i++) w.Varint(i < q.Goals.Length ? q.Goals[i] : 0);
-        return w.I32(q.Uid).Varint(0).I32(q.PublisherId).Varint(0);
+        return w.I32(q.Uid).Varint(q.RollCount).I32(q.PublisherId).Varint(0);
     }
 
     /// <summary>0x8d09 QuestList_NT (world entry; the official new character got none).</summary>
@@ -1020,6 +1020,14 @@ public static class GamePackets
 
     /// <summary>0x8d11 QuestAdd_NT: a newly accepted quest (the official answer to an accept; no 0x8d0b was seen).</summary>
     public static byte[] QuestAdd(QuestWire q) => WriteQuest(PacketWriter.Opcode(0x8d11), q).ToArray();
+
+    /// <summary>0x8fbc QuestCompleteByItemUse_NT (Dev 0x3BF7 + 0x53C5): bulk Common_Quest rows, same tail as 0x8d09. CANDIDATE: cleared journal sync.</summary>
+    public static byte[] QuestCompleteByItemUse(IReadOnlyList<QuestWire> quests)
+    {
+        var w = PacketWriter.Opcode(0x8FBC).Varint(quests.Count);
+        foreach (var q in quests) WriteQuest(w, q);
+        return w.ToArray();
+    }
 
     /// <summary>0x8d10 QuestUpdateProgress_NT: uid, status, step, objective counters.</summary>
     public static byte[] QuestProgress(QuestWire q)

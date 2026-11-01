@@ -1,0 +1,133 @@
+{
+  "source": "MapData SpawnInfoList Usage=Monolith (merged when absent from tools/world_objects.py build export)",
+  "objects": [
+    {
+      "map": 1010,
+      "env": 1200863,
+      "name": "E_L1_Verteron_MonoLith",
+      "unique_key": 0,
+      "position": [
+        -120142.1,
+        -99550.0,
+        23716.0
+      ],
+      "yaw": 400.781,
+      "interact_time": 5000,
+      "interact_range": 160,
+      "relationship": 8,
+      "monolith": true
+    },
+    {
+      "map": 1011,
+      "env": 1201540,
+      "name": "E_L2_Eltnen_MonoLith",
+      "unique_key": 0,
+      "position": [
+        -130145.5,
+        -128111.6,
+        26213.6
+      ],
+      "yaw": 0.0,
+      "interact_time": 5000,
+      "interact_range": 160,
+      "relationship": 8,
+      "monolith": true
+    },
+    {
+      "map": 1110,
+      "env": 1300862,
+      "name": "E_D1_Altgard_MonoLith",
+      "unique_key": 0,
+      "position": [
+        -81205.4,
+        -138245.8,
+        36051.3
+      ],
+      "yaw": 182.812,
+      "interact_time": 5000,
+      "interact_range": 160,
+      "relationship": 9,
+      "monolith": true
+    },
+    {
+      "map": 1111,
+      "env": 1301278,
+      "name": "E_D2_Morheim_MonoLith",
+      "unique_key": 0,
+      "position": [
+        -56742.1,
+        -204214.5,
+        59243.5
+      ],
+      "yaw": 0.0,
+      "interact_time": 5000,
+      "interact_range": 160,
+      "relationship": 9,
+      "monolith": true
+    },
+    {
+      "map": 1100,
+      "env": 1100228,
+      "name": "E_Abyss_Reshanta_MonoLith_01",
+      "unique_key": 0,
+      "position": [
+        22891.6,
+        16350.4,
+        9795.8
+      ],
+      "yaw": 0.0,
+      "interact_time": 5000,
+      "interact_range": 160,
+      "relationship": 8,
+      "monolith": true
+    },
+    {
+      "map": 1100,
+      "env": 1100229,
+      "name": "E_Abyss_Reshanta_MonoLith_02",
+      "unique_key": 0,
+      "position": [
+        28227.4,
+        20190.1,
+        10006.8
+      ],
+      "yaw": 109.688,
+      "interact_time": 5000,
+      "interact_range": 160,
+      "relationship": 8,
+      "monolith": true
+    },
+    {
+      "map": 1100,
+      "env": 1100230,
+      "name": "E_Abyss_Reshanta_MonoLith_03",
+      "unique_key": 0,
+      "position": [
+        28832.6,
+        14531.5,
+        10006.8
+      ],
+      "yaw": 109.688,
+      "interact_time": 5000,
+      "interact_range": 160,
+      "relationship": 9,
+      "monolith": true
+    },
+    {
+      "map": 1100,
+      "env": 1100231,
+      "name": "E_Abyss_Reshanta_MonoLith_04",
+      "unique_key": 0,
+      "position": [
+        22891.6,
+        16350.4,
+        9795.8
+      ],
+      "yaw": 0.0,
+      "interact_time": 5000,
+      "interact_range": 160,
+      "relationship": 9,
+      "monolith": true
+    }
+  ]
+}

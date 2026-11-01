@@ -29,7 +29,13 @@ WORLD_OBJECTS = ROOT / 'tools/data/world-objects.json'
 SUPPLEMENT = ROOT / 'tools/data/quest-world-supplement.json'
 MAP_POINTS = ROOT / 'tools/data/map-points.json'
 MAP_BASES = ROOT / 'tools/data/map-bases.json'
+MAP_EVENTS = ROOT / 'tools/data/map-events.json'
 AUDIT_DEFERRED = ROOT / 'docs/quests/AUDIT_DEFERRED.md'
+
+try:
+    from quests import EVENT_INVALID_UNAVAILABLE_REASON, FESTIVAL_DETECTIVE_CODES, event_no_longer_valid
+except ImportError:
+    from tools.quests import EVENT_INVALID_UNAVAILABLE_REASON, FESTIVAL_DETECTIVE_CODES, event_no_longer_valid
 
 # Deferred quest codes (tools/audit_quests.py, Oct 2026).
 DEFERRED_CODES = None  # filled from audit or hard-coded list
@@ -65,6 +71,26 @@ def deferred_quest_codes() -> list[str]:
                     codes.append(m.group(1))
     DEFERRED_CODES = codes
     return codes
+
+
+def spawn_name_index(world: dict) -> dict[str, tuple[str, list]]:
+    """Map spawn name -> (map_id, compact row) from tools/data/world-npcs.json (MapData SpawnInfoList export)."""
+    out: dict[str, tuple[str, list]] = {}
+    for map_id, rows in world.get('maps', {}).items():
+        for row in rows:
+            if isinstance(row, list) and row:
+                out.setdefault(row[0], (map_id, row))
+    return out
+
+
+def festival_detective_retired(quests: dict) -> bool:
+    """Festival detective chain is marked invalid in client QuestString for the current patch."""
+    for code in FESTIVAL_DETECTIVE_CODES:
+        q = quests['quests'].get(code)
+        if q and event_no_longer_valid(q):
+            continue
+        return False
+    return True
 
 
 def load_json(path: Path) -> dict:
@@ -146,34 +172,48 @@ def build_supplement() -> dict:
         x, y, z = kuru[2], kuru[3], kuru[4]
         maps_out.setdefault('1010', []).append(spawn_row('M_L1_TF_Kuru_03_001_QuestSup', 2100159, x + 200, y, z))
 
-    # Festival detective NPCs (Light) — near existing event citizen 2989382
-    anchor = find_spawn(world['maps'], '1010', 2989382)
-    if anchor:
-        ax, ay, az = anchor[2], anchor[3], anchor[4]
-        for i, nid in enumerate([2989502, 2989504, 2989505]):
-            if nid in missing:
-                maps_out.setdefault('1010', []).append(
-                    spawn_row(f'N_L1_FQ_Event_QuestSup_{nid}', nid, ax + 150 * (i + 1), ay, az))
-        triggers_out.setdefault('1010', []).extend([
-            _trigger('Trigger_DQ1202072_01', ax, ay, az, radius=1500),
-            _trigger('Trigger_DQ1202072_02', ax + 300, ay, az, radius=1500),
-        ])
+    # Festival detective NPCs: only synthetic field spawns when the event is still valid in dat.
+    # Client MapData SpawnInfoList on 1010/1110 has no N_*_FQ_Event_ShugoBM_01_02 / CLB01 rows; instance-only _INS on 840043/800025/850015.
+    if not festival_detective_retired(quests):
+        placements = spawn_name_index(world)
+        anchor = find_spawn(world['maps'], '1010', 2989382)
+        if anchor:
+            ax, ay, az = anchor[2], anchor[3], anchor[4]
+            light = [
+                ('N_L1_FQ_Event_ShugoBM_01_02', 2989502),
+                ('N_L1_FQ_Event_CLB01_02_01', 2989504),
+                ('N_L1_FQ_Event_CLB01_03_01', 2989505),
+            ]
+            for i, (name, nid) in enumerate(light):
+                if nid not in missing or name in placements:
+                    continue
+                maps_out.setdefault('1010', []).append(spawn_row(name, nid, ax + 150 * (i + 1), ay, az))
+            triggers_out.setdefault('1010', []).extend([
+                _trigger('Trigger_DQ1202072_01', ax, ay, az, radius=1500),
+                _trigger('Trigger_DQ1202072_02', ax + 300, ay, az, radius=1500),
+            ])
 
-    # Dark festival chain — near 2406115 on 1111
-    dark = find_spawn(world['maps'], '1111', 2406115)
-    if dark:
-        dx, dy, dz = dark[2], dark[3], dark[4]
-        for i, nid in enumerate([2959363, 2959365, 2959366]):
-            if nid in missing:
-                maps_out.setdefault('1110', []).append(
-                    spawn_row(f'N_D1_FQ_Event_QuestSup_{nid}', nid, dx + 100 * i, dy, dz))
-        triggers_out.setdefault('1110', []).extend([
-            _trigger('Trigger_FQ_Event_1_1_0', dx, dy, dz, radius=1500),
-            _trigger('Trigger_FQ_Event_1_1_1', dx + 250, dy, dz, radius=1500),
-        ])
-    if 2406116 in missing and dark:
+        dark = find_spawn(world['maps'], '1111', 2406115)
+        if dark:
+            dx, dy, dz = dark[2], dark[3], dark[4]
+            dark_rows = [
+                ('N_D1_FQ_Event_ShugoBM_01_02', 2959363),
+                ('N_D1_FQ_Event_CLB01_02_01', 2959365),
+                ('N_D1_FQ_Event_CLB01_03_01', 2959366),
+            ]
+            for i, (name, nid) in enumerate(dark_rows):
+                if nid not in missing or name in placements:
+                    continue
+                maps_out.setdefault('1110', []).append(spawn_row(name, nid, dx + 100 * i, dy, dz))
+            triggers_out.setdefault('1110', []).extend([
+                _trigger('Trigger_FQ_Event_1_1_0', dx, dy, dz, radius=1500),
+                _trigger('Trigger_FQ_Event_1_1_1', dx + 250, dy, dz, radius=1500),
+            ])
+
+    dark_anchor = find_spawn(world['maps'], '1111', 2406115)
+    if 2406116 in missing and dark_anchor:
         maps_out.setdefault('1111', []).append(
-            spawn_row('M_D2_AH_DestDaeva_02_QuestSup', 2406116, dark[2], dark[3] + 100, dark[4]))
+            spawn_row('M_D2_AH_DestDaeva_02_QuestSup', 2406116, dark_anchor[2], dark_anchor[3] + 100, dark_anchor[4]))
 
     # Middle Abyss (map 21 + mirror on 20 for players on live Reshanta A)
     abyss_ids = abyss_middle_ids(missing)

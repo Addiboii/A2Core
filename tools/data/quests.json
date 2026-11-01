@@ -19268,7 +19268,7 @@
         ]
       },
       "unavailable": true,
-      "unavailable_reason": "unlock_level_above_cap_45"
+      "unavailable_reason": "event_no_longer_valid"
     },
     "DQ1202073": {
       "id": 1202073,
@@ -19341,7 +19341,7 @@
         ]
       },
       "unavailable": true,
-      "unavailable_reason": "unlock_level_above_cap_45"
+      "unavailable_reason": "event_no_longer_valid"
     },
     "DQ1202074": {
       "id": 1202074,
@@ -19427,7 +19427,7 @@
         ]
       },
       "unavailable": true,
-      "unavailable_reason": "unlock_level_above_cap_45"
+      "unavailable_reason": "event_no_longer_valid"
     },
     "DQ1203010": {
       "id": 1203010,
@@ -36759,7 +36759,9 @@
             2000
           ]
         ]
-      }
+      },
+      "unavailable": true,
+      "unavailable_reason": "event_no_longer_valid"
     },
     "UQ1309038": {
       "id": 1309038,
@@ -36835,7 +36837,9 @@
             2000
           ]
         ]
-      }
+      },
+      "unavailable": true,
+      "unavailable_reason": "event_no_longer_valid"
     },
     "UQ1309039": {
       "id": 1309039,
@@ -36899,7 +36903,9 @@
             2000
           ]
         ]
-      }
+      },
+      "unavailable": true,
+      "unavailable_reason": "event_no_longer_valid"
     },
     "UQ1309040": {
       "id": 1309040,
@@ -36955,7 +36961,9 @@
             2000
           ]
         ]
-      }
+      },
+      "unavailable": true,
+      "unavailable_reason": "event_no_longer_valid"
     },
     "UQ1309041": {
       "id": 1309041,
@@ -37031,7 +37039,9 @@
             2000
           ]
         ]
-      }
+      },
+      "unavailable": true,
+      "unavailable_reason": "event_no_longer_valid"
     },
     "UQ1309042": {
       "id": 1309042,
@@ -37095,7 +37105,9 @@
             2000
           ]
         ]
-      }
+      },
+      "unavailable": true,
+      "unavailable_reason": "event_no_longer_valid"
     },
     "UQ1309043": {
       "id": 1309043,
@@ -37151,7 +37163,9 @@
             2000
           ]
         ]
-      }
+      },
+      "unavailable": true,
+      "unavailable_reason": "event_no_longer_valid"
     },
     "UQ1309044": {
       "id": 1309044,
@@ -37224,7 +37238,9 @@
             2000
           ]
         ]
-      }
+      },
+      "unavailable": true,
+      "unavailable_reason": "event_no_longer_valid"
     },
     "UQ1309045": {
       "id": 1309045,
@@ -37299,7 +37315,9 @@
             2000
           ]
         ]
-      }
+      },
+      "unavailable": true,
+      "unavailable_reason": "event_no_longer_valid"
     },
     "UQ1309046": {
       "id": 1309046,
@@ -37385,7 +37403,9 @@
             2000
           ]
         ]
-      }
+      },
+      "unavailable": true,
+      "unavailable_reason": "event_no_longer_valid"
     },
     "UQ1309047": {
       "id": 1309047,
@@ -37458,7 +37478,9 @@
             2000
           ]
         ]
-      }
+      },
+      "unavailable": true,
+      "unavailable_reason": "event_no_longer_valid"
     },
     "UQ1309048": {
       "id": 1309048,
@@ -37533,7 +37555,9 @@
             2000
           ]
         ]
-      }
+      },
+      "unavailable": true,
+      "unavailable_reason": "event_no_longer_valid"
     },
     "UQ1309049": {
       "id": 1309049,
@@ -37619,7 +37643,9 @@
             2000
           ]
         ]
-      }
+      },
+      "unavailable": true,
+      "unavailable_reason": "event_no_longer_valid"
     },
     "UQ1309050": {
       "id": 1309050,
@@ -39705,7 +39731,9 @@
             2000
           ]
         ]
-      }
+      },
+      "unavailable": true,
+      "unavailable_reason": "event_no_longer_valid"
     },
     "UQ1309078": {
       "id": 1309078,
@@ -39781,7 +39809,9 @@
             2000
           ]
         ]
-      }
+      },
+      "unavailable": true,
+      "unavailable_reason": "event_no_longer_valid"
     },
     "UQ1309079": {
       "id": 1309079,
@@ -39845,7 +39875,9 @@
             2000
           ]
         ]
-      }
+      },
+      "unavailable": true,
+      "unavailable_reason": "event_no_longer_valid"
     },
     "UQ1309080": {
       "id": 1309080,
@@ -39901,7 +39933,9 @@
             2000
           ]
         ]
-      }
+      },
+      "unavailable": true,
+      "unavailable_reason": "event_no_longer_valid"
     },
     "UQ1309081": {
       "id": 1309081,
@@ -39977,7 +40011,9 @@
             2000
           ]
         ]
-      }
+      },
+      "unavailable": true,
+      "unavailable_reason": "event_no_longer_valid"
     },
     "UQ1309082": {
       "id": 1309082,
@@ -40041,7 +40077,9 @@
             2000
           ]
         ]
-      }
+      },
+      "unavailable": true,
+      "unavailable_reason": "event_no_longer_valid"
     },
     "UQ1309083": {
       "id": 1309083,
@@ -40097,7 +40135,9 @@
             2000
           ]
         ]
-      }
+      },
+      "unavailable": true,
+      "unavailable_reason": "event_no_longer_valid"
     },
     "UQ1309084": {
       "id": 1309084,
@@ -40170,7 +40210,9 @@
             2000
           ]
         ]
-      }
+      },
+      "unavailable": true,
+      "unavailable_reason": "event_no_longer_valid"
     },
     "UQ1309085": {
       "id": 1309085,
@@ -40245,7 +40287,9 @@
             2000
           ]
         ]
-      }
+      },
+      "unavailable": true,
+      "unavailable_reason": "event_no_longer_valid"
     },
     "UQ1309086": {
       "id": 1309086,
@@ -40331,7 +40375,9 @@
             2000
           ]
         ]
-      }
+      },
+      "unavailable": true,
+      "unavailable_reason": "event_no_longer_valid"
     },
     "UQ1309087": {
       "id": 1309087,
@@ -40404,7 +40450,9 @@
             2000
           ]
         ]
-      }
+      },
+      "unavailable": true,
+      "unavailable_reason": "event_no_longer_valid"
     },
     "UQ1309088": {
       "id": 1309088,
@@ -40479,7 +40527,9 @@
             2000
           ]
         ]
-      }
+      },
+      "unavailable": true,
+      "unavailable_reason": "event_no_longer_valid"
     },
     "UQ1309089": {
       "id": 1309089,
@@ -40565,7 +40615,9 @@
             2000
           ]
         ]
-      }
+      },
+      "unavailable": true,
+      "unavailable_reason": "event_no_longer_valid"
     },
     "UQ1309090": {
       "id": 1309090,
@@ -73442,7 +73494,7 @@
         ]
       },
       "unavailable": true,
-      "unavailable_reason": "unlock_level_above_cap_45"
+      "unavailable_reason": "event_no_longer_valid"
     },
     "DQ2202073": {
       "id": 2202073,
@@ -73515,7 +73567,7 @@
         ]
       },
       "unavailable": true,
-      "unavailable_reason": "unlock_level_above_cap_45"
+      "unavailable_reason": "event_no_longer_valid"
     },
     "DQ2202074": {
       "id": 2202074,
@@ -73601,7 +73653,7 @@
         ]
       },
       "unavailable": true,
-      "unavailable_reason": "unlock_level_above_cap_45"
+      "unavailable_reason": "event_no_longer_valid"
     },
     "DQ2203010": {
       "id": 2203010,
@@ -91083,7 +91135,9 @@
             2000
           ]
         ]
-      }
+      },
+      "unavailable": true,
+      "unavailable_reason": "event_no_longer_valid"
     },
     "UQ2309038": {
       "id": 2309038,
@@ -91159,7 +91213,9 @@
             2000
           ]
         ]
-      }
+      },
+      "unavailable": true,
+      "unavailable_reason": "event_no_longer_valid"
     },
     "UQ2309039": {
       "id": 2309039,
@@ -91223,7 +91279,9 @@
             2000
           ]
         ]
-      }
+      },
+      "unavailable": true,
+      "unavailable_reason": "event_no_longer_valid"
     },
     "UQ2309040": {
       "id": 2309040,
@@ -91279,7 +91337,9 @@
             2000
           ]
         ]
-      }
+      },
+      "unavailable": true,
+      "unavailable_reason": "event_no_longer_valid"
     },
     "UQ2309041": {
       "id": 2309041,
@@ -91355,7 +91415,9 @@
             2000
           ]
         ]
-      }
+      },
+      "unavailable": true,
+      "unavailable_reason": "event_no_longer_valid"
     },
     "UQ2309042": {
       "id": 2309042,
@@ -91419,7 +91481,9 @@
             2000
           ]
         ]
-      }
+      },
+      "unavailable": true,
+      "unavailable_reason": "event_no_longer_valid"
     },
     "UQ2309043": {
       "id": 2309043,
@@ -91475,7 +91539,9 @@
             2000
           ]
         ]
-      }
+      },
+      "unavailable": true,
+      "unavailable_reason": "event_no_longer_valid"
     },
     "UQ2309044": {
       "id": 2309044,
@@ -91548,7 +91614,9 @@
             2000
           ]
         ]
-      }
+      },
+      "unavailable": true,
+      "unavailable_reason": "event_no_longer_valid"
     },
     "UQ2309045": {
       "id": 2309045,
@@ -91623,7 +91691,9 @@
             2000
           ]
         ]
-      }
+      },
+      "unavailable": true,
+      "unavailable_reason": "event_no_longer_valid"
     },
     "UQ2309046": {
       "id": 2309046,
@@ -91709,7 +91779,9 @@
             2000
           ]
         ]
-      }
+      },
+      "unavailable": true,
+      "unavailable_reason": "event_no_longer_valid"
     },
     "UQ2309047": {
       "id": 2309047,
@@ -91782,7 +91854,9 @@
             2000
           ]
         ]
-      }
+      },
+      "unavailable": true,
+      "unavailable_reason": "event_no_longer_valid"
     },
     "UQ2309048": {
       "id": 2309048,
@@ -91857,7 +91931,9 @@
             2000
           ]
         ]
-      }
+      },
+      "unavailable": true,
+      "unavailable_reason": "event_no_longer_valid"
     },
     "UQ2309049": {
       "id": 2309049,
@@ -91943,7 +92019,9 @@
             2000
           ]
         ]
-      }
+      },
+      "unavailable": true,
+      "unavailable_reason": "event_no_longer_valid"
     },
     "UQ2309050": {
       "id": 2309050,
@@ -94029,7 +94107,9 @@
             2000
           ]
         ]
-      }
+      },
+      "unavailable": true,
+      "unavailable_reason": "event_no_longer_valid"
     },
     "UQ2309078": {
       "id": 2309078,
@@ -94105,7 +94185,9 @@
             2000
           ]
         ]
-      }
+      },
+      "unavailable": true,
+      "unavailable_reason": "event_no_longer_valid"
     },
     "UQ2309079": {
       "id": 2309079,
@@ -94169,7 +94251,9 @@
             2000
           ]
         ]
-      }
+      },
+      "unavailable": true,
+      "unavailable_reason": "event_no_longer_valid"
     },
     "UQ2309080": {
       "id": 2309080,
@@ -94225,7 +94309,9 @@
             2000
           ]
         ]
-      }
+      },
+      "unavailable": true,
+      "unavailable_reason": "event_no_longer_valid"
     },
     "UQ2309081": {
       "id": 2309081,
@@ -94301,7 +94387,9 @@
             2000
           ]
         ]
-      }
+      },
+      "unavailable": true,
+      "unavailable_reason": "event_no_longer_valid"
     },
     "UQ2309082": {
       "id": 2309082,
@@ -94365,7 +94453,9 @@
             2000
           ]
         ]
-      }
+      },
+      "unavailable": true,
+      "unavailable_reason": "event_no_longer_valid"
     },
     "UQ2309083": {
       "id": 2309083,
@@ -94421,7 +94511,9 @@
             2000
           ]
         ]
-      }
+      },
+      "unavailable": true,
+      "unavailable_reason": "event_no_longer_valid"
     },
     "UQ2309084": {
       "id": 2309084,
@@ -94494,7 +94586,9 @@
             2000
           ]
         ]
-      }
+      },
+      "unavailable": true,
+      "unavailable_reason": "event_no_longer_valid"
     },
     "UQ2309085": {
       "id": 2309085,
@@ -94569,7 +94663,9 @@
             2000
           ]
         ]
-      }
+      },
+      "unavailable": true,
+      "unavailable_reason": "event_no_longer_valid"
     },
     "UQ2309086": {
       "id": 2309086,
@@ -94655,7 +94751,9 @@
             2000
           ]
         ]
-      }
+      },
+      "unavailable": true,
+      "unavailable_reason": "event_no_longer_valid"
     },
     "UQ2309087": {
       "id": 2309087,
@@ -94728,7 +94826,9 @@
             2000
           ]
         ]
-      }
+      },
+      "unavailable": true,
+      "unavailable_reason": "event_no_longer_valid"
     },
     "UQ2309088": {
       "id": 2309088,
@@ -94803,7 +94903,9 @@
             2000
           ]
         ]
-      }
+      },
+      "unavailable": true,
+      "unavailable_reason": "event_no_longer_valid"
     },
     "UQ2309089": {
       "id": 2309089,
@@ -94889,7 +94991,9 @@
             2000
           ]
         ]
-      }
+      },
+      "unavailable": true,
+      "unavailable_reason": "event_no_longer_valid"
     },
     "UQ2309090": {
       "id": 2309090,
@@ -106815,9 +106919,70 @@
   ],
   "progression": {
     "level_cap": 45,
-    "unavailable_quests": 225,
+    "unavailable_quests": 277,
     "unavailable_above_level_cap": 169,
     "unavailable_side_hero_gate_at_cap": 56,
+    "unavailable_event_no_longer_valid": 58,
+    "event_no_longer_valid_codes": [
+      "DQ1202072",
+      "DQ1202073",
+      "DQ1202074",
+      "DQ2202072",
+      "DQ2202073",
+      "DQ2202074",
+      "UQ1309037",
+      "UQ1309038",
+      "UQ1309039",
+      "UQ1309040",
+      "UQ1309041",
+      "UQ1309042",
+      "UQ1309043",
+      "UQ1309044",
+      "UQ1309045",
+      "UQ1309046",
+      "UQ1309047",
+      "UQ1309048",
+      "UQ1309049",
+      "UQ1309077",
+      "UQ1309078",
+      "UQ1309079",
+      "UQ1309080",
+      "UQ1309081",
+      "UQ1309082",
+      "UQ1309083",
+      "UQ1309084",
+      "UQ1309085",
+      "UQ1309086",
+      "UQ1309087",
+      "UQ1309088",
+      "UQ1309089",
+      "UQ2309037",
+      "UQ2309038",
+      "UQ2309039",
+      "UQ2309040",
+      "UQ2309041",
+      "UQ2309042",
+      "UQ2309043",
+      "UQ2309044",
+      "UQ2309045",
+      "UQ2309046",
+      "UQ2309047",
+      "UQ2309048",
+      "UQ2309049",
+      "UQ2309077",
+      "UQ2309078",
+      "UQ2309079",
+      "UQ2309080",
+      "UQ2309081",
+      "UQ2309082",
+      "UQ2309083",
+      "UQ2309084",
+      "UQ2309085",
+      "UQ2309086",
+      "UQ2309087",
+      "UQ2309088",
+      "UQ2309089"
+    ],
     "side_cap_unavailable_codes": [
       "DQ1203010",
       "DQ1203020",
@@ -106876,6 +107041,6 @@
       "DQ2203280",
       "DQ2203290"
     ],
-    "note": "UnlockLevel above cap plus side quests gated on post-gate hero progress at cap 45"
+    "note": "UnlockLevel above cap, side hero gate @ cap 45, and retired event quests (step text)"
   }
 }

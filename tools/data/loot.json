@@ -1,194 +1,11 @@
 {
   "source": "RewardData/RewardItem/RewardPackage/RewardPackageItem + Item.dat (tools/loot_data.py)",
   "npcs": {
-    "1100228": [
-      "reward_manual_Monolith_1100228"
-    ],
-    "1100229": [
-      "reward_manual_Monolith_1100229"
-    ],
-    "1100230": [
-      "reward_manual_Monolith_1100230"
-    ],
-    "1100231": [
-      "reward_manual_Monolith_1100231"
-    ],
-    "1100311": [
-      "reward_manual_FieldEvent_L_TreasureBox_1100311"
-    ],
-    "1100312": [
-      "reward_manual_FieldEvent_L_TreasureBox_1100312"
-    ],
-    "1200018": [
-      "reward_manual_FieldEvent_L_TreasureBox_1200018"
-    ],
-    "1200019": [
-      "reward_manual_FieldEvent_L_TreasureBox_1200019"
-    ],
-    "1200020": [
-      "reward_manual_FieldEvent_L_TreasureBox_1200020"
-    ],
-    "1200036": [
-      "reward_manual_TreasureBox_L_Normal"
-    ],
-    "1200037": [
-      "reward_manual_TreasureBox_L_Normal"
-    ],
-    "1200365": [
-      "reward_manual_Field_L_Flag_1200365"
-    ],
-    "1200366": [
-      "reward_manual_Field_L_Flag_1200366"
-    ],
-    "1200368": [
-      "reward_manual_Field_L_Flag_1200368"
-    ],
-    "1200495": [
-      "reward_manual_Field_L_Flag_1200495"
-    ],
-    "1200541": [
-      "reward_manual_Field_L_Flag_1200541"
-    ],
-    "1200667": [
-      "reward_manual_TreasureBox_L_Normal"
-    ],
-    "1200794": [
-      "reward_manual_Garrison_1200794"
-    ],
-    "1200860": [
-      "reward_manual_Monolith_1200860"
-    ],
-    "1200865": [
-      "reward_manual_Monolith_1200865"
-    ],
-    "1200868": [
-      "reward_manual_Monolith_1200868"
-    ],
-    "1201054": [
-      "reward_manual_FieldEvent_L_TreasureBox_1200054"
-    ],
-    "1201055": [
-      "reward_manual_FieldEvent_L_TreasureBox_1200055"
-    ],
-    "1201290": [
-      "reward_manual_E_D1_HQ_GodFragment_02_001"
-    ],
-    "1201420": [
-      "reward_manual_Event_Christmas_1201420"
-    ],
-    "1201421": [
-      "reward_manual_Event_Christmas_1201421"
-    ],
-    "1201422": [
-      "reward_manual_Event_Christmas_1201422"
-    ],
-    "1201461": [
-      "reward_manual_Garrison_1201461"
-    ],
-    "1201511": [
-      "reward_manual_Monolith_1201511"
-    ],
-    "1201512": [
-      "reward_manual_Monolith_1201512"
-    ],
-    "1201513": [
-      "reward_manual_Monolith_1201513"
-    ],
-    "1201751": [
-      "reward_manual_Event_Halloween_1201751_key"
-    ],
-    "1201752": [
-      "reward_manual_Event_Halloween_1201752_key"
-    ],
-    "1201753": [
-      "reward_manual_Event_Halloween_1201753_key"
-    ],
-    "1300081": [
-      "reward_manual_TreasureBox_D_Normal"
-    ],
-    "1300082": [
-      "reward_manual_TreasureBox_D_Normal"
-    ],
-    "1300123": [
-      "reward_manual_Field_D_Flag_1300123"
-    ],
-    "1300124": [
-      "reward_manual_Field_D_Flag_1300124"
-    ],
-    "1300128": [
-      "reward_manual_Field_D_Flag_1300128"
-    ],
-    "1300628": [
-      "reward_manual_Field_D_Flag_1300628"
-    ],
-    "1300630": [
-      "reward_manual_Field_D_Flag_1300630"
-    ],
-    "1300749": [
-      "reward_manual_Garrison_1300749"
-    ],
-    "1300754": [
-      "reward_manual_TreasureBox_D_Normal"
-    ],
-    "1300865": [
-      "reward_manual_Monolith_1300865"
-    ],
-    "1300891": [
-      "reward_manual_Monolith_1300891"
-    ],
-    "1300892": [
-      "reward_manual_Monolith_1300892"
-    ],
-    "1301134": [
-      "reward_manual_E_L1_HQ_GodFragment_01"
-    ],
-    "1301196": [
-      "reward_manual_Event_Christmas_1301196"
-    ],
-    "1301197": [
-      "reward_manual_Event_Christmas_1301197"
-    ],
-    "1301198": [
-      "reward_manual_Event_Christmas_1301198"
-    ],
-    "1301228": [
-      "reward_manual_Monolith_1301228"
-    ],
-    "1301229": [
-      "reward_manual_Monolith_1301229"
-    ],
-    "1301230": [
-      "reward_manual_Monolith_1301230"
-    ],
-    "1301271": [
-      "reward_manual_Garrison_1301271"
-    ],
-    "1301458": [
-      "reward_manual_Event_Halloween_1301458_key"
-    ],
-    "1301459": [
-      "reward_manual_Event_Halloween_1301459_key"
-    ],
-    "1301460": [
-      "reward_manual_Event_Halloween_1301460_key"
-    ],
     "1400495": [
       "reward_name_manual_Seal_Dungeon_Usable_Env_001"
     ],
-    "1400694": [
-      "reward_manual_E_L0_Layer_1_DrakanCorpse_01"
-    ],
-    "1400711": [
-      "reward_manual_Dungeon_Seal_1400711"
-    ],
-    "1400712": [
-      "reward_manual_Dungeon_Seal_1400712"
-    ],
     "1400771": [
       "reward_name_manual_Seal_Dungeon_Usable_Env_001"
-    ],
-    "1400800": [
-      "reward_manual_E_D0_Layer_1_InteractCorpse_002"
     ],
     "1400856": [
       "reward_name_manual_Seal_Dungeon_Usable_Env_001"
@@ -196,26 +13,11 @@
     "1400868": [
       "reward_name_manual_Seal_Dungeon_Usable_Env_001"
     ],
-    "1401039": [
-      "reward_manual_E_D0_Layer_1_BoxPile_002"
-    ],
-    "1401066": [
-      "reward_manual_E_L0_Layer_1_BoxPile_001"
-    ],
     "1401131": [
       "reward_name_manual_Seal_Dungeon_Usable_Env_001"
     ],
     "1401133": [
       "reward_name_manual_Seal_Dungeon_Usable_Env_001"
-    ],
-    "1402028": [
-      "reward_manual_Dungeon_Seal_1402028"
-    ],
-    "1402193": [
-      "reward_manual_Dungeon_Seal_1402193"
-    ],
-    "1402194": [
-      "reward_manual_Dungeon_Seal_1402194"
     ],
     "2000925": [
       "reward_basic_D_N3_20",
@@ -2593,9 +2395,6 @@
     ],
     "2320403": [
       "reward_PartyDungeonBoss_H2_2320403_participant_all"
-    ],
-    "2340201": [
-      "reward_manual_FieldEvent_L_2340201"
     ],
     "2360100": [
       "reward_basic_enchant_N2_45"
@@ -35875,7 +35674,7 @@
       "race": 0,
       "items": [
         [
-          631900001,
+          631900007,
           100000000,
           3,
           3
@@ -35887,7 +35686,7 @@
       "race": 0,
       "items": [
         [
-          631900007,
+          631900001,
           100000000,
           3,
           3
@@ -69736,6 +69535,209 @@
         1,
         1
       ]
+    ]
+  },
+  "envs": {
+    "1301134": [
+      "reward_manual_E_D1_HQ_GodFragment_02_001"
+    ],
+    "1201290": [
+      "reward_manual_E_L1_HQ_GodFragment_01"
+    ],
+    "1100228": [
+      "reward_manual_Monolith_1100228"
+    ],
+    "1100229": [
+      "reward_manual_Monolith_1100229"
+    ],
+    "1100230": [
+      "reward_manual_Monolith_1100230"
+    ],
+    "1100231": [
+      "reward_manual_Monolith_1100231"
+    ],
+    "1100311": [
+      "reward_manual_FieldEvent_L_TreasureBox_1100311"
+    ],
+    "1100312": [
+      "reward_manual_FieldEvent_L_TreasureBox_1100312"
+    ],
+    "1200018": [
+      "reward_manual_FieldEvent_L_TreasureBox_1200018"
+    ],
+    "1200019": [
+      "reward_manual_FieldEvent_L_TreasureBox_1200019"
+    ],
+    "1200020": [
+      "reward_manual_FieldEvent_L_TreasureBox_1200020"
+    ],
+    "1200036": [
+      "reward_manual_TreasureBox_L_Normal"
+    ],
+    "1200037": [
+      "reward_manual_TreasureBox_L_Normal"
+    ],
+    "1200365": [
+      "reward_manual_Field_L_Flag_1200365"
+    ],
+    "1200366": [
+      "reward_manual_Field_L_Flag_1200366"
+    ],
+    "1200368": [
+      "reward_manual_Field_L_Flag_1200368"
+    ],
+    "1200495": [
+      "reward_manual_Field_L_Flag_1200495"
+    ],
+    "1200541": [
+      "reward_manual_Field_L_Flag_1200541"
+    ],
+    "1200667": [
+      "reward_manual_TreasureBox_L_Normal"
+    ],
+    "1200794": [
+      "reward_manual_Garrison_1200794"
+    ],
+    "1200860": [
+      "reward_manual_Monolith_1200860"
+    ],
+    "1200865": [
+      "reward_manual_Monolith_1200865"
+    ],
+    "1200868": [
+      "reward_manual_Monolith_1200868"
+    ],
+    "1201054": [
+      "reward_manual_FieldEvent_L_TreasureBox_1200054"
+    ],
+    "1201055": [
+      "reward_manual_FieldEvent_L_TreasureBox_1200055"
+    ],
+    "1201420": [
+      "reward_manual_Event_Christmas_1201420"
+    ],
+    "1201421": [
+      "reward_manual_Event_Christmas_1201421"
+    ],
+    "1201422": [
+      "reward_manual_Event_Christmas_1201422"
+    ],
+    "1201461": [
+      "reward_manual_Garrison_1201461"
+    ],
+    "1201511": [
+      "reward_manual_Monolith_1201511"
+    ],
+    "1201512": [
+      "reward_manual_Monolith_1201512"
+    ],
+    "1201513": [
+      "reward_manual_Monolith_1201513"
+    ],
+    "1201751": [
+      "reward_manual_Event_Halloween_1201751_key"
+    ],
+    "1201752": [
+      "reward_manual_Event_Halloween_1201752_key"
+    ],
+    "1201753": [
+      "reward_manual_Event_Halloween_1201753_key"
+    ],
+    "1300081": [
+      "reward_manual_TreasureBox_D_Normal"
+    ],
+    "1300082": [
+      "reward_manual_TreasureBox_D_Normal"
+    ],
+    "1300123": [
+      "reward_manual_Field_D_Flag_1300123"
+    ],
+    "1300124": [
+      "reward_manual_Field_D_Flag_1300124"
+    ],
+    "1300128": [
+      "reward_manual_Field_D_Flag_1300128"
+    ],
+    "1300628": [
+      "reward_manual_Field_D_Flag_1300628"
+    ],
+    "1300630": [
+      "reward_manual_Field_D_Flag_1300630"
+    ],
+    "1300749": [
+      "reward_manual_Garrison_1300749"
+    ],
+    "1300754": [
+      "reward_manual_TreasureBox_D_Normal"
+    ],
+    "1300865": [
+      "reward_manual_Monolith_1300865"
+    ],
+    "1300891": [
+      "reward_manual_Monolith_1300891"
+    ],
+    "1300892": [
+      "reward_manual_Monolith_1300892"
+    ],
+    "1301196": [
+      "reward_manual_Event_Christmas_1301196"
+    ],
+    "1301197": [
+      "reward_manual_Event_Christmas_1301197"
+    ],
+    "1301198": [
+      "reward_manual_Event_Christmas_1301198"
+    ],
+    "1301228": [
+      "reward_manual_Monolith_1301228"
+    ],
+    "1301229": [
+      "reward_manual_Monolith_1301229"
+    ],
+    "1301230": [
+      "reward_manual_Monolith_1301230"
+    ],
+    "1301271": [
+      "reward_manual_Garrison_1301271"
+    ],
+    "1301458": [
+      "reward_manual_Event_Halloween_1301458_key"
+    ],
+    "1301459": [
+      "reward_manual_Event_Halloween_1301459_key"
+    ],
+    "1301460": [
+      "reward_manual_Event_Halloween_1301460_key"
+    ],
+    "1400694": [
+      "reward_manual_E_L0_Layer_1_DrakanCorpse_01"
+    ],
+    "1400711": [
+      "reward_manual_Dungeon_Seal_1400711"
+    ],
+    "1400712": [
+      "reward_manual_Dungeon_Seal_1400712"
+    ],
+    "1400800": [
+      "reward_manual_E_D0_Layer_1_InteractCorpse_002"
+    ],
+    "1401039": [
+      "reward_manual_E_D0_Layer_1_BoxPile_002"
+    ],
+    "1401066": [
+      "reward_manual_E_L0_Layer_1_BoxPile_001"
+    ],
+    "1402028": [
+      "reward_manual_Dungeon_Seal_1402028"
+    ],
+    "1402193": [
+      "reward_manual_Dungeon_Seal_1402193"
+    ],
+    "1402194": [
+      "reward_manual_Dungeon_Seal_1402194"
+    ],
+    "2340201": [
+      "reward_manual_FieldEvent_L_2340201"
     ]
   }
 }

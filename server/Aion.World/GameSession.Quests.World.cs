@@ -140,6 +140,7 @@ public sealed partial class GameSession
     {
         if (o.RequiredCombatPower <= 0 || combatPower >= o.RequiredCombatPower) return false;
         if (questLog?.OpenUseEnvObjIds().Contains(o.Env) == true) return false;
+        if (QuestCollectItemRescueEnv(o)) return false;
         if (mapEventRuns.Any(r => r.WantsObject(EventName(o)))) return false;
         return true;
     }
@@ -206,6 +207,18 @@ public sealed partial class GameSession
 
     public const int FlightRingAbnormal = 18999040;
 
+    const byte IncreaseEnvObjReward = 41; // EIncreaseReason kGatherSource (interaction loot)
+
+    async Task<List<byte[]>> GrantEnvObjLootAsync(int envId, CancellationToken ct)
+    {
+        if (!LootTables.Embedded.HasEnvLoot(envId)) return [];
+        var rolled = LootTables.Embedded.RollEnv(envId, profileRace, rng);
+        if (rolled.Count == 0) return [];
+        if (Store is not { } store || CharacterId is not { } character) return [];
+        var granted = await Stored(async () => await store.GrantLootAsync(character, rolled, ct) ? [[]] : []);
+        return granted.Count == 0 ? [] : await InventoryChangesAsync(ct, IncreaseEnvObjReward, 0);
+    }
+
     async Task<List<byte[]>> CompleteUseAsync(int index, CancellationToken ct, long now = 0)
     {
         var objects = WorldObjects.ObjectsOn(worldMap);
@@ -228,8 +241,12 @@ public sealed partial class GameSession
         var replies = new List<byte[]>();
         if (objects[index].Gather is not null) replies.AddRange(await CompleteGatherAsync(index, objects[index], now, ct));
         var destroyed = CarryUsed(index, objects[index], now, replies);
-        if (questLog is not null)
-            replies.AddRange(await Stored(() => QuestChangesAsync(questLog.UsedObject(objects[index].Env, level), ct)));
+        var monolithReplies = objects[index].Monolith ? await MonolithResonateAsync(objects[index], ct) : [];
+        replies.AddRange(monolithReplies);
+        var monolithQuest = monolithReplies.Count > 0;
+        replies.AddRange(await CreditUseEnvObjQuestAsync(objects[index].Env, ct));
+        if (!monolithQuest)
+            replies.AddRange(await GrantEnvObjLootAsync(objects[index].Env, ct));
         // A carried-item box comes back after its FinishDuration even when a map event counts it (FierceHornCave BombBox_02).
         var consumed = objects[index].Carry is null && (CopyOwner ?? this).mapEventRuns.Any(r => r.WantsObject(EventName(objects[index])));
         replies.AddRange(MapEventUsedObject(EventName(objects[index]), now));
@@ -239,16 +256,7 @@ public sealed partial class GameSession
             shownObjects.Remove(index);
             replies.Add(GamePackets.EnvObjDespawn(key, 4, 3));
         }
-        // A party dungeon's portal (EnvObjData Usage PartyDungeon): into the expedition.
-        if (objects[index].Portal is { Length: > 0 } portal)
-        {
-            var moved = EnterPartyDungeon(portal, now, throughDoor: true);
-            if (moved.Count == 0)
-                Note($"portal {objects[index].Name} (env {objects[index].Env}) → dungeon [{string.Join(',', portal)}]: entry refused (see prior dungeon notes)");
-            replies.AddRange(moved);
-        }
-        // A layer's exit door (Usage MoveMap: UsageValue names the teleport point outside).
-        if (objects[index].MoveTo is { Length: > 0 } point) replies.AddRange(MoveMapDoor(point, now));
+        replies.AddRange(ApplyEnvObjSelfAction(objects[index], now));
         // The expedition's reward cube (Usage OdEnergyCube): the final boss's reward, once per player per run.
         if (objects[index].Cube) replies.AddRange(await CubeRewardAsync(null, now, ct));
         replies.AddRange(Achieve("UseEnvObjSpawnerName", 1, e => e.Has(objects[index].Name), now));

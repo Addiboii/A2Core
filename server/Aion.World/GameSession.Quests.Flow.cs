@@ -140,13 +140,23 @@ public sealed partial class GameSession
             if (AscensionQuests.Contains(record.Code) && (selected?.Ascension ?? 1) < 2
                 && (Store is not { } ascending || CharacterId is not { } ascended || await ascending.AscendAsync(ascended, 2, ct)))
                 replies.AddRange(Ascend(2));
-            questLog.Set(record with { Status = QuestLog.Rewarded });
+            var rewarded = record with { Status = QuestLog.Rewarded };
+            questLog.Set(rewarded);
             replies.Add(GamePackets.QuestTakeRewardReply(uid));
+            // HUD episode bar (AionWidget_HUD_IndicatorQuest) counts cleared quests in the active Quest.dat Part from
+            // journal EQuestStatus; without a post-reward sync the client can stay at Complete (3) and show 0% part progress.
+            replies.Add(GamePackets.QuestProgress(Wire(rewarded)));
+            replies.Add(GamePackets.QuestAdd(Wire(rewarded)));
             replies.AddRange(AchieveQuest(record.Code, quest.Type));
             var unlocked = QuestUnlockTypes().Where(t => !unlockedBefore.Contains(t)).ToArray();
             if (unlocked.Length > 0) replies.Add(GamePackets.ContentsUnlockUpdate(unlocked));
-            if (quest.Next is { } next && questLog.Book.Find(next) is { } nextQuest && QuestBook.ChainsWithoutAccept(nextQuest) && questLog.CanAccept(next, level))
-                replies.Add(GamePackets.QuestAdd(Wire(await SaveQuestAsync(QuestLog.New(next, nextQuest), ct))));
+            if (questLog.FollowUpOnReward(quest, level, QuestConditionsHold) is { } next)
+            {
+                replies.Add(GamePackets.QuestAdd(Wire(await SaveQuestAsync(QuestLog.New(next, questLog.Book.Find(next)!), ct))));
+                LogQuestEvent("quest_accept", next, 0, QuestLog.Incomplete);
+            }
+            else if (quest.Next is { } waiting && questLog.Book.Find(waiting) is { } follow)
+                DebugMapEvent($"quest follow-up {waiting} after {record.Code} not auto-added: acquire={follow.Acquire} startNpc={follow.StartNpc} turnInNpc={quest.FinishNpc} block={questLog.AcceptBlockReason(follow, level, QuestConditionsHold) ?? "-"}");
             // Quests waiting on this one (ClearQuest, ClearQuestType objectives) move on.
             replies.AddRange(await QuestChangesAsync(questLog.Recheck(level), ct));
             return replies;
