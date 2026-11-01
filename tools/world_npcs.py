@@ -33,6 +33,7 @@ Official NPC behaviour (research/local/npc-behaviour-20261017, capture 20261013-
 """
 import argparse
 import json
+import random
 import sys
 from functools import lru_cache
 from pathlib import Path
@@ -122,10 +123,12 @@ HP_BY_LEVEL = {1: 133, 3: 199, 4: 266, 5: 399, 6: 532, 7: 665, 8: 798, 9: 931, 1
 # HP per level unit by (NpcSubType, Grade), OBSERVED in the 2026-10-19 recording: Grade 1 NormalMonsters 50 per unit
 # (level 7: 250, level 8: 300, level 1: 50), Grade 2 75 (150, 225, 375, 450), Grade 3 133 (the curve); the Grade 1
 # EliteMonster 2290016 (level 6) 3200 = 800 x 4; the Grade 5 HeroMonster 2701034 (the lake cave boss, level 5) 3000 = 1000 x 3.
-# Other combinations fall back to the sub type's observed unit (Legend: OURS).
-HP_UNIT = {('NormalMonster', 1): 50, ('NormalMonster', 2): 75, ('NormalMonster', 3): 133, ('EliteMonster', 1): 800, ('HeroMonster', 5): 1000}
-HP_UNIT_BY_SUB_TYPE = {'NormalMonster': 133, 'EliteMonster': 800, 'HeroMonster': 1000, 'LegendMonster': 2000}
+# Elite/Hero units are CANDIDATE toned down for near-level comfort until NpcStat HP is wired.
+HP_UNIT = {('NormalMonster', 1): 50, ('NormalMonster', 2): 75, ('NormalMonster', 3): 133, ('EliteMonster', 1): 600, ('HeroMonster', 5): 700}
+HP_UNIT_BY_SUB_TYPE = {'NormalMonster': 133, 'EliteMonster': 600, 'HeroMonster': 700, 'LegendMonster': 1600}
 HP_BASE_UNIT = 133
+# CANDIDATE: official captures ~0.075 of level HP; lowered for dev play (server/Aion.World/Combat.NpcDamageHpFraction).
+NPC_DAMAGE_HP_FRACTION = 0.055
 
 
 def hp_unit(sub_type, grade):
@@ -149,6 +152,44 @@ def hp_for_level(level):
         return max(1, round(HP_BY_LEVEL[low] * level / low))
     t = (level - low) / (high - low)
     return round(HP_BY_LEVEL[low] + t * (HP_BY_LEVEL[high] - HP_BY_LEVEL[low]))
+
+
+def npc_damage_scale(sub_type='NormalMonster', grade=3):
+    """Rank damage scale (OBSERVED + CANDIDATE), mirrors server/Aion.World/Combat.DamageScale."""
+    return {('NormalMonster', 1): 0.45, ('NormalMonster', 2): 0.65, ('EliteMonster', 1): 1.2}.get((sub_type, grade), 1.0 if sub_type != 'EliteMonster' else 1.2)
+
+
+def npc_fixing_damage(level, sub_type='NormalMonster', grade=3):
+    """CANDIDATE NPC attack baseline until NpcStat export lands."""
+    return hp_for_level(level) * NPC_DAMAGE_HP_FRACTION * npc_damage_scale(sub_type, grade)
+
+
+def level_diff_damage_scale(attacker_level, victim_level):
+    """CANDIDATE level-gap modifier when an NPC hits a levelled target."""
+    gap = attacker_level - victim_level
+    return max(0.35, min(1.75, 1.0 + gap * 0.05))
+
+
+def npc_defense(level, sub_type='NormalMonster', grade=3, reference_pc_defense=None):
+    """CANDIDATE NPC defense from level and rank; reference_pc_defense defaults to Gladiator PcStatLevel Defense."""
+    if reference_pc_defense is None:
+        try:
+            from class_skills import data as cs
+            reference_pc_defense = cs()['stats'].get('Gladiator', {}).get(str(level), {}).get('Defense', 10 + max(0, level - 1) * 10)
+        except Exception:
+            reference_pc_defense = 10 + max(0, level - 1) * 10
+    scale = {('NormalMonster', 1): 0.5, ('NormalMonster', 2): 0.75, ('EliteMonster', 1): 1.5, ('HeroMonster', 5): 2.0}.get(
+        (sub_type, grade), 2.0 if sub_type == 'LegendMonster' else (1.5 if sub_type == 'EliteMonster' else 1.0))
+    return max(0, round(reference_pc_defense * scale))
+
+
+def npc_skill_damage(attacker_level, skill_damage_min, skill_damage_max, victim_level, sub_type='NormalMonster', grade=3, rng=random):
+    """One rolled hit before defense mitigation (CANDIDATE formula)."""
+    low, high = min(skill_damage_min, skill_damage_max), max(skill_damage_min, skill_damage_max)
+    factor = (low + rng.random() * (high - low)) / 10000.0
+    raw = npc_fixing_damage(attacker_level, sub_type, grade) * factor
+    raw *= level_diff_damage_scale(attacker_level, victim_level)
+    return max(1, round(raw))
 
 
 def _find(node, key):
@@ -337,8 +378,11 @@ def map_targets(map_id, target_class):
     for index, spawn in enumerate(data()['maps'].get(str(map_id), [])):
         template = data()['templates'].get(str(spawn['npc_id']), {})
         hp = hp_for(spawn['level'], spawn.get('sub_type') or template.get('sub_type', 'NormalMonster'), template.get('grade', 3))
+        sub = spawn.get('sub_type') or template.get('sub_type', 'NormalMonster')
+        grade = template.get('grade', 3)
+        defense = npc_defense(spawn['level'], sub, grade)
         key = FIRST_KEY + index
-        targets[key] = target_class(key=key, name=spawn['name'], hp=hp, hp_max=hp,
+        targets[key] = target_class(key=key, name=spawn['name'], hp=hp, hp_max=hp, defense=defense,
                                     position=tuple(spawn['position']), npc_id=spawn['npc_id'],
                                     level=spawn['level'], direction=spawn['yaw'],
                                     relationship=spawn['relationship'], aggressive=spawn['aggressive'],

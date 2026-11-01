@@ -2832,6 +2832,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
                 aiMap.AiTickAt = now + 50;
                 SyncSharedMapAiKillPreserve(aiMap);
                 aiMap.Ai.DefenseOf ??= key => aiMap.Players.TryGetValue(key, out var p) ? p.Session.Defense : 0;
+                aiMap.Ai.PlayerLevelOf ??= key => aiMap.Players.TryGetValue(key, out var p) ? p.Session.Level : 1;
                 WireMapEventNpcCombatHooks(aiMap.Ai, now);
                 aiMap.BroadcastAll(aiMap.Ai.Tick(aiMap.Targets, aiMap.NpcVictims(), now, (key, damage) =>
                 {
@@ -2844,8 +2845,10 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
                 replies.AddRange(npcKills);
             }
         }
-        else if (targets is not null && (ai.DefenseOf ??= _ => Defense) is not null)
+        else if (targets is not null)
         {
+            ai.DefenseOf ??= _ => Defense;
+            ai.PlayerLevelOf ??= _ => Level;
             ai.SkipLeashHealNpcIds = OpenKillNpcIdsForSharedAi();
             if (ai.SkipLeashHealNpcIds.Count == 0) ai.SkipLeashHealNpcIds = null;
             WireMapEventNpcCombatHooks(ai, now);

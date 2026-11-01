@@ -40,7 +40,7 @@ public sealed partial class NpcAi
         if (skill.Cast > 0)
             brain.Volley.Add(new(release - skill.Cast, ShotKind.CastingStart, id, seq, victim.Key, 0));
         brain.Volley.Add(new(release, ShotKind.SkillStart, id, seq, victim.Key, 0));
-        var perHit = Math.Max(1, (int)Math.Round(Damage(target, skill) / (double)rows.Count));
+        var perHit = Math.Max(1, (int)Math.Round(Damage(target, skill, victim.Level) / (double)rows.Count));
         for (var i = 0; i < rows.Count; i++)
         {
             var row = rows[i];

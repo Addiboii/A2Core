@@ -119,7 +119,7 @@ public sealed partial class NpcAi
                     brain.Volley.Add(new(at, ShotKind.Projectile, id, seq, t.Key, row + 1, area!.ProjectileFor(row), flight));
                 var lands = at + (splash ? mainFlight : flight);
                 var defense = Math.Max(0, t.Defense);
-                var damage = Math.Max(1, (int)Math.Round(Damage(summon, skill) * 1000.0 / (1000 + defense) / rows.Count));
+                var damage = Math.Max(1, (int)Math.Round(Damage(summon, skill, t.Level) * 1000.0 / (1000 + defense) / rows.Count));
                 brain.Volley.Add(new(lands, ShotKind.Hit, id, seq, t.Key, row + 1, Damage: damage, Effect: skill.Effect, Projectile: projectile));
                 last = Math.Max(last, lands);
             }

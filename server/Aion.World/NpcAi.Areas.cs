@@ -55,7 +55,7 @@ public sealed partial class NpcAi
                          .Where(p => p.Key != victimKey && area.Contains(cast.Centre, cast.Yaw, p.Position, PlayerRadius))
                          .OrderBy(p => p.Position.DistanceSquared(cast.Centre)).Take(others).ToList())
             {
-                var damage = Mitigated(caster, hit.Skill, DefenseOf?.Invoke(key) ?? 0);
+                var damage = Mitigated(caster, hit.Skill, DefenseOf?.Invoke(key) ?? 0, PlayerLevelOf?.Invoke(key) ?? 1);
                 replies.Add(GamePackets.NpcSkillHit(key, caster.Key, hit.SkillId, hit.ActionSeq, hit.Skill.Effect, damage));
                 replies.AddRange(currentHitPlayer(key, damage));
             }
@@ -67,13 +67,13 @@ public sealed partial class NpcAi
                          && area.Contains(cast.Centre, cast.Yaw, t.Position, t.Radius))
                      .OrderBy(t => t.Position.DistanceSquared(cast.Centre)).Take(others).ToList())
         {
-            var damage = Mitigated(caster, hit.Skill, t.Defense);
+            var damage = Mitigated(caster, hit.Skill, t.Defense, t.Level);
             replies.Add(GamePackets.NpcSkillHit(t.Key, caster.Key, hit.SkillId, hit.ActionSeq, hit.Skill.Effect, damage));
             replies.AddRange(HitNpc(current, t.Key, caster, damage, now));
         }
         return (replies, inside);
     }
 
-    int Mitigated(Target caster, NpcSkill skill, int defense) =>
-        Math.Max(1, (int)Math.Round(Damage(caster, skill) * 1000.0 / (1000 + Math.Max(0, defense))));
+    int Mitigated(Target caster, NpcSkill skill, int defense, int victimLevel) =>
+        Math.Max(1, (int)Math.Round(Damage(caster, skill, victimLevel) * 1000.0 / (1000 + Math.Max(0, defense))));
 }

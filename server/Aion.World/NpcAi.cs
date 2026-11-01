@@ -30,7 +30,8 @@ public sealed partial class NpcAi(Random rng, GameData? data = null)
     /// <summary>Official: the NPC's hit (0x3804) followed its skill start (0x3802) by ~600 ms.</summary>
     public const int HitDelayMs = 600;
     /// <summary>Official: NPC hits were ~7.5% of the NPC's level HP (level 3: 13-17 of 199; level 7: 47-54 of 665).</summary>
-    public const double DamagePerHp = 0.075;
+    /// <summary>Legacy name; see <see cref="Combat.NpcDamageHpFraction"/>.</summary>
+    public const double DamagePerHp = Combat.NpcDamageHpFraction;
     /// <summary>The player's collision radius for reach (RecastNavMesh AgentRadius 50).</summary>
     public const double PlayerRadius = 50.0;
     /// <summary>Below the NPC, a player still counts as level with it within this height (stairs, slopes).</summary>
@@ -449,6 +450,8 @@ public sealed partial class NpcAi(Random rng, GameData? data = null)
     /// <summary>The NPC died: it leaves combat (official 0x8d21 off after the kill) and drops a pending hit.</summary>
     /// <summary>A victim's defense by entity key (null: no reduction).</summary>
     public Func<int, int>? DefenseOf { get; set; }
+    /// <summary>Player level for level-gap damage (key 1 when solo).</summary>
+    public Func<int, int>? PlayerLevelOf { get; set; }
     /// <summary>After an NPC-vs-NPC hit changes victim HP (map event HpRemaining from summons and SetAggroNpc fights).</summary>
     public Func<Target, List<byte[]>>? OnNpcHpChanged { get; set; }
     /// <summary>Caps damage from another NPC before HP is applied (map event HpRemaining talk targets).</summary>
@@ -693,15 +696,21 @@ public sealed partial class NpcAi(Random rng, GameData? data = null)
     /// <summary>Centre distance at which the NPC's skill reaches the player.</summary>
     static double AttackRange(Target target, NpcSkill? skill) => (skill?.Range ?? Reach) + target.Radius + PlayerRadius;
 
-    int Damage(Target target, NpcSkill skill)
+    int VictimLevel(Brain brain)
+    {
+        var key = Victim(brain);
+        if (brain.VictimIsNpc && current?.GetValueOrDefault(key) is { } npc) return npc.Level;
+        return PlayerLevelOf?.Invoke(key) ?? 1;
+    }
+
+    int Damage(Target attacker, NpcSkill skill, int victimLevel)
     {
         var low = Math.Min(skill.DamageMin, skill.DamageMax);
         var high = Math.Max(skill.DamageMin, skill.DamageMax);
         var factor = (low + rng.NextDouble() * (high - low)) / 10000.0;
-        // The NPC's level's Grade 3 HP, not its own HP: the recording of 2026-10-19 has the lake cave boss (hero, level 5, 3000 HP)
-        // hitting 21-31 with its ordinary attacks (399 x 7.5 % = 30) and level-4 monsters 11-30; the skills' factors spread that,
-        // and the rank scales it (Combat.DamageScale).
-        return Math.Max(1, (int)Math.Round(Combat.HpForLevel(target.Level) * DamagePerHp * target.DamageScale * factor));
+        var raw = Combat.NpcFixingDamage(attacker.Level, attacker.SubType, attacker.Grade) * factor;
+        raw *= Combat.LevelDiffDamageScale(attacker.Level, victimLevel);
+        return Math.Max(1, (int)Math.Round(raw));
     }
 
     /// <summary>A due hit lands when the player is still within reach plus the skill's follow range.</summary>
@@ -727,7 +736,7 @@ public sealed partial class NpcAi(Random rng, GameData? data = null)
         }
         // The victim's defense reduces the hit (the CANDIDATE 1000/(1000+defense) used for players' hits).
         var defense = brain.VictimIsNpc && current?.GetValueOrDefault(victim) is { } prey ? prey.Defense : DefenseOf?.Invoke(victim) ?? 0;
-        var damage = Math.Max(1, (int)Math.Round(Damage(target, hit.Skill) * 1000.0 / (1000 + Math.Max(0, defense))));
+        var damage = Math.Max(1, (int)Math.Round(Damage(target, hit.Skill, VictimLevel(brain)) * 1000.0 / (1000 + Math.Max(0, defense))));
         LastAttacker = target.Key;
         LastHitSkill = hit.SkillId;
         var (splash, struck) = Splash(target, hit, victim, p, victimRadius, now);

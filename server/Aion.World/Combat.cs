@@ -152,18 +152,47 @@ public static class Combat
     /// <summary>
     /// HP per level unit by NpcData NpcSubType and Grade, OBSERVED in the 2026-10-19 recording: Grade 1 NormalMonsters 50 (level 7:
     /// 250, level 8: 300, level 1: 50), Grade 2 75 (150, 225, 375, 450), Grade 3 133 (the curve); the Grade 1 EliteMonster 2290016
-    /// (level 6) 3200 = 800 x 4; the Grade 5 HeroMonster 2701034 (the lake cave boss, level 5) 3000 = 1000 x 3. Other combinations
-    /// take the sub type's observed unit (Legend: OURS).
+    /// (level 6) 3200 = 800 x 4; the Grade 5 HeroMonster 2701034 (the lake cave boss, level 5) 3000 = 1000 x 3. Elite/Hero units are
+    /// CANDIDATE toned down for near-level comfort until NpcStat HP is wired (official 0x3641 anchors unchanged for grade-3 normals).
     /// </summary>
     public static int HpUnit(string subType, int grade) => (subType, grade) switch
     {
         ("NormalMonster", 1) => 50,
         ("NormalMonster", 2) => 75,
-        ("EliteMonster", _) => 800,
-        ("HeroMonster", _) => 1000,
-        ("LegendMonster", _) => 2000,
+        ("EliteMonster", _) => 600,
+        ("HeroMonster", _) => 700,
+        ("LegendMonster", _) => 1600,
         _ => HpBaseUnit,
     };
+
+    /// <summary>CANDIDATE: NPC basic-hit strength as a fraction of the level's Grade-3 HP curve (official captures ~0.075; lowered for dev play).</summary>
+    public const double NpcDamageHpFraction = 0.055;
+
+    /// <summary>CANDIDATE NPC attack baseline (NpcStat.dat not exported): level curve × rank scale, used like FixingDamage with skill ratios.</summary>
+    public static double NpcFixingDamage(int level, string subType, int grade) =>
+        HpForLevel(level) * NpcDamageHpFraction * DamageScale(subType, grade);
+
+    /// <summary>CANDIDATE level-gap modifier when an NPC hits a levelled target (player or NPC).</summary>
+    public static double LevelDiffDamageScale(int attackerLevel, int victimLevel)
+    {
+        var gap = attackerLevel - victimLevel;
+        return Math.Clamp(1.0 + gap * 0.05, 0.35, 1.75);
+    }
+
+    /// <summary>CANDIDATE NPC defense from level and rank (NpcStat.dat not exported). <paramref name="referencePcDefense"/> is PcStatLevel Defense at the same level.</summary>
+    public static int NpcDefense(int level, string subType, int grade, int referencePcDefense)
+    {
+        var scale = (subType, grade) switch
+        {
+            ("NormalMonster", 1) => 0.5,
+            ("NormalMonster", 2) => 0.75,
+            ("EliteMonster", _) => 1.5,
+            ("HeroMonster", _) => 2.0,
+            ("LegendMonster", _) => 2.5,
+            _ => 1.0,
+        };
+        return Math.Max(0, (int)Math.Round(referencePcDefense * scale));
+    }
 
     /// <summary>
     /// The NPC's hits against the level's Grade 3 damage by NpcSubType and Grade, OBSERVED (official hits on the player per unit
@@ -234,6 +263,7 @@ public static class Combat
                 UniqueKey = spawn.UniqueKey, SocialAction = spawn.SocialAction, SocialStart = spawn.SocialAction != 0 ? StartedAt : 0, Route = spawn.Route,
                 Air = spawn.Air, AirMonster = spawn.Air && spawn.SubType.EndsWith("Monster", StringComparison.Ordinal), DamageScale = DamageScale(spawn.SubType, spawn.Grade),
                 SubType = spawn.SubType, Grade = spawn.Grade,
+                Defense = NpcDefense(spawn.Level, spawn.SubType, spawn.Grade, data.BaseStats("Gladiator", spawn.Level).GetValueOrDefault("Defense")),
             };
             NpcAi.InitGroggy(targets[key]);
         }
