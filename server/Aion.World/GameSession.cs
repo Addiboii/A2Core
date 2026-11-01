@@ -444,6 +444,8 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             case NPShopGameMoneyLimitRq when plain.Length >= 3: return await NPShopGameMoneyLimitAsync(plain, now, ct);
             case NPShopPurchaseRq when plain.Length >= 10: return await NPShopPurchaseAsync(plain, now, ct);
             case TrustLimitInfoRq: return TrustLimitInfo(now);
+            case GamePackets.MonolithResonateRq when plain.Length >= 14: return await MonolithResonateRequestAsync(plain, ct);
+            case GamePackets.SyncMonolithAccountAchievementsRq when plain.Length >= 6: return await SyncMonolithAccountAchievementsAsync(plain);
             case ItemRestoreRq when plain.Length >= 3: return await RestoreItemsAsync(plain, ct);
             case ItemEnchantRq when plain.Length >= 10: return await EnchantAsync(plain, ct);
             case ItemExceedEnchantRq when plain.Length >= 10: return await ExceedEnchantAsync(plain, ct);
@@ -1660,17 +1662,21 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         replies.AddRange(ApplyQuestWorldGating(now));
         replies.AddRange(NpcsAtEntry(at));
         replies.AddRange(KibeliskSpawns(mapId, now));
+        if (!shortLoad) replies.Add(MonolithListAtEntry());
         if (!shortLoad)
         {
             replies.Add(GamePackets.OpenSubzoneGroups(fog.ToList()));
             replies.AddRange(SocialWorldEntry());
         }
         fogCheckAt = 0;
+        ResetMonolithClientState();
         shownObjects.Clear();
         shownTriggers.Clear();
         usedObjects.Clear();
         ResetEnvObjHits();
         pendingUse = null;
+        if (!shortLoad)
+            EnableMonolithNoticesAfterList();
         replies.AddRange(ObjectVisibility(at, now));
         replies.AddRange(MapEventsStart(now, resendExistingJoins: shortLoad));   // the layer's events join (0x922e) and run their first directives
         replies.AddRange(ApplyQuestWorldGating(now));

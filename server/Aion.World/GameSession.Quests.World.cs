@@ -23,6 +23,7 @@ public sealed partial class GameSession
         if (resources is null || now < fogCheckAt) return [];
         fogCheckAt = now + FogCheckMs;
         var replies = ObjectVisibility(at, now);
+        replies.AddRange(await TryMonolithProximityResonateAsync(at, ct));
         replies.AddRange(await AreaQuestsAsync(at, ct));
         if (Subzones.GroupAt(worldMap, at) is { } group && !fog.Contains(group)) replies.AddRange(await OpenFogAsync([group], ct));
         replies.AddRange(DismountIfSubzoneForbidden());
@@ -53,12 +54,17 @@ public sealed partial class GameSession
     {
         var key = WorldObjects.FirstKey + index;
         envObjPhase.TryGetValue(index, out var phase);
-        var canInteract = PlayerMayUseEnvObj(index, o);
+        // Usage=Monolith: client opens MonolithResonate from 0x3baa, not InteractEnvObj (EnvObjData InteractTime 0).
+        var canInteract = o.Monolith ? false : PlayerMayUseEnvObj(index, o);
         return GamePackets.EnvObjSpawn(key, o.Env, o.At, o.Yaw, now, o.UniqueKey, (byte)o.Relationship,
             state: 1, canInteract: canInteract ? (byte)1 : (byte)0, reason: 1, phase: phase);
     }
 
-    void PushEnvObjSpawn(int index, WorldObject o, long now) => mapEventOut.Add(EnvObjSpawnPacket(index, o, now));
+    void PushEnvObjSpawn(int index, WorldObject o, long now)
+    {
+        mapEventOut.Add(EnvObjSpawnPacket(index, o, now));
+        foreach (var notice in MonolithEnvObjNotices(index, o)) mapEventOut.Add(notice);
+    }
 
     bool EnvObjInteractAllowed(int index) => !envObjCanInteract.TryGetValue(index, out var ok) || ok;
 
@@ -84,7 +90,10 @@ public sealed partial class GameSession
                 continue;
             }
             if (near && !Gathered(i, now) && !Broken(i, now) && !CarryBoxGone(i, now) && !usedObjects.Contains(i) && shownObjects.Add(i))
+            {
                 replies.Add(EnvObjSpawnPacket(i, o, now));
+                replies.AddRange(MonolithEnvObjNotices(i, o));
+            }
             else if (!near && shownObjects.Remove(i))
                 replies.Add(GamePackets.EnvObjDespawn(WorldObjects.FirstKey + i));
         }
@@ -121,16 +130,25 @@ public sealed partial class GameSession
     async Task<List<byte[]>> SyncQuestCollectItemsAsync(CancellationToken ct)
     {
         if (questLog is null) return [];
+        if (Store is null || CharacterId is null)
+        {
+            Note("SyncQuestCollectItems skipped: character or store not loaded");
+            return [];
+        }
         var itemIds = questLog.All.Where(q => q.Status == QuestLog.Incomplete).SelectMany(q =>
             questLog.CurrentStep(q) is { } step
-                ? step.Objectives.Take(6).Where((o, i) => o.Type == "CollectItem" && o.Item is { } id && q.Goals[i] < o.Count).Select(o => o.Item!.Value)
+                ? step.Objectives.Take(6).Where(o => o.Type == "CollectItem" && o.Item is { }).Select(o => o.Item!.Value)
                 : []).Distinct().ToList();
         if (itemIds.Count == 0) return [];
         var changed = new Dictionary<string, QuestRecord>();
         foreach (var itemId in itemIds)
         {
             var held = inventory.Values.Where(i => i.ItemId == itemId).Sum(i => i.Count);
-            foreach (var record in questLog.Holding(itemId, held, level)) changed[record.Code] = record;
+            foreach (var record in questLog.Holding(itemId, held, level))
+            {
+                Note($"SyncQuestCollectItems item={itemId} held={held} quest={record.Code} step={record.Step} goals=[{string.Join(',', record.Goals)}]");
+                changed[record.Code] = record;
+            }
         }
         return changed.Count == 0 ? [] : await Stored(() => QuestChangesAsync(changed.Values, ct));
     }

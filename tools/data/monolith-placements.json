@@ -1,5 +1,5 @@
 {
-  "source": "MapData SpawnInfoList Usage=Monolith (merged when absent from tools/world_objects.py build export)",
+  "source": "MapData SpawnInfoList Usage=Monolith (merged when absent from tools/world_objects.py build export); monolith_id from pinned ids (tools/monolith_data.py; run WorldProbe on Monolith.dat to refresh)",
   "objects": [
     {
       "map": 1010,
@@ -15,7 +15,9 @@
       "interact_time": 5000,
       "interact_range": 160,
       "relationship": 8,
-      "monolith": true
+      "monolith": true,
+      "monolith_id": 1200865,
+      "monolith_name": "monolith_L_Verteron_01"
     },
     {
       "map": 1011,
@@ -31,7 +33,9 @@
       "interact_time": 5000,
       "interact_range": 160,
       "relationship": 8,
-      "monolith": true
+      "monolith": true,
+      "monolith_id": 1201511,
+      "monolith_name": "monolith_L_Eltnen_01"
     },
     {
       "map": 1110,
@@ -47,7 +51,9 @@
       "interact_time": 5000,
       "interact_range": 160,
       "relationship": 9,
-      "monolith": true
+      "monolith": true,
+      "monolith_id": 1300865,
+      "monolith_name": "monolith_D_Altgard_01"
     },
     {
       "map": 1111,
@@ -63,7 +69,9 @@
       "interact_time": 5000,
       "interact_range": 160,
       "relationship": 9,
-      "monolith": true
+      "monolith": true,
+      "monolith_id": 1301228,
+      "monolith_name": "monolith_D_Morheim_01"
     },
     {
       "map": 1100,
@@ -79,7 +87,9 @@
       "interact_time": 5000,
       "interact_range": 160,
       "relationship": 8,
-      "monolith": true
+      "monolith": true,
+      "monolith_id": 1100228,
+      "monolith_name": "monolith_L_Reshanta_01"
     },
     {
       "map": 1100,
@@ -95,7 +105,9 @@
       "interact_time": 5000,
       "interact_range": 160,
       "relationship": 8,
-      "monolith": true
+      "monolith": true,
+      "monolith_id": 1100228,
+      "monolith_name": "monolith_L_Reshanta_01"
     },
     {
       "map": 1100,
@@ -111,7 +123,9 @@
       "interact_time": 5000,
       "interact_range": 160,
       "relationship": 9,
-      "monolith": true
+      "monolith": true,
+      "monolith_id": 1100230,
+      "monolith_name": "monolith_D_Reshanta_01"
     },
     {
       "map": 1100,
@@ -127,7 +141,9 @@
       "interact_time": 5000,
       "interact_range": 160,
       "relationship": 9,
-      "monolith": true
+      "monolith": true,
+      "monolith_id": 1100230,
+      "monolith_name": "monolith_D_Reshanta_01"
     }
   ]
 }

@@ -1,0 +1,101 @@
+{
+  "source": "pinned ids (tools/monolith_data.py; run WorldProbe on Monolith.dat to refresh)",
+  "monoliths": [
+    {
+      "id": 1100228,
+      "name": "monolith_L_Reshanta_01",
+      "race": 1,
+      "token_item": null,
+      "sync_quest": null
+    },
+    {
+      "id": 1100230,
+      "name": "monolith_D_Reshanta_01",
+      "race": 2,
+      "token_item": null,
+      "sync_quest": null
+    },
+    {
+      "id": 1200865,
+      "name": "monolith_L_Verteron_01",
+      "race": 1,
+      "token_item": null,
+      "sync_quest": null
+    },
+    {
+      "id": 1201511,
+      "name": "monolith_L_Eltnen_01",
+      "race": 1,
+      "token_item": null,
+      "sync_quest": null
+    },
+    {
+      "id": 1300865,
+      "name": "monolith_D_Altgard_01",
+      "race": 2,
+      "token_item": null,
+      "sync_quest": null
+    },
+    {
+      "id": 1301228,
+      "name": "monolith_D_Morheim_01",
+      "race": 2,
+      "token_item": null,
+      "sync_quest": null
+    }
+  ],
+  "by_name": {
+    "monolith_L_Verteron_01": {
+      "id": 1200865,
+      "name": "monolith_L_Verteron_01",
+      "race": 1,
+      "token_item": null,
+      "sync_quest": null
+    },
+    "monolith_L_Eltnen_01": {
+      "id": 1201511,
+      "name": "monolith_L_Eltnen_01",
+      "race": 1,
+      "token_item": null,
+      "sync_quest": null
+    },
+    "monolith_L_Reshanta_01": {
+      "id": 1100228,
+      "name": "monolith_L_Reshanta_01",
+      "race": 1,
+      "token_item": null,
+      "sync_quest": null
+    },
+    "monolith_D_Altgard_01": {
+      "id": 1300865,
+      "name": "monolith_D_Altgard_01",
+      "race": 2,
+      "token_item": null,
+      "sync_quest": null
+    },
+    "monolith_D_Morheim_01": {
+      "id": 1301228,
+      "name": "monolith_D_Morheim_01",
+      "race": 2,
+      "token_item": null,
+      "sync_quest": null
+    },
+    "monolith_D_Reshanta_01": {
+      "id": 1100230,
+      "name": "monolith_D_Reshanta_01",
+      "race": 2,
+      "token_item": null,
+      "sync_quest": null
+    }
+  },
+  "env_to_monolith_id": {
+    "1200863": 1200865,
+    "1201540": 1201511,
+    "1300862": 1300865,
+    "1301278": 1301228,
+    "1100228": 1100228,
+    "1100229": 1100228,
+    "1100230": 1100230,
+    "1100231": 1100230
+  }
+}

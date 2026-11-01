@@ -45,7 +45,10 @@ public sealed partial class GameSession
         var shown = posts.Where(p => (tab == 0 || p.Tab == tab) && (!unreadOnly || !p.Read)).ToList();
         var w = PacketWriter.Opcode(PostLoadRs).U16(0).U8(tab).I32(posts.Count(p => tab == 0 || p.Tab == tab)).I32(posts.Count(p => (tab == 0 || p.Tab == tab) && !p.Read)).Varint((uint)shown.Count);
         foreach (var post in shown) WritePost(w, post);
-        return [w.ToArray()];
+        var replies = new List<byte[]> { w.ToArray() };
+        if (tab == PostTabReward)
+            replies.AddRange(FlushMonolithNoticesAfterLoadPost());
+        return replies;
     }
 
     static List<(byte Type, long Id)> PostPairs(byte[] plain)
