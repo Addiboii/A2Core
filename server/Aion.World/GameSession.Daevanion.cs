@@ -17,6 +17,8 @@ public sealed partial class GameSession
         DaevanionResetBoardRq = 0xe22c, DaevanionResetBoardRs = 0xe22d, DaevanionPointUpdateNt = 0xe22e,
         UpdateItemDaevanionPointNt = 0xe22f, DaevanionOpenAllNodeRq = 0xe2ee, DaevanionOpenAllNodeRs = 0xe2ef,
         DaevanionOpenRouteNodeRq = 0xe2f0, DaevanionOpenRouteNodeRs = 0xe2f1;
+    /// <summary>Live client (2026-10-31): node learn moved +0x2db from 0xe227; body is OpenRouteNode wire (board i32, node path).</summary>
+    public const ushort DaevanionOpenNodeRqLive = 0xe502, DaevanionOpenNodeRsLive = 0xe503;
 
     /// <summary>EContentsUnlockType::Daevanion (20): the client keeps board tabs locked until this is in 0xe257/0xe258.</summary>
     public const byte DaevanionContentsUnlock = 20;
@@ -42,9 +44,30 @@ public sealed partial class GameSession
         }
     }
 
+    void RecomputeDaevanionUsedFromNodes()
+    {
+        daevanionUsed.Clear();
+        foreach (var id in daevanionNodes)
+        {
+            if (Daevanion.NodeOf(id) is not { Cost: > 0 } node) continue;
+            if (Daevanion.BoardOf(node.BoardId) is not { } board) continue;
+            daevanionUsed[board.PointType] = daevanionUsed.GetValueOrDefault(board.PointType) + node.Cost;
+        }
+    }
+
     void EnsureStartNodes()
     {
         if (character is null) return;
+        var slot = Daevanion.ClassSlot(character.CreationId);
+        if (slot == 0) return;
+        // Drop nodes from other class boards (legacy saves e.g. 610113 on a Ranger slot 3 / board 31).
+        foreach (var id in daevanionNodes.ToList())
+        {
+            if (Daevanion.NodeOf(id) is not { } node) continue;
+            if (Daevanion.BoardOf(node.BoardId) is not { } board || board.Slot == slot) continue;
+            daevanionNodes.Remove(id);
+        }
+        RecomputeDaevanionUsedFromNodes();
         foreach (var boardId in Daevanion.BoardsForCreation(character.CreationId))
         {
             if (level < (Daevanion.BoardOf(boardId)?.NeedLevel ?? 999)) continue;
@@ -53,22 +76,10 @@ public sealed partial class GameSession
     }
 
     /// <summary>
-    /// Level-earned Daevanion crystals per point type (client Exp/Daevanion tables: one at NeedLevel, then +1 per level;
-    /// matches UI cap e.g. level 16 on a board opening at 12 → 4/4 available when used=0).
+    /// Level-earned Daevanion crystals per point type (client Exp.dat DaevanionPointMap; embedded level_points in daevanion.json).
     /// </summary>
-    int DaevanionLevelEarned(int pointType)
-    {
-        if (character is null) return 0;
-        var earned = 0;
-        foreach (var boardId in Daevanion.BoardsForCreation(character.CreationId))
-        {
-            if (Daevanion.BoardOf(boardId) is not { } board || board.PointType != pointType) continue;
-            if (level < board.NeedLevel) continue;
-            var tier = level == board.NeedLevel ? 1 : level - board.NeedLevel;
-            earned = Math.Max(earned, tier);
-        }
-        return earned;
-    }
+    int DaevanionLevelEarned(int pointType) =>
+        character is null ? 0 : Daevanion.LevelPointsEarned(pointType, level);
 
     int DaevanionAvailable(int pointType) =>
         DaevanionLevelEarned(pointType) + daevanionBonus.GetValueOrDefault(pointType) - daevanionUsed.GetValueOrDefault(pointType);
@@ -171,7 +182,8 @@ public sealed partial class GameSession
 
     async Task<bool> PersistDaevanionAsync(CancellationToken ct)
     {
-        if (Store is not { } store || CharacterId is not { } character) return true;
+        if (Store is not { } store) return true;
+        if (CharacterId is not { } character) return false;
         var progress = new DaevanionProgress(daevanionNodes.ToList(), daevanionUsed, daevanionBonus);
         return await store.SaveDaevanionAsync(character, progress, ct);
     }
@@ -198,6 +210,42 @@ public sealed partial class GameSession
         var w = PacketWriter.Opcode(opcode).I32(result).I32(boardId).Varint((uint)opened.Count);
         foreach (var id in opened) w.I32(id);
         return w.ToArray();
+    }
+
+    /// <summary>DevPacketData_GameServer_DaevanionOpenRouteNode_RQ body after opcode.</summary>
+    static bool TryParseDaevanionRouteBody(byte[] plain, out int boardId, out List<int> route)
+    {
+        boardId = 0;
+        route = [];
+        if (plain.Length < 7) return false;
+        try
+        {
+            var reader = new PacketReader(plain) { Offset = 2 };
+            boardId = reader.I32();
+            var count = reader.Varint();
+            for (var i = 0; i < count && i < 256; i++)
+            {
+                if (reader.Offset + 4 > plain.Length) return false;
+                route.Add(reader.I32());
+            }
+            return route.Count > 0;
+        }
+        catch (ProtocolException)
+        {
+            return false;
+        }
+    }
+
+    static List<int> DaevanionPendingRoute(IReadOnlyList<int> route, IReadOnlyCollection<int> opened)
+    {
+        var pending = new List<int>();
+        foreach (var id in route)
+        {
+            if (id == 0) continue;
+            if (opened.Contains(id)) continue;
+            pending.Add(id);
+        }
+        return pending;
     }
 
     List<int> CollectOpenAll(int boardId)
@@ -254,12 +302,33 @@ public sealed partial class GameSession
         ];
     }
 
-    async Task<List<byte[]>> DaevanionOpenNodeAsync(byte[] plain, CancellationToken ct)
+    async Task<List<byte[]>> DaevanionOpenNodeAsync(byte[] plain, CancellationToken ct) =>
+        await DaevanionOpenNodeAsync(plain, DaevanionOpenNodeRs, ct);
+
+    async Task<List<byte[]>> DaevanionOpenNodeLiveAsync(byte[] plain, CancellationToken ct)
+    {
+        if (!TryParseDaevanionRouteBody(plain, out var boardId, out var wireRoute))
+            return [PacketWriter.Opcode(DaevanionOpenNodeRsLive).U16(1).I32(0).ToArray()];
+        var pending = DaevanionPendingRoute(wireRoute, daevanionNodes);
+        if (pending.Count == 0)
+            return [PacketWriter.Opcode(DaevanionOpenNodeRsLive).U16(1).I32(wireRoute[^1]).ToArray()];
+        if (pending.Count == 1)
+            return await DaevanionOpenNodeAsync(pending[0], boardId, DaevanionOpenNodeRsLive, ct);
+        return await DaevanionOpenRouteCoreAsync(boardId, pending, DaevanionOpenNodeRsLive, ct);
+    }
+
+    async Task<List<byte[]>> DaevanionOpenNodeAsync(byte[] plain, ushort rsOpcode, CancellationToken ct)
     {
         if (plain.Length < 6) return [];
         var nodeId = BitConverter.ToInt32(plain, 2);
-        byte[] Reply(int result) => PacketWriter.Opcode(DaevanionOpenNodeRs).U16(result).I32(nodeId).ToArray();
+        return await DaevanionOpenNodeAsync(nodeId, Daevanion.NodeOf(nodeId)?.BoardId ?? 0, rsOpcode, ct);
+    }
+
+    async Task<List<byte[]>> DaevanionOpenNodeAsync(int nodeId, int boardId, ushort rsOpcode, CancellationToken ct)
+    {
+        byte[] Reply(int result) => PacketWriter.Opcode(rsOpcode).U16(result).I32(nodeId).ToArray();
         if (!CanOpenNode(nodeId, out var node, out var fail)) return [Reply(fail)];
+        if (boardId != 0 && node.BoardId != boardId) return [Reply(1)];
         ApplyOpenNode(nodeId, node);
         if (!await PersistDaevanionAsync(ct))
         {
@@ -295,19 +364,16 @@ public sealed partial class GameSession
 
     async Task<List<byte[]>> DaevanionOpenRouteNodeAsync(byte[] plain, CancellationToken ct)
     {
-        if (plain.Length < 6) return [];
-        List<int> route;
-        int boardId;
-        try
-        {
-            var reader = new PacketReader(plain) { Offset = 2 };
-            boardId = reader.I32();
-            var count = reader.Varint();
-            route = [];
-            for (var i = 0; i < count && i < 256; i++) route.Add(reader.I32());
-        }
-        catch (ProtocolException) { return []; }
-        byte[] Reply(int result, IReadOnlyList<int> ids) => DaevanionBatchOpenReply(DaevanionOpenRouteNodeRs, result, boardId, ids);
+        if (!TryParseDaevanionRouteBody(plain, out var boardId, out var route)) return [];
+        return await DaevanionOpenRouteCoreAsync(boardId, route, DaevanionOpenRouteNodeRs, ct);
+    }
+
+    async Task<List<byte[]>> DaevanionOpenRouteCoreAsync(int boardId, IReadOnlyList<int> route, ushort rsOpcode, CancellationToken ct)
+    {
+        byte[] Reply(int result, IReadOnlyList<int> ids) =>
+            rsOpcode == DaevanionOpenNodeRsLive && ids.Count <= 1
+                ? PacketWriter.Opcode(rsOpcode).U16(result).I32(ids.Count > 0 ? ids[^1] : 0).ToArray()
+                : DaevanionBatchOpenReply(rsOpcode, result, boardId, ids);
         if (route.Count == 0) return [Reply(1, [])];
         if (!TryOpenRoute(boardId, route, out var opened, out var fail))
         {
@@ -405,6 +471,12 @@ public sealed partial class GameSession
     }
 
     internal byte[] DaevanionPointUpdateWire() => DaevanionPointUpdate();
+
+    internal IReadOnlyList<(int Type, int Point)> DaevanionUsedPointWire() =>
+        Enumerable.Range(1, 5).Where(t => daevanionUsed.GetValueOrDefault(t) > 0).Select(t => (t, daevanionUsed[t])).ToList();
+
+    internal IReadOnlyList<(int Type, int Point)> DaevanionBonusPointWire() =>
+        Enumerable.Range(1, 5).Where(t => daevanionBonus.GetValueOrDefault(t) > 0).Select(t => (t, daevanionBonus[t])).ToList();
 
     internal int DaevanionAvailableForTests(int pointType) => DaevanionAvailable(pointType);
 

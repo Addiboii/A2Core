@@ -18,6 +18,7 @@ public sealed class DaevanionTables
         [property: JsonPropertyName("nodes")] Dictionary<string, JsonElement> Nodes,
         [property: JsonPropertyName("creation_slot")] Dictionary<string, int> CreationSlot,
         [property: JsonPropertyName("item_points")] Dictionary<string, ItemPointJson> ItemPoints,
+        [property: JsonPropertyName("level_points")] Dictionary<string, Dictionary<string, int>>? LevelPoints,
         [property: JsonPropertyName("grid")] JsonElement Grid);
 
     public sealed record ItemPointJson([property: JsonPropertyName("point")] int PointType, [property: JsonPropertyName("amount")] int Amount);
@@ -27,6 +28,7 @@ public sealed class DaevanionTables
     readonly Dictionary<int, int> creationSlot;
     readonly Dictionary<int, (int PointType, int Amount)> itemPoints;
     readonly Dictionary<int, List<int>> nodesByBoard = [];
+    readonly Dictionary<int, Dictionary<int, int>> levelPoints = [];
     readonly (int Row, int Col) origin;
 
     DaevanionTables(File file)
@@ -36,6 +38,14 @@ public sealed class DaevanionTables
         creationSlot = file.CreationSlot.ToDictionary(p => int.Parse(p.Key, CultureInfo.InvariantCulture), p => p.Value);
         itemPoints = file.ItemPoints.ToDictionary(p => int.Parse(p.Key, CultureInfo.InvariantCulture), p => (p.Value.PointType, p.Value.Amount));
         origin = (file.Grid.GetProperty("origin").GetProperty("r").GetInt32(), file.Grid.GetProperty("origin").GetProperty("c").GetInt32());
+        if (file.LevelPoints is not null)
+        {
+            foreach (var (typeText, byLevel) in file.LevelPoints)
+            {
+                var pointType = int.Parse(typeText, CultureInfo.InvariantCulture);
+                levelPoints[pointType] = byLevel.ToDictionary(p => int.Parse(p.Key, CultureInfo.InvariantCulture), p => p.Value);
+            }
+        }
         nodes = file.Nodes.ToDictionary(p => int.Parse(p.Key, CultureInfo.InvariantCulture), p =>
         {
             var n = p.Value;
@@ -76,6 +86,13 @@ public sealed class DaevanionTables
     public int ClassSlot(int creationId) => creationSlot.GetValueOrDefault(creationId);
     public (int PointType, int Amount)? ItemGrant(int templateId) => itemPoints.TryGetValue(templateId, out var grant) ? grant : null;
     public (int Row, int Col) Origin => origin;
+
+    /// <summary>Cumulative crystals earned at a character level (Exp.dat DaevanionPointMap; tools/data/daevanion.json level_points).</summary>
+    public int LevelPointsEarned(int pointType, int level)
+    {
+        if (!levelPoints.TryGetValue(pointType, out var byLevel) || level <= 0) return 0;
+        return byLevel.GetValueOrDefault(level);
+    }
 
     /// <summary>Board ids for a creation profile (five gods).</summary>
     public IEnumerable<int> BoardsForCreation(int creationId)

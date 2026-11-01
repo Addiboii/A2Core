@@ -556,6 +556,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             case PeriodCollectionListRq: return PeriodCollectionListRequest(plain, now);
             case RegisterPeriodCollectionRq when plain.Length >= 11: return await RegisterCollectionAsync(plain, now, ct);
             case DaevanionOpenNodeRq when plain.Length >= 6: return await DaevanionOpenNodeAsync(plain, ct);
+            case DaevanionOpenNodeRqLive when plain.Length >= 7: return await DaevanionOpenNodeLiveAsync(plain, ct);
             case DaevanionCloseNodeRq when plain.Length >= 6: return await DaevanionCloseNodeAsync(plain, ct);
             case DaevanionResetBoardRq when plain.Length >= 6: return await DaevanionResetBoardAsync(plain, ct);
             case DaevanionOpenAllNodeRq when plain.Length >= 6: return await DaevanionOpenAllNodeAsync(plain, ct);
@@ -1362,9 +1363,11 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
                 character = new Choice(state.Summary.Name, state.Gender, state.CreationId, state.Appearance, state.VoiceType);
                 level = data.ClampLevel(state.Progress.Level);
                 LoadDaevanion(await store.DaevanionAsync(state.Summary.CharacterId, ct));
-                var daevanionNodesBefore = daevanionNodes.Count;
+                var daevanionNodesBefore = daevanionNodes.ToHashSet();
+                var daevanionUsedBefore = new Dictionary<int, int>(daevanionUsed);
                 EnsureStartNodes();
-                if (daevanionNodes.Count > daevanionNodesBefore)
+                if (!daevanionNodesBefore.SetEquals(daevanionNodes)
+                    || !daevanionUsedBefore.OrderBy(p => p.Key).SequenceEqual(daevanionUsed.OrderBy(p => p.Key)))
                 {
                     var progress = new DaevanionProgress(daevanionNodes.ToList(), daevanionUsed, daevanionBonus);
                     await store.SaveDaevanionAsync(state.Summary.CharacterId, progress, ct);
@@ -1538,6 +1541,8 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
                 EquipItemLevel = armed, HighestTotalItemLevel = armed,
                 CombatPower = combatPower,
                 SubzoneId = Subzones.SubzoneIdAt(mapId, at),
+                UsedDaevanionPoints = DaevanionUsedPointWire(),
+                BonusDaevanionPoints = DaevanionBonusPointWire(),
             }));
         replies.Add(GamePackets.CharBarrier(playerKey));
         replies.Add(GamePackets.CharStatsUpdate(playerKey, StatSheet().Stats, resources.HpMax));

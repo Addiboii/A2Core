@@ -119,6 +119,10 @@ public sealed record MyCharacterAppear
     public int VoiceType { get; init; }
     /// <summary>Mounted VehicleList id (_ride_data_id); omitted on the wire when 0 (world entry).</summary>
     public int RideDataId { get; init; }
+    /// <summary>MyCharAppear _used_daevanion_point_infos (same spent values as 0xe22e / 0x3b33).</summary>
+    public IReadOnlyList<(int Type, int Point)> UsedDaevanionPoints { get; init; } = [];
+    /// <summary>MyCharAppear _bonus_daevanion_point_infos (item-granted bonus pools).</summary>
+    public IReadOnlyList<(int Type, int Point)> BonusDaevanionPoints { get; init; } = [];
 }
 
 /// <summary>An NPC as the client draws it (0x3641).</summary>
@@ -396,6 +400,13 @@ public static class GamePackets
 
     public static PacketWriter Stat(PacketWriter w, int type, int value) => w.U16(type).I32(value);
 
+    static void WriteDaevanionPointInfos(PacketWriter w, IReadOnlyList<(int Type, int Point)> infos)
+    {
+        w.Varint((uint)infos.Count);
+        foreach (var (type, point) in infos)
+            w.U8((byte)type).I32(point);
+    }
+
     /// <summary>0x3633 MyCharAppear_NT (client decoders 0x8498b80/0x91f3870).</summary>
     public static byte[] MyCharAppear(MyCharacterAppear a)
     {
@@ -436,7 +447,10 @@ public static class GamePackets
         w.U8(a.VoiceType).I32(0).I32(0).I64(0);
         w.U8(0).I64(0).I32(0);
         w.I32(0).I32(0).I32(0).I32(0);
-        return w.I64(a.CombatPower).I64(a.CombatPower).U8(0).U8(0).ToArray();
+        w.I64(a.CombatPower).I64(a.CombatPower);
+        WriteDaevanionPointInfos(w, a.UsedDaevanionPoints);
+        WriteDaevanionPointInfos(w, a.BonusDaevanionPoints);
+        return w.Varint(0).Varint(0).ToArray();
     }
 
     /// <summary>0x3646 CharBarrierInfo_NT: key | count | {uid varint, remain_barrier varint}. OBSERVED empty list at world entry.</summary>

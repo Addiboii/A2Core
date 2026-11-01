@@ -25,31 +25,72 @@ OUT = ROOT / 'tools/data/daevanion.json'
 ROWS = COLS = 15
 ORIGIN = (8, 8)
 
-# Server creation profile class → board class slot (achievements 11…81, 16…86).
+# Live DaevanionNode.dat class slot → board id prefix (slot × 10 + god order).
 CLASS_SLOT = {
     'gladiator': 1,
     'templar': 2,
-    'assassin': 3,
-    'cleric': 4,
-    'ranger': 5,
-    'elementalist': 6,
-    'sorcerer': 7,
+    'ranger': 3,
+    'assassin': 4,
+    'elementalist': 5,
+    'sorcerer': 6,
+    'cleric': 7,
     'chanter': 8,
+    'fighter': 9,
 }
 
-# Light/dark creation ids share the same boards (race-independent).
-CREATION_TO_SLOT = {
-    1: 1, 9: 1,
-    2: 2, 10: 2,
-    3: 3, 11: 3,
-    4: 4, 12: 4,
-    5: 5, 13: 5,
-    6: 6, 14: 6,
-    7: 7, 15: 7,
-    8: 8, 16: 8,
-}
+STARTER_SKILLS = ROOT / 'tools/data/starter-skills.json'
+SKIP_CREATION_CLASSES = frozenset({'novice', 'test', 'tutorial'})
+
+
+def build_creation_to_slot() -> dict[int, int]:
+    """Map pc_creation_id → class slot from starter-skills.json (race-independent)."""
+    catalog = json.loads(STARTER_SKILLS.read_text(encoding='utf-8'))
+    result: dict[int, int] = {}
+    for key, profile in catalog.items():
+        creation_id = int(key.split(':')[0])
+        class_key = profile['class'].lower()
+        if class_key in SKIP_CREATION_CLASSES:
+            continue
+        slot = CLASS_SLOT.get(class_key)
+        if slot is None:
+            raise SystemExit(f'unknown starter class {profile["class"]!r} for creation {creation_id}')
+        if creation_id in result and result[creation_id] != slot:
+            raise SystemExit(f'creation {creation_id} maps to conflicting slots')
+        result[creation_id] = slot
+    return result
 
 POINT_TYPE = {'daevanion_crystal': 1, 'battle_crystal': 5}
+
+# Client Exp.dat DaevanionPointMap (not in repo): cumulative crystals earned per character level,
+# +4 per level from the type's first board NeedLevel (type 1 from 12, type 5 from 45).
+_LEVEL_POINT_START = {1: 12, 5: 45}
+_LEVEL_POINT_PER_LEVEL = 4
+EXP_DAEVANION_MAP = ROOT / 'research/local/exp-tables-20261016/table-000.json'
+
+
+def build_level_points() -> dict[str, dict[str, int]]:
+    """Cumulative level-earned Daevanion crystals by point type (matches client UI caps)."""
+    if EXP_DAEVANION_MAP.is_file():
+        rows = json.loads(EXP_DAEVANION_MAP.read_text(encoding='utf-8'))['Properties']['Data']
+        by_type: dict[int, dict[str, int]] = {}
+        for row in rows:
+            level = int(row['Level'])
+            point_map = row.get('DaevanionPointMap') or row.get('daevanionPointMap')
+            if not point_map:
+                continue
+            for key, value in point_map.items():
+                pt = int(key)
+                by_type.setdefault(pt, {})[str(level)] = int(value)
+        if by_type:
+            return {str(pt): levels for pt, levels in sorted(by_type.items())}
+
+    result: dict[str, dict[str, int]] = {}
+    for pt, start in _LEVEL_POINT_START.items():
+        levels: dict[str, int] = {}
+        for level in range(start, 101):
+            levels[str(level)] = (level - start + 1) * _LEVEL_POINT_PER_LEVEL
+        result[str(pt)] = levels
+    return result
 
 # Morph / fragment items → bonus points (Item.dat use effects; amounts from shop weights).
 ITEM_POINTS = {
@@ -186,11 +227,12 @@ def build() -> dict:
 
     return {
         'source': src.get('source', 'daevanion-normalized.json') + '; tools/daevanion_data.py',
+        'level_points': build_level_points(),
         'grid': {'rows': ROWS, 'cols': COLS, 'origin': {'r': ORIGIN[0], 'c': ORIGIN[1]}},
         'grade_cost': {str(k): v for k, v in grade_cost.items()},
         'point_types': {str(v): k for k, v in POINT_TYPE.items()},
         'stat_wire': {str(v): k for k, v in stat_wire_ids().items()},
-        'creation_slot': {str(k): v for k, v in CREATION_TO_SLOT.items()},
+        'creation_slot': {str(k): v for k, v in build_creation_to_slot().items()},
         'item_points': {str(k): {'point': p, 'amount': a} for k, (p, a) in ITEM_POINTS.items()},
         'boards': boards,
         'nodes': nodes,
