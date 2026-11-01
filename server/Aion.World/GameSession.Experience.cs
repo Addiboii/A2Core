@@ -80,7 +80,14 @@ public sealed partial class GameSession
             var kit = data.SkillListForClient(cls, level, profile);
             learned = kit.Select(k => k.SkillId).ToHashSet();
             var added = kit.Where(k => !skillsBefore.Contains(k.SkillId)).ToList();
-            if (added.Count > 0) replies.Add(GamePackets.AddSkillList(playerKey, added));
+            if (added.Count > 0)
+            {
+                var originals = KitOriginalLevels(added);
+                var daevanion = SkillWireDaevanionBonuses(added);
+                var levels = added.Select(s => (s.SkillId, SkillWireDisplayLevel(s.SkillId))).ToList();
+                replies.Add(GamePackets.AddSkillList(playerKey, levels, originalLevels: originals, additionalDaevanion: daevanion));
+            }
+            RebuildWireClientSkillList();
             replies.AddRange(PassiveAbnormals());
             replies.Add(SkillPointUpdate());
         }

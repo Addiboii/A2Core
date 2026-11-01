@@ -34,10 +34,13 @@ public sealed partial class GameSession
 
     byte[] CharCombatPowerUpdate() => GamePackets.CharCombatPowerUpdate(combatPower, highestCombatPower);
 
-    /// <summary>Official order after a successful skill-point mastery change (OBSERVED 2026-10-31): 0x3656, RS, 0x3813, 0x5105.</summary>
-    List<byte[]> SkillMasteryCoreReplies(byte[] rs, int skillId, int newLevel, byte reason)
+    /// <summary>Official order after a successful skill-point mastery change (OBSERVED 2026-10-31): 0x3656, RS, 0x3813, optional chain 0x3813 (reason 5), 0x5105 last.</summary>
+    List<byte[]> SkillMasteryCoreReplies(byte[] rs, int skillId, int newLevel, byte reason, IEnumerable<byte[]>? beforePoints = null, bool appendSkillPointUpdate = true)
     {
         RecomputeCombatPower();
-        return [CharCombatPowerUpdate(), rs, SkillLevelUpdate(skillId, newLevel, reason), SkillPointUpdate()];
+        var replies = new List<byte[]> { CharCombatPowerUpdate(), rs, SkillLevelUpdate(skillId, newLevel, reason) };
+        if (beforePoints is not null) replies.AddRange(beforePoints);
+        if (appendSkillPointUpdate) replies.Add(SkillPointUpdate());
+        return replies;
     }
 }

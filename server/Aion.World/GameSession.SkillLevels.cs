@@ -16,7 +16,7 @@ public sealed partial class GameSession
 {
     public const ushort SkillLevelUpRq = 0x383f, SkillLevelUpRs = 0x3840, SkillLevelUpdateNt = 0x3813, SkillPointUpdateNt = 0x5105;
     public const ushort SkillLevelDownRq = 0x3841, SkillLevelDownRs = 0x3842, SkillLevelResetRq = 0x3843, SkillLevelResetRs = 0x3844;
-    const byte SkillPointLevelUp = 3, SkillPointLevelDown = 4, SkillLevelModify = 5;   // ESkillAcquireReason
+    const byte SkillPointLevelUp = 3, SkillPointLevelDown = 4, SkillLevelModify = 5, SkillLevelEntryResync = 0x0a;   // ESkillAcquireReason
     const byte SkillPointTypePoint = 1;   // ESkillPointType
     // EResult (usmap): the client shows the matching system message for a refused SkillLevelUp_RQ; 1/2 are not skill results.
     public const int SkillAcquireNotFoundData = 6185, SkillAcquireNotEnoughCharLevel = 6188, SkillAcquireNotEnoughSkillPoint = 6191;
@@ -29,6 +29,8 @@ public sealed partial class GameSession
     readonly Dictionary<int, int> kitSkillLevels = [];
     /// <summary>Kit levels from the last 0x5100 build (SkillListForClient, before mastery overlay); used for wire originals.</summary>
     Dictionary<int, int> kitListBaselines = [];
+    /// <summary>Last leveled kit sent on 0x5100 (WithLevels + chain overlay); rebuilt on entry and skill-point replies.</summary>
+    List<(int SkillId, int Level)> wireClientSkillList = [];
 
     void RefreshKitSkillLevels()
     {
@@ -101,6 +103,64 @@ public sealed partial class GameSession
     /// </summary>
     byte[] SkillPointUpdate() => GamePackets.SkillPointUpdate(SkillPointsLeft, SkillPointTypePoint);
 
+    void RefreshWireClientSkillList(IReadOnlyList<(int SkillId, int Level)> kitAfterChainOverlay) =>
+        wireClientSkillList = kitAfterChainOverlay.ToList();
+
+    void RebuildWireClientSkillList()
+    {
+        if (className is null || Profile() is not { } profile) return;
+        var kit = data.SkillListForClient(className, level, profile);
+        RefreshWireClientSkillList(data.WithChainVariantsOnHotbar(WithLevels(kit), profile, MasteryLevel));
+    }
+
+    byte[] WireSkillListPacket()
+    {
+        var levels = wireClientSkillList.Select(s => (s.SkillId, SkillWireDisplayLevel(s.SkillId))).ToList();
+        return GamePackets.SkillList(levels, KitOriginalLevels(wireClientSkillList), additionalDaevanion: SkillWireDaevanionBonuses(wireClientSkillList));
+    }
+
+    /// <summary>Wire _original_skill_level: bought mastery without bonuses (chain steps mirror their root).</summary>
+    Dictionary<int, int> KitOriginalLevels(IEnumerable<(int SkillId, int Level)> skills)
+    {
+        var map = new Dictionary<int, int>();
+        foreach (var (id, _) in skills) map[id] = SkillWireMasteryLevel(id);
+        return map;
+    }
+
+    Dictionary<int, int> SkillWireDaevanionBonuses(IEnumerable<(int SkillId, int Level)> skills)
+    {
+        var map = new Dictionary<int, int>();
+        foreach (var (id, _) in skills)
+        {
+            var source = ChainMirrorSource(id);
+            map[id] = DaevanionSkillBonus(source);
+        }
+        return map;
+    }
+
+    int ChainMirrorSource(int skillId) =>
+        data.Skill(skillId) is { ChainPrev: > 0 } ? ChainRoot(skillId) : skillId;
+
+    int SkillWireMasteryLevel(int skillId) => MasteryLevel(ChainMirrorSource(skillId));
+
+    int SkillWireDisplayLevel(int skillId) => SkillLevel(ChainMirrorSource(skillId));
+
+    /// <summary>
+    /// Live client (2026-10-31): 0x5105 must be last; 0x5100 / 0x3813 (reason SkillLevelEntryResync) establish Common_Skill
+    /// originals as bought mastery. After a refused 0x3840, resync the list then send 0x5105 again.
+    /// </summary>
+    IEnumerable<byte[]> SkillPointSpendBaselineSeeds() =>
+        wireClientSkillList.Where(s => HasPurchasedMastery(s.SkillId))
+            .Select(s => SkillLevelUpdate(s.SkillId, SkillLevelEntryResync));
+
+    List<byte[]> SkillPointListResync()
+    {
+        RebuildWireClientSkillList();
+        return [WireSkillListPacket(), ..SkillPointSpendBaselineSeeds()];
+    }
+
+    List<byte[]> SkillPointClientSync() => [..SkillPointListResync(), SkillPointUpdate()];
+
     void LogSkillPointsAtEntry()
     {
         var earned = data.SkillPoints(level);
@@ -112,78 +172,70 @@ public sealed partial class GameSession
     async Task<List<byte[]>> SkillLevelUpAsync(byte[] plain, CancellationToken ct)
     {
         if (plain.Length < 6)
-            return [PacketWriter.Opcode(SkillLevelUpRs).U16(1).I32(0).ToArray(), SkillPointUpdate()];
+            return [PacketWriter.Opcode(SkillLevelUpRs).U16(1).I32(0).ToArray(), ..SkillPointClientSync()];
         var skillId = BitConverter.ToInt32(plain, 2);
         byte[] Reply(int result) => PacketWriter.Opcode(SkillLevelUpRs).U16(result).I32(skillId).ToArray();
         var next = BoughtSkillLevel(skillId) + 1;
         if (!learned.Contains(skillId) || data.SkillLevelCost(skillId, next) is not { } cost)
         {
             Note($"SkillLevelUp refused skill={skillId} result={SkillAcquireNotFoundData} next={next} learned={learned.Contains(skillId)}");
-            return [Reply(SkillAcquireNotFoundData), SkillPointUpdate()];
+            return [Reply(SkillAcquireNotFoundData), ..SkillPointClientSync()];
         }
         if (cost.NeedLevel > level || cost.Cost > SkillPointsLeft)
         {
             var result = cost.NeedLevel > level ? SkillAcquireNotEnoughCharLevel : SkillAcquireNotEnoughSkillPoint;
             Note($"SkillLevelUp refused skill={skillId} result={result} next={next} needLevel={cost.NeedLevel} charLevel={level} cost={cost.Cost} pointsLeft={SkillPointsLeft} spent={SpentSkillPoints()} earned={data.SkillPoints(level)} mastery={BoughtSkillLevel(skillId)} kit={KitSkillLevel(skillId)} persisted={persistedSkillLevels.GetValueOrDefault(skillId)}");
-            return [Reply(result), SkillPointUpdate()];
+            return [Reply(result), ..SkillPointClientSync()];
         }
         if (Store is { } store && CharacterId is { } character)
         {
             var saved = await Stored(async () => await store.SetSkillLevelAsync(character, skillId, next, PurchasedLevel(skillId, next), ct) ? [[]] : []);
-            if (saved.Count == 0) return [Reply(1)];
+            if (saved.Count == 0) return [Reply(1), ..SkillPointClientSync()];
         }
         ApplyMasteryLevel(skillId, next);
         LogSkillPoints(skillId, next, $"level_up left={SkillPointsLeft} sent5105={SkillPointsLeft}");
-        var replies = new List<byte[]>(SkillMasteryCoreReplies(Reply(0), skillId, next, SkillPointLevelUp));
+        List<byte[]>? chainUpdates = null;
         if (data.Skill(skillId) is { } def && SkillCooldown.IsFixSlot(def) && SkillCooldown.IsBasicAutoAttack(def))
-            replies.AddRange(SyncBasicChainSkills(skillId));
-        return replies;
+            chainUpdates = SyncBasicChainSkills(skillId);
+        RebuildWireClientSkillList();
+        return SkillMasteryCoreReplies(Reply(0), skillId, next, SkillPointLevelUp, chainUpdates);
     }
 
     /// <summary>After FixSlot basic mastery changes: base chain steps appear in 0x5100 at the same level (unlocks Skill Order rows).</summary>
     List<byte[]> SyncBasicChainSkills(int rootSkillId)
     {
         var mastery = MasteryLevel(SkillFamilyId(rootSkillId));
-        var added = new List<(int SkillId, int Level)>();
         var updates = new List<byte[]>();
         foreach (var id in data.BasicAttackChainSkillIds(rootSkillId, mastery))
         {
+            if (id == rootSkillId) continue;
             var listLevel = GameData.ChainSkillKitLevel(id, mastery);
-            if (learned.Add(id))
-                added.Add((id, listLevel));
-            else
-                updates.Add(SkillLevelUpdate(id, listLevel, SkillLevelModify));
+            learned.Add(id);
+            updates.Add(SkillLevelUpdate(id, listLevel, SkillLevelModify));
         }
-        var replies = new List<byte[]>();
-        if (added.Count > 0)
-        {
-            var originals = added.ToDictionary(s => s.SkillId, s => SkillWireOriginalLevel(s.SkillId, s.Level));
-            replies.Add(GamePackets.AddSkillList(playerKey, added, SkillPointLevelUp, originalLevels: originals));
-        }
-        replies.AddRange(updates);
-        return replies;
+        return updates;
     }
 
     /// <summary>
-    /// Skill {level, original level} (usmap Common_Skill / SkillLevelUpdate_NT): level is current list mastery; original is what
-    /// <see cref="SpentOnSkill"/> uses as the kit baseline for purchasable skills, or equals level for chain/inherited ids with no
-    /// SkillAcquireData mastery rows (so the client does not subtract phantom costs).
+    /// Skill {level, original level, additional level} (usmap Common_Skill / SkillLevelUpdate_NT): _skill_level is total mastery
+    /// including bonuses; _original_skill_level is bought mastery without bonuses (not the class-kit baseline); chain steps mirror
+    /// their root. SkillPointLevelUp/Down keep kit baseline in original (OBSERVED 2026-10-13); entry/resync uses reason 0x0a.
     /// </summary>
-    byte[] SkillLevelUpdate(int skillId, int newLevel, byte reason) =>
-        SkillLevelUpdate(skillId, newLevel, SkillWireOriginalLevel(skillId, newLevel), reason);
+    byte[] SkillLevelUpdate(int skillId, byte reason) =>
+        SkillLevelUpdate(skillId, SkillWireDisplayLevel(skillId), WireOriginalForReason(skillId, reason), DaevanionSkillBonus(ChainMirrorSource(skillId)), reason);
 
-    static byte[] SkillLevelUpdate(int skillId, int level, int originalLevel, byte reason) =>
-        PacketWriter.Opcode(SkillLevelUpdateNt).Varint(1).I32(skillId).U8(1).I32(skillId).U8((byte)level).U8((byte)originalLevel).Zeros(5).U8(reason).ToArray();
+    byte[] SkillLevelUpdate(int skillId, int boughtLevel, byte reason) =>
+        SkillLevelUpdate(skillId, SkillWireDisplayLevel(skillId), WireOriginalForReason(skillId, reason, boughtLevel), DaevanionSkillBonus(ChainMirrorSource(skillId)), reason);
 
-    int SkillWireOriginalLevel(int skillId, int listLevel) =>
-        data.HasPurchasableMasteryLevels(skillId) ? KitSkillLevel(skillId) : listLevel;
+    static byte[] SkillLevelUpdate(int skillId, int level, int originalLevel, int daevanionBonus, byte reason) =>
+        PacketWriter.Opcode(SkillLevelUpdateNt).Varint(1).I32(skillId).U8(1).I32(skillId).U8((byte)level).U8((byte)originalLevel)
+            .U8((byte)daevanionBonus).U8(0).U8(0).U8(0).U8(0).U8(reason).ToArray();
 
-    Dictionary<int, int> SkillWireOriginalLevels(IEnumerable<(int SkillId, int Level)> skills)
-    {
-        var map = new Dictionary<int, int>();
-        foreach (var (id, level) in skills) map[id] = SkillWireOriginalLevel(id, level);
-        return map;
-    }
+    /// <summary>0x3813 _original_skill_level: bought mastery on wire; level-up/down bursts use the new bought level (official 2026-10-31).</summary>
+    int WireOriginalForReason(int skillId, byte reason, int? levelAfterChange = null) =>
+        reason is SkillPointLevelUp or SkillPointLevelDown
+            ? levelAfterChange ?? SkillWireMasteryLevel(skillId)
+            : SkillWireMasteryLevel(skillId);
 
     void ApplyMasteryLevel(int skillId, int newLevel)
     {
@@ -212,16 +264,16 @@ public sealed partial class GameSession
     async Task<List<byte[]>> SkillLevelDownAsync(byte[] plain, CancellationToken ct)
     {
         if (plain.Length < 6)
-            return [PacketWriter.Opcode(SkillLevelDownRs).U16(1).I32(0).ToArray(), SkillPointUpdate()];
+            return [PacketWriter.Opcode(SkillLevelDownRs).U16(1).I32(0).ToArray(), ..SkillPointClientSync()];
         var skillId = BitConverter.ToInt32(plain, 2);
         byte[] Reply(int result) => PacketWriter.Opcode(SkillLevelDownRs).U16(result).I32(skillId).ToArray();
         var baseline = KitSkillLevel(skillId);
         var current = BoughtSkillLevel(skillId);
-        if (current <= baseline || !HasPurchasedMastery(skillId)) return [Reply(1), SkillPointUpdate()];
+        if (current <= baseline || !HasPurchasedMastery(skillId)) return [Reply(1), ..SkillPointClientSync()];
         var next = current - 1;
-        if (!await SaveSkillLevelAsync(skillId, next, ct)) return [Reply(1), SkillPointUpdate()];
+        if (!await SaveSkillLevelAsync(skillId, next, ct)) return [Reply(1), ..SkillPointClientSync()];
         ApplyMasteryLevel(skillId, next);
-        return SkillMasteryCoreReplies(Reply(0), skillId, next, SkillPointLevelDown);
+        return [..SkillMasteryCoreReplies(Reply(0), skillId, next, SkillPointLevelDown, appendSkillPointUpdate: false), ..SkillPointListResync(), SkillPointUpdate()];
     }
 
     /// <summary>
@@ -232,7 +284,7 @@ public sealed partial class GameSession
     async Task<List<byte[]>> SkillLevelResetAsync(byte[] plain, CancellationToken ct)
     {
         if (plain.Length < 7)
-            return [PacketWriter.Opcode(SkillLevelResetRs).U16(1).U8(0).I32(0).Varint(0).Varint(0).ToArray(), SkillPointUpdate()];
+            return [PacketWriter.Opcode(SkillLevelResetRs).U16(1).U8(0).I32(0).Varint(0).Varint(0).ToArray(), ..SkillPointClientSync()];
         var acquireType = plain[2];
         var skillId = BitConverter.ToInt32(plain, 3);
         var targets = (skillId == 0
@@ -244,7 +296,7 @@ public sealed partial class GameSession
             foreach (var id in reset) w.I32(id).I32(KitSkillLevel(id));
             return w.Varint(1).AppendSkillPointInfo(SkillPointsLeft, SkillPointTypePoint).ToArray();
         }
-        if (targets.Count == 0) return [Reply(1, []), SkillPointUpdate()];
+        if (targets.Count == 0) return [Reply(1, []), ..SkillPointClientSync()];
         var updates = new List<byte[]>();
         foreach (var id in targets)
         {
@@ -253,9 +305,9 @@ public sealed partial class GameSession
             ApplyMasteryLevel(id, baseline);
             updates.Add(SkillLevelUpdate(id, baseline, SkillLevelModify));
         }
-        if (updates.Count == 0) return [Reply(1, []), SkillPointUpdate()];
+        if (updates.Count == 0) return [Reply(1, []), ..SkillPointClientSync()];
         RecomputeCombatPower();
-        return [CharCombatPowerUpdate(), Reply(0, targets), .. updates, SkillPointUpdate()];
+        return [CharCombatPowerUpdate(), Reply(0, targets), .. updates, ..SkillPointListResync(), SkillPointUpdate()];
     }
 
     async Task<bool> SaveSkillLevelAsync(int skillId, int newLevel, CancellationToken ct)

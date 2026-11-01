@@ -552,6 +552,8 @@ public sealed class GameData
         void EnsureKitSkill(int skillId, int listLevel)
         {
             if (skillId <= 0 || Skill(skillId) is null) return;
+            if (HasPurchasableMasteryLevels(skillId))
+                listLevel = Math.Min(listLevel, masteryLevel(skillId));
             known[skillId] = known.TryGetValue(skillId, out var cur) ? Math.Max(cur, listLevel) : listLevel;
         }
         void EnsureChainOnly(int skillId, int rootMastery)

@@ -544,32 +544,39 @@ public static class GamePackets
     /// ESkillAcquireReason (1 LevelUp).
     /// </summary>
     public static byte[] AddSkillList(int key, IReadOnlyList<(int SkillId, int Level)> skills, byte reason = 1,
-        IReadOnlyDictionary<int, int>? autoLoad = null, IReadOnlyDictionary<int, int>? originalLevels = null)
+        IReadOnlyDictionary<int, int>? autoLoad = null, IReadOnlyDictionary<int, int>? originalLevels = null,
+        IReadOnlyDictionary<int, int>? additionalDaevanion = null)
     {
         var w = PacketWriter.Opcode(0x5101).Varint(key).U8(skills.Count);
         foreach (var (id, level) in skills)
         {
             var original = originalLevels?.GetValueOrDefault(id) ?? level;
-            WriteSkill(w, id, level, original, autoLoad);
+            var daevanion = additionalDaevanion?.GetValueOrDefault(id) ?? 0;
+            WriteSkill(w, id, level, original, daevanion, autoLoad);
         }
         return w.U8(reason).ToArray();
     }
 
     /// <summary>
-    /// One Common_Skill entry of 0x5100 / 0x5101. Flag 1 is the ready entry (id, level, original level, nine zero bytes); flag 5
-    /// is the AutoLoad (charge) variant with one more byte, the charge count (OBSERVED in the official starter 0x5100: one flag-5
-    /// entry, count 3; tests/test_starter_skills.py). The client blocks a cast of an AutoLoad skill whose count is 0 without
-    /// sending anything (usmap SkillAction_NotAutoLoadStack / NotAutoLoadReady), so a flag-1 entry leaves such a skill dead.
+    /// One Common_Skill entry of 0x5100 / 0x5101. Flag 1 is the ready entry (id, level, original level, Common_SkillAdditionalLevel
+    /// five bytes, four cooltime/autoload zero bytes); flag 5 is the AutoLoad (charge) variant with one more byte, the charge count
+    /// (OBSERVED in the official starter 0x5100: one flag-5 entry, count 3; tests/test_starter_skills.py). The client blocks a cast
+    /// of an AutoLoad skill whose count is 0 without sending anything (usmap SkillAction_NotAutoLoadStack / NotAutoLoadReady), so a
+    /// flag-1 entry leaves such a skill dead.
     /// </summary>
-    static void WriteSkill(PacketWriter w, int id, int level, int original, IReadOnlyDictionary<int, int>? autoLoad)
+    static void WriteSkill(PacketWriter w, int id, int level, int original, int additionalDaevanion, IReadOnlyDictionary<int, int>? autoLoad)
     {
         if (autoLoad is not null && autoLoad.TryGetValue(id, out var count))
         {
-            w.U8(5).I32(id).U8(level).U8(original).Zeros(9).U8(count);
+            w.U8(5).I32(id).U8(level).U8(original).WriteSkillAdditionalLevel(additionalDaevanion).Zeros(4).U8(count);
             return;
         }
-        w.U8(1).I32(id).U8(level).U8(original).Zeros(9);
+        w.U8(1).I32(id).U8(level).U8(original).WriteSkillAdditionalLevel(additionalDaevanion).Zeros(4);
     }
+
+    /// <summary>Common_SkillAdditionalLevel (usmap): _daevanion, _abnormal, _equip, _arcana, _fix.</summary>
+    static PacketWriter WriteSkillAdditionalLevel(this PacketWriter w, int daevanion) =>
+        w.U8(daevanion).U8(0).U8(0).U8(0).U8(0);
 
     /// <summary>
     /// 0x3822 SkillAutoLoadUpdate_NT (dev 0x36CB + 0x157, usmap order): skill i32 | charge count u8 | time i32 (ms until the
@@ -653,9 +660,9 @@ public static class GamePackets
     public static PacketWriter AppendSkillPointInfo(this PacketWriter w, int point, byte pointType = 1) =>
         w.U8(1).U8(pointType).Varint(point);
 
-    /// <summary>0x5100 skill list: count + ready entries (flag 1, i32 id, level, original level, nine zero bytes).</summary>
+    /// <summary>0x5100 skill list: count + ready entries (flag 1, i32 id, level, original level, additional level, cooltime zeros).</summary>
     public static byte[] SkillList(IReadOnlyList<(int SkillId, int Level)> skills, IReadOnlyDictionary<int, int>? originalLevels = null,
-        IReadOnlyDictionary<int, int>? autoLoad = null)
+        IReadOnlyDictionary<int, int>? autoLoad = null, IReadOnlyDictionary<int, int>? additionalDaevanion = null)
     {
         if (skills.Count > 127 || skills.Select(s => s.SkillId).Distinct().Count() != skills.Count) throw new ArgumentException("Expected at most 127 unique skills");
         var w = PacketWriter.Opcode(0x5100).U8(skills.Count);
@@ -664,9 +671,10 @@ public static class GamePackets
             if (id <= 0 || level is < 1 or > 255) throw new ArgumentException("Invalid skill ID or level");
             var original = originalLevels?.GetValueOrDefault(id) ?? level;
             if (original is < 1 or > 255 || original > level) throw new ArgumentException("Invalid original skill level");
+            var daevanion = additionalDaevanion?.GetValueOrDefault(id) ?? 0;
             // Both official recordings write the dodge (11000100) as "03 01 <id>"; sending that made
             // the live client ignore Shift entirely (2026-10-14), so the plain "01 <id>" form stays.
-            WriteSkill(w, id, level, original, autoLoad);
+            WriteSkill(w, id, level, original, daevanion, autoLoad);
         }
         return w.ToArray();
     }

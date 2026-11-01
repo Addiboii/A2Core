@@ -1607,9 +1607,11 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             {
                 // Owned skills before the hotbar (0x5100 then 0x5600; not the usmap ordinals).
                 var leveledKit = WithLevels(kit);
-                var skillList = GamePackets.SkillList(leveledKit, SkillWireOriginalLevels(leveledKit));
+                RefreshWireClientSkillList(leveledKit);
+                var skillList = WireSkillListPacket();
                 replies.Add(skillList);
                 LogSkillPointsAtEntry();
+                replies.AddRange(SkillPointSpendBaselineSeeds());
                 replies.Add(SkillPointUpdate());
                 var actives = learned.Where(id => id >= 11_000_000 && !IsDodgeId(id) && data.Skill(id)?.Type == "Active").Order().ToList();
                 replies.Add(GamePackets.SkillOptionSlots(actives, SkillOptionMap()));
