@@ -56,7 +56,7 @@ public sealed partial class GameSession
     public const ushort SkinExtractionRq = 0x8d60, SkinExtractionRs = 0x8d61;
     public const int SkinExtractionFail = 15437, SkinExtractionAlreadyExist = 15438, SkinExtractionInvalidData = 15439,
         SkinExtractionInternalError = 15440, SkinExtractionNotEnoughCount = 15441;
-    const byte IncreaseSkinExtraction = 46, DecreaseSkinExtraction = 47;   // EIncreaseReason / EDecreaseReason (OURS CANDIDATE)
+    const byte IncreaseSkinExtraction = 88, DecreaseSkinExtraction = 59;   // EIncreaseReason / EDecreaseReason kSkinExtraction (usmap)
 
     static SkinExtractionTables Extractions => SkinExtractionTables.Embedded;
     readonly HashSet<int> loggedSkinBlockOpcodes = [];

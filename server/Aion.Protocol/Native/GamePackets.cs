@@ -53,6 +53,12 @@ public sealed record InventoryItem(long Key, int ItemId, long Count, byte Contai
     bool Locked = false, string Maker = "", long ExpireTime = 0, bool ExpireFixed = false)
 {
     public const byte Bag = 1, Storage = 2, AccountStorage = 3, Equipped = 11;
+
+    /// <summary>Whether two wire snapshots are the same for 0x561b diffing (ignores reference identity on Detail lists).</summary>
+    public bool WireSameAs(InventoryItem other) =>
+        Key == other.Key && ItemId == other.ItemId && Count == other.Count && Container == other.Container && Slot == other.Slot
+        && Locked == other.Locked && Maker == other.Maker && ExpireTime == other.ExpireTime && ExpireFixed == other.ExpireFixed
+        && EquipDetail.WireSameAs(Detail, other.Detail);
 }
 
 /// <summary>Equipment detail of an item: item level and equip slot (1 weapon, 3 helm, 4 shoulder, 5 torso, 6 pants, 7 gloves, 8 boots, 19 cape; 0 in the bag).</summary>
@@ -62,7 +68,30 @@ public sealed record EquipDetail(
     int ItemLevel, byte EquipSlot, byte EnchantLevel = 0, long SoulBindOwner = 0, byte SoulBindCount = 0,
     byte SurpassEnchantLevel = 0, int EnchantBonusProb = 0, int SurpassEnchantBonusProb = 0, int[]? Godstones = null,
     IReadOnlyList<(int Wire, int Value)>? RolledStats = null,
-    byte SkinExtractionCount = 0);
+    byte SkinExtractionCount = 0)
+{
+    public static bool WireSameAs(EquipDetail? a, EquipDetail? b)
+    {
+        if (a is null || b is null) return a is null && b is null;
+        if (a.ItemLevel != b.ItemLevel || a.EquipSlot != b.EquipSlot || a.EnchantLevel != b.EnchantLevel
+            || a.SoulBindOwner != b.SoulBindOwner || a.SoulBindCount != b.SoulBindCount
+            || a.SurpassEnchantLevel != b.SurpassEnchantLevel || a.EnchantBonusProb != b.EnchantBonusProb
+            || a.SurpassEnchantBonusProb != b.SurpassEnchantBonusProb || a.SkinExtractionCount != b.SkinExtractionCount)
+            return false;
+        if (a.Godstones is null || b.Godstones is null)
+        {
+            if (a.Godstones is not null || b.Godstones is not null) return false;
+        }
+        else if (a.Godstones.Length != b.Godstones.Length || !a.Godstones.SequenceEqual(b.Godstones))
+            return false;
+        var rolledA = a.RolledStats ?? [];
+        var rolledB = b.RolledStats ?? [];
+        if (rolledA.Count != rolledB.Count) return false;
+        for (var i = 0; i < rolledA.Count; i++)
+            if (rolledA[i].Wire != rolledB[i].Wire || rolledA[i].Value != rolledB[i].Value) return false;
+        return true;
+    }
+}
 
 /// <summary>A 0x561b change: type 0 add / 1 update, and the official reason codes (24 grant, 38 potion use observed).</summary>
 public sealed record ItemModification(byte Type, InventoryItem Item, byte Increase = 0, byte Decrease = 0, byte Update = 0);

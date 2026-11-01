@@ -14,7 +14,7 @@ public sealed partial class GameSession
     public const ushort PostLoadRq = 0xe214, PostLoadRs = 0xe215, PostRecvNt = 0xe216, PostReadRq = 0xe217, PostReadRs = 0xe218,
         PostDeleteRq = 0xe219, PostDeleteRs = 0xe21a, PostTakeRq = 0xe21b, PostTakeRs = 0xe21c;
     public const int StaffPostDataId = 106, PostTabSystem = 1, PostTabReward = 2, PostTypeGame = 1;
-    const byte IncreasePostTake = 29;   // EIncreaseReason (CANDIDATE value: kPostItemTake)
+    const byte IncreasePostTake = 21;   // EIncreaseReason kPostAttachment (usmap)
 
     /// <summary>A storage-backed value; a database error yields the fallback (as Stored sends nothing).</summary>
     async Task<T> StoredValue<T>(Func<Task<T>> action, T fallback)

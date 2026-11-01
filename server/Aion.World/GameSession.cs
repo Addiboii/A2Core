@@ -1023,7 +1023,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             if (equip && inventory.GetValueOrDefault(key) is { Container: InventoryItem.Bag } from
                 && inventory.Values.FirstOrDefault(i => i.Container == InventoryItem.Equipped && i.Slot == slot && i.Key != key) is { } old)
                 hints = new() { [old.Key] = from.Slot };
-            replies.AddRange(await InventoryChangesAsync(ct, 24, 0, hints));
+            replies.AddRange(await InventoryChangesAsync(ct, IncreaseQuestReward, 0, hints));
             // The new weapon decides weapon skills and damage; gear changes the stats.
             equippedWeapon = WeaponFromInventory();
             replies.AddRange(RefreshStats());
@@ -1061,13 +1061,17 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
 
     /// <summary>
     /// After a stored change (a GM grant): reload the items and send what differs from the client's
-    /// view as 0x561b (type 0 new, type 1 changed; increase reason 24 as the official grants).
+    /// view as 0x561b (type 0 new, type 1 changed; increase reason kQuestReward as the official grants).
     /// </summary>
-    public async Task<List<byte[]>> InventoryChangesAsync(CancellationToken ct) => await InventoryChangesAsync(ct, 24, 0);
+    public async Task<List<byte[]>> InventoryChangesAsync(CancellationToken ct) => await InventoryChangesAsync(ct, IncreaseQuestReward, 0);
+
+    const byte IncreaseQuestReward = 24;   // EIncreaseReason kQuestReward (usmap)
+    const byte IncreaseQuestStep = 25;   // EIncreaseReason kQuestStep (usmap)
+    const byte IncreaseJournalRegionReward = 50;   // EIncreaseReason kJournalRegionReward (usmap)
 
     /// <summary>
     /// The stored items against what the client has: adds, updates and removals (EItemModificationType
-    /// 0/1/2) with the given EIncreaseReason / EDecreaseReason (24 kQuestReward was the only one before).
+    /// 0/1/2) with the given EIncreaseReason / EDecreaseReason.
     /// </summary>
     async Task<List<byte[]>> InventoryChangesAsync(CancellationToken ct, byte increase, byte decrease, IReadOnlyDictionary<long, int>? hints = null)
     {
@@ -1079,7 +1083,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         foreach (var item in items)
         {
             if (!inventory.TryGetValue(item.Key, out var before)) { changes.Add(new ItemModification(0, item, Increase: increase)); gained.Add((item.ItemId, item.Count)); }
-            else if (before != item)
+            else if (!before.WireSameAs(item))
             {
                 changes.Add(new ItemModification(1, item, Increase: (byte)(item.Count > before.Count ? increase : 0), Decrease: (byte)(item.Count < before.Count ? decrease : 0)));
                 if (item.Count > before.Count) gained.Add((item.ItemId, item.Count - before.Count));

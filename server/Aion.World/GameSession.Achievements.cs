@@ -93,6 +93,7 @@ public sealed class AchievementTables
     public IReadOnlyList<Entry> InGroup(int groupId) => byGroupId.GetValueOrDefault(groupId) ?? [];
     public IEnumerable<Entry> All => byId.Values;
     public IReadOnlyList<long[]> GroupRewards(int groupId) => file.GroupRewards.GetValueOrDefault(groupId.ToString(System.Globalization.CultureInfo.InvariantCulture)) ?? [];
+    public IEnumerable<Group> AllGroups => groupsById.Values;
     public IEnumerable<Board> Boards => file.Attendance.Values;
 
     /// <summary>The attendance boards open now for a race: the dated ones in their window, else the undated ones (OURS fallback).</summary>
@@ -109,7 +110,10 @@ public sealed class AchievementTables
 // 01 | id | 02000000 | time | 00 confirm it). The listed set (OBSERVED): every achievement of a group of the character's
 // race or of all races in the categories Unlock, Achievement and SeasonMissionUnlock (not Onboarding), plus the open
 // attendance boards' achievements, the active battle pass's and the active season missions' (the last two are not
-// modelled yet). The group reward states map is sent empty (CANDIDATE: its bool-array packing is not decoded).
+// modelled yet). The group reward states map (_group_reward_states: group id -> Common_AchievementGroupRewardState
+// with _step_reward_states bit-packed bools, one per AchievementGroupReward.dat step) drives the monolith gate /
+// P_RTxt_GroupRewardCount gauge on dungeon and other milestone groups; completed count still comes from
+// _achievements (AchievementGroupReward.CompleteCount thresholds in client data).
 // Counting (OURS, by EAchievementObjectiveType): PCLevel, ClearQuest/ClearQuestType, KillNpc/KillNpcAll, ClearDungeon/
 // ClearDungeonType/ClearDungeonGroup/ClearDungeonBySingle, ClearMapEvent, UseEnvObjSpawnerName, UseItem/UseUsableItemType,
 // CraftCategorySuccess, GatherSuccess/GatherCategorySuccess, CraftMasteryLevel/GatherMasteryLevel, EquipItemLevel,
@@ -124,7 +128,7 @@ public sealed partial class GameSession
     public const ushort AchievementListNt = 0x5683, AchievementCountUpdateNt = 0x5684, TakeAchievementRewardRq = 0x5685, TakeAchievementRewardRs = 0x5686,
         TakeAchievementGroupRewardRq = 0x5687, TakeAchievementGroupRewardRs = 0x5688, TakeAchievementRewardBatchRq = 0x5689, TakeAchievementRewardBatchRs = 0x568a,
         AttendanceRq = SocialOpcodes.E3Base + 1503, AttendanceRs = SocialOpcodes.E3Base + 1504, SeasonScheduleNt = 0x8d53, AccountContentsInfoListNt = 0x56b6, CloseNpcAchievementRq = 0xe2c8, CloseNpcAchievementRs = 0xe2c9, CloseEnvObjAchievementRq = 0xe2ca, CloseEnvObjAchievementRs = 0xe2cb;
-    const byte IncreaseAchievementReward = 26;   // EIncreaseReason (CANDIDATE value)
+    const byte IncreaseAchievementReward = 2;   // EIncreaseReason kAchievement (usmap)
     static AchievementTables Achievements => AchievementTables.Embedded;
     static readonly HashSet<string> ListedCategories = new(StringComparer.OrdinalIgnoreCase) { "Achievement", "Unlock", "SeasonMissionUnlock" };
 
@@ -188,14 +192,38 @@ public sealed partial class GameSession
         return w.I32(id).I32(count).I64(state?.CompletedMs ?? 0).U8((byte)step);
     }
 
-    /// <summary>AchievementList_NT at world entry: the listed achievements with their states, no group reward states.</summary>
+    /// <summary>Group ids with AchievementGroupReward.dat rows for the race (includes Group_*_Dungeon_* tabs).</summary>
+    internal static IReadOnlyList<int> GroupRewardStateGroupIds(int race, AchievementTables tables) =>
+        tables.AllGroups.Where(g => (g.Race == 0 || g.Race == race) && tables.GroupRewards(g.Id).Count > 0).Select(g => g.Id).OrderBy(id => id).ToList();
+
+    internal static void WriteGroupRewardState(PacketWriter w, int groupId, IReadOnlyList<long[]> rewards, IReadOnlySet<(int Group, int Step)> claimed)
+    {
+        w.I32(groupId);
+        w.Varint((uint)rewards.Count);
+        for (var step = 1; step <= rewards.Count; step++) w.Bool(claimed.Contains((groupId, step)));
+    }
+
+    void WriteGroupRewardStates(PacketWriter w) => WriteGroupRewardStates(w, profileRace, groupRewardsTaken);
+
+    internal static void WriteGroupRewardStates(PacketWriter w, int race, IReadOnlySet<(int Group, int Step)> claimed)
+    {
+        var tables = AchievementTables.Embedded;
+        var ids = GroupRewardStateGroupIds(race, tables);
+        w.Varint((uint)ids.Count);
+        foreach (var groupId in ids) WriteGroupRewardState(w, groupId, tables.GroupRewards(groupId), claimed);
+    }
+
+    /// <summary>AchievementList_NT at world entry: listed achievement states plus group reward step flags.</summary>
     byte[] AchievementList(long now)
     {
         var listed = Achievements.All.Where(e => Listed(e, now)).ToList();
         var w = PacketWriter.Opcode(AchievementListNt).Varint((uint)listed.Count);
         foreach (var entry in listed) WriteState(w, entry.Id, achievements.GetValueOrDefault(entry.Id));
-        return w.Varint(0).ToArray();
+        WriteGroupRewardStates(w);
+        return w.ToArray();
     }
+
+    internal byte[] AchievementListPacket(long now) => AchievementList(now);
 
     byte[] AchievementUpdate(IReadOnlyList<int> ids)
     {
@@ -316,7 +344,7 @@ public sealed partial class GameSession
         if (plain.Length < 7) return [];
         var id = BitConverter.ToInt32(plain, 2);
         var step = plain[6];
-        byte[] Reply(int result) => PacketWriter.Opcode(TakeAchievementRewardRs).U16(result).I32(id).U8(step).ToArray();
+        byte[] Reply(int result) => PacketWriter.Opcode(TakeAchievementRewardRs).I32(result).I32(id).U8(step).ToArray();
         var taken = await TakeStepAsync(id, step, now, ct);
         if (taken is null) return [Reply(1)];
         await FlushAchievementsAsync(now, ct, force: true);
@@ -324,8 +352,8 @@ public sealed partial class GameSession
         return [.. taken, Reply(0)];
     }
 
-    /// <summary>Takes one step's reward; null when not claimable. Returns the state update and the inventory change.</summary>
-    async Task<List<byte[]>?> TakeStepAsync(int id, int step, long now, CancellationToken ct)
+    /// <summary>Takes one step's reward; null when not claimable. Returns the state update and optional inventory change.</summary>
+    async Task<List<byte[]>?> TakeStepAsync(int id, int step, long now, CancellationToken ct, bool syncInventory = true)
     {
         if (Achievements.Of(id) is not { } entry || !achievements.TryGetValue(id, out var state) || state.RewardedStep >= step || state.Count < entry.StepCount(step)) return null;
         if (PaidPassLocked(id)) return null;   // the paid pass's levels need a purchase (none is sold)
@@ -338,7 +366,9 @@ public sealed partial class GameSession
         }
         state.RewardedStep = step;
         achievementDirty.Add(id);
-        return [AchievementUpdate(AchievementUpdateIds(id, now)), .. items.Count > 0 ? await InventoryChangesAsync(ct, IncreaseAchievementReward, 0) : []];
+        var replies = new List<byte[]> { AchievementUpdate(AchievementUpdateIds(id, now)) };
+        if (syncInventory && items.Count > 0) replies.AddRange(await InventoryChangesAsync(ct, IncreaseAchievementReward, 0));
+        return replies;
     }
 
     /// <summary>0x5687 TakeAchievementGroupReward_RQ {group i32, step u8}: the group's reward at that step once enough of its achievements are complete.</summary>
@@ -347,14 +377,14 @@ public sealed partial class GameSession
         if (plain.Length < 7) return [];
         var groupId = BitConverter.ToInt32(plain, 2);
         var step = plain[6];
-        byte[] Reply(int result) => PacketWriter.Opcode(TakeAchievementGroupRewardRs).U16(result).I32(groupId).U8(step).ToArray();
-        var taken = await TakeGroupStepAsync(groupId, step, ct);
+        byte[] Reply(int result) => PacketWriter.Opcode(TakeAchievementGroupRewardRs).I32(result).I32(groupId).U8(step).ToArray();
+        var taken = await TakeGroupStepAsync(groupId, step, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), ct);
         return taken is null ? [Reply(1)] : [Reply(0), .. taken];
     }
 
     int CompletedInGroup(int groupId) => Achievements.InGroup(groupId).Count(e => (achievements.GetValueOrDefault(e.Id)?.CompletedMs ?? 0) != 0);
 
-    async Task<List<byte[]>?> TakeGroupStepAsync(int groupId, int step, CancellationToken ct)
+    async Task<List<byte[]>?> TakeGroupStepAsync(int groupId, int step, long now, CancellationToken ct, bool syncInventory = true, bool refreshGroupStates = true)
     {
         var rewards = Achievements.GroupRewards(groupId);
         if (step < 1 || step > rewards.Count || groupRewardsTaken.Contains((groupId, step))) return null;
@@ -367,7 +397,10 @@ public sealed partial class GameSession
             if (ok.Count == 0) return null;
         }
         groupRewardsTaken.Add((groupId, step));
-        return await InventoryChangesAsync(ct, IncreaseAchievementReward, 0);
+        var replies = new List<byte[]>();
+        if (refreshGroupStates) replies.Add(AchievementList(now));
+        if (syncInventory) replies.AddRange(await InventoryChangesAsync(ct, IncreaseAchievementReward, 0));
+        return replies;
     }
 
     /// <summary>0x5689 TakeAchievementRewardBatch_RQ {category u8, group i32, only character}: every claimable step of the group (or category).</summary>
@@ -381,6 +414,7 @@ public sealed partial class GameSession
         var results = new List<(int Group, List<byte> GroupSteps, Dictionary<int, int> Steps)>();
         var attendanceAchievements = Achievements.Boards.Select(b => b.Achievement).ToHashSet();
         var refreshAccountContents = false;
+        var grantedItems = false;
         var groups = groupId != 0 ? [groupId] : Achievements.All.Select(e => Achievements.GroupOf(e)).OfType<AchievementTables.Group>().Where(g => (g.Race == 0 || g.Race == profileRace) && CategoryOrdinal(g.Category) == category).Select(g => g.Id).Distinct().ToList();
         foreach (var gid in groups)
         {
@@ -389,23 +423,33 @@ public sealed partial class GameSession
             foreach (var entry in Achievements.InGroup(gid))
                 for (var step = (achievements.GetValueOrDefault(entry.Id)?.RewardedStep ?? 0) + 1; step <= entry.Steps.Length; step++)
                 {
-                    var taken = await TakeStepAsync(entry.Id, step, now, ct);
+                    var taken = await TakeStepAsync(entry.Id, step, now, ct, syncInventory: false);
                     if (taken is null) break;
+                    if (entry.StepRewards(step).Count > 0) grantedItems = true;
                     if (attendanceAchievements.Contains(entry.Id)) refreshAccountContents = true;
                     replies.AddRange(taken);
                     steps[entry.Id] = step;
                 }
             for (var step = 1; step <= Achievements.GroupRewards(gid).Count; step++)
-                if (await TakeGroupStepAsync(gid, step, ct) is { } taken) { replies.AddRange(taken); groupSteps.Add((byte)step); }
+                if (await TakeGroupStepAsync(gid, step, now, ct, syncInventory: false, refreshGroupStates: false) is { })
+                {
+                    grantedItems = true;
+                    groupSteps.Add((byte)step);
+                }
             if (steps.Count > 0 || groupSteps.Count > 0) results.Add((gid, groupSteps, steps));
         }
+        var inventoryChanges = grantedItems
+            ? await InventoryChangesAsync(ct, IncreaseAchievementReward, 0)
+            : [];
         var takeResults = results.Select(r => (r.Group, (IReadOnlyList<byte>)r.GroupSteps, (IReadOnlyDictionary<int, int>)r.Steps)).ToList();
-        var batchResult = (ushort)(takeResults.Count > 0 ? 0 : 1);
+        var batchResult = takeResults.Count > 0 ? 0 : 1;
         if (takeResults.Count > 0) await FlushAchievementsAsync(now, ct, force: true);
-        var batch = new List<byte[]>();
+        // Batch RS first so the client parses _take_result before 5684/561b inventory NTs (revert: append RS after replies).
+        var batch = new List<byte[]> { RewardBatchReply(category, groupId, only, takeResults, batchResult) };
         batch.AddRange(replies);
-        batch.Add(RewardBatchReply(category, groupId, only, takeResults, batchResult));
+        if (inventoryChanges.Count > 0) batch.AddRange(inventoryChanges);
         if (refreshAccountContents) batch.Add(AccountContentsInfoList(now));
+        if (results.Any(r => r.GroupSteps.Count > 0)) batch.Add(AchievementList(now));
         return batch;
     }
 
@@ -414,9 +458,9 @@ public sealed partial class GameSession
     /// [Common_AchievementRewardBatchTakeResult {group i32, [group step u8], map achievement i32 -> step u8}]}.
     /// The map value is a ByteProperty: an i32 there shifts every later group and the client reads garbage counts.
     /// </summary>
-    public static byte[] RewardBatchReply(byte category, int groupId, bool only, IReadOnlyList<(int Group, IReadOnlyList<byte> GroupSteps, IReadOnlyDictionary<int, int> Steps)> results, ushort result = 0)
+    public static byte[] RewardBatchReply(byte category, int groupId, bool only, IReadOnlyList<(int Group, IReadOnlyList<byte> GroupSteps, IReadOnlyDictionary<int, int> Steps)> results, int result = 0)
     {
-        var w = PacketWriter.Opcode(TakeAchievementRewardBatchRs).U16(result).U8(category).I32(groupId).Bool(only).Bool(false).Varint((uint)results.Count);
+        var w = PacketWriter.Opcode(TakeAchievementRewardBatchRs).I32(result).U8(category).I32(groupId).U8(only ? (byte)1 : (byte)0).U8(0).Varint((uint)results.Count);
         foreach (var (gid, groupSteps, steps) in results)
         {
             w.I32(gid).Varint((uint)groupSteps.Count);

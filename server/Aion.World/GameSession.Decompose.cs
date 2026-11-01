@@ -82,7 +82,7 @@ public sealed class DecomposeTables
 public sealed partial class GameSession
 {
     public const ushort ItemDecomposeRq = 0x5640, ItemDecomposeRs = 0x5641;
-    const byte DecreaseDecompose = 31, IncreaseDecompose = 30;   // EDecreaseReason / EIncreaseReason (CANDIDATE values)
+    const byte DecreaseDecompose = 9, IncreaseDecompose = 10;   // EDecreaseReason / EIncreaseReason kItemDecompose (usmap)
     static DecomposeTables Decompose => DecomposeTables.Embedded;
 
     async Task<List<byte[]>> DecomposeAsync(byte[] plain, CancellationToken ct)

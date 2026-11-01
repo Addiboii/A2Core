@@ -26,6 +26,8 @@ public sealed partial class GameSession
         BattlePassInfoListNt = SocialOpcodes.E3Base + 1462, BattlePassPurchaseRq = SocialOpcodes.E3Base + 1471, BattlePassPurchaseRs = SocialOpcodes.E3Base + 1472;
     const ushort LegacyTakeBattlePassRewardRq = 0xe2bb, LegacyBattlePassPurchaseRq = 0xe2c6;
 
+    const byte IncreaseBattlePassReward = 72;   // EIncreaseReason kBattlePassReward (usmap)
+
     List<AchievementTables.PassGroup> ActivePasses(long now) =>
         Achievements.PassGroups.Where(g => (g.Race == 0 || g.Race == profileRace) && g.FromMs <= now && now <= g.ToMs).ToList();
 
@@ -108,13 +110,14 @@ public sealed partial class GameSession
             if (id == 0 || upTo == 0) continue;
             for (var s = (achievements.GetValueOrDefault(id)?.RewardedStep ?? 0) + 1; s <= upTo; s++)
             {
-                if (await TakeStepAsync(id, s, now, ct) is not { } taken) break;
+                if (await TakeStepAsync(id, s, now, ct, syncInventory: false) is not { } taken) break;
                 changes.AddRange(taken);
                 claimed[id] = s;
             }
         }
         var ok = claimed.Count > 0;
         var reply = TakeBattlePassRewardOpcode(plain);
+        if (ok) changes.AddRange(await InventoryChangesAsync(ct, IncreaseBattlePassReward, 0));
         return ok
             ? [BuildTakeBattlePassRewardReply(reply, 0, groupId, achievementId, step, claimed), .. changes, BattlePassInfoList(now)]
             : [BuildTakeBattlePassRewardReply(reply, 1, groupId, achievementId, step, claimed)];
@@ -179,7 +182,7 @@ public sealed partial class GameSession
                 state.RewardedStep = 1;
                 achievements[expId] = state;
                 achievementDirty.Add(expId);
-                changes.AddRange(await InventoryChangesAsync(ct, IncreaseAchievementReward, 0));
+                changes.AddRange(await InventoryChangesAsync(ct, IncreaseBattlePassReward, 0));
             }
         }
         return [Reply(0), .. changes, BattlePassInfoList(now)];
