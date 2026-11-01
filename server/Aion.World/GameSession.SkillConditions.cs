@@ -80,6 +80,8 @@ partial class GameSession
         var replies = new List<byte[]>();
         AddBuff(grant.Abnormal, grant.DurationMs, skillId, now, replies, path: SelfAbnormalPath.SkillCondGrant);
         replies.AddRange(BuffStatsChanged(speedBefore));
+        if (grant.SelectTarget?.Equals("Self", StringComparison.OrdinalIgnoreCase) != false)
+            replies.AddRange(SkillCondContextSelectReplies(grant.Abnormal));
         return replies;
     }
 }

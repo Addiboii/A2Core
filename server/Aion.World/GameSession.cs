@@ -1926,9 +1926,9 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         // Official order (2026-10-30): 0x3802 start, 0x3818/0x3819 chain, the 0x3801 accept, 0x8d21 when it starts combat,
         // then the 0x3803 arrows.
         var replies = new List<byte[]> { CastStartPacket(skill, (byte)actionUid, request, cooldown) };
+        replies.AddRange(ApplySkillCondGrant(skill, definition!, now, request));
         replies.AddRange(ChainCasterAbnormalReplies(skill, now));
         replies.AddRange(ChainCastReplies(skill, now));
-        replies.AddRange(ApplySkillCondGrant(skill, definition!, now, request));
         replies.Add(GamePackets.RequestAck(0x383a));
         replies.Add(CastReplyFor(request, true));
         replies.AddRange(EnterCombat(now));

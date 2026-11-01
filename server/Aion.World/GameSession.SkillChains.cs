@@ -121,6 +121,91 @@ public sealed partial class GameSession
         return stack;
     }
 
+    /// <summary>Allowed ids in a slot's four context rows (class default stack for the bar skill).</summary>
+    HashSet<int> AllowedContextSkillIds(int barSkillId) =>
+        data.DefaultContextSkills(barSkillId).Where(id => id > 0).ToHashSet();
+
+    /// <summary>Saved or default context rows match the class stack (no foreign skills such as Deadshot on the E combo slot).</summary>
+    bool ContextStackValid(int barSkillId, IReadOnlyList<int> stack)
+    {
+        if (barSkillId <= 0 || stack.Count < 4 || stack[0] != barSkillId) return false;
+        var allowed = AllowedContextSkillIds(barSkillId);
+        return stack[0] == barSkillId && stack.All(id => id == 0 || allowed.Contains(id));
+    }
+
+    /// <summary>Slots the server auto-selected after a SkillCond grant; reverted when that abnormal group expires.</summary>
+    readonly Dictionary<int, (byte ContextIndex, int SkillId, int AbnormalGroup)> contextAutoSelect = [];
+
+    /// <summary>
+    /// Server-pushed 0x5608 (no 0x5607, not persisted): tells the client which context row is active so SkillCond-gated
+    /// skills unlock (Suppressing Arrow after Marking Shot Precision, same pattern as chain self-buff before 0x3818).
+    /// </summary>
+    List<byte[]> NotifyQuickSlotContextSkill(byte slotId, byte contextIndex, int skillId)
+    {
+        if (Profile() is not { } profile) return [];
+        var rs = PacketWriter.Opcode(QuickSlotContextSkillRs).U16(0).U8(slotId).U8(contextIndex).I32(skillId)
+            .Bool(false).U8(0).U8(0).I32(0).ToArray();
+        return [rs, Hotbar(profile.DefaultBar())];
+    }
+
+    bool TryContextSlotOfSkill(int skillId, out byte slotId, out byte contextIndex)
+    {
+        slotId = 0;
+        contextIndex = 0;
+        foreach (var (slot, stack) in EffectiveSkillStacks().OrderBy(p => p.Key))
+        {
+            var index = Array.IndexOf(stack, skillId);
+            if (index < 0) continue;
+            slotId = (byte)slot;
+            contextIndex = (byte)index;
+            return true;
+        }
+        return false;
+    }
+
+    /// <summary>After skill_cond_grant (0x382a): select each newly usable conditional skill on the hotbar.</summary>
+    List<byte[]> SkillCondContextSelectReplies(int abnormalGroup)
+    {
+        if (abnormalGroup <= 0) return [];
+        var replies = new List<byte[]>();
+        foreach (var skillId in learned.OrderBy(id => id))
+        {
+            if (data.Skill(skillId) is not { SkillCond.AbnormalGroup: int need } || need != abnormalGroup) continue;
+            if (!TryContextSlotOfSkill(skillId, out var slot, out var index)) continue;
+            contextAutoSelect[slot] = (index, skillId, abnormalGroup);
+            replies.AddRange(NotifyQuickSlotContextSkill(slot, index, skillId));
+        }
+        return replies;
+    }
+
+    /// <summary>When a gating self-buff expires, restore the bar skill at index 0 on auto-selected slots.</summary>
+    List<byte[]> SkillCondContextExpireReplies(IReadOnlyList<Buff> removed)
+    {
+        if (removed.Count == 0 || Profile() is null) return [];
+        var groups = removed.Select(b => b.Group).Where(g => g > 0).ToHashSet();
+        if (groups.Count == 0) return [];
+        var replies = new List<byte[]>();
+        foreach (var slot in contextAutoSelect.Keys.Order().ToList())
+        {
+            var (index, skillId, group) = contextAutoSelect[slot];
+            if (!groups.Contains(group)) continue;
+            contextAutoSelect.Remove(slot);
+            if (!EffectiveSkillStacks().TryGetValue(slot, out var stack) || stack[0] <= 0) continue;
+            replies.AddRange(NotifyQuickSlotContextSkill((byte)slot, 0, stack[0]));
+        }
+        return replies;
+    }
+
+    bool IsAllowedContextSkillEdit(int[] target, byte contextSlot, int skillId)
+    {
+        if (skillId == 0) return true;
+        if (contextSlot == 0 && target[0] == 0) return learned.Contains(skillId);
+        var bar = target[0];
+        if (bar <= 0) return false;
+        var allowed = AllowedContextSkillIds(bar);
+        return allowed.Contains(skillId);
+    }
+
     /// <summary>
     /// 0x5607 QuickSlotContextSkillUpdate_RQ {slot u8, context index u8, skill id i32} (OBSERVED live 2026-10-30, 8 bytes:
     /// `06 01 D008E500` = slot 6, index 1, skill 15010000). The Skill Order window sends every edit as this one request:
@@ -156,6 +241,7 @@ public sealed partial class GameSession
         }
         var displaced = target[contextSlot];
         if (displaced == skillId) return [Rs(0), Hotbar(profile.DefaultBar())];
+        if (!IsAllowedContextSkillEdit(target, contextSlot, skillId)) return Refused();
 
         byte swapSlot = 0, swapContext = 0;
         var swapped = false;

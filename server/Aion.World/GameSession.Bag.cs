@@ -19,7 +19,20 @@ public sealed partial class GameSession
     async Task LoadQuickSlotsAsync(INativeCharacterStore store, Guid character, CancellationToken ct)
     {
         quickSlots.Clear();
-        foreach (var slot in await store.QuickSlotsAsync(character, ct)) quickSlots[slot.Slot] = slot;
+        var repairs = new List<QuickSlotRecord>();
+        foreach (var slot in await store.QuickSlotsAsync(character, ct))
+        {
+            if (slot.Type == 0 && slot.SkillId != 0 && !ContextStackValid(slot.SkillId, ContextSkillsForSlot(slot)))
+            {
+                var fixedSlot = slot with { ContextSkills = data.DefaultContextSkills(slot.SkillId).ToArray() };
+                quickSlots[slot.Slot] = fixedSlot;
+                repairs.Add(fixedSlot);
+            }
+            else quickSlots[slot.Slot] = slot;
+        }
+        if (repairs.Count == 0) return;
+        foreach (var slot in repairs)
+            await store.SaveQuickSlotAsync(character, slot.Slot, slot, ct);
     }
 
     /// <summary>The hotbar at world entry: the player's saved slots, else the class's default bar.</summary>

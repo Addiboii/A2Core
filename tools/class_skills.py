@@ -577,7 +577,8 @@ def refresh_e_stacks():
     doc = json.loads(DATA.read_text(encoding='utf-8'))
     stacks_doc = json.loads(PC_CONTEXT_STACKS.read_text(encoding='utf-8'))
     if stacks_doc.get('real_export'):
-        e_msg = 'pc-context-stacks.json is a PCContextSkillSlot export: left as it is'
+        doc['e_combo_stacks'] = stacks_doc.get('e_slot_by_class') or stacks_doc.get('by_class') or doc.get('e_combo_stacks', {})
+        e_msg = 'pc-context-stacks.json is a PCContextSkillSlot export: embedded e_combo_stacks from export'
     else:
         e_msg = None
         previous = stacks_doc.get('ours', {})

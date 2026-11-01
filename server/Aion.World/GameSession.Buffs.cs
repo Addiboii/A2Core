@@ -307,7 +307,7 @@ public sealed partial class GameSession
         if (removed.Any(b => b.Polymorph) && buffs.All(b => !b.Polymorph)) packets.Add(RidePackets.PolymorphUpdate(playerKey, 0));
         if (removed.Any(b => b.Relationship is not null) && buffs.All(b => b.Relationship is null)) packets.Add(GamePackets.RelationshipUpdate(playerKey, OwnRelationship));
         worldPlayer?.Map?.Broadcast(worldPlayer, packets);
-        return packets;
+        return [.. packets, .. SkillCondContextExpireReplies(removed)];
     }
 
     /// <summary>Every buff ends at death except a rebirth buff (it revives in place): removal, then the stats without them.</summary>
