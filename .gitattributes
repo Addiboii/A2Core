@@ -1,2 +1,7 @@
 *.sh text eol=lf
 deploy/linux/** text eol=lf
+
+# Windows scripts: stored with CRLF in the repo (no normalization) so ZIP downloads work in CMD
+*.cmd -text
+*.bat -text
+*.ps1 -text
