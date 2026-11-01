@@ -199,14 +199,9 @@ public sealed partial class GameSession
         if (data.Skill(skillId) is { } def && SkillCooldown.IsFixSlot(def) && SkillCooldown.IsBasicAutoAttack(def))
             chainUpdates = SyncBasicChainSkills(skillId);
         RebuildWireClientSkillList();
-        // Same tail as entry / refusal / level-down: full 0x5100 + entry resync 0x3813 seeds, then 0x5105. Incremental
-        // 0x3813 (reason SkillPointLevelUp) alone left the client spend model out of sync with chain rows on the list.
-        return
-        [
-            ..SkillMasteryCoreReplies(Reply(0), skillId, next, SkillPointLevelUp, chainUpdates, appendSkillPointUpdate: false),
-            ..SkillPointListResync(),
-            SkillPointUpdate(),
-        ];
+        // Official burst (capture 20261013 / 2026-10-31): 0x3656, 0x3840, 0x3813 reason SkillPointLevelUp, optional chain
+        // 0x3813 reason SkillLevelModify, then 0x5105 only — no extra 0x5100 / entry resync on success.
+        return SkillMasteryCoreReplies(Reply(0), skillId, next, SkillPointLevelUp, chainUpdates);
     }
 
     /// <summary>After FixSlot basic mastery changes: base chain steps appear in 0x5100 at the same level (unlocks Skill Order rows).</summary>

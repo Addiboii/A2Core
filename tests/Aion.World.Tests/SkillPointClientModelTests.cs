@@ -366,7 +366,7 @@ public sealed class SkillPointClientModelTests
         {
             var up = await session.HandleAsync(new PacketWriter().U16(GameSession.SkillLevelUpRq).I32(skillId).ToArray(), Now);
             Assert.Equal(0, BitConverter.ToUInt16(GameSessionTestHelpers.SkillLevelUpRs(up), 2));
-            AssertSkillPointTailOrder(up);
+            AssertOfficialSkillLevelUpBurst(up);
             followUp.AddRange(up);
             window.Feed(up);
             var displayed = ClientDisplayedAfter(entry, followUp, 12, data, "Gladiator");
@@ -686,7 +686,7 @@ public sealed class SkillPointClientModelTests
 
         var up = await session.HandleAsync(new PacketWriter().U16(GameSession.SkillLevelUpRq).I32(14_020_000).ToArray(), Now);
         Assert.Equal(0, BitConverter.ToUInt16(GameSessionTestHelpers.SkillLevelUpRs(up), 2));
-        AssertSkillPointTailOrder(up);
+        AssertOfficialSkillLevelUpBurst(up);
         foreach (var group in SkillLevelUpdates(up).Select(ParseSkillLevelUpdate).GroupBy(u => u.SkillId))
         {
             var originals = group.Select(g => g.Original).Distinct().ToList();
@@ -770,13 +770,26 @@ public sealed class SkillPointClientModelTests
         var buySkill = UpgradableLevel2(data, "Gladiator", 5).First();
         var up = await session.HandleAsync(new PacketWriter().U16(GameSession.SkillLevelUpRq).I32(buySkill).ToArray(), Now + 200);
         Assert.Equal(0, BitConverter.ToUInt16(GameSessionTestHelpers.SkillLevelUpRs(up), 2));
-        AssertSkillPointTailOrder(up);
+        AssertOfficialSkillLevelUpBurst(up);
         var followUp = levelUp.Concat(up).ToList();
         var afterLearn = ClientDisplayedAfter(entry, followUp, 5, data, "Gladiator");
         Assert.True(afterLearn >= 0);
         Assert.Equal(session.SkillPointsLeft, afterLearn);
         window.Feed(up);
         Assert.Equal(session.SkillPointsLeft, window.Shown);
+    }
+
+    static void AssertOfficialSkillLevelUpBurst(IReadOnlyList<byte[]> packets)
+    {
+        var list = packets.ToList();
+        var start = list.FindIndex(p => GameSessionTestHelpers.Op(p) == 0x3656);
+        Assert.True(start >= 0);
+        Assert.Equal(GameSession.SkillLevelUpRs, GameSessionTestHelpers.Op(list[start + 1]));
+        Assert.Equal(GameSession.SkillLevelUpdateNt, GameSessionTestHelpers.Op(list[start + 2]));
+        Assert.Equal(GameSession.SkillPointUpdateNt, GameSessionTestHelpers.Op(list[^1]));
+        Assert.All(list.Skip(start + 3).Take(list.Count - start - 4),
+            p => Assert.Equal(GameSession.SkillLevelUpdateNt, GameSessionTestHelpers.Op(p)));
+        Assert.DoesNotContain(list, p => GameSessionTestHelpers.Op(p) == 0x5100);
     }
 
     static void AssertSkillPointTailOrder(IReadOnlyList<byte[]> packets)

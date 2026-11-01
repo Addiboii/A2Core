@@ -442,7 +442,10 @@ Check(variant9End.Any(b => b[0] == 0x06 && b[1] == 0x38) && variant9End.Any(b =>
 await hold.HandleAsync(holdOff, Now + 2210);
 hold.DashVariant = 10;
 Check((await hold.HandleAsync(holdOn, Now + 2600)).Select(b => b[0] | b[1] << 8).SequenceEqual(new[] { 0x8d03, 0x3741 }), "dash variant 10: the sprint reply goes out at once");
-Check((await hold.HandleAsync(Cast(GameSession.CombatDodge, 1, new Vector3d(100, 0, 0)), Now + 2604)).Count == 0, "dash variant 10: the dash request gets no reply");
+var variant10Dash = await hold.HandleAsync(Cast(GameSession.CombatDodge, 1, new Vector3d(100, 0, 0)), Now + 2604);
+Check(variant10Dash.Select(b => b[0] | b[1] << 8).SequenceEqual(new[] { 0x3801, 0x8d00, 0x3802 })
+      && BitConverter.ToInt32(variant10Dash[2], 4) == GameSession.NormalDodge,
+      "dash variant 10: legacy alias accepts the sprint-opening dash (refusal froze live 2026-11-01)");
 await hold.HandleAsync(holdOff, Now + 2700);
 hold.DashVariant = 0;
 game.DashVariant = 0;

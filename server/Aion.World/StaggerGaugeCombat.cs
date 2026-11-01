@@ -18,8 +18,66 @@ public static class StaggerGaugeCombat
     public static int GaugeMax(Target target) =>
         target.StaggerGaugeMax > 0 ? target.StaggerGaugeMax : DefaultGaugeMax;
 
-    public static int GaugeDamage(GameData data, int skillId) =>
-        data.Skill(skillId)?.StaggerGauge ?? 0;
+    /// <summary>Reference HP budget for exported stagger_gauge table values (5000 HP sandbag × elite break fraction).</summary>
+    public const int ReferenceHpBudgetForTable = 1750;
+
+    /// <summary>
+    /// Share of max HP that should be dealt (per break) before the groggy bar empties.
+    /// Strong bosses ~15–20% (Legend/Hero); weaker elites ~30–40%. OURS when GroggyData max/recovery are not exported.
+    /// </summary>
+    public static double HpLossFractionPerStaggerBreak(Target target) => (target.SubType, target.Grade) switch
+    {
+        ("LegendMonster", _) => 0.175,
+        ("HeroMonster", >= 5) => 0.20,
+        ("HeroMonster", _) => 0.25,
+        ("EliteMonster", _) => 0.35,
+        _ when target.Grade >= 5 => 0.20,
+        _ => 0.35,
+    };
+
+    public static int HpBudgetPerStaggerBreak(Target target)
+    {
+        var hpMax = target.HpMax > 0 ? target.HpMax : 1;
+        return Math.Max(1, (int)Math.Round(hpMax * HpLossFractionPerStaggerBreak(target)));
+    }
+
+    static bool UsesHpScaledGauge(Target target) =>
+        HasBossGauge(target) || target.StaggerGaugeMax > 0 || target.GroggyMax > 0;
+
+    public static int GaugeDamage(GameData data, int skillId, Target? target = null, int hitDamage = 0)
+    {
+        if (data.Skill(skillId) is not { } def) return 0;
+        var gaugeMax = target is not null ? GaugeMax(target) : DefaultGaugeMax;
+        var hpBudget = target is not null ? HpBudgetPerStaggerBreak(target) : ReferenceHpBudgetForTable;
+
+        if (hitDamage > 0 && target is not null && UsesHpScaledGauge(target))
+            return Math.Max(1, (int)Math.Round(gaugeMax * (double)hitDamage / hpBudget));
+
+        int baseGauge;
+        if (def.StaggerGauge > 0)
+            baseGauge = def.StaggerGauge;
+        else if (!def.Type.Equals("Active", StringComparison.OrdinalIgnoreCase) || def.Damage.Length == 0)
+            return 0;
+        else
+        {
+            // SkillEffect GroggyGuardDecreaseEnergy rows are not fully exported; MP bands from wiki (OURS).
+            baseGauge = def.Cost.Mp switch
+            {
+                <= 50 => 3,
+                <= 200 => 7,
+                _ => 10,
+            };
+        }
+
+        if (target is null || hpBudget == ReferenceHpBudgetForTable) return baseGauge;
+        return Math.Max(1, (int)Math.Round(baseGauge * (double)ReferenceHpBudgetForTable / hpBudget));
+    }
+
+    /// <summary>0xe005 _groggy_guard_energy: remaining bar (max when untouched, 0 when the bar breaks).</summary>
+    public static int WireGroggyEnergy(Target target) =>
+        target.StaggerGaugeMax > 0 || target.GroggyMax > 0
+            ? Math.Max(0, GaugeMax(target) - target.StaggerGauge)
+            : 0;
 
     /// <summary>Enable stagger gauge on bosses (NpcSubType / grade from tools/world_npcs.py).</summary>
     public static void InitBossGauge(Target target)
@@ -39,7 +97,7 @@ public static class StaggerGaugeCombat
     {
         if (target.StaggerGaugeMax <= 0) return;
         target.GroggyMax = target.StaggerGaugeMax;
-        target.GroggyEnergy = Math.Max(0, target.GroggyMax - target.StaggerGauge);
+        target.GroggyEnergy = WireGroggyEnergy(target);
     }
 
     public static void SyncGaugeFromGroggy(Target target)
@@ -57,10 +115,15 @@ public static class StaggerGaugeCombat
         SyncGroggyFromGauge(target);
     }
 
-    public static byte[]? GroggyUpdatePacket(Target target, bool activated = false) =>
-        target.GroggyMax > 0
-            ? GamePackets.UpdateGroggyInfo(target.Key, target.GroggyMax, target.GroggyEnergy, activated)
-            : null;
+    public static byte[]? GroggyUpdatePacket(Target target, bool activated = false)
+    {
+        if (target.GroggyMax <= 0 && target.StaggerGaugeMax <= 0) return null;
+        var max = GaugeMax(target);
+        if (target.GroggyMax <= 0) target.GroggyMax = max;
+        var energy = WireGroggyEnergy(target);
+        target.GroggyEnergy = energy;
+        return GamePackets.UpdateGroggyInfo(target.Key, max, energy, activated);
+    }
 
     public static void AppendGroggyWire(Target target, List<byte[]> replies, bool activated = false)
     {
@@ -91,13 +154,12 @@ public static class StaggerGaugeCombat
         victim.StaggerGauge = Math.Min(GaugeMax(victim), victim.StaggerGauge + gaugeDamage);
         if (victim.GroggyMax > 0) SyncGroggyFromGauge(victim);
         if (victim.StaggerGauge < GaugeMax(victim))
-            return victim.GroggyMax > 0 ? [GroggyUpdatePacket(victim)!] : [];
-        victim.StaggerGauge = 0;
-        if (victim.GroggyMax > 0) SyncGroggyFromGauge(victim);
+            return GroggyUpdatePacket(victim) is { } pkt ? [pkt] : [];
+        // Bar depleted (energy 0 on wire) before stagger; refill only after StaggerUntil in StaggerTick.
         var breakReplies = session is not null
             ? session.BreakNpcStagger(victim, now)
             : BreakStaggerShared(victim, casterKey, now);
-        if (victim.GroggyMax > 0) AppendGroggyWire(victim, breakReplies, activated: true);
+        AppendGroggyWire(victim, breakReplies, activated: true);
         return breakReplies;
     }
 

@@ -157,7 +157,7 @@ public sealed partial class NpcAi
             replies.AddRange(HitNpc(current, t.Key, summon, shot.Damage, now));
             if (shot.Seq == 1 && summon.SummonSourceSkill > 0 && data is { } gd)
             {
-                var gauge = StaggerGaugeCombat.GaugeDamage(gd, summon.SummonSourceSkill);
+                var gauge = StaggerGaugeCombat.GaugeDamage(gd, summon.SummonSourceSkill, t);
                 replies.AddRange(StaggerGaugeCombat.AddGaugeDamage(t, gauge, summon.OwnerKey, now, session: null, firstRow: true));
             }
         }

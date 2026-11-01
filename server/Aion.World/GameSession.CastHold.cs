@@ -127,11 +127,17 @@ public sealed partial class GameSession
         var replies = CastReplies(wire, now);
         if (replies.Count == 0)
         {
-            if (ParseCast(wire) is { } request) return [CastReplyFor(request, false)];
+            if (ParseCast(wire) is { } request)
+                return IsDodgeId(request.SkillId)
+                    ? DodgeUnlockRefusal(IsCombatDodgeId(request.SkillId) ? request.SkillId : request.SkillId - 1)
+                    : [CastReplyFor(request, false)];
             return replies;
         }
         if (replies.Any(p => Opcode(p) == 0x3801 && CastResultCode(p) == 0)) return replies;
-        if (ParseCast(wire) is { } refused) return [CastReplyFor(refused, false)];
+        if (ParseCast(wire) is { } refused)
+            return IsDodgeId(refused.SkillId)
+                ? DodgeUnlockRefusal(IsCombatDodgeId(refused.SkillId) ? refused.SkillId : refused.SkillId - 1)
+                : [CastReplyFor(refused, false)];
         return replies;
     }
 

@@ -70,10 +70,14 @@ public sealed class StaggerGaugeTests
         var t = Now + 60_000;
         var cast = await session.HandleAsync(Cast(Combustion), t);
         Assert.True(Accepted(cast));
-        var hitReplies = await AfterHitsAsync(session, t);
         var target = session.Targets![Dummy];
-        Assert.Equal(3, target.StaggerGauge);
-        Assert.Equal(target.GroggyMax - 3, target.GroggyEnergy);
+        var hpBefore = target.Hp;
+        var hitReplies = await AfterHitsAsync(session, t);
+        var hitDamage = hpBefore - target.Hp;
+        Assert.True(hitDamage > 0);
+        var expectedGauge = StaggerGaugeCombat.GaugeDamage(GameSessionTestHelpers.LiveGameData, Combustion, target, hitDamage);
+        Assert.Equal(expectedGauge, target.StaggerGauge);
+        Assert.Equal(target.GroggyMax - expectedGauge, target.GroggyEnergy);
         Assert.Contains(hitReplies, p => GameSessionTestHelpers.Op(p) == 0xe005);
     }
 }

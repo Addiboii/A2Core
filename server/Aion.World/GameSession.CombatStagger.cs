@@ -10,9 +10,9 @@ public sealed partial class GameSession
         return replies;
     }
 
-    internal List<byte[]> ApplyStaggerGaugeOnNpcHit(Target target, int skillId, int row, long now)
+    internal List<byte[]> ApplyStaggerGaugeOnNpcHit(Target target, int skillId, int row, long now, int hitDamage = 0)
     {
-        var gauge = StaggerGaugeCombat.GaugeDamage(data, skillId);
+        var gauge = StaggerGaugeCombat.GaugeDamage(data, skillId, target, hitDamage);
         return StaggerGaugeCombat.AddGaugeDamage(target, gauge, playerKey, now, this, row == 0);
     }
 

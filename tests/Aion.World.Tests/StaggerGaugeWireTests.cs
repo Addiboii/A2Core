@@ -54,8 +54,29 @@ public sealed class StaggerGaugeWireTests
         StaggerGaugeCombat.SyncGroggyFromGauge(t);
         var replies = StaggerGaugeCombat.AddGaugeDamage(t, 3, 1, 1000, session: null, firstRow: true);
         Assert.Contains(replies, p => Op(p) == 0x382a);
-        Assert.Contains(replies, p => Op(p) == 0xe005);
+        Assert.Contains(replies, p => p.SequenceEqual(GamePackets.UpdateGroggyInfo(t.Key, 100, 0, activated: true)));
         Assert.True(t.StaggerUntil > 1000);
+        Assert.Equal(StaggerGaugeCombat.DefaultGaugeMax, t.StaggerGauge);
+    }
+
+    [Fact]
+    public void Lake_guardian_spawn_has_full_groggy_and_gladiator_hits_deplete_wire_energy()
+    {
+        var data = GameSessionTestHelpers.LiveGameData;
+        var boss = Combat.MapTargets(data, 210016).Values.Single(t => t.NpcId == 2701034);
+        Assert.True(StaggerGaugeCombat.HasBossGauge(boss));
+        Assert.Equal(StaggerGaugeCombat.DefaultGaugeMax, boss.GroggyEnergy);
+        Assert.Equal(0, boss.StaggerGauge);
+        var appear = StaggerGaugeCombat.NpcAppearPackets(boss.Appearance(), boss);
+        Assert.Equal(0xe005, Op(appear[1]));
+        Assert.Equal(100, StaggerGaugeCombat.WireGroggyEnergy(boss));
+        const int sampleHit = 100;
+        var dmg = StaggerGaugeCombat.GaugeDamage(data, 11010000, boss, sampleHit);
+        Assert.True(dmg > 3);
+        var hit = StaggerGaugeCombat.AddGaugeDamage(boss, dmg, 1, 1000, null, true);
+        Assert.Single(hit);
+        Assert.Equal(100 - dmg, StaggerGaugeCombat.WireGroggyEnergy(boss));
+        Assert.Equal(GamePackets.UpdateGroggyInfo(boss.Key, 100, 100 - dmg), hit[0]);
     }
 
     [Fact]

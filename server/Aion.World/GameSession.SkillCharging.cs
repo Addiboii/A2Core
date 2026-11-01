@@ -82,8 +82,10 @@ partial class GameSession
         if (dodging) combatDodge = IsCombatDodgeId(skill) ? skill : skill - 1;
         var variant = DashVariant;
         if (dodging && !sprinting && variant >= 6) variant = 0;
-        if (dodging && sprinting && variant is 6 or 10) return false;
+        if (dodging && sprinting && variant == 6) return false;
         var sprintDash = dodging && sprinting;
+        if (sprintDash && variant == 10) variant = 0;
+        var sprintOpeningDash = sprintDash && now - sprintOnAt <= SprintAutoDodgeWindowMs;
         var started = skill == combatDodge && variant != 9 && (sprinting || !inCombat) ? combatDodge + 1 : skill;
         var normalDodge = dodging && started == combatDodge + 1 && learned.Contains(combatDodge);
         definition = normalDodge ? data.Skill(combatDodge) is { } dodge ? dodge with { Cost = dodge.Cost with { Sp = NormalDodgeSp } } : null
@@ -105,8 +107,9 @@ partial class GameSession
         var toggleOff = request.HasChangeToggle && request.ChangeToggle is 0 or 2;
         var toggleOn = request.HasChangeToggle && request.ChangeToggle == 1;
         if (basicAuto && toggleOff) return true;
-        var castGapOk = noCool || dodging || now - lastAcceptedCastMs >= SkillCooldown.MinCastGapMs;
-        if (meetsCastRules && cooldownReady && castGapOk) return true;
+        var castGapOk = noCool || now - lastAcceptedCastMs >= SkillCooldown.MinCastGapMs || sprintOpeningDash;
+        var cooldownOk = cooldownReady || sprintOpeningDash;
+        if (meetsCastRules && cooldownOk && castGapOk) return true;
         if (basicAuto && toggleOn && meetsCastRules && !cooldownReady) return true;
         return false;
     }

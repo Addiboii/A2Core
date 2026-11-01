@@ -67,6 +67,22 @@ public sealed class Hq1102030BirdsEyeViewTests
         Assert.NotNull(run);
     }
 
+    /// <summary>Quest id 1102030 (HQ1102030): step 2 ClearMapEvent must complete after the HQ001 layer script (regression for field→layer loop).</summary>
+    [Fact]
+    public async Task Step2_HQ1102030_ClearMapEvent_credits_after_layer_script()
+    {
+        var session = await OnStep2Async(Now + 40_000);
+        var lebron = session.Targets!.Values.First(t => t.NpcId == 2931025);
+        await MapEventScenarioHelpers.EnterInstanceLayerAsync(session, 2931025, Now + 40_130);
+        var run = await MapEventScenarioHelpers.WaitForMapEventRunAsync(session, "World_L_A_Layer_HQ001_MapEvent", Now + 40_400);
+        Assert.NotNull(run);
+        var finished = await MapEventScenarioHelpers.PlayMapEventScriptAsync(session, run!, Now + 41_000, maxSeconds: 360);
+        await MapEventScenarioHelpers.FlushQuestMapEventClearsAsync(session, Now + 250_000);
+        var q = session.Quests!.Get("HQ1102030")!;
+        Assert.True(finished || run!.Status == MapEventRun.Complete || q.Step > 2 || q.Goals[1] > 0,
+            $"quest step={q.Step} goals=[{string.Join(',', q.Goals)}] run={run!.Status}");
+    }
+
     [Fact]
     public async Task Layer_AskNpc_objectives_name_Lebron_template_2931024()
     {

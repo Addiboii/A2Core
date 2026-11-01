@@ -82,6 +82,9 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
     /// </summary>
     public static bool IsCombatDodgeId(int skill) => skill % 1_000_000 == 100 && skill / 1_000_000 is >= 11 and <= 19;
     public static bool IsDodgeId(int skill) => IsCombatDodgeId(skill) || IsCombatDodgeId(skill - 1);
+
+    /// <summary>9-byte 0x3801 refusal (result 1) so the client unlocks movement after a rejected dodge or sprint auto-dodge.</summary>
+    internal static List<byte[]> DodgeUnlockRefusal(int combatDodge) => [GamePackets.DodgeResult(combatDodge, 1)];
     /// <summary>This character's CombatDodge (the learned class dodge; Gladiator's id when none is learned).</summary>
     int ClassCombatDodge => learned.FirstOrDefault(IsCombatDodgeId) is var id and > 0 ? id : CombatDodge;
     int ClassNormalDodge => ClassCombatDodge + 1;
@@ -202,11 +205,14 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
     /// same write as the recorded dash (official: one batch). 8 is 7, held until <see cref="DashBatchDelayMs"/> after the sprint
     /// request (official answers 45-85 ms later, one tick). 9 is 7 but starts CombatDodge instead of NormalDodge.
     /// Variants 1-5 sent the sprint reply on its own, a frame before the dash, and the client never left the dash.
-    /// 10 answers the sprint and sends nothing for the dash request.
+    /// 10 is legacy (refused the dash with 9-byte 0x3801 result 1 and froze live 2026-11-01); sprint dashes use variant 0.
     /// A standing dodge (no sprint) on 6-10 keeps variant 0: that is the reply this client already finishes.
     /// </summary>
-    public int DashVariant { get; set; }
+    /// <summary>Default 0: accept the client's auto CombatDodge after 0x3704 (NormalDodge dash + sustained sprint).</summary>
+    public int DashVariant { get; set; } = 0;
     public const int DashVariantMax = 10, DodgeLateEndMs = 600, DashBatchDelayMs = 50, SprintReplyHoldMs = 80;
+    /// <summary>CombatDodge right after 0x3704 skips MinCastGap and dodge cooldown (official sprint-opening dash).</summary>
+    public const int SprintAutoDodgeWindowMs = 250;
     /// <summary>Sprint-on reply (and, for variant 8, the dash) waiting to share one write. Official sends them at one timestamp.</summary>
     List<byte[]>? pendingSprintReply, pendingDashBatch;
     long sprintOnAt;
@@ -1775,6 +1781,8 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
     {
         if (body.Length < 9 || !IsSkillStartWireOpcode(Opcode(body))) return [];
         var skill = BitConverter.ToInt32(body, 4);
+        if (IsDodgeId(skill))
+            return DodgeUnlockRefusal(IsCombatDodgeId(skill) ? skill : skill - 1);
         return [GamePackets.CastReply(false, skill, 0)];
     }
 
@@ -1843,8 +1851,8 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         if (dodging && sprinting && variant == 6)
             return [GamePackets.DodgeResult(combatDodge, 1)];
         var sprintDash = dodging && sprinting;
-        // Variant 10: no reply at all to the dodge the client sends with the sprint (6 refused it and still froze, live 2026-10-20).
-        if (dodging && sprinting && variant == 10) return [];
+        if (sprintDash && variant == 10) variant = 0;
+        var sprintOpeningDash = sprintDash && now - sprintOnAt <= SprintAutoDodgeWindowMs;
         // Variant 9 starts CombatDodge while sprinting (official starts NormalDodge). The rest of the sprint dashes are NormalDodge.
         // OBSERVED (official 2026-10-19 and 2026-10-20): the server picks the dodge by combat state. All 36 CombatDodge starts came
         // within 8 s of the player's own attack; out of combat the dodge is NormalDodge (10,000 SP, no 0x3804 effect) whether the
@@ -1887,10 +1895,13 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         // 2026-10-30 16:08: Tempest Shot x6 in 70 ms, Snipe->Rapid Fire->Spiral Arrow->Snipe in 33 ms). Each accept is a new
         // SkillStart with projectiles/FX, which flooded the client (stuck FX meshes, then UE "Maximum number of UObjects").
         // OBSERVED official: Tempest Shot re-accepted 229 ms apart at the least.
-        var castGapOk = noCool || dodging || now - lastAcceptedCastMs >= SkillCooldown.MinCastGapMs;
-        var accepted = meetsCastRules && cooldownReady && castGapOk;
+        var castGapOk = noCool || now - lastAcceptedCastMs >= SkillCooldown.MinCastGapMs || sprintOpeningDash;
+        var cooldownOk = cooldownReady || sprintOpeningDash;
+        var accepted = meetsCastRules && cooldownOk && castGapOk;
         if (!accepted)
         {
+            if (dodging && IsExactHeldCastDuplicate(request, body, now))
+                return DodgeUnlockRefusal(combatDodge);
             if (!dodging && meetsCastRules && IsExactHeldCastDuplicate(request, body, now))
                 return [CastReplyFor(request, false)];
             var queued = MaybeQueueEarlyChainCast(body, request, chainSkill, chainAllowed, castGapOk, nextCastAcceptAtMs);
@@ -1898,12 +1909,9 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             if (queued.Count > 0) return queued;
             LogSkillCastRefusal(request, skill, definition, meetsCastRules, chainAllowed, cooldownReady, castGapOk, cost, weapons);
             // A sprint dash refused for cost or cooldown stays on the 9-byte form. The mask-first reply drops the sprint.
-            if (dodging)
-            {
-                if (sprinting && variant is 7 or 8 or 9)
-                    return DeliverDash([GamePackets.DodgeResult(combatDodge, 1)], variant);
-                return [GamePackets.DodgeResult(combatDodge, 1)];
-            }
+            if (dodging) return sprinting && variant is 7 or 8 or 9
+                ? DeliverDash(DodgeUnlockRefusal(combatDodge), variant)
+                : DodgeUnlockRefusal(combatDodge);
             // Right-click auto-attack-on-target: acknowledge toggle while the swing is still on lockout (no SkillStart).
             if (basicAuto && toggleOn && meetsCastRules && !cooldownReady)
                 return [CastReplyFor(request, true)];
@@ -1914,14 +1922,16 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             .Concat(ForceDismount()).Concat(InterruptItemCast()).ToList();
         // The bomb thrown at a tower ends with the hit that breaks it; any other cast of it uses a charge now.
         if (DestructibleEnvObjIndex(request.TargetKey) is null) dismount.AddRange(CarrySkillStarted(skill));
-        if (!dodging) lastAcceptedCastMs = now;
-        ScheduleNextCastAccept(now, definition!, skill, HeldCastWireKeyOf(request, body));
+        lastAcceptedCastMs = now;
         DropQueuedHeldCastSilently();
         skillMoveGraceUntil = now + SkillMoveGraceMs;
         var cooldown = noCool ? 0 : SkillCooldown.Reduced(SkillCooldown.EffectiveMs(definition), CoolTimeDecrease);
         var lockout = PlayerCastLockoutMs(definition!, skill);
         if (definition!.CooldownMs > 0 && lockout == definition.CooldownMs) lockout = cooldown;
         if (!noCool && lockout > 0) cooldowns[cooldownKey] = now + lockout;
+        ScheduleNextCastAccept(now, definition!, skill, HeldCastWireKeyOf(request, body));
+        if (dodging)
+            nextCastAcceptAtMs = Math.Max(nextCastAcceptAtMs, now + Math.Max(lockout, SkillCooldown.MinCastGapMs));
         // Builder SetInvincible: the flagged resources do not decrease.
         if (!invincible.Mp) resources!.Mp -= cost.Mp;
         if (!invincible.Sp) resources!.Sp -= cost.Sp;

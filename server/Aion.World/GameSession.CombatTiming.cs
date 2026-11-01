@@ -285,7 +285,7 @@ partial class GameSession
             if (scheduled.Row == 0) replies.AddRange(SkillDebuffReplies(target, scheduled.SkillId, now));
             if (scheduled.Row == 0 && !UsesChainCasterAbnormalOnAccept(scheduled.SkillId))
                 replies.AddRange(ApplyCasterSkillAbnormals(scheduled.SkillId, now));
-            replies.AddRange(ApplyStaggerGaugeOnNpcHit(target, scheduled.SkillId, scheduled.Row, now));
+            replies.AddRange(ApplyStaggerGaugeOnNpcHit(target, scheduled.SkillId, scheduled.Row, now, hit.Amount));
             if (hit.Amount > 0) LogCombatHit(scheduled.SkillId, target.Key, hit.Amount, kill: false);
             if (hit.Amount > 0) replies.AddRange(ai.Engage(targets, target, now, playerKey, hit.Amount));
         }
