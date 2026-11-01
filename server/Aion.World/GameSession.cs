@@ -2118,15 +2118,14 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         var hpMax = Math.Max(1, (basis.GetValueOrDefault("HPMax") is > 0 and var hp ? hp : GamePackets.SpawnHpMax) + EquipStat("HPMax") + EnchantStat("HPMax") + ExceedStat("HPMax") + RideStat("HPMax")
             + BuffStat("HPMax") + BoardStat("HPMax") + TitleStat("HPMax") + SetStat("HPMax") + D(193));
         var weapon = data.WeaponStatsOf(equippedWeapon);
-        int WeaponStat(string name, int fallback) => Math.Max(fallback, EquipStat(name));
-        int WeaponAccuracySheet() =>
-            Math.Max(weapon.Accuracy, EquipStat("WeaponAccuracy") + EquipStat("Accuracy"))
-            + TitleStat("Accuracy") + SetStat("Accuracy") + D(318);
+        int WeaponLine(string name, int wire, int fallback) =>
+            AggregatedStat(name, wire) + Math.Max(0, fallback - EquipStat(name));
+        int WeaponAccuracySheet() => PlayerCombatAccuracy();
         var byType = GamePackets.DefaultStats.Select(s => s.Type switch
         {
-            31 => (Type: s.Type, Value: WeaponStat("WeaponDamage", weapon.Max) + TitleStat("FixingDamage") + EnchantStat("WeaponDamage") + ExceedStat("WeaponDamage") + D(31)),
-            33 => (Type: s.Type, Value: WeaponStat("WeaponMinDamage", weapon.Min) + TitleStat("FixingDamage") + EnchantStat("WeaponMinDamage") + ExceedStat("WeaponMinDamage") + D(33)),
-            128 => (Type: s.Type, Value: WeaponStat("Critical", weapon.Critical) + RideStat("Critical") + BuffStat("Critical") + BoardStat("Critical") + TitleStat("Critical") + SetStat("Critical") + D(128)),
+            31 => (Type: s.Type, Value: WeaponLine("WeaponDamage", 31, weapon.Max) + TitleStat("FixingDamage") + D(31)),
+            33 => (Type: s.Type, Value: WeaponLine("WeaponMinDamage", 33, weapon.Min) + TitleStat("FixingDamage") + D(33)),
+            128 => (Type: s.Type, Value: WeaponLine("Critical", 128, weapon.Critical) + D(128)),
             318 => (Type: s.Type, Value: WeaponAccuracySheet()),
             193 => (Type: s.Type, Value: hpMax), 199 => (Type: s.Type, Value: MpMax), 242 => (Type: s.Type, Value: GamePackets.SpawnSp + BuffStat("SPMax")),
             307 => (Type: s.Type, Value: Defense),

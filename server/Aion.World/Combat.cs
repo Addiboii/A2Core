@@ -92,12 +92,15 @@ public sealed record Hit(int Amount, bool Critical, int EffectId);
 /// <summary>
 /// Skill damage. A data-driven CANDIDATE model, not recovered retail formulas (tools/combat.py):
 /// attack = weapon roll + FixingDamage(level); raw = flat + attack * ratio / 10000 per Damage row;
-/// crit chance Critical / 1000 (capped at 0.5) for x1.5; damage = raw * 1000 / (1000 + defense), at least 1.
+/// crit chance (Critical + attribute crit) / 1000 (capped at 0.5) for x1.5; optional accuracy shaves defense (CANDIDATE);
+/// damage = raw * 1000 / (1000 + defense), at least 1.
 /// </summary>
 public static class Combat
 {
     public const double CriticalMultiplier = 1.5, CriticalCap = 0.5;
     public const int DefenseScale = 1000;
+    /// <summary>CANDIDATE: effective defense divisor per point of accuracy rating (weapon + DEX-derived).</summary>
+    public const int AccuracyDefenseDivisor = 50;
     public const int TrainingDummyKey = 1000;
     // NpcData 2400032 M_D1_FV_TraDummy_01_01 (training-dummy model, level 10).
     public const int SandbagNpcId = 2400032, SandbagLevel = 10;
@@ -115,23 +118,27 @@ public static class Combat
 
     public static IReadOnlyList<Hit> SkillHits(GameData data, int skillId, string? className, int level, int? weaponItem,
         int targetDefense, Random rng, bool pvp = false, int extraFixing = 0, WeaponStats? weaponOverride = null,
-        int amplifyAllBp = 0, int defensePierceBp = 0)
+        int amplifyAllBp = 0, int defensePierceBp = 0, int attackAmplifyBp = 0, int extraCritical = 0, int extraAccuracy = 0)
     {
         var definition = data.Skill(skillId);
         if (definition is null) return [];
-        return RowHits(data, definition.Damage, className, level, weaponItem, targetDefense, rng, pvp, extraFixing, weaponOverride, amplifyAllBp, defensePierceBp);
+        return RowHits(data, definition.Damage, className, level, weaponItem, targetDefense, rng, pvp, extraFixing, weaponOverride,
+            amplifyAllBp, defensePierceBp, attackAmplifyBp, extraCritical, extraAccuracy);
     }
 
     /// <summary>The hits of explicit Damage rows (a trap's detonation group), by the same model as <see cref="SkillHits"/>.</summary>
     public static IReadOnlyList<Hit> RowHits(GameData data, IEnumerable<DamageRow> rows, string? className, int level, int? weaponItem,
         int targetDefense, Random rng, bool pvp = false, int extraFixing = 0, WeaponStats? weaponOverride = null,
-        int amplifyAllBp = 0, int defensePierceBp = 0)
+        int amplifyAllBp = 0, int defensePierceBp = 0, int attackAmplifyBp = 0, int extraCritical = 0, int extraAccuracy = 0)
     {
         var weapon = weaponOverride ?? data.WeaponStatsOf(weaponItem);
         var fixing = data.BaseStats(className, level).GetValueOrDefault("FixingDamage") + extraFixing;
-        var criticalChance = Math.Min(CriticalCap, weapon.Critical / 1000.0);
+        var critRating = weapon.Critical + extraCritical;
+        var criticalChance = Math.Min(CriticalCap, critRating / 1000.0);
+        var accuracyRating = weapon.Accuracy + extraAccuracy;
         var mitigatedDefense = Math.Max(0, (int)((long)targetDefense * (10_000 - Math.Clamp(defensePierceBp, 0, 10_000)) / 10_000));
-        var amplify = (10_000 + amplifyAllBp) / 10_000.0;
+        mitigatedDefense = Math.Max(0, mitigatedDefense - accuracyRating / AccuracyDefenseDivisor);
+        var amplify = (10_000 + amplifyAllBp + attackAmplifyBp) / 10_000.0;
         var hits = new List<Hit>();
         foreach (var row in rows)
         {

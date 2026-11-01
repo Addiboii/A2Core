@@ -143,30 +143,57 @@ public sealed partial class GameSession
         equippedWeapon = WeaponFromInventory();
     }
 
-    /// <summary>Equipped weapon roll stats including all gear that adds weapon/crit/accuracy lines.</summary>
-    WeaponStats PlayerWeaponStats()
+    /// <summary>
+    /// One weapon combat line: equipped weapon template plus all gear/enchant/title/set/Daevanion/buff contributions
+    /// (AggregatedStat), without Math.Max dropping bonuses below the weapon floor.
+    /// </summary>
+    int WeaponCombatLine(string stat, int daevanionWire)
     {
         var weapon = data.WeaponStatsOf(equippedWeapon);
-        return new WeaponStats(
-            Math.Max(weapon.Min, EquipStat("WeaponMinDamage")),
-            Math.Max(weapon.Max, EquipStat("WeaponDamage")),
-            Math.Max(weapon.Critical, EquipStat("Critical")),
-            Math.Max(weapon.Accuracy, EquipStat("WeaponAccuracy") + EquipStat("Accuracy")));
+        var template = stat switch
+        {
+            "WeaponMinDamage" => weapon.Min,
+            "WeaponDamage" => weapon.Max,
+            "Critical" => weapon.Critical,
+            "WeaponAccuracy" => weapon.Accuracy,
+            _ => 0,
+        };
+        return AggregatedStat(stat, daevanionWire) + Math.Max(0, template - EquipStat(stat));
     }
+
+    int PlayerCombatAccuracy() => WeaponCombatLine("WeaponAccuracy", 318) + AggregatedStat("Accuracy", 104);
+
+    /// <summary>Equipped weapon roll stats including all gear that adds weapon/crit/accuracy lines.</summary>
+    WeaponStats PlayerWeaponStats() => new(
+        WeaponCombatLine("WeaponMinDamage", 33),
+        WeaponCombatLine("WeaponDamage", 31),
+        WeaponCombatLine("Critical", 128),
+        PlayerCombatAccuracy());
 
     int PlayerAmplifyAllBp() => CombatStat("AmplifyAllDamage", 28);
 
     int PlayerDefensePierceBp() => CombatStat("DefensePierce", 284);
 
+    int PlayerAttackAmplifyBp() =>
+        AttributeStat(CombatAttributes.PrimaryPowerAttribute(className)) * CombatAttributes.PowerToAttackBpPerPoint;
+
+    int PlayerExtraCritical() =>
+        AttributeStat("AGI") * CombatAttributes.AgiToCriticalPerPoint
+        + AttributeStat("DEX") * CombatAttributes.DexToCriticalPerPoint;
+
+    int PlayerExtraAccuracy() => AttributeStat("DEX") * CombatAttributes.DexToAccuracyPerPoint;
+
     IReadOnlyList<Hit> PlayerSkillHits(int skillId, int targetDefense, bool pvp = false) =>
         Combat.SkillHits(data, skillId, className, level, equippedWeapon, targetDefense, rng, pvp,
             extraFixing: ExtraFixing, weaponOverride: PlayerWeaponStats(), amplifyAllBp: PlayerAmplifyAllBp(),
-            defensePierceBp: PlayerDefensePierceBp());
+            defensePierceBp: PlayerDefensePierceBp(), attackAmplifyBp: PlayerAttackAmplifyBp(),
+            extraCritical: PlayerExtraCritical(), extraAccuracy: PlayerExtraAccuracy());
 
     IReadOnlyList<Hit> PlayerRowHits(IEnumerable<DamageRow> rows, int targetDefense, bool pvp = false) =>
         Combat.RowHits(data, rows, className, level, equippedWeapon, targetDefense, rng, pvp,
             extraFixing: ExtraFixing, weaponOverride: PlayerWeaponStats(), amplifyAllBp: PlayerAmplifyAllBp(),
-            defensePierceBp: PlayerDefensePierceBp());
+            defensePierceBp: PlayerDefensePierceBp(), attackAmplifyBp: PlayerAttackAmplifyBp(),
+            extraCritical: PlayerExtraCritical(), extraAccuracy: PlayerExtraAccuracy());
 
     internal int AttackSpeedForTests => AttackSpeed;
 
