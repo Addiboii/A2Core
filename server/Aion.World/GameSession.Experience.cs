@@ -32,8 +32,8 @@ public sealed partial class GameSession
     async Task<List<byte[]>> KillExperienceAsync(CancellationToken ct)
     {
         if (killedLevels.Count == 0) return [];
-        // Scheduled experience events multiply kill experience (SharedWorld.ExpRate).
-        var gained = (long)Math.Round(killedLevels.Sum(KillExperience) * (options.World?.ExpRate ?? 1));
+        // The base rate (Aion:Rates:Experience) and scheduled experience events (SharedWorld.ExpRate) multiply kill experience.
+        var gained = WorldRates.Scale(killedLevels.Sum(KillExperience), (options.World?.Rates.Experience ?? 1) * (options.World?.ExpRate ?? 1));
         killedLevels.Clear();
         if (gained <= 0) return [];
         // Party members nearby share it evenly (OURS: no party bonus); each applies its share on its own loop.

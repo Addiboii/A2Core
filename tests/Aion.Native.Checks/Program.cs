@@ -558,6 +558,30 @@ Check(game.Level == 2 && game.Experience == expLeft && kill.Any(b => b.SequenceE
       "a kill gives experience (0x8d07 reason 1) and levels up: 0x8d08, 0x8d91, stats and full pools");
 Check(game.KillExperience(1) == (long)Math.Round(data.NeedExp(1) / 25.0 * 0.9) && game.KillExperience(-5) >= 0 && new GameSession(data, new GameSessionOptions { CharacterLevel = 30 }, new Random(1)).KillExperience(10) == 0,
       "weaker mobs give less, none 10+ levels below");
+// Base rates (Aion:Rates, OURS): experience x2 doubles the same kill's experience; drops x0 rolls no loot.
+{
+    var rated = new GameSession(data, new GameSessionOptions { TrainingDummy = true, World = new SharedWorld(data) { Rates = new WorldRates { Experience = 2, Drops = 0 } } }, new Random(7));
+    await rated.HandleAsync(Strings(0x3613, Session, "", "t", "").Concat(new byte[9]).ToArray(), Now);
+    await rated.HandleAsync(create, Now);
+    await rated.HandleAsync(select, Now);
+    await rated.HandleAsync(new PacketWriter().U16(0x3622).I32(1).ToArray(), Now);
+    rated.Targets[Combat.TrainingDummyKey].Hp = 1;
+    var ratedKill = await rated.HandleAsync(Cast(basic, Combat.TrainingDummyKey, rated.Targets[Combat.TrainingDummyKey].Position), Now + 100000);
+    Check(ratedKill.Any(b => b.SequenceEqual(GamePackets.ExpUpdate(rated.Experience, killExp * 2, 1))) && rated.GroundDrops.Count == 0,
+          "Aion:Rates:Experience 2 doubles kill experience; Drops 0 rolls no loot");
+}
+Check(WorldRates.Scale(1133, 1.5) == 1700 && WorldRates.Scale(10, 0) == 0 && WorldRates.Scale(-5, 2) == 0 && WorldRates.Scale(long.MaxValue / 2, 100) == long.MaxValue,
+      "rates scale amounts, rounded, never negative or past long");
+Check(WorldRates.Rolls(0, new Random(1)) == 0 && WorldRates.Rolls(3, new Random(1)) == 3 && WorldRates.Rolls(100 * 10, new Random(1)) == WorldRates.MaxLootRolls
+      && Enumerable.Range(0, 400).Select(i => WorldRates.Rolls(1.5, new Random(i))).Distinct().Order().SequenceEqual([1, 2]), "loot rolls: whole part, the fraction by chance, at most 100");
+Check(new WorldRates().Validate() == new WorldRates { Experience = 1, Kinah = 1, Drops = 1 } && new WorldRates { Experience = 0, Kinah = 100, Drops = 0.5 }.Validate() is not null,
+      "default rates are 1; 0 to 100 accepted");
+foreach (var bad in new[] { new WorldRates { Experience = -1 }, new WorldRates { Kinah = 100.5 }, new WorldRates { Drops = double.NaN }, new WorldRates { Drops = double.PositiveInfinity } })
+{
+    var rateRefused = false;
+    try { bad.Validate(); } catch (InvalidOperationException) { rateRefused = true; }
+    Check(rateRefused, $"rates outside 0-100 refused: {bad}");
+}
 var respawn = await game.TickAsync(Now + 100000 + GameSession.RespawnMs);
 Check(respawn.Any(b => b.SequenceEqual(GamePackets.Death(Combat.TrainingDummyKey))) && dummy.Hp == dummy.HpMax, "corpse respawns at full HP");
 // Chain skills (GameSession.SkillChains.cs; OBSERVED 20261013-144836 #875, #956-#957, #1142): Keen Strike offers Rupture Strike

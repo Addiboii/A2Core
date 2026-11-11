@@ -117,7 +117,15 @@ if (native.LoginPort is not null || native.GamePort is not null)
     builder.Services.AddSingleton<Aion.World.WorldPresence>();
     builder.Services.AddSingleton<Aion.Host.Authentication.ScheduledRestart>();
     // Multiplayer: one shared world (maps, NPCs, players) for every game connection on this host.
-    builder.Services.AddSingleton(_ => new Aion.World.SharedWorld(Aion.World.GameData.Embedded));
+    // Base rates (Aion:Rates:Experience, :Kinah, :Drops; OURS, default 1, 0-100): a bad value stops the host here.
+    var rates = (builder.Configuration.GetSection("Aion:Rates").Get<Aion.World.WorldRates>() ?? new Aion.World.WorldRates()).Validate();
+    builder.Services.AddSingleton(provider =>
+    {
+        if (rates != new Aion.World.WorldRates())
+            provider.GetRequiredService<ILoggerFactory>().CreateLogger("Aion.World")
+                .LogInformation("Rates: experience x{Experience}, Kinah x{Kinah}, drops x{Drops}", rates.Experience, rates.Kinah, rates.Drops);
+        return new Aion.World.SharedWorld(Aion.World.GameData.Embedded) { Rates = rates };
+    });
     // The race of the world each account picks on the login port, for the game port's lobby.
     builder.Services.AddSingleton<Aion.World.WorldChoices>();
     builder.Services.AddSingleton(provider =>

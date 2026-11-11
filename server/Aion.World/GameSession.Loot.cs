@@ -23,12 +23,14 @@ public sealed partial class GameSession
     /// <summary>The loot of a killed monster: the drops for the killer (0x561e), or nothing.</summary>
     List<byte[]> DropLoot(Target target, long now)
     {
-        // Drop events (SharedWorld.DropRate) roll the table more often: x2.5 = two rolls and a third half the time.
-        var rate = options.World?.DropRate ?? 1;
-        var fraction = rate - Math.Floor(rate);
-        var rolls = (int)Math.Floor(rate) + (fraction > 0 && rng.NextDouble() < fraction ? 1 : 0);
+        // The base rate (Aion:Rates:Drops) and drop events (SharedWorld.DropRate) roll the table more often: x2.5 = two rolls
+        // and a third half the time. Kinah in the loot follows Aion:Rates:Kinah.
+        var rolls = WorldRates.Rolls((options.World?.Rates.Drops ?? 1) * (options.World?.DropRate ?? 1), rng);
+        var kinahRate = options.World?.Rates.Kinah ?? 1;
         var rolled = new List<(int, long)>();
-        for (var i = 0; i < rolls; i++) rolled.AddRange(LootTables.Embedded.Roll(target.NpcId, profileRace, rng));
+        for (var i = 0; i < rolls; i++)
+            foreach (var (item, count) in LootTables.Embedded.Roll(target.NpcId, profileRace, rng))
+                if ((item == KinaItemId ? WorldRates.Scale(count, kinahRate) : count) is > 0 and var amount) rolled.Add((item, amount));
         if (rolled.Count == 0) return [];
         var placed = new List<DropItem>();
         foreach (var (item, count) in rolled)

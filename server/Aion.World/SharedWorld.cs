@@ -49,6 +49,9 @@ public sealed class SharedWorld(GameData data)
     /// <summary>The shared map if someone loaded it (staff tools do not create maps). Call under the lock held exclusively.</summary>
     public MapInstance? LoadedMap(int mapId) => maps.GetValueOrDefault((uint)mapId);
 
+    /// <summary>The host's base rates (Aion:Rates, OURS); event boosts multiply on top.</summary>
+    public WorldRates Rates { get; init; } = new();
+
     double expRate = 1, dropRate = 1;
     /// <summary>Event boosts (scheduled events): multipliers for kill experience and loot rolls on this host.</summary>
     public double ExpRate { get => Volatile.Read(ref expRate); set => Volatile.Write(ref expRate, Math.Clamp(value, 0.1, 10)); }

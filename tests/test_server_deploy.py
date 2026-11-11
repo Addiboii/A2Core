@@ -135,5 +135,20 @@ class PackServerDataTests(unittest.TestCase):
                                           'navmesh': source / 'navmesh', 'catalog': source / 'game-catalog-v2'})
 
 
+DEPLOY = Path(__file__).resolve().parents[1] / 'deploy/linux'
+
+
+class LocalSettingsTests(unittest.TestCase):
+    def test_rates_live_in_a_file_updates_keep(self):
+        service = (DEPLOY / 'aion-host.service').read_text(encoding='utf-8')
+        # Read after aion.env (later lines win) and optional ("-": the host starts without it).
+        self.assertLess(service.index('EnvironmentFile=/etc/aion/aion.env'), service.index('EnvironmentFile=-/etc/aion/local.env'))
+        install = (DEPLOY / 'install.sh').read_text(encoding='utf-8')
+        self.assertIn('if [[ ! -f $CONFIG/local.env ]]; then', install)
+        for key in ('Experience', 'Kinah', 'Drops'):
+            self.assertIn(f'#Aion__Rates__{key}=1', install)
+            self.assertIn(f'Aion__Rates__', (DEPLOY / 'README.md').read_text(encoding='utf-8'))
+
+
 if __name__ == '__main__':
     unittest.main()

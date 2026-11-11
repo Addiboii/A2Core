@@ -12,6 +12,8 @@ User=aion
 Group=aion
 WorkingDirectory=/opt/aion/host
 EnvironmentFile=/etc/aion/aion.env
+# Your own settings (rates and the like); install.sh never rewrites this file. Later lines win over aion.env.
+EnvironmentFile=-/etc/aion/local.env
 ExecStart=/usr/bin/dotnet /opt/aion/host/Aion.Host.dll
 Restart=on-failure
 RestartSec=5

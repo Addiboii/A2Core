@@ -83,7 +83,29 @@ What install.sh does:
    or an admin reset get those accounts in. Without the key the host logs that two-step sign-in is off.)
    Host log files are off; `Aion__Logging__File__Enabled=true` in aion.env writes them to
    `/var/lib/aion/logs` (`Aion__Logging__File__Directory`), rotated by size.
-7. Installs and starts `aion-postgres.service` and `aion-host.service`.
+7. Creates `/etc/aion/local.env` once (your own settings, read after aion.env; never rewritten).
+8. Installs and starts `aion-postgres.service` and `aion-host.service`.
+
+## Rates
+
+Experience, Kinah and drop rates are host settings (default 1, from 0 to 100; 0 turns that source off; a value
+outside the range stops the host at startup with a message in the journal). Put them in `/etc/aion/local.env`,
+which updates never touch, and restart:
+
+```bash
+sudo tee -a /etc/aion/local.env <<'EOF'
+Aion__Rates__Experience=2
+Aion__Rates__Kinah=1.5
+Aion__Rates__Drops=2
+EOF
+sudo systemctl restart aion-host
+journalctl -u aion-host | grep Rates     # "Rates: experience x2, Kinah x1.5, drops x2"
+```
+
+Experience applies to kills and quest rewards, Kinah to Kinah in loot and quest rewards, drops to how often a
+monster's loot table is rolled (at most 100 rolls a kill). Experience and drop events from the staff dashboard
+multiply on top. On a development PC the same keys go in appsettings (`"Aion": { "Rates": { "Experience": 2 } }`)
+or the environment (`Aion__Rates__Experience=2`).
 
 ## Dashboard icons and 3D preview
 
