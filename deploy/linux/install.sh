@@ -47,7 +47,7 @@ command -v npm &>/dev/null || { echo "npm missing (nodejs, npm)" >&2; exit 1; }
 echo "Using $(dotnet --version), node $(node --version) and $("$PG_BIN/postgres" --version)"
 
 id aion &>/dev/null || useradd --system --home-dir $STATE --shell /usr/sbin/nologin aion
-install -d -o aion -g aion -m 750 $STATE $DATA $STATE/ncguard
+install -d -o aion -g aion -m 750 $STATE $DATA $STATE/ncguard $STATE/backups
 install -d -o aion -g aion -m 755 $STATE/downloads
 install -d -o root -g aion -m 750 $CONFIG
 install -d -m 755 /opt/aion
@@ -132,16 +132,23 @@ if [[ ! -f $CONFIG/local.env ]]; then
 #Aion__Rates__Experience=1
 #Aion__Rates__Kinah=1
 #Aion__Rates__Drops=1
+# Nightly database backups (aion-backup.timer): days kept in /var/lib/aion/backups (default 14).
+#AION_BACKUP_KEEP_DAYS=14
 LOCAL
   chown root:aion $CONFIG/local.env && chmod 640 $CONFIG/local.env
 fi
 
 sed "s#@PG_BIN@#$PG_BIN#" "$REPO/deploy/linux/aion-postgres.service" > /etc/systemd/system/aion-postgres.service
 cp "$REPO/deploy/linux/aion-host.service" /etc/systemd/system/aion-host.service
+# Nightly backups with retention (aion-backup.timer) and the restore command (asks before replacing the database).
+install -m 755 "$REPO/deploy/linux/aion-backup.sh" /usr/local/sbin/aion-backup
+install -m 755 "$REPO/deploy/linux/aion-restore.sh" /usr/local/sbin/aion-restore
+cp "$REPO/deploy/linux/aion-backup.service" "$REPO/deploy/linux/aion-backup.timer" /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable --now aion-postgres
 systemctl enable aion-host
 systemctl restart aion-host
+systemctl enable --now aion-backup.timer
 
 if command -v ufw &>/dev/null && ufw status | grep -q "Status: active"; then
   for port in 443 3700 8087 8091 13328; do ufw allow $port/tcp; done

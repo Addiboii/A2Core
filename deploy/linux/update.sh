@@ -18,13 +18,14 @@ if [[ "${ONLINE:-0}" -gt 0 && "${AION_UPDATE_NOW:-0}" != 1 ]]; then
   sleep 10
 fi
 
-# Back up before new migrations run (kept in /var/lib/aion/backups; the newest 10 are kept).
+# Back up before new migrations run (kept in /var/lib/aion/backups; the newest 10 are kept; nightly-*.dump from
+# aion-backup.timer age out by days on their own).
 install -d -o aion -g aion -m 750 /var/lib/aion/backups
 BACKUP=/var/lib/aion/backups/before-update-$(date +%Y%m%d-%H%M%S).dump
 (cd / && runuser -u aion -- env AION_PG_HOME=/var/lib/aion/postgres \
   AION_PG_BIN="$(ls -d /usr/lib/postgresql/*/bin | sort -V | tail -1)" \
   python3 /opt/aion/src/tools/postgres_dev.py backup "$BACKUP")
-ls -1t /var/lib/aion/backups/*.dump | tail -n +11 | xargs -r rm --
+ls -1t /var/lib/aion/backups/*.dump | grep -v '/nightly-' | tail -n +11 | xargs -r rm --
 echo "Database backed up to $BACKUP"
 
 # The checkout belongs to the user who cloned it; pull as that user.

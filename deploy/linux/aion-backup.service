@@ -1,0 +1,21 @@
+# Nightly database backup (deploy/linux/aion-backup.sh, installed as /usr/local/sbin/aion-backup), started by
+# aion-backup.timer; run one now with: systemctl start aion-backup. Days kept: AION_BACKUP_KEEP_DAYS in
+# /etc/aion/local.env (default 14).
+[Unit]
+Description=AION2 database backup
+Requires=aion-postgres.service
+After=aion-postgres.service
+
+[Service]
+Type=oneshot
+User=aion
+Group=aion
+EnvironmentFile=-/etc/aion/local.env
+ExecStart=/usr/local/sbin/aion-backup
+Nice=10
+IOSchedulingClass=idle
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/aion/backups

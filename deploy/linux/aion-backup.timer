@@ -1,0 +1,12 @@
+# Runs aion-backup.service every night (OURS: 04:30 server time, up to 10 minutes later; a night missed while the
+# server was off runs at the next boot). Another time: systemctl edit aion-backup.timer ([Timer] OnCalendar=).
+[Unit]
+Description=Nightly AION2 database backup
+
+[Timer]
+OnCalendar=*-*-* 04:30:00
+RandomizedDelaySec=10min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

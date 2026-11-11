@@ -254,6 +254,18 @@ def verify_backup(path):
         sql(f'DROP DATABASE {name};', database='postgres')
 
 
+def restore(path, confirm_database):
+    """Replace the database with a backup, in one transaction (a failure leaves it as it was). Destructive:
+    the caller names the database again as a safety check (deploy/linux/aion-restore.sh asks the operator first)."""
+    if confirm_database != DATABASE:
+        raise SystemExit(f'Refusing to restore: --confirm-database must name the database being replaced ({DATABASE}).')
+    path = Path(path).resolve()
+    if not path.is_file():
+        raise SystemExit(f'No backup at {path}')
+    run('pg_restore', ['--clean', '--if-exists', '--exit-on-error', '--single-transaction',
+                       '--dbname', DATABASE, path], timeout=long_timeout())
+
+
 ROLES = ('gamemaster', 'admin')
 
 
@@ -281,6 +293,9 @@ def main():
     backup.add_argument('output', type=Path)
     verify = sub.add_parser('verify-backup')
     verify.add_argument('path', type=Path)
+    replace = sub.add_parser('restore', help='replace the database with a backup (deploy/linux/aion-restore.sh asks first)')
+    replace.add_argument('path', type=Path)
+    replace.add_argument('--confirm-database', required=True, help='the database being replaced, as a safety check')
     staff = sub.add_parser('role', help='grant or revoke a gamemaster/admin role (operator only)')
     staff.add_argument('username')
     staff.add_argument('role', choices=ROLES)
@@ -309,6 +324,9 @@ def main():
         print('Backup saved:', args.output)
     elif args.command == 'verify-backup':
         print(verify_backup(args.path))
+    elif args.command == 'restore':
+        restore(args.path, args.confirm_database)
+        print('Restored', args.path, 'into', DATABASE)
     elif args.command == 'role':
         changed = sql(role_statement(args.username, args.role, args.revoke)).stdout.strip()
         exists = sql(f"SELECT count(*) FROM auth.accounts WHERE provider='local' AND subject={literal(args.username)};").stdout.strip()

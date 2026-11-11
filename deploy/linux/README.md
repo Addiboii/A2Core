@@ -84,7 +84,8 @@ What install.sh does:
    Host log files are off; `Aion__Logging__File__Enabled=true` in aion.env writes them to
    `/var/lib/aion/logs` (`Aion__Logging__File__Directory`), rotated by size.
 7. Creates `/etc/aion/local.env` once (your own settings, read after aion.env; never rewritten).
-8. Installs and starts `aion-postgres.service` and `aion-host.service`.
+8. Installs and starts `aion-postgres.service` and `aion-host.service`, installs `aion-backup`/`aion-restore`
+   (`/usr/local/sbin`) and enables `aion-backup.timer` (see Backups).
 
 ## Rates
 
@@ -143,14 +144,41 @@ It backs up the database (`/var/lib/aion/backups`, newest 10 kept), pulls, then 
 with the options of the last install: rebuilds the host, applies new migrations, restarts.
 New server data (re-extracted terrain etc.): copy a new archive and run install.sh with `--data`.
 
-Restore a backup if an update goes wrong:
+Restore a backup if an update goes wrong: `sudo aion-restore before-update-<time>.dump` (see Backups).
+
+## Backups
+
+All backups are in `/var/lib/aion/backups` (`pg_dump -Fc` through `tools/postgres_dev.py backup`):
+
+| File | Made by | Kept |
+| --- | --- | --- |
+| `nightly-<time>.dump` | `aion-backup.timer`, every night at 04:30 (up to 10 min later; a missed night runs at boot) | `AION_BACKUP_KEEP_DAYS` days (default 14) |
+| `before-update-<time>.dump` | `update.sh`, before new migrations | newest 10 (with the dashboard's) |
+| `aion-<time>.dump` | staff dashboard, Server page | newest 10 (with the updates') |
+| `before-restore-<time>.dump` | `aion-restore`, before it replaces the database | newest 10 (with the updates') |
 
 ```bash
-sudo systemctl stop aion-host
-sudo runuser -u aion -- env AION_PG_HOME=/var/lib/aion/postgres /usr/lib/postgresql/*/bin/pg_restore --clean --if-exists -h 127.0.0.1 -p 55432 -U aion_admin -d aion /var/lib/aion/backups/<file>.dump
+systemctl list-timers aion-backup.timer       # next and last run
+sudo systemctl start aion-backup              # a backup now
+journalctl -u aion-backup                     # what each run did (file, size, removed old backups)
+echo 'AION_BACKUP_KEEP_DAYS=30' | sudo tee -a /etc/aion/local.env    # keep 30 days (read at the next run)
+sudo systemctl edit aion-backup.timer         # another time: [Timer] OnCalendar= then OnCalendar=*-*-* 02:00:00
 ```
 
-(pg_restore asks for the aion_admin password from `/var/lib/aion/postgres/credentials.json`.)
+A failed run leaves no file and removes nothing (`systemctl status aion-backup` shows the failure). Copy the
+backups and `/etc/aion/aion.env` (it holds the two-step sign-in key) off the server too: a backup on the same disk
+does not survive the disk.
+
+Restore (replaces every account, character and item with the backup's):
+
+```bash
+sudo aion-restore                                   # lists the backups, newest first
+sudo aion-restore nightly-20261111-043012.dump      # asks you to type the file name
+```
+
+It checks that the backup restores into a scratch database, stops the host, saves the current database as
+`before-restore-<time>.dump`, restores in one transaction (a failure leaves the database as it was) and starts
+the host again. Large databases: `sudo AION_PG_TIMEOUT=7200 aion-restore ...` (seconds; default 3600).
 
 ## Getting the code onto the server
 

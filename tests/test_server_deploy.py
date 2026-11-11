@@ -2,10 +2,16 @@
 import argparse
 import contextlib
 import io
+import os
 from pathlib import Path
+import shutil
+import subprocess
+import sys
 import tarfile
 import tempfile
+import time
 import unittest
+from unittest.mock import patch
 
 from tools import pack_server_data, server_env
 
@@ -148,6 +154,123 @@ class LocalSettingsTests(unittest.TestCase):
         for key in ('Experience', 'Kinah', 'Drops'):
             self.assertIn(f'#Aion__Rates__{key}=1', install)
             self.assertIn(f'Aion__Rates__', (DEPLOY / 'README.md').read_text(encoding='utf-8'))
+
+
+def posix_bash():
+    """Git Bash on Windows (never WSL's bash.exe, which sees other paths), else the system bash."""
+    if os.name == 'nt':
+        candidate = Path(os.environ.get('ProgramFiles', r'C:\Program Files')) / 'Git/bin/bash.exe'
+        return str(candidate) if candidate.exists() else None
+    return shutil.which('bash')
+
+
+FAKE_POSTGRES_DEV = """import sys
+from pathlib import Path
+if sys.argv[1:2] == ['backup']:
+    target = Path(sys.argv[2])
+    if target.parent.joinpath('FAIL').exists():
+        target.write_text('half')
+        sys.exit('pg_dump failed')
+    target.write_text('dump')
+"""
+
+
+class BackupScriptTests(unittest.TestCase):
+    def test_scripts_parse(self):
+        bash = posix_bash()
+        if not bash:
+            self.skipTest('no bash')
+        for name in ('install.sh', 'update.sh', 'aion-backup.sh', 'aion-restore.sh'):
+            result = subprocess.run([bash, '-n', str(DEPLOY / name)], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, f'{name}: {result.stderr}')
+
+    def run_backup(self, folder, keep_days=None):
+        env = {**os.environ, 'AION_BACKUP_DIR': folder.joinpath('backups').as_posix(), 'AION_TOOLS': folder.joinpath('tools').as_posix(),
+               'AION_PYTHON': Path(sys.executable).as_posix(), 'AION_PG_BIN': '/nonexistent', 'AION_PG_HOME': folder.as_posix()}
+        if keep_days is not None:
+            env['AION_BACKUP_KEEP_DAYS'] = keep_days
+        return subprocess.run([posix_bash(), (DEPLOY / 'aion-backup.sh').as_posix()], capture_output=True, text=True, env=env)
+
+    def test_nightly_backup_keeps_the_configured_days(self):
+        if not posix_bash():
+            self.skipTest('no bash')
+        with tempfile.TemporaryDirectory() as directory:
+            folder = Path(directory)
+            (folder / 'tools').mkdir()
+            (folder / 'tools/postgres_dev.py').write_text(FAKE_POSTGRES_DEV, encoding='utf-8')
+            backups = folder / 'backups'
+            backups.mkdir()
+            day = 86400
+            for name, age in [('nightly-old.dump', 20 * day), ('nightly-edge.dump', 7 * day + 600), ('nightly-recent.dump', 6 * day),
+                              ('before-update-old.dump', 90 * day), ('aion-dashboard.dump', 90 * day)]:
+                path = backups / name
+                path.write_text('x')
+                os.utime(path, (time.time() - age, time.time() - age))
+            result = self.run_backup(folder, '7')
+            self.assertEqual(result.returncode, 0, result.stderr)
+            names = sorted(p.name for p in backups.iterdir())
+            self.assertNotIn('nightly-old.dump', names)
+            self.assertNotIn('nightly-edge.dump', names)       # 7 days old with 7 kept: goes
+            self.assertIn('nightly-recent.dump', names)
+            self.assertIn('before-update-old.dump', names)     # other backups follow their own rules
+            self.assertIn('aion-dashboard.dump', names)
+            made = [n for n in names if n.startswith('nightly-2')]
+            self.assertEqual(len(made), 1)
+            self.assertEqual((backups / made[0]).read_text(), 'dump')
+            self.assertIn('Removed old backup', result.stdout)
+            # A failed dump leaves no file (not even the partial one) and removes nothing.
+            (backups / 'FAIL').write_text('')
+            os.utime(backups / 'nightly-recent.dump', (time.time() - 30 * day, time.time() - 30 * day))
+            failed = self.run_backup(folder, '7')
+            self.assertNotEqual(failed.returncode, 0)
+            (backups / 'FAIL').unlink()
+            self.assertEqual(sorted(p.name for p in backups.iterdir()), names)
+            # The days kept must be a whole number, 1 or more.
+            for bad in ('0', 'two', '-3'):
+                self.assertEqual(self.run_backup(folder, bad).returncode, 2)
+
+    def test_install_and_units(self):
+        install = (DEPLOY / 'install.sh').read_text(encoding='utf-8')
+        for line in ('install -m 755 "$REPO/deploy/linux/aion-backup.sh" /usr/local/sbin/aion-backup',
+                     'install -m 755 "$REPO/deploy/linux/aion-restore.sh" /usr/local/sbin/aion-restore',
+                     'systemctl enable --now aion-backup.timer', '$STATE/backups'):
+            self.assertIn(line, install)
+        service = (DEPLOY / 'aion-backup.service').read_text(encoding='utf-8')
+        self.assertIn('ExecStart=/usr/local/sbin/aion-backup', service)
+        self.assertIn('User=aion', service)
+        self.assertIn('ReadWritePaths=/var/lib/aion/backups', service)
+        self.assertIn('EnvironmentFile=-/etc/aion/local.env', service)
+        timer = (DEPLOY / 'aion-backup.timer').read_text(encoding='utf-8')
+        self.assertIn('OnCalendar=', timer)
+        self.assertIn('Persistent=true', timer)
+        # update.sh's newest-10 pruning leaves nightly dumps to the timer's retention.
+        self.assertIn("grep -v '/nightly-'", (DEPLOY / 'update.sh').read_text(encoding='utf-8'))
+        restore = (DEPLOY / 'aion-restore.sh').read_text(encoding='utf-8')
+        self.assertIn('read -r -p', restore)
+        self.assertIn('restore "$FILE" --confirm-database aion', restore)
+        self.assertLess(restore.index('verify-backup'), restore.index('systemctl stop aion-host'))
+        self.assertLess(restore.index('as_aion backup "$SAFETY"'), restore.index('restore "$FILE"'))
+
+    def test_restore_needs_the_database_named(self):
+        from tools import postgres_dev
+        calls = []
+        with tempfile.NamedTemporaryFile(suffix='.dump', delete=False) as dump:
+            path = Path(dump.name)
+        try:
+            with patch.object(postgres_dev, 'run', lambda *a, **kw: calls.append((a, kw))):
+                with self.assertRaises(SystemExit):
+                    postgres_dev.restore(path, 'other')
+                with self.assertRaises(SystemExit):
+                    postgres_dev.restore(path.with_name('missing-backup.dump'), postgres_dev.DATABASE)
+                self.assertEqual(calls, [])
+                postgres_dev.restore(path, postgres_dev.DATABASE)
+        finally:
+            path.unlink()
+        (binary, args), kw = calls[0]
+        self.assertEqual(binary, 'pg_restore')
+        self.assertIn('--single-transaction', args)
+        self.assertIn('--clean', args)
+        self.assertEqual(kw['timeout'], postgres_dev.long_timeout())
 
 
 if __name__ == '__main__':
