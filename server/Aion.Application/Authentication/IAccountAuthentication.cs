@@ -20,6 +20,10 @@ public sealed record GameTicket(string Token, int WorldId, DateTimeOffset Expire
 public interface IAccountAuthentication
 {
     Task<bool> RegisterAsync(string username, string password, CancellationToken cancellationToken);
+    /// <summary>Does any local account exist? While none does, the account page lets the first one register even with
+    /// registration closed (OURS: a new server otherwise has no way to make its first account; a role still needs the
+    /// operator's `postgres_dev.py role`). The default answers yes, which keeps a closed registration closed.</summary>
+    Task<bool> HasLocalAccountsAsync(CancellationToken cancellationToken) => Task.FromResult(true);
     Task<AccountSession?> SignInAsync(string username, string password, CancellationToken cancellationToken);
     /// <summary>Sign-in with a chosen session lifetime ("keep me signed in"); the default keeps the standard one.</summary>
     Task<AccountSession?> SignInAsync(string username, string password, TimeSpan lifetime, CancellationToken cancellationToken) =>

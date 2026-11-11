@@ -11,7 +11,7 @@ public static class AccountEndpoints
     private sealed record TicketRequest(int WorldId);
 
     /// <param name="registration">Self-registration on the account page (Aion:Accounts:Registration); when off,
-    /// only admins create accounts (POST /api/admin/accounts).</param>
+    /// only admins create accounts (POST /api/admin/accounts), except the first account of a new server.</param>
     public static void MapAccountEndpoints(this WebApplication app, bool registration = true)
     {
         app.MapPost("/api/client-launches", async (HttpContext context, IClientHandoff handoff, CancellationToken ct) =>
@@ -24,7 +24,8 @@ public static class AccountEndpoints
         }).RequireRateLimiting("account-entry");
         app.MapPost("/api/accounts/register", async (Credentials input, IAccountAuthentication auth, CancellationToken ct) =>
         {
-            if (!registration) return Results.Json(new { error = "Registration is closed. Ask an admin for an account." }, statusCode: 403);
+            // Closed registration still lets the first account of a new server register (IAccountAuthentication.HasLocalAccountsAsync).
+            if (!registration && await auth.HasLocalAccountsAsync(ct)) return Results.Json(new { error = "Registration is closed. Ask an admin for an account." }, statusCode: 403);
             if (!PostgresAccountAuthentication.ValidUsername(input.Username) || !PostgresAccountAuthentication.ValidPassword(input.Password))
                 return Results.BadRequest(new { error = "Use a 3–32 character username (letters, numbers, underscore) and a 12–256 character password." });
             return await auth.RegisterAsync(input.Username!, input.Password!, ct)

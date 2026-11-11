@@ -351,7 +351,9 @@ var downloads = accountsReady && builder.Configuration["Aion:Web:Downloads"] is 
     ? new Downloads(Path.GetFullPath(downloadPath), TimeProvider.System) : null;
 downloads?.Map(app);
 var registrationOpen = builder.Configuration.GetValue<bool?>("Aion:Accounts:Registration") ?? true;
-app.MapGet("/api/status", () => Results.Ok(new { accountsConfigured = accountsReady, registrationOpen = accountsReady && registrationOpen,
+// registrationOpen is also true while a new server has no account yet: its first account may register (AccountEndpoints).
+app.MapGet("/api/status", async (HttpContext context, CancellationToken ct) => Results.Ok(new { accountsConfigured = accountsReady,
+    registrationOpen = accountsReady && (registrationOpen || context.RequestServices.GetService<IAccountAuthentication>() is { } accounts && !await accounts.HasLocalAccountsAsync(ct)),
     launcherAvailable = downloads?.LauncherAvailable ?? false, gameReady = false }));
 if (accountsReady)
 {

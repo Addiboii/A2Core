@@ -31,6 +31,13 @@ public sealed partial class PostgresAccountAuthentication : IAccountAuthenticati
     // Hash the exact token representation; a changed bearer string is a different token.
     private static byte[] Hash(string token) => SHA256.HashData(Encoding.UTF8.GetBytes(token));
 
+    public async Task<bool> HasLocalAccountsAsync(CancellationToken cancellationToken)
+    {
+        await using var connection = await source.OpenConnectionAsync(cancellationToken);
+        await using var command = new NpgsqlCommand("SELECT EXISTS(SELECT 1 FROM auth.local_credentials)", connection);
+        return (bool)(await command.ExecuteScalarAsync(cancellationToken))!;
+    }
+
     public async Task<bool> RegisterAsync(string username, string password, CancellationToken cancellationToken)
     {
         if (!ValidUsername(username) || !ValidPassword(password)) return false;
