@@ -656,6 +656,7 @@ Check((await game.HandleAsync([0x30, 0x36], Now)).Single().SequenceEqual(GamePac
           && !GameSession.WithinCastRange(melee, Vector3d.Zero, new Vector3d(0, 0, 401 + GameSession.CastRangeTolerance))
           && GameSession.WithinCastRange(melee with { UseRange = 0 }, Vector3d.Zero, new Vector3d(1e6, 0, 1e6)),
           "range geometry: horizontal to the target's edge plus the tolerance, height separately, no range never refuses");
+}
 // Stagger (Stagger.cs, tools/data/stagger.json from SkillEffect.dat GroggyGuardDecreaseEnergy): the 2.0.6 recording 20261019-231752
 // drained the guarded 2701034's guard (key 30114) under player 9655's casts 50 -> 40 -> 25 -> 23 -> 13 -> 11 -> 9 -> 7 -> broken.
 {
