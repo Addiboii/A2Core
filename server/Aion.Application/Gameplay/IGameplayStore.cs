@@ -53,6 +53,13 @@ public sealed record AchievementRecord(int Id, int Count, DateTimeOffset? Comple
 public sealed record BossChallengeRecord(int GroupId, int ClearLevel, long BestPoint, int BestLevel, int BestTimeMs, long CumulativePoint, DateTimeOffset UpdatedAt);
 /// <summary>An entry ticket's count at a time (migration 065); the recharges since then are added on load.</summary>
 public sealed record ContentTicketRecord(int TicketId, int Remaining, DateTimeOffset UpdatedAt);
+/// <summary>A stigma skill learned with shards and the level it reached (migration 072).</summary>
+public sealed record StigmaRecord(int SkillId, int Level);
+/// <summary>A character's stigmas and the shards its GetStigmaShard items gave (on top of Exp.dat's total for its level).</summary>
+public sealed record StigmaState(IReadOnlyList<StigmaRecord> Stigmas, int ItemShards)
+{
+    public static readonly StigmaState Empty = new([], 0);
+}
 /// <summary>A period collection list's progress (migration 032).</summary>
 public sealed record CollectionRecord(int CollectionId, int ListId, int Registered, bool Rewarded);
 /// <summary>A mail (migration 030): Post.dat template, EPostType, EPostSaveTab, its message parameters and attachments.</summary>
@@ -188,6 +195,11 @@ public interface IGameplayStore
     Task<bool> SaveBossChallengeAsync(VerifiedAccount account, Guid character, BossChallengeRecord record, CancellationToken ct = default) => Task.FromResult(false);
     Task<IReadOnlyList<ContentTicketRecord>> ContentTicketsAsync(VerifiedAccount account, Guid character, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<ContentTicketRecord>>([]);
     Task<bool> SaveContentTicketAsync(VerifiedAccount account, Guid character, ContentTicketRecord record, CancellationToken ct = default) => Task.FromResult(false);
+    Task<StigmaState> StigmasAsync(VerifiedAccount account, Guid character, CancellationToken ct = default) => Task.FromResult(StigmaState.Empty);
+    /// <summary>Sets a stigma's level when its saved level is still <paramref name="expected"/> (0: not learned yet); false otherwise.</summary>
+    Task<bool> SetStigmaLevelAsync(VerifiedAccount account, Guid character, int skillId, int level, int expected, CancellationToken ct = default) => Task.FromResult(false);
+    /// <summary>Consumes one GetStigmaShard item and adds its shards, in one transaction.</summary>
+    Task<bool> UseStigmaShardItemAsync(VerifiedAccount account, Guid character, Guid item, long revision, int shards, CancellationToken ct = default) => Task.FromResult(false);
     /// <summary>A character id by name (any account), for mail to offline players.</summary>
     Task<Guid?> CharacterByNameAsync(VerifiedAccount account, string name, CancellationToken ct = default) => Task.FromResult<Guid?>(null);
     /// <summary>Sorts the bag: items ordered by template, then age, on slots 0, 1, 2, ...</summary>

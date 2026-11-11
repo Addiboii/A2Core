@@ -122,6 +122,13 @@ await using(var source=NpgsqlDataSource.Create(connectionString))
     Check(bag.Items.Count==1 && bag.Items[0].Location=="equipment" && bag.Items[0].Slot==1,"starter equipment persisted");
     Check(bag.Skills.Count==1 && bag.Skills[0].SkillId==201 && bag.Skills[0].Slot==0,"starter skills and bar persisted");
     Check(await game.InventoryAsync(second,id) is null,"inventory ownership");
+    // Stigmas (migration 072): learned once, raised by compare-and-set on the previous level, owner-scoped.
+    Check(await game.SetStigmaLevelAsync(first,id,11240000,1,0) && !await game.SetStigmaLevelAsync(first,id,11240000,1,0),"stigma learned once");
+    var stigmaRaises=await Task.WhenAll(game.SetStigmaLevelAsync(first,id,11240000,2,1),game.SetStigmaLevelAsync(first,id,11240000,2,1));
+    Check(stigmaRaises.Count(x=>x)==1,"one concurrent stigma raise wins");
+    Check(!await game.SetStigmaLevelAsync(second,id,11240000,3,2),"stigma ownership");
+    var stigmaState=await game.StigmasAsync(first,id);
+    Check(stigmaState.Stigmas.Single()==new StigmaRecord(11240000,2) && stigmaState.ItemShards==0 && (await game.StigmasAsync(second,id)).Stigmas.Count==0,"stigma round trip");
     var item=bag.Items[0];
     Check(item.WireId>0,"starter item receives durable wire ID");
     Check(!await game.MoveItemAsync(second,id,item.InstanceId,item.Revision,null),"foreign item move denied");

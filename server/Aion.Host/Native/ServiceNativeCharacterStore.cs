@@ -322,6 +322,24 @@ public sealed partial class ServiceNativeCharacterStore(string token, WorldIdent
         return await game.SaveContentTicketAsync(identity.Account, character, record, ct);
     }
 
+    public async Task<StigmaState> StigmasAsync(Guid character, CancellationToken ct)
+    {
+        await ValidateAsync(ct);
+        return await game.StigmasAsync(identity.Account, character, ct);
+    }
+
+    public async Task<bool> SetStigmaLevelAsync(Guid character, int skillId, int level, int expected, CancellationToken ct)
+    {
+        await ValidateAsync(ct);
+        return await game.SetStigmaLevelAsync(identity.Account, character, skillId, level, expected, ct);
+    }
+
+    public async Task<bool> UseStigmaShardItemAsync(Guid character, Guid item, long revision, int shards, CancellationToken ct)
+    {
+        await ValidateAsync(ct);
+        return await game.UseStigmaShardItemAsync(identity.Account, character, item, revision, shards, ct);
+    }
+
     public async Task<IReadOnlyList<CollectionRecord>> CollectionsAsync(Guid character, CancellationToken ct)
     {
         await ValidateAsync(ct);
