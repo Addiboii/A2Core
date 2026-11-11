@@ -2954,6 +2954,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         }
         replies.AddRange(ChainTick(now));
         replies.AddRange(BuffTick(now));
+        replies.AddRange(await QuickSlotAutoUseAsync(now, ct));
         replies.AddRange(DropTick(now));
         replies.AddRange(MapEventTick(now));
         replies.AddRange(InstanceTick(now));

@@ -1735,6 +1735,28 @@ Check(barSent.AsSpan().IndexOf(new PacketWriter().U8(0).U8(5).U8(1).I64(41).I32(
       "world entry sends the default bar with the saved potion slot over it (0x5600, item record without context skills as observed)");
 Check((await staffSession.HandleAsync(new byte[] { 0x03, 0x56, 5 }, Now)).Single().SequenceEqual(new PacketWriter().U16(0x5604).U16(0).U8(5).ToArray())
       && !staffStore.QuickSlotRows.ContainsKey(5), "QuickSlotReset clears the slot (0x5604)");
+// Quickbar auto-use (OURS trigger): the toggle byte (CANDIDATE _toggle_yn) on an item slot is kept; when that item's buff
+// runs out the server uses the item again through the ordinary item use.
+staffStore.Items.Add(Stored(510715007, 3, "bag", null, 7201));   // White Dragon's Chopped Steak: a 300 s food buff
+await staffSession.InventoryChangesAsync(default);
+byte[] SteakSlot(int toggle) => new PacketWriter().U16(0x5601).U8(0).U8(6).U8(1).I64(7201).I32(510715007).I32(0).U8(0).I32(0).U8(toggle).ToArray();
+Check((await staffSession.HandleAsync(SteakSlot(1), Now)).Single()[2] == 0 && staffSession.AutoUseSlots.SequenceEqual([6])
+      && staffStore.Settings["quick_slot_auto_use"].GetRawText() == "[6]", "a toggled item slot is stored with the auto-use slots");
+var toggledBar = (await staffSession.HandleAsync(new PacketWriter().U16(0x3622).I32(1).ToArray(), Now)).First(b => b[0] == 0x00 && b[1] == 0x56);
+Check(toggledBar.AsSpan().IndexOf(new PacketWriter().U8(0).U8(6).U8(1).I64(7201).I32(510715007).I32(0).U8(0).I32(0).U8(1).ToArray()) > 0,
+      "world entry sends the toggled slot with toggle 1 (0x5600)");
+var feedAt = Now + 1_000_000;
+await staffSession.HandleAsync(new PacketWriter().U16(0x5612).I64(7201).ToArray(), feedAt);
+var steakHp = staffSession.Resource.HpMax;
+Check(staffStore.Items.Single(i => i.WireId == 7201).Quantity == 2 && (await staffSession.TickAsync(feedAt + 100_000)).All(b => !(b[0] == 0x16 && b[1] == 0x56))
+      && staffStore.Items.Single(i => i.WireId == 7201).Quantity == 2, "while the buff lasts nothing is used");
+var refed = await staffSession.TickAsync(feedAt + 300_100);
+Check(refed.Any(b => b.SequenceEqual(RidePackets.ItemUsed(7201, 510715007))) && staffStore.Items.Single(i => i.WireId == 7201).Quantity == 1
+      && staffSession.Resource.HpMax == steakHp, "the buff runs out: the server uses the next steak (0x5616) and the buff is back");
+Check((await staffSession.HandleAsync(SteakSlot(0), Now)).Single()[2] == 0 && staffSession.AutoUseSlots.Count == 0
+      && staffStore.Settings["quick_slot_auto_use"].GetRawText() == "[]", "setting the slot with toggle 0 turns auto-use off");
+var unfed = await staffSession.TickAsync(feedAt + 600_200);
+Check(unfed.All(b => !(b[0] == 0x16 && b[1] == 0x56)) && staffStore.Items.Single(i => i.WireId == 7201).Quantity == 1, "toggled off: the buff ends and nothing is used");
 // Per-character settings (GameSession.Settings.cs): auto-potion, seal stone, emotes, presets, the restore counts.
 var potionSet = await staffSession.HandleAsync(new PacketWriter().U16(0x5649).U8(1).I32(530126003).I32(0).ToArray(), Now);
 Check(potionSet.Single().SequenceEqual(new PacketWriter().U16(0x564a).U16(0).U8(1).I32(530126003).I32(0).ToArray())

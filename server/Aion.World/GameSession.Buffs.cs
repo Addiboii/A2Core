@@ -203,6 +203,8 @@ public sealed partial class GameSession
         {
             replies.AddRange(RemoveBuffs(expired, ExpireTimeout));
             replies.AddRange(BuffStatsChanged(speedBefore));
+            // Only buffs that ran out (not replaced, not cleared at death) re-arm a quickbar auto-use item.
+            foreach (var b in expired) if (b.SkillId != 0 && !b.Scripted) expiredItemSkills.Add(b.SkillId);
         }
         return replies;
     }

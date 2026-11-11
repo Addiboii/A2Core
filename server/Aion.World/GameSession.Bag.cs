@@ -28,7 +28,7 @@ public sealed partial class GameSession
         var bar = new SortedDictionary<int, (int Slot, int Type, long ItemUid, int ItemId, int SkillId)>();
         foreach (var (slot, skill) in defaults) bar[slot] = (slot, 0, 0, 0, skill);
         foreach (var s in quickSlots.Values) bar[s.Slot] = (s.Slot, s.Type, s.ItemUid, s.ItemId, s.SkillId);
-        return GamePackets.QuickSlots(bar.Values.ToList());
+        return GamePackets.QuickSlots(bar.Values.ToList(), autoUseSlots.Count == 0 ? null : autoUseSlots.Where(quickSlots.ContainsKey).ToHashSet());
     }
 
     /// <summary>
@@ -100,19 +100,33 @@ public sealed partial class GameSession
 
     /// <summary>
     /// 0x5601 QuickSlotSet_RQ {QuickSlotInfo: slot u8, EQuickSlotType u8, item uid i64, item id i32, skill id i32,
-    /// context skills (varint + i32), macro u8, social action i32, toggle u8}: stored, echoed in 0x5602.
+    /// context skills (varint + i32), macro u8, social action i32, toggle u8}: stored, echoed in 0x5602. The toggle
+    /// (usmap _toggle_yn, CANDIDATE: auto-use; 0 in all 42 recorded records) on an item slot is kept with the settings
+    /// (quick_slot_auto_use) and drives QuickSlotAutoUseAsync.
     /// </summary>
     async Task<List<byte[]>> SetQuickSlotAsync(byte[] plain, CancellationToken ct)
     {
         int number, type, itemId, skillId;
         long uid;
+        var toggle = false;
         try
         {
             // QuickSlotInfo starts with its presence mask (live 2026-10-16 `00 0e 01 ...` for a potion on slot 14; the reader
             // took the mask for the slot and the slot for the type, so every item drag was refused).
             var reader = new PacketReader(plain) { Offset = 2 };
-            reader.U8();
+            var mask = reader.U8();
             number = reader.U8(); type = reader.U8(); uid = (long)reader.U64(); itemId = (int)reader.U32(); skillId = (int)reader.U32();
+            try
+            {
+                if ((mask & 1) != 0)
+                {
+                    var context = reader.Varint();
+                    for (var i = 0; i < context && i < 64; i++) reader.U32();
+                }
+                reader.U8(); reader.U32();
+                toggle = reader.U8() != 0;
+            }
+            catch (ProtocolException) { toggle = false; }
         }
         catch (ProtocolException) { return []; }
         byte[] Reply(int result) => PacketWriter.Opcode(QuickSlotSetRs).U16(result).Raw(plain.AsSpan(2)).ToArray();
@@ -122,6 +136,7 @@ public sealed partial class GameSession
         var saved = await Stored(async () => await store.SaveQuickSlotAsync(character, number, slot, ct) ? [[]] : []);
         if (saved.Count == 0) return [Reply(1)];
         quickSlots[number] = slot;
+        await SetQuickSlotAutoUseAsync(number, toggle && type == QuickSlotItem && itemId != 0, ct);
         return [Reply(0)];
     }
 
@@ -133,7 +148,43 @@ public sealed partial class GameSession
         var saved = await Stored(async () => await store.SaveQuickSlotAsync(character, number, null, ct) ? [[]] : []);
         if (saved.Count == 0) return [Reply(1)];
         quickSlots.Remove(number);
+        await SetQuickSlotAutoUseAsync(number, false, ct);
         return [Reply(0)];
+    }
+
+    // ---------- Quickbar auto-use (OURS trigger) ----------
+
+    const int QuickSlotItem = 1;   // EQuickSlotType item (OBSERVED live 2026-10-16: a potion slot)
+    /// <summary>Hotbar slots whose auto-use toggle is on (character setting quick_slot_auto_use).</summary>
+    readonly SortedSet<int> autoUseSlots = [];
+    /// <summary>Item skills whose buff ran out on the last buff tick (their auto-use items are used again).</summary>
+    readonly HashSet<int> expiredItemSkills = [];
+    public IReadOnlyCollection<int> AutoUseSlots => autoUseSlots;
+
+    async Task SetQuickSlotAutoUseAsync(int number, bool on, CancellationToken ct)
+    {
+        if (on ? autoUseSlots.Add(number) : autoUseSlots.Remove(number)) await SaveSettingAsync("quick_slot_auto_use", autoUseSlots.ToArray(), ct);
+    }
+
+    /// <summary>
+    /// OURS: when the buff of an item on a toggled item slot runs out (expiry, not replacement or death), the server uses
+    /// that item again from the bag (its smallest stack) through the ordinary item use, with all its checks (alive, cooldown,
+    /// the store's revision check). Nothing happens while the buff lasts or for items without a buff.
+    /// </summary>
+    async Task<List<byte[]>> QuickSlotAutoUseAsync(long now, CancellationToken ct)
+    {
+        if (expiredItemSkills.Count == 0) return [];
+        var skills = expiredItemSkills.ToHashSet();
+        expiredItemSkills.Clear();
+        if (autoUseSlots.Count == 0 || resources is null || dead || Store is null) return [];
+        var replies = new List<byte[]>();
+        foreach (var itemId in autoUseSlots.Select(n => quickSlots.GetValueOrDefault(n)).Where(s => s is { Type: QuickSlotItem, ItemId: > 0 }).Select(s => s!.ItemId).Distinct())
+        {
+            if (Boxes.Use(itemId) is not { Effect: "Skill", Values: [var value, ..] } || !int.TryParse(value, out var skill) || !skills.Contains(skill)) continue;
+            if (storedItems.Values.Where(i => i.TemplateId == itemId && i.Location == "bag").OrderBy(i => i.Quantity).ThenBy(i => i.WireId).FirstOrDefault() is { } stack)
+                replies.AddRange(await UseItemAsync(stack.WireId, now, ct, reply: false));
+        }
+        return replies;
     }
 
     /// <summary>Party members on the same map within this distance share a kill's experience (OURS).</summary>

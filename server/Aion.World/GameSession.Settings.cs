@@ -55,6 +55,8 @@ public sealed partial class GameSession
         potionSlots = Read<int[]>("potion_auto_use") is [var a, var b] ? [a, b] : [0, 0];
         autoUseItems.Clear();
         autoUseItems.UnionWith(Read<int[]>("item_auto_use") ?? []);
+        autoUseSlots.Clear();
+        autoUseSlots.UnionWith(Read<int[]>("quick_slot_auto_use") ?? []);
         presets = Read<PresetSetting>("presets") ?? new([], []);
         restoreCounts = Read<Dictionary<int, RestoreCount>>("item_restores") ?? [];
     }
