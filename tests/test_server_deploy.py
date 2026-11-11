@@ -15,6 +15,8 @@ from unittest.mock import patch
 
 from tools import pack_server_data, server_env
 
+ROOT = Path(__file__).resolve().parents[1]
+
 
 def server_data(root):
     for name, body in [('bootstrap/keys/app-key.json', '{}'), ('bootstrap/keys/local-test-key.json', '{}'),
@@ -81,6 +83,23 @@ class ServerEnvTests(unittest.TestCase):
         for address in ('127.0.0.1', '2001:db8::1', 'example.com'):
             with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
                 server_env.main(['--public-address', address, '--data', '.', '--state', '.', '--proxy'])
+
+    def test_loopback_needs_a_loopback_bind(self):
+        # One PC (deploy/windows -Local): players and server on 127.0.0.1; never a public bind with a loopback address.
+        with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
+            server_env.main(['--public-address', '127.0.0.1', '--data', '.', '--state', '.', '--proxy'])
+        error = io.StringIO()
+        with contextlib.redirect_stderr(error), contextlib.redirect_stdout(io.StringIO()):
+            try:
+                server_env.main(['--public-address', '127.0.0.1', '--bind', '127.0.0.1', '--data', 'missing', '--state', '.', '--proxy'])
+            except (SystemExit, OSError):
+                pass                                          # the missing data or credentials, after the address check
+        self.assertNotIn('non-loopback', error.getvalue())
+
+    def test_install_passes_open_registration(self):
+        script = (ROOT / 'deploy/linux/install.sh').read_text(encoding='utf-8')
+        self.assertIn('--open-registration) OPEN_REGISTRATION=1', script)
+        self.assertIn('TLS_ARGS+=(--open-registration)', script)
 
     def test_geolocation(self):
         self.assertEqual(server_env.geolocation('59.9139,10.7522,no'),
@@ -271,6 +290,36 @@ class BackupScriptTests(unittest.TestCase):
         self.assertIn('--single-transaction', args)
         self.assertIn('--clean', args)
         self.assertEqual(kw['timeout'], postgres_dev.long_timeout())
+
+
+class WindowsInstallTests(unittest.TestCase):
+    WINDOWS = ROOT / 'deploy/windows'
+
+    def test_postgres_download_is_pinned_to_the_tool_archive(self):
+        # install.ps1 fetches the archive postgres_dev.py setup unpacks on Windows, and checks its SHA-256.
+        script = (self.WINDOWS / 'install.ps1').read_text(encoding='utf-8')
+        tool = (ROOT / 'tools/postgres_dev.py').read_text(encoding='utf-8')
+        archive = 'postgresql-18.6-1-windows-x64-binaries.zip'
+        self.assertIn(archive, script)
+        self.assertIn(archive, tool)
+        self.assertRegex(script, r"\$PgSha256 = '[0-9a-f]{64}'")
+        self.assertIn('Get-FileHash $archive -Algorithm SHA256', script)
+
+    def test_install_repeats_the_linux_steps(self):
+        script = (self.WINDOWS / 'install.ps1').read_text(encoding='utf-8')
+        for step in ("'setup'", "'import-catalog'", 'configure_starters.py', "'install'", 'equipment_rules.py',
+                     "'upgrade-catalog'", "'backup'", 'server_env.py', '--staff-path', '--totp-key', '--open-registration'):
+            self.assertIn(step, script)
+        # The game's ports, as install.sh opens them (plus the account port).
+        self.assertIn('$Ports = 443, 3700, 8087, 8091, 8780, 13328', script)
+
+    @unittest.skipUnless(os.name == 'nt' and shutil.which('powershell'), 'needs Windows PowerShell')
+    def test_scripts_parse(self):
+        for name in ('install.ps1', 'start.ps1', 'stop.ps1'):
+            command = ("$errors = $null; [void][System.Management.Automation.Language.Parser]::ParseFile('%s', [ref]$null, [ref]$errors); "
+                       "if ($errors) { $errors | ForEach-Object { $_.Message }; exit 1 }") % str(self.WINDOWS / name)
+            result = subprocess.run(['powershell', '-NoProfile', '-Command', command], capture_output=True, text=True, timeout=60)
+            self.assertEqual(result.returncode, 0, name + ': ' + result.stdout + result.stderr)
 
 
 if __name__ == '__main__':
