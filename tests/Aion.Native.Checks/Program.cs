@@ -2140,6 +2140,32 @@ Check(unknownObject.Single().SequenceEqual(GamePackets.InteractEnvObjReply(123_4
 Check(Kibelisks.OnMap(1000).Single().ArtifactId == 1051035, "the Poeta Kibelisk is placed (TeleportArtifact_1051035)");
 Check(Kibelisks.OnMap(1000).Single().Relationship == 8 && Kibelisks.OnMap(1100).All(k => k.Relationship == 9),
       "Kibelisks spawn with their race's relationship (Poeta EnvObj_Light 8, Ishalgen EnvObj_Dark 9)");
+// Field-event treasure boxes (E_L1_FE_TH_S2_TreasureBox_01, env 1100312, linked by name to
+// reward_manual_FieldEvent_L_TreasureBox_1100312): opening one pays its table once (534960002 and 534950001 at 1e8 each).
+var (chestBackMap, chestBackAt) = (staffSession.MapId!.Value, staffSession.Position!.Value);
+var chest = WorldObjects.ObjectsOn(510036).Select((o, i) => (o, i)).First(x => x.o.Loot is not null && x.o.InteractTime > 0);
+Check(chest.o is { Env: 1100312, Loot: "reward_manual_FieldEvent_L_TreasureBox_1100312" } && LootTables.Embedded.HasTable(chest.o.Loot!),
+      "a field-event treasure box is linked to its reward table by name");
+staffSession.Teleport(510036, chest.o.At with { X = chest.o.At.X + 20 }, Now + 700_000);
+await staffSession.HandleAsync(new PacketWriter().U16(0x3622).I32(1).ToArray(), Now + 700_000);
+long Held(int item) => staffStore.Items.Where(i => i.TemplateId == item && i.Location == "bag").Sum(i => i.Quantity);
+var (chestKeysBefore, boxCoinsBefore) = (Held(534960002), Held(534950001));
+var chestKey = WorldObjects.FirstKey + chest.i;
+await staffSession.HandleAsync(new PacketWriter().U16(0x3636).Varint(chestKey).I64(0).I32(chest.o.Env).ToArray(), Now + 700_010);
+var chestOpened = await staffSession.TickAsync(Now + 700_010 + chest.o.InteractTime);
+Check(chestOpened.Any(b => b.SequenceEqual(GamePackets.InteractEnvObjCompleted(chestKey, staffSession.PlayerKey))) && Held(534960002) > chestKeysBefore && Held(534950001) > boxCoinsBefore,
+      "opening the treasure box grants its reward table's items");
+var (keysAfter, coinsAfter) = (Held(534960002), Held(534950001));
+var chestAgain = await staffSession.HandleAsync(new PacketWriter().U16(0x3636).Varint(chestKey).I64(0).I32(chest.o.Env).ToArray(), Now + 703_000);
+await staffSession.TickAsync(Now + 706_000);
+Check(chestAgain.Single().SequenceEqual(GamePackets.InteractEnvObjReply(chestKey, 1)) && Held(534960002) == keysAfter && Held(534950001) == coinsAfter,
+      "an opened treasure box is refused the second time and pays nothing more");
+staffSession.Teleport(510036, chest.o.At with { X = chest.o.At.X + 30 }, Now + 706_100);
+await staffSession.HandleAsync(new PacketWriter().U16(0x3622).I32(1).ToArray(), Now + 706_100);
+var chestReloaded = await staffSession.HandleAsync(new PacketWriter().U16(0x3636).Varint(chestKey).I64(0).I32(chest.o.Env).ToArray(), Now + 706_200);
+Check(chestReloaded.Single().SequenceEqual(GamePackets.InteractEnvObjReply(chestKey, 1)), "after a map reload the opened box stays refused");
+staffSession.Teleport(chestBackMap, chestBackAt, Now + 706_300);
+await staffSession.HandleAsync(new PacketWriter().U16(0x3622).I32(1).ToArray(), Now + 706_300);
 var devDepot = await (await BarSession()).HandleAsync([0x10, 0x56], Now);
 Check(devDepot[0].SequenceEqual(GamePackets.ItemDepotList([new InventoryItem(1, 110160001, 1, InventoryItem.Equipped, 1, new EquipDetail(1, 1))])),
       "development: the starter weapon in the official inventory format");

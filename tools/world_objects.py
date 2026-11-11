@@ -18,6 +18,7 @@ quest names.
 """
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -30,7 +31,9 @@ ENVOBJDATA = ROOT / 'research/local/world/gameplay-tables/table-000.json'
 QUESTS = ROOT / 'tools/data/quests.json'
 GATHER_TABLES = ROOT / 'research/local/craft-legion-20261016/tables'
 CATALOG = ROOT / 'research/local/game-catalog-v2/entries.jsonl'
+REWARD_TABLES = ROOT / 'research/local/pet-tables-20261016'   # RewardItem table-001, RewardPackage table-003 (tools/loot_data.py)
 DATA = ROOT / 'tools/data/world-objects.json'
+CHEST_TABLE = re.compile(r'^reward_manual_FieldEvent_.+_TreasureBox_(\d+)$')
 
 RELATIONSHIP = {'NoRelation': 0, 'EnvObj_Neutral': 7, 'EnvObj_Light': 8, 'EnvObj_Dark': 9, 'Rift': 10, 'EnvObj_Destroy': 15,
                 'EnvObj_RoleA': 26, 'EnvObj_RoleB': 27, 'EnvObj_MonsterEnemy': 28}
@@ -119,6 +122,23 @@ def gather_sources(tables=GATHER_TABLES, catalog=CATALOG):
             for row in rows('table-010.json') if row.get('MaterialGroup') in groups}
 
 
+def chest_tables(tables=REWARD_TABLES):
+    """EnvObjData id -> its field-event treasure box's reward table, by name: reward_manual_FieldEvent_<x>_TreasureBox_<id>
+    (RewardItem / RewardPackage names). CANDIDATE: the naming convention; RewardData.dat rows with the same id name the same
+    table for E_L1_FE_TH_S2_* and E_L1_FE_TB_* (1100311/12, 1200018-21), but _1200054/_1200055 are named by RewardData rows
+    1201054/1201055 (GoldBox_002/003), their suffixes being Kibelisk ids (never placed here)."""
+    out = {}
+    for name in ('table-001.json', 'table-003.json'):
+        path = Path(tables) / name
+        if not path.exists():
+            continue
+        for row in json.loads(path.read_text(encoding='utf-8'))['Properties']['Data']:
+            match = CHEST_TABLE.match(str(row.get('Name') or ''))
+            if match:
+                out[int(match.group(1))] = row['Name']
+    return out
+
+
 def door_layer(name, dungeons, served_types=SERVED_TYPES):
     """The served instance layer a door is named after (World_L_A_Layer_01_EnterDoor -> World_L_A_Layer_01), or 0."""
     stem = str(name or '')
@@ -175,11 +195,12 @@ def misleading(spawn, own, env_names):
     return any('_'.join(parts[:i]) in env_names for i in range(len(parts), 1, -1))
 
 
-def objects(data, rows, wanted, gathers=None, everything=False, portals=None, dungeons=None):
+def objects(data, rows, wanted, gathers=None, everything=False, portals=None, dungeons=None, chests=None):
     """Placed EnvObjs: quest objects, gather nodes and the wanted ids; <paramref>everything</paramref> keeps every placed
     object with a row (instance maps: map events name walls, wagons and doors by spawn name)."""
     gathers = gathers or {}
     portals = portals or {}
+    chests = chests or {}
     env_names = {(row['name'] or '').lower() for row in rows.values()}
     found = []
     for record in data.get('SpawnInfoList', []):
@@ -235,6 +256,9 @@ def objects(data, rows, wanted, gathers=None, everything=False, portals=None, du
                 if row.get('not_have_abnormal_group'):
                     found[-1]['carry'] = {'group': row['not_have_abnormal_group'], 'despawn': row['despawn'],
                                           'finish_duration': row['finish_duration']}
+                # Field-event treasure boxes: the reward table opening one pays (chest_tables; CANDIDATE link by name).
+                if env in chests:
+                    found[-1]['loot'] = chests[env]
                 # Recovery orbs and their boxes (EnvObjData name *RecoveryOrb*; OBSERVED in EnvObjData.dat, build 26262663):
                 # LifeTime (ms, 0 = unset), CollisionCylinderRadius (cm) and HitSkillIdList. Data only: the pickup effect is unknown.
                 if 'RecoveryOrb' in str(row.get('name') or ''):
@@ -299,13 +323,14 @@ def build():
     except (OSError, ValueError):
         dungeon_rows = {}
     portals = party_portals(rows, dungeon_rows)
+    chests = chest_tables()
     maps = {}
     for path in sorted(MAPDATA.glob('*/table-*.json')):
         if not path.stem.split('-')[-1].isdigit():
             continue
         data = json.loads(path.read_text(encoding='utf-8'))['Properties']['Data']
         instance = data.get('MapId') in instance_maps
-        placed, areas = objects(data, rows, envs, gathers, everything=instance, portals=portals, dungeons=dungeon_rows), triggers(data, trigger_names, map_events=instance)
+        placed, areas = objects(data, rows, envs, gathers, everything=instance, portals=portals, dungeons=dungeon_rows, chests=chests), triggers(data, trigger_names, map_events=instance)
         if placed or areas:
             entry = maps.setdefault(str(data['MapId']), {'objects': [], 'triggers': []})
             entry['objects'].extend(placed)

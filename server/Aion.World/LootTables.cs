@@ -36,13 +36,20 @@ public sealed class LootTables
     public bool HasLoot(int npcId) => file.Npcs.ContainsKey(npcId.ToString(System.Globalization.CultureInfo.InvariantCulture));
 
     /// <summary>The items one kill drops for a character of a race (1 Light, 2 Dark), merged by item.</summary>
-    public List<(int ItemId, long Count)> Roll(int npcId, int race, Random rng)
+    public List<(int ItemId, long Count)> Roll(int npcId, int race, Random rng) =>
+        RollTables(file.Npcs.GetValueOrDefault(npcId.ToString(System.Globalization.CultureInfo.InvariantCulture)) ?? [], race, rng);
+
+    /// <summary>Whether a reward table is known (a treasure box's table may be empty in the client data and is then left out).</summary>
+    public bool HasTable(string name) => file.Tables.ContainsKey(name);
+
+    /// <summary>One roll of the named reward tables (as a kill's), merged by item; unknown names pay nothing.</summary>
+    public List<(int ItemId, long Count)> RollTables(IEnumerable<string> names, int race, Random rng)
     {
         var drops = new Dictionary<int, long>();
         void Add(long item, long count) { if (count > 0) drops[(int)item] = drops.GetValueOrDefault((int)item) + count; }
         long Count(long min, long max) => min >= max ? min : min + (long)(rng.NextDouble() * (max - min + 1));
         bool Hit(long chance) => rng.NextDouble() * 100_000_000 < chance;
-        foreach (var name in file.Npcs.GetValueOrDefault(npcId.ToString(System.Globalization.CultureInfo.InvariantCulture)) ?? [])
+        foreach (var name in names)
         {
             if (!file.Tables.TryGetValue(name, out var table) || table.Race != 0 && table.Race != race) continue;
             foreach (var item in table.Items)

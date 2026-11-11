@@ -33,6 +33,8 @@ public sealed class DungeonCopy(GameSession host, int dungeonId, long now)
     /// <summary>Revives each character used in this run (character id, or player key for a development login), for
     /// Dungeon.dat RebirthLimitCount.</summary>
     public Dictionary<string, int> Revives { get; } = [];
+    /// <summary>Treasure boxes opened in this run: (character key as for <see cref="Revives"/>, object index).</summary>
+    public HashSet<(string Who, int Index)> ChestsOpened { get; } = [];
     /// <summary>The final boss's cube reward each player took (player key → items), once per run.</summary>
     public Dictionary<int, List<(int ItemId, long Count)>> CubeTaken { get; } = [];
 }

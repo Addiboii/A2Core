@@ -53,6 +53,33 @@ public sealed partial class GameSession
         return null;
     }
 
+    /// <summary>Treasure boxes opened outside a dungeon copy (map, object index), until relog (OURS).</summary>
+    readonly HashSet<(int Map, int Index)> openedChests = [];
+
+    /// <summary>Whether this player already opened the treasure box at <paramref name="index"/> (in this run inside a copy).</summary>
+    bool ChestOpened(int index) =>
+        WorldObjects.ObjectsOn(worldMap) is var objects && index < objects.Count && objects[index].Loot is not null
+        && (copy is { } c ? c.ChestsOpened.Contains((ReviveKey, index)) : openedChests.Contains((worldMap, index)));
+
+    /// <summary>
+    /// A field-event treasure box opened (its use completed): one roll of its reward table (loot.json, as a kill's roll),
+    /// granted as the cube's rewards are (pendingRewards, then stored and the inventory changes sent). The box is then used up for this
+    /// player and despawns (EnvObjData bDespawn is set on every such box, OBSERVED; once per run inside a copy, else per map
+    /// until relog: OURS). Nothing the client sends decides the items or counts.
+    /// </summary>
+    async Task<List<byte[]>> OpenChestAsync(int index, string table, CancellationToken ct)
+    {
+        var replies = new List<byte[]>();
+        var first = copy is { } c ? c.ChestsOpened.Add((ReviveKey, index)) : openedChests.Add((worldMap, index));
+        if (usedObjects.Add(index) && shownObjects.Remove(index)) replies.Add(GamePackets.EnvObjDespawn(WorldObjects.FirstKey + index, 4, 3));
+        if (!first) return replies;
+        var items = LootTables.Embedded.RollTables([table], profileRace, rng);
+        if (items.Count == 0) return replies;
+        pendingRewards.Add(items);
+        replies.AddRange(await GrantPendingRewardsAsync(ct));
+        return replies;
+    }
+
     /// <summary>A used carried-item box with bDespawn hides for its FinishDuration (as a gathered node; A2Core PR #4, OURS timing).</summary>
     void CarryBoxUsed(int index, WorldObject o, long now, List<byte[]> replies)
     {

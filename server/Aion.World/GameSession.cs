@@ -723,7 +723,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             var o = objects[i];
             double dx = o.Position[0] - at.X, dy = o.Position[1] - at.Y;
             var near = (instance && o.LongRange || dx * dx + dy * dy <= WorldObjects.VisibleRange * WorldObjects.VisibleRange) && !MapEventHidden(i, o);
-            if (near && !Gathered(i, now) && !usedObjects.Contains(i) && shownObjects.Add(i))
+            if (near && !Gathered(i, now) && !usedObjects.Contains(i) && !ChestOpened(i) && shownObjects.Add(i))
                 replies.Add(EnvObjAppear(i, o, now));
             else if (!near && shownObjects.Remove(i))
                 replies.Add(GamePackets.EnvObjDespawn(WorldObjects.FirstKey + i));
@@ -775,7 +775,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         foreach (var key in EnvObjKeys(plain))
             if (key is { } k && k - WorldObjects.FirstKey is var i && i >= 0 && i < objects.Count) { index = i; break; }
         // No such object: refuse it, or the client waits for the reply with the player locked.
-        if (index is not { } found || Gathered(found, now) || usedObjects.Contains(found)) return [GamePackets.InteractEnvObjReply(EnvObjKeys(plain).FirstOrDefault(k => k is not null) ?? 0, 1)];
+        if (index is not { } found || Gathered(found, now) || usedObjects.Contains(found) || ChestOpened(found)) return [GamePackets.InteractEnvObjReply(EnvObjKeys(plain).FirstOrDefault(k => k is not null) ?? 0, 1)];
         var o = objects[found];
         var key2 = WorldObjects.FirstKey + found;
         if (o.FlightRing) return FlyThroughRing(key2, now);
@@ -835,6 +835,8 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             shownObjects.Remove(index);
             replies.Add(GamePackets.EnvObjDespawn(key, 4, 3));
         }
+        // A field-event treasure box (GameSession.EnvObjects.cs): its reward table, once.
+        if (objects[index].Loot is { } chestTable) replies.AddRange(await OpenChestAsync(index, chestTable, ct));
         // A party dungeon's portal (EnvObjData Usage PartyDungeon): into the expedition.
         if (objects[index].Portal is { Length: > 0 } portal) replies.AddRange(EnterPartyDungeon(portal, now));
         // The expedition's reward cube (Usage OdEnergyCube): the final boss's reward, once per player per run.

@@ -11,9 +11,12 @@ Rebuild the tracked summary with `python tools/loot_data.py`.
   roll (CANDIDATE: RewardItem tables often sum above 1e8, e.g. a soul at 1e8 plus a spiritstone).
 - packages: RewardPackageItem name -> [[item ID, weight of 1e8, count min, count max]]: one item is
   picked by weight (they sum to 1e8).
+- Field-event treasure box tables (reward_manual_FieldEvent_<x>_TreasureBox_<EnvObjData id>) are kept even when no
+  RewardData row names them: tools/world_objects.py links the boxes to them by that name (CANDIDATE).
 Prologue monsters (Poeta, M_L0_*) have no RewardData row and drop nothing.
 """
 import json
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -21,6 +24,7 @@ DATA = ROOT / 'tools/data/loot.json'
 TABLES = ROOT / 'research/local/pet-tables-20261016'
 CATALOG = ROOT / 'research/local/game-catalog-v2/entries.jsonl'
 RACES = {'ERace::Light': 1, 'ERace::Dark': 2}
+CHEST_TABLE = re.compile(r'^reward_manual_FieldEvent_.+_TreasureBox_\d+$')
 
 
 def _rows(index, tables=TABLES):
@@ -42,6 +46,7 @@ def build(tables=TABLES, catalog=CATALOG):
         if names:
             npcs[str(value(row['ID']))] = names
     wanted = {n for names in npcs.values() for n in names}
+    wanted |= {row['Name'] for index in (1, 3) for row in _rows(index, tables) if CHEST_TABLE.match(str(row.get('Name') or ''))}
     tables_out = {}
     for row in _rows(1, tables):
         if row['Name'] in wanted:

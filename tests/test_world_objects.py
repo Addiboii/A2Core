@@ -47,6 +47,24 @@ class WorldObjectTests(unittest.TestCase):
         self.assertEqual(data['recovery_orbs']['1100133']['life_time'], 30000)
         self.assertEqual(sum('recovery_orb' in o for m in data['maps'].values() for o in m['objects']), 104)
 
+    def test_treasure_boxes_link_their_table_by_name(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as folder:
+            (Path(folder) / 'table-001.json').write_text(json.dumps({'Properties': {'Data': [
+                {'Name': 'reward_manual_FieldEvent_L_TreasureBox_1100312'}, {'Name': 'reward_manual_TreasureBox_L_Normal'},
+                {'Name': 'reward_manual_FieldEvent_L_TreasureBox_x'}]}}), encoding='utf-8')
+            chests = world_objects.chest_tables(Path(folder))
+        self.assertEqual(chests, {1100312: 'reward_manual_FieldEvent_L_TreasureBox_1100312'})
+        rows = world_objects.envobj_rows({'Properties': [{'ID': {'Value': 1100312}, 'Name': 'E_L1_FE_TH_S2_TreasureBox_01',
+                                                          'Usage': 'EEnvObjectUsage::Normal', 'InteractTime': 2000}]})
+        spawn = {'SpawnInfoList': [{'Name': 'FE_TH_S2_Box_1', 'EnvObjIdList': [{'Value': 1100312}],
+                                    'Positions': [{'Location': {'X': 0, 'Y': 0, 'Z': 0}, 'Rotation': {'Yaw': 0}}]}]}
+        box, = world_objects.objects(spawn, rows, wanted=set(), everything=True, chests=chests)
+        self.assertEqual(box['loot'], 'reward_manual_FieldEvent_L_TreasureBox_1100312')
+        data = json.loads((ROOT / 'tools/data/world-objects.json').read_text(encoding='utf-8'))
+        linked = {o['env'] for m in data['maps'].values() for o in m['objects'] if 'loot' in o}
+        self.assertEqual(linked, {1100311, 1100312, 1200018, 1200019, 1200020})
+
     def test_spawn_named_after_another_object_keeps_its_own_name(self):
         names = {'e_d0_firewood_001', 'e_d0_firewood_002'}
         self.assertTrue(world_objects.misleading('E_D0_FireWood_001_2', 'E_D0_FireWood_002', names))

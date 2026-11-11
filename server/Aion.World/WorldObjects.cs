@@ -31,7 +31,10 @@ public sealed record WorldObject(
     // EnvObjData CombatPower and its Level / ItemLevel (portals gated for level 45).
     [property: JsonPropertyName("required_combat_power")] int RequiredCombatPower = 0,
     [property: JsonPropertyName("min_level")] int MinLevel = 0,
-    [property: JsonPropertyName("item_level")] int ItemLevel = 0)
+    [property: JsonPropertyName("item_level")] int ItemLevel = 0,
+    // A field-event treasure box: the loot.json reward table opening it pays (tools/world_objects.py; CANDIDATE link by the
+    // table name reward_manual_FieldEvent_<x>_TreasureBox_<EnvObjData id>).
+    [property: JsonPropertyName("loot")] string? Loot = null)
 {
     public Vector3d At => new(Position[0], Position[1], Position[2]);
     /// <summary>EnvObj_Destroy (ERelationshipEntity 15): broken by hits rather than used.</summary>
