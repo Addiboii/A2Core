@@ -46,5 +46,7 @@
     <EmbeddedResource Include="../../tools/data/exceed-enchant.json" LogicalName="exceed-enchant.json" />
     <EmbeddedResource Include="../../tools/data/item-rules.json" LogicalName="item-rules.json" />
     <EmbeddedResource Include="../../tools/data/guild.json" LogicalName="guild.json" />
+    <!-- tools/wing_data.py (Wing.dat, build 26262663). -->
+    <EmbeddedResource Include="../../tools/data/wings.json" LogicalName="wings.json" />
   </ItemGroup>
 </Project>

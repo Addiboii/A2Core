@@ -536,6 +536,18 @@ public sealed partial class ServiceNativeCharacterStore(string token, WorldIdent
         return (await game.InventoryAsync(identity.Account, character, ct))?.Wings ?? [];
     }
 
+    public async Task<int> EquippedWingAsync(Guid character, CancellationToken ct)
+    {
+        await ValidateAsync(ct);
+        return (await game.InventoryAsync(identity.Account, character, ct))?.EquippedWing ?? 0;
+    }
+
+    public async Task<bool> SetWingAsync(Guid character, int wingId, CancellationToken ct)
+    {
+        await ValidateAsync(ct);
+        return await game.SetWingAsync(identity.Account, character, wingId, ct);
+    }
+
     public async Task<IReadOnlyList<SkillState>> SkillsAsync(Guid character, CancellationToken ct)
     {
         await ValidateAsync(ct);

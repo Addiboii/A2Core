@@ -149,7 +149,8 @@ public sealed partial class PostgresGameplayStore(NpgsqlDataSource source) : IGa
         await using var t=await c.BeginTransactionAsync(ct);
         if(!await Own(c,t,account.AccountId,character,ct)) return null;
         var items=await Items(c,t,character,ct); var skills=await Skills(c,t,character,ct); var wings=await Wings(c,t,character,ct); var extras=await Extras(c,t,character,ct);
-        await t.CommitAsync(ct); return new(items,skills,wings,extras);
+        var equippedWing=await Scalar(c,t,"SELECT wing_id FROM game.character_wing_equips WHERE character_id=$1",ct,character) is int w ? w : 0;
+        await t.CommitAsync(ct); return new(items,skills,wings,extras,equippedWing);
     }
 
     public async Task<bool> GrantTitleAsync(VerifiedAccount account, Guid character, int titleId, CancellationToken ct=default)
@@ -171,6 +172,20 @@ public sealed partial class PostgresGameplayStore(NpgsqlDataSource source) : IGa
         {
             if(await Scalar(c,t,"SELECT title_id FROM game.character_titles WHERE character_id=$1 AND title_id=$2",ct,character,titleId) is not int) return false;
             await Execute(c,t,"INSERT INTO game.character_title_equips(character_id,category,title_id) VALUES($1,$2,$3) ON CONFLICT (character_id,category) DO UPDATE SET title_id=EXCLUDED.title_id",ct,character,(short)category,titleId);
+        }
+        await t.CommitAsync(ct); return true;
+    }
+
+    public async Task<bool> SetWingAsync(VerifiedAccount account, Guid character, int wingId, CancellationToken ct=default)
+    {
+        if(wingId<0) throw new GameplayException("invalid_wing");
+        await using var c=await source.OpenConnectionAsync(ct); await using var t=await c.BeginTransactionAsync(ct);
+        if(!await Own(c,t,account.AccountId,character,ct)) return false;
+        if(wingId==0) await Execute(c,t,"DELETE FROM game.character_wing_equips WHERE character_id=$1",ct,character);
+        else
+        {
+            if(await Scalar(c,t,"SELECT wing_id FROM game.character_wings WHERE character_id=$1 AND wing_id=$2",ct,character,wingId) is not int) return false;
+            await Execute(c,t,"INSERT INTO game.character_wing_equips(character_id,wing_id) VALUES($1,$2) ON CONFLICT (character_id) DO UPDATE SET wing_id=EXCLUDED.wing_id,updated_at=now()",ct,character,wingId);
         }
         await t.CommitAsync(ct); return true;
     }

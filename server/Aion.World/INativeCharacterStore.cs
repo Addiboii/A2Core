@@ -142,6 +142,10 @@ public interface INativeCharacterStore : IAsyncDisposable
     Task<long?> RewardQuestAsync(Guid character, string code, long experience, IReadOnlyList<(int TemplateId, long Count)> items, CancellationToken ct);
     /// <summary>The character's registered wings (Wing.dat ids).</summary>
     Task<IReadOnlyList<int>> WingsAsync(Guid character, CancellationToken ct);
+    /// <summary>The stored equipped wing (migration 073); 0 when none is stored.</summary>
+    Task<int> EquippedWingAsync(Guid character, CancellationToken ct) => Task.FromResult(0);
+    /// <summary>Stores the equipped wing (0 clears); false unless it is one of the character's registered wings.</summary>
+    Task<bool> SetWingAsync(Guid character, int wingId, CancellationToken ct) => Task.FromResult(false);
     /// <summary>The character's ascension by play (the HQ1101020 turn-in): the grade only rises. Stores without a record say yes.</summary>
     Task<bool> AscendAsync(Guid character, int grade, CancellationToken ct) => Task.FromResult(true);
 }

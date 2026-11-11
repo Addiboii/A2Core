@@ -26,7 +26,9 @@ public sealed record CharacterExtras(IReadOnlyList<int> Titles, IReadOnlyDiction
 {
     public static readonly CharacterExtras None = new([], new Dictionary<int, int>(), new Dictionary<int, int>(), new Dictionary<int, int>(), []);
 }
-public sealed record PlayerInventory(IReadOnlyList<ItemState> Items, IReadOnlyList<SkillState> Skills, IReadOnlyList<int>? Wings = null, CharacterExtras? Extras = null);
+/// <summary>EquippedWing: the stored wing choice (migration 073; 0 none stored: the default rule applies).</summary>
+public sealed record PlayerInventory(IReadOnlyList<ItemState> Items, IReadOnlyList<SkillState> Skills, IReadOnlyList<int>? Wings = null, CharacterExtras? Extras = null,
+    int EquippedWing = 0);
 // Trusted server calls only: progress changes are not accepted from a player API.
 public sealed record AdminCommand(Guid RequestId, Guid CharacterId, string Command,
     string? BuildId = null, int TemplateId = 0, long Quantity = 1, int Level = 1,
@@ -100,6 +102,8 @@ public interface IGameplayStore
     Task<bool> GrantTitleAsync(VerifiedAccount account, Guid character, int titleId, CancellationToken ct = default) => Task.FromResult(false);
     /// <summary>The equipped title of a category (1..3) or the shown one (0); 0 clears. The title must be owned.</summary>
     Task<bool> SetTitleAsync(VerifiedAccount account, Guid character, int category, int titleId, CancellationToken ct = default) => Task.FromResult(false);
+    /// <summary>The equipped wing (migration 073); 0 clears. A wing must be registered to the character (game.character_wings).</summary>
+    Task<bool> SetWingAsync(VerifiedAccount account, Guid character, int wingId, CancellationToken ct = default) => Task.FromResult(false);
     /// <summary>Skins added to the collection (a count per skin).</summary>
     Task<bool> GrantSkinsAsync(VerifiedAccount account, Guid character, IReadOnlyList<int> skins, CancellationToken ct = default) => Task.FromResult(false);
     /// <summary>Equipped skins by ESkinEquipSlot; 0 clears the slot. Each skin must be owned.</summary>

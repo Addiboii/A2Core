@@ -1281,13 +1281,52 @@ Check(staffSession.Resource.HpMax != 1500 && staffAppear.AsSpan().IndexOf(hpPair
 var fpWing = BitConverter.GetBytes(GameSession.FpMax).Concat(BitConverter.GetBytes(GameSession.FpMax)).Append((byte)1).Concat(wingBytes).ToArray();
 Check(staffAppear.AsSpan().IndexOf(fpWing) > 0, "staff appear carries fp/fp_max, the relationship (Light) then the default Light wing");
 Check(staffEntry.Any(b => b.SequenceEqual(GamePackets.WingList([(30200600, 0)]))), "staff world entry sends WingList with the wing");
-Check(staffSession.AcquireAllWings().Single().SequenceEqual(GamePackets.WingList(GamePackets.LightWings.Select(id => (id, (byte)0)).ToList())),
-      "AcquireWingAll sends every Light wing (41) as the WingList");
+Check(staffSession.AcquireAllWings().Single().SequenceEqual(GamePackets.WingList(WingTables.Embedded.OfRace(1).Select(id => (id, (byte)0)).ToList())),
+      "AcquireWingAll sends every Light wing as the WingList");
+// Wing.dat of build 26262663 (tools/data/wings.json): 84 wings, 42 per race; the default Light wing 30200600 has HPMax 200,
+// 30100300 HPMax 500 and Defense 400 (EquipStatList).
+Check(WingTables.Embedded.Count == 84 && WingTables.Embedded.OfRace(1).Count == 42 && WingTables.Embedded.OfRace(2).Count == 42
+      && WingTables.Embedded.Stat(30200600, 0, "HPMax") == 200 && WingTables.Embedded.Stat(30100300, 0, "Defense") == 400,
+      "wings.json: 42 wings per race with their EquipStatList");
+staffStore.Wings.AddRange(WingTables.Embedded.OfRace(1));   // the stored registration AcquireWingAll saves through the policy
+var (hpWithDefault, defenseWithDefault) = (staffSession.Resource.HpMax, staffSession.Defense);
 var wingChange = await staffSession.HandleAsync(new PacketWriter().U16(0x5674).U8(0).I32(30100300).ToArray(), Now);
-Check(wingChange.Count == 2 && wingChange[0].SequenceEqual(GamePackets.WingChangeReply(30100300, false))
-      && wingChange[1].SequenceEqual(GamePackets.WingChangeNotice(1, 30100300, false)), "changing to a registered wing (0x5674 -> 0x5675 + 0x5676)");
+Check(wingChange.Count >= 3 && wingChange[0].SequenceEqual(GamePackets.WingChangeReply(30100300, false))
+      && wingChange[1].SequenceEqual(GamePackets.WingChangeNotice(1, 30100300, false)) && wingChange.Any(b => b[0] == 0x4a && b[1] == 0x36),
+      "changing to a registered wing (0x5674 -> 0x5675 + 0x5676, then the stats)");
+Check(staffStore.EquippedWing == 30100300 && staffSession.Resource.HpMax == hpWithDefault + 300 && staffSession.Defense == defenseWithDefault + 400,
+      "the worn wing is stored and its EquipStatList replaces the default wing's (HPMax 200 -> 500, Defense +400)");
 Check((await staffSession.HandleAsync(new PacketWriter().U16(0x5674).U8(0).I32(40100300).ToArray(), Now)).Single()
-      .SequenceEqual(GamePackets.WingChangeReply(40100300, false, 1)), "an unregistered wing is refused");
+      .SequenceEqual(GamePackets.WingChangeReply(40100300, false, 1)) && staffStore.EquippedWing == 30100300, "an unregistered wing (of the other race) is refused");
+Check((await staffSession.HandleAsync(new PacketWriter().U16(0x5674).U8(0).I32(99999999).ToArray(), Now)).Single()
+      .SequenceEqual(GamePackets.WingChangeReply(99999999, false, 1)), "a wing Wing.dat does not know is refused");
+{
+    staffStore.SetWingCalls = 0;
+    var relog = new GameSession(data, new GameSessionOptions { StaffRole = (_, _) => Task.FromResult<string?>("admin") }, new Random(3)) { Store = staffStore };
+    await relog.HandleAsync(Strings(0x3613, Session, "", "t", "").Concat(new byte[9]).ToArray(), Now);
+    await relog.HandleAsync(new PacketWriter().U16(0x361f).Varint(staffStore.States[0].WireId << 16).I32(0).Vec3(Vector3d.Zero).ToArray(), Now);
+    var relogEntry = await relog.HandleAsync(new PacketWriter().U16(0x3622).I32(1).ToArray(), Now);
+    var relogAppear = relogEntry.Single(b => b[0] == 0x33 && b[1] == 0x36);
+    Check(relogAppear.AsSpan().IndexOf(BitConverter.GetBytes(GameSession.FpMax).Concat(BitConverter.GetBytes(GameSession.FpMax)).Append((byte)1)
+          .Concat(BitConverter.GetBytes(30100300)).ToArray()) > 0 && relog.Resource.HpMax == staffSession.Resource.HpMax,
+          "after a relog the stored wing is worn again (CharState wing 30100300) with its stats");
+    staffStore.Wings.Remove(30100300);
+    staffStore.Wings.Remove(30200600);
+    var lost = new GameSession(data, new GameSessionOptions { StaffRole = (_, _) => Task.FromResult<string?>("admin") }, new Random(3)) { Store = staffStore };
+    await lost.HandleAsync(Strings(0x3613, Session, "", "t", "").Concat(new byte[9]).ToArray(), Now);
+    await lost.HandleAsync(new PacketWriter().U16(0x361f).Varint(staffStore.States[0].WireId << 16).I32(0).Vec3(Vector3d.Zero).ToArray(), Now);
+    var lostAppear = (await lost.HandleAsync(new PacketWriter().U16(0x3622).I32(1).ToArray(), Now)).Single(b => b[0] == 0x33 && b[1] == 0x36);
+    Check(lostAppear.AsSpan().IndexOf(wingBytes) > 0 && lostAppear.AsSpan().IndexOf(BitConverter.GetBytes(30100300)) < 0 && staffStore.SetWingCalls == 0,
+          "a stored wing no longer registered falls back to the default wing; the stored row is left alone at login");
+    // Back to the default wing: implied for staff (not registered), so the stored choice is cleared.
+    Check((await lost.HandleAsync(new PacketWriter().U16(0x5674).U8(0).I32(30100300).ToArray(), Now)).Single()
+          .SequenceEqual(GamePackets.WingChangeReply(30100300, false, 1)), "a wing no longer registered cannot be worn");
+    var toDefault = await lost.HandleAsync(new PacketWriter().U16(0x5674).U8(0).I32(30200600).ToArray(), Now);
+    Check(toDefault[0].SequenceEqual(GamePackets.WingChangeReply(30200600, false)) && staffStore.EquippedWing == 0 && lost.Resource.HpMax == hpWithDefault,
+          "the implied default wing clears the stored choice; its stats are back");
+    staffStore.Wings.Add(30100300);
+    staffStore.Wings.Add(30200600);
+}
 // Quests: a character without quests starts on HQ1101010 (opening quest skipped), which the world entry lists.
 Check(staffStore.Quests.Any(q => q.Code == "HQ1100010" && q.Status == QuestLog.Rewarded) && staffSession.Quests?.Get("HQ1101010") is { Status: QuestLog.Incomplete },
       "first selection: the opening quest is done and HQ1101010 is active");
@@ -2747,6 +2786,16 @@ sealed partial class FakeStore : INativeCharacterStore
     public List<ItemState> Items { get; } = [];
     public List<int> Wings { get; } = [];
     public Task<IReadOnlyList<int>> WingsAsync(Guid character, CancellationToken ct) => Task.FromResult<IReadOnlyList<int>>(Wings.ToList());
+    public int EquippedWing { get; set; }
+    public int SetWingCalls { get; set; }
+    public Task<int> EquippedWingAsync(Guid character, CancellationToken ct) => Task.FromResult(EquippedWing);
+    public Task<bool> SetWingAsync(Guid character, int wingId, CancellationToken ct)
+    {
+        SetWingCalls++;
+        if (wingId != 0 && !Wings.Contains(wingId)) return Task.FromResult(false);
+        EquippedWing = wingId;
+        return Task.FromResult(true);
+    }
     public List<SkillState> Skills { get; } = [];
     public Task<IReadOnlyList<SkillState>> SkillsAsync(Guid character, CancellationToken ct) => Task.FromResult<IReadOnlyList<SkillState>>(Skills.ToList());
     public Task<bool> SetSkillLevelAsync(Guid character, int skillId, int level, int purchased, CancellationToken ct)

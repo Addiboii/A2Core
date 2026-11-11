@@ -772,32 +772,14 @@ public static class GamePackets
     public static byte[] ClientEnvSettingReply() => PacketWriter.Opcode(0x8d43).I32(0).ToArray();
     /// <summary>0x8d41 UpdateClientOption_RS: u16 result, answering the 0x8d40 option save.</summary>
     public static byte[] ClientOptionReply() => PacketWriter.Opcode(0x8d41).U16(0).ToArray();
-    /// <summary>0x5672 WingList_NT: count, {i32 wing, u8 enchant}. Official world entry "00" (empty); non-empty framing is a CANDIDATE.</summary>
+    /// <summary>0x5672 WingList_NT: count, {i32 wing, u8 enchant} (usmap _wing_list of DevPacketData_Common_WingInfo {_wing_id int,
+    /// _enchant_level byte}). Official world entry "00" (empty); non-empty framing is a CANDIDATE.</summary>
     public static byte[] WingList(IReadOnlyList<(int Id, byte Enchant)> wings)
     {
         var w = PacketWriter.Opcode(0x5672).Varint(wings.Count);
         foreach (var (id, enchant) in wings) w.I32(id).U8(enchant);
         return w.ToArray();
     }
-
-    /// <summary>Every wing of Wing.dat by race (41 each; 30xxxxxx Light, 40xxxxxx Dark), for AcquireWingAll.</summary>
-    public static readonly int[] LightWings =
-    [
-        30100300, 30100301, 30100500, 30101000, 30101100, 30101200, 30200101, 30200400, 30200500, 30200600,
-        30200703, 30201400, 30201500, 30201900, 30202100, 30202101, 30202102, 30202200, 30202300, 30202400,
-        30202500, 30202501, 30202502, 30202600, 30202700, 30202800, 30203300, 30300300, 30400200, 30400300,
-        30400400, 30400500, 30400900, 30500100, 30500101, 30500200, 30600100, 30600200, 30600300, 30700400,
-        30701000,
-    ];
-    public static readonly int[] DarkWings =
-    [
-        40100300, 40100301, 40100500, 40101000, 40101100, 40101200, 40200100, 40200400, 40200503, 40200601,
-        40200700, 40201400, 40201500, 40201900, 40202100, 40202101, 40202102, 40202200, 40202300, 40202400,
-        40202500, 40202501, 40202502, 40202600, 40202700, 40202800, 40203300, 40300300, 40400200, 40400300,
-        40400400, 40400500, 40400900, 40500100, 40500101, 40500200, 40600100, 40600200, 40600300, 40700400,
-        40701000,
-    ];
-    public static int[] Wings(int race) => race == 2 ? DarkWings : LightWings;
 
     /// <summary>0x5675 WingChange_RS: result, packed is_wing_skin, wing id (answering 0x5674). CANDIDATE.</summary>
     public static byte[] WingChangeReply(int wingId, bool skin, int result = 0) => PacketWriter.Opcode(0x5675).U16(result).Bool(skin).I32(wingId).ToArray();

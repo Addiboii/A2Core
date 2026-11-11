@@ -207,6 +207,12 @@ await using(var source=NpgsqlDataSource.Create(connectionString))
     await game.AdminAsync(second,new(Guid.NewGuid(),id,"wings",Wings:[30200600,30100300]));
     await game.AdminAsync(second,new(Guid.NewGuid(),id,"wings",Wings:[30200600,30200400]));
     Check((await game.InventoryAsync(first,id))!.Wings!.SequenceEqual(new[]{30100300,30200400,30200600}),"wings stored once each and loaded with the inventory");
+    // The worn wing (migration 073): only a registered wing, only by the owner, 0 clears; read back with the inventory.
+    Check((await game.InventoryAsync(first,id))!.EquippedWing==0,"no wing choice stored by default");
+    Check(!await game.SetWingAsync(first,id,40100300) && !await game.SetWingAsync(second,id,30100300),"an unregistered wing or another account's character is refused");
+    await Reject(()=>game.SetWingAsync(first,id,-1),"invalid_wing");
+    Check(await game.SetWingAsync(first,id,30100300) && await game.SetWingAsync(first,id,30200400) && (await game.InventoryAsync(first,id))!.EquippedWing==30200400,"the wing choice is stored once and replaced");
+    Check(await game.SetWingAsync(first,id,0) && (await game.InventoryAsync(first,id))!.EquippedWing==0 && await game.SetWingAsync(first,id,30100300),"0 clears the choice");
     // Friends and blocks: a request by name, accepted by the other side, both see the friendship; a block ends it.
     var staffChar=(await game.AdminFindCharactersAsync(second,"[GM]Staff")).Single().CharacterId;
     Check((await game.FriendRequestAsync(first,id,"nobody-here")).Result=="not_found" && (await game.FriendRequestAsync(first,id,"starter")).Result=="self","friend request: unknown name and self refused");
