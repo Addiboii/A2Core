@@ -5,6 +5,9 @@ import unittest
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 
+from unittest.mock import patch
+
+from tools import postgres_dev
 from tools.postgres_dev import literal, migration_script, sql, migrate, role_statement
 
 
@@ -22,6 +25,46 @@ class MigrationTests(unittest.TestCase):
         self.assertIn('Applied migration changed', script)
         self.assertIn('\\if :apply', script)
         self.assertTrue(script.endswith('COMMIT;'))
+
+
+class TimeoutTests(unittest.TestCase):
+    def calls(self, action):
+        seen = []
+        with patch.object(postgres_dev, 'run', lambda binary, args=(), **kw: seen.append((binary, kw.get('timeout', 180)))),                 patch.object(postgres_dev, 'sql', lambda text, **kw: seen.append(('psql', kw.get('timeout', 180))) or
+                             type('R', (), {'stdout': ''})()):
+            try:
+                action()
+            except Exception:
+                pass
+        return seen
+
+    def test_long_operations_use_the_configured_timeout(self):
+        with patch.dict(os.environ, {'AION_PG_TIMEOUT': '7200'}):
+            self.assertEqual(postgres_dev.long_timeout(), 7200)
+            seen = self.calls(lambda: postgres_dev.verify_backup('x.dump'))
+            self.assertIn(('pg_restore', 7200), seen)
+            # The short calls around it (create, count, drop) keep 180 s.
+            self.assertTrue(all(timeout == 180 for binary, timeout in seen if binary == 'psql'))
+        with patch.dict(os.environ, {'AION_PG_TIMEOUT': ''}):
+            self.assertEqual(postgres_dev.long_timeout(), 3600)
+        for bad in ('soon', '0', '-5'):
+            with patch.dict(os.environ, {'AION_PG_TIMEOUT': bad}), self.assertRaises(SystemExit):
+                postgres_dev.long_timeout()
+
+    def test_import_catalog_uses_the_long_timeout(self):
+        with tempfile.TemporaryDirectory() as directory:
+            folder = Path(directory)
+            (folder / 'manifest.json').write_text('{"counts": {"items": 0, "skills": 0}}', encoding='utf-8')
+            (folder / 'entries.jsonl').write_text('', encoding='utf-8')
+            with patch.object(postgres_dev, 'HOME', folder), patch.dict(os.environ, {'AION_PG_TIMEOUT': '4000'}):
+                seen = self.calls(lambda: postgres_dev.import_catalog(folder))
+        self.assertEqual(seen, [('psql', 4000)])
+
+    def test_short_calls_default_to_180_seconds(self):
+        self.assertEqual(postgres_dev.SHORT_TIMEOUT, 180)
+        import inspect
+        self.assertEqual(inspect.signature(postgres_dev.run).parameters['timeout'].default, 180)
+        self.assertEqual(inspect.signature(postgres_dev.sql).parameters['timeout'].default, 180)
 
 
 @unittest.skipUnless(os.environ.get('AION_POSTGRES_TESTS') == '1', 'Requires local PostgreSQL and imported catalogue')

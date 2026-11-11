@@ -26,6 +26,20 @@ PORT = 55432
 # AION_PG_DATABASE: another database of the cluster (a disposable restore to rehearse an upgrade); default aion.
 DATABASE = os.environ.get('AION_PG_DATABASE') or 'aion'
 WINDOWS = os.name == 'nt'
+# OURS: psql/pg_dump calls end after 180 s; long operations (backup, verify-backup, import-catalog,
+# upgrade-catalog) wait AION_PG_TIMEOUT seconds instead (default 3600: a large database or catalogue).
+SHORT_TIMEOUT = 180
+
+
+def long_timeout():
+    value = os.environ.get('AION_PG_TIMEOUT', '').strip()
+    try:
+        seconds = int(value) if value else 3600
+    except ValueError:
+        raise SystemExit(f'AION_PG_TIMEOUT must be a number of seconds, not {value!r}') from None
+    if seconds <= 0:
+        raise SystemExit('AION_PG_TIMEOUT must be a positive number of seconds')
+    return seconds
 
 
 def binaries():
@@ -45,7 +59,7 @@ def literal(text):
     return "'" + str(text).replace("'", "''") + "'"
 
 
-def run(binary, args=(), *, text=None, role='aion_admin', database=None, check=True):
+def run(binary, args=(), *, text=None, role='aion_admin', database=None, check=True, timeout=SHORT_TIMEOUT):
     database = database or DATABASE
     env = os.environ.copy()
     if (HOME / 'credentials.json').exists():
@@ -65,7 +79,7 @@ def run(binary, args=(), *, text=None, role='aion_admin', database=None, check=T
             result = subprocess.CompletedProcess(command, process.returncode, '', log.read())
     else:
         result = subprocess.run(command, input=text, encoding='utf-8', capture_output=True,
-                                env=env, creationflags=flags, timeout=180)
+                                env=env, creationflags=flags, timeout=timeout)
     if check and result.returncode:
         # SQL errors can contain input; redact generated credentials before printing.
         message = result.stderr
@@ -76,9 +90,9 @@ def run(binary, args=(), *, text=None, role='aion_admin', database=None, check=T
     return result
 
 
-def sql(text, *, role='aion_admin', database=None, check=True):
+def sql(text, *, role='aion_admin', database=None, check=True, timeout=SHORT_TIMEOUT):
     return run('psql', ['-X', '-q', '-A', '-t', '-v', 'ON_ERROR_STOP=1'], text=text,
-               role=role, database=database, check=check)
+               role=role, database=database, check=check, timeout=timeout)
 
 
 def setup():
@@ -194,7 +208,7 @@ def import_catalog(directory):
             stream.write(f"INSERT INTO catalog.{kind}(build_id,template_id,name,category,definition) SELECT {literal(build_id)},(document->>'id')::integer,document->>'name',document->>'category',document FROM incoming WHERE document->>'kind'='{kind}' ON CONFLICT DO NOTHING;\n")
         stream.write('COMMIT;\n')
     try:
-        run('psql', ['-X', '-q', '-v', 'ON_ERROR_STOP=1', '-f', path])
+        run('psql', ['-X', '-q', '-v', 'ON_ERROR_STOP=1', '-f', path], timeout=long_timeout())
     finally:
         path.unlink(missing_ok=True)
     return {'build_id': build_id, 'counts': counts}
@@ -215,7 +229,7 @@ def upgrade_catalog(directory):
     if newest != build:
         raise ValueError(f'{build[:12]} is not the newest imported catalogue ({newest[:12]}); not moving back')
     output = sql(f'BEGIN; SELECT pg_advisory_xact_lock(731924002); SET LOCAL ROLE aion_owner; '
-                 f'SELECT catalog.adopt_build({literal(build)}); COMMIT;').stdout
+                 f'SELECT catalog.adopt_build({literal(build)}); COMMIT;', timeout=long_timeout()).stdout
     adopted = json.loads(next(line for line in output.splitlines() if line.startswith('{')))
     for tool in (['class_skills.py', 'install'], ['configure_starters.py'], ['equipment_rules.py']):
         subprocess.run([sys.executable, str(ROOT / 'tools' / tool[0]), *tool[1:], '--build-id', build], check=True)
@@ -231,7 +245,7 @@ def verify_backup(path):
     sql(f'CREATE DATABASE {name};', database='postgres')
     try:
         run('pg_restore', ['--no-owner', '--no-privileges', '--exit-on-error',
-                           '--dbname', name, Path(path).resolve()])
+                           '--dbname', name, Path(path).resolve()], timeout=long_timeout())
         return sql("SELECT 'items='||count(*) FROM catalog.items;"
                    "SELECT 'skills='||count(*) FROM catalog.skills;"
                    "SELECT 'migrations='||count(*) FROM public.schema_migrations;", database=name).stdout.strip()
@@ -291,7 +305,7 @@ def main():
         if args.output.exists():
             raise ValueError('Backup destination already exists')
         args.output.parent.mkdir(parents=True, exist_ok=True)
-        run('pg_dump', ['-Fc', '-f', args.output])
+        run('pg_dump', ['-Fc', '-f', args.output], timeout=long_timeout())
         print('Backup saved:', args.output)
     elif args.command == 'verify-backup':
         print(verify_backup(args.path))
