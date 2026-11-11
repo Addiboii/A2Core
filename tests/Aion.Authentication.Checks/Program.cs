@@ -124,18 +124,37 @@ Check(await auth.RevokeSessionsAsync(managed.Token),"revoke all sessions");
 Check(await auth.AuthenticateAsync(otherSession.Token,default) is null,"other device revoked");
 await Execute($"INSERT INTO auth.account_roles VALUES('{manager.AccountId}','admin')");
 managed=(await auth.SignInAsync("managed",password+"new",default))!;
+// Staff sessions (migration 075): only the staff sign-in of a staff account gives one; the staff operations need it.
+Aion.Application.Authentication.ITotpAuthentication staffSignIn = auth;
+Check(await Scalar<string>($"SELECT kind FROM auth.sessions WHERE account_id='{manager.AccountId}' LIMIT 1")=="player","sessions are player sessions by default");
+Check((await staffSignIn.SignInAsync("managed",password+"new",TimeSpan.FromHours(1),Aion.Application.Authentication.SessionKind.Staff,default)) is { Session: null, NotStaff: true },
+      "staff sign-in refused without a staff role");
+var managerStaff=(await staffSignIn.SignInAsync("manager",password,TimeSpan.FromHours(1),Aion.Application.Authentication.SessionKind.Staff,default))?.Session
+    ?? throw new Exception("Staff sign-in failed");
+Check(await Scalar<string>($"SELECT kind FROM auth.sessions WHERE account_id='{manager.AccountId}' AND kind='staff'")=="staff","staff session stored as staff");
+Check((await auth.AuthenticateStaffAsync(managerStaff.Token,default))?.AccountId==manager.AccountId && await auth.AuthenticateStaffAsync(manager.Token,default) is null,
+      "only the staff session authenticates as staff");
+Check((await auth.AuthenticateAsync(managerStaff.Token,default))?.AccountId==manager.AccountId,"a staff session is still a session");
+Check(!await auth.SetStaffRoleAsync(manager.Token,managed.AccountId,"gamemaster",true),"an admin's player session cannot change roles");
+Check(!await auth.DisableAccountAsync(manager.Token,managed.AccountId),"an admin's player session cannot disable accounts");
+await DeniedState(authSource,$"INSERT INTO auth.sessions(token_hash,account_id,expires_at,kind) VALUES(sha256('x'::bytea),'{managed.AccountId}',now()+interval '1 hour','staff')",
+      "42501","no staff session row for an account without a staff role");
 // Staff roles: admins only, through auth.set_staff_role, audited.
 Check(!await auth.SetStaffRoleAsync(managed.Token,managed.AccountId,"admin",true),"ordinary user cannot grant roles");
-Check(await auth.SetStaffRoleAsync(manager.Token,managed.AccountId,"gamemaster",true),"admin grants gamemaster");
+Check(await auth.SetStaffRoleAsync(managerStaff.Token,managed.AccountId,"gamemaster",true),"admin grants gamemaster");
+var managedStaff=(await staffSignIn.SignInAsync("managed",password+"new",TimeSpan.FromHours(1),Aion.Application.Authentication.SessionKind.Staff,default))?.Session
+    ?? throw new Exception("Staff sign-in of the new gamemaster failed");
 Check(await Scalar<string>($"SELECT string_agg(role,',') FROM auth.account_roles WHERE account_id='{managed.AccountId}'")=="gamemaster","granted role stored");
-Check(!await auth.SetStaffRoleAsync(manager.Token,managed.AccountId,"gm",true),"retired gm role rejected");
-Check(!await auth.SetStaffRoleAsync(manager.Token,manager.AccountId,"admin",false),"admin cannot remove own admin role");
-Check(await auth.SetStaffRoleAsync(manager.Token,managed.AccountId,"gamemaster",false),"admin revokes gamemaster");
+Check(!await auth.SetStaffRoleAsync(managerStaff.Token,managed.AccountId,"gm",true),"retired gm role rejected");
+Check(!await auth.SetStaffRoleAsync(managerStaff.Token,manager.AccountId,"admin",false),"admin cannot remove own admin role");
+Check(await auth.SetStaffRoleAsync(managerStaff.Token,managed.AccountId,"gamemaster",false),"admin revokes gamemaster");
 Check(await Scalar<long>($"SELECT count(*) FROM auth.account_roles WHERE account_id='{managed.AccountId}'")==0,"revoked role removed");
+Check(await auth.AuthenticateAsync(managedStaff.Token,default) is null && await auth.AuthenticateAsync(managed.Token,default) is not null,
+      "losing the last staff role ends the staff sessions, not the player ones");
 Check(await Scalar<long>("SELECT count(*) FROM audit.events WHERE action IN ('role_granted','role_revoked')")==2,"role changes audited");
 await Denied(authSource, $"INSERT INTO auth.account_roles VALUES('{managed.AccountId}','admin')", "auth role cannot write roles directly");
-Check(!await auth.DisableAccountAsync(manager.Token,manager.AccountId),"self disable prevented");
-Check(await auth.DisableAccountAsync(manager.Token,managed.AccountId),"admin disables target");
+Check(!await auth.DisableAccountAsync(managerStaff.Token,manager.AccountId),"self disable prevented");
+Check(await auth.DisableAccountAsync(managerStaff.Token,managed.AccountId),"admin disables target");
 Check(await auth.AuthenticateAsync(managed.Token,default) is null && await auth.SignInAsync("managed",password+"new",default) is null,"disabled account cannot sign in or reuse session");
 Check(await Scalar<long>("SELECT count(*) FROM audit.events WHERE action='account_disabled'")==1,"disable audit persisted");
 var worldUser=(await auth.SignInAsync("race",password,default))!;
@@ -194,13 +213,23 @@ for (var i = 0; i < 4; i++) await totp.CompleteSignInAsync(third.ChallengeToken,
 Check(await totp.CompleteSignInAsync(third.ChallengeToken, null, recovery[1], default) is null, "wrong codes lock code entry per account");
 await Execute($"UPDATE auth.account_totp SET locked_until=now()-interval '1 second' WHERE account_id='{twoId}'");
 Check(await totp.CompleteSignInAsync(third.ChallengeToken, null, recovery[1], default) is not null, "code lock expires");
+// A staff sign-in of a two-step staff account: the challenge carries the kind; the role is checked again at the code.
+await Execute($"INSERT INTO auth.account_roles VALUES('{twoId}','gamemaster')");
+var staffChallenge = (await totp.SignInAsync("twostep", password, TimeSpan.FromHours(1), Aion.Application.Authentication.SessionKind.Staff, default))!.Challenge!;
+var twoStepStaff = await totp.CompleteSignInAsync(staffChallenge.ChallengeToken, null, recovery[3], default) ?? throw new Exception("Two-step staff sign-in failed");
+Check((await auth.AuthenticateStaffAsync(twoStepStaff.Token, default))?.AccountId == twoId, "two-step staff sign-in gives a staff session");
+var lateChallenge = (await totp.SignInAsync("twostep", password, TimeSpan.FromHours(1), Aion.Application.Authentication.SessionKind.Staff, default))!.Challenge!;
+await Execute($"DELETE FROM auth.account_roles WHERE account_id='{twoId}'");
+Check(await auth.AuthenticateAsync(twoStepStaff.Token, default) is null, "role removed: staff session ended");
+Check(await totp.CompleteSignInAsync(lateChallenge.ChallengeToken, null, recovery[4], default) is null, "role removed before the code: no staff session");
 auth.ConfigureTotp(null);
 Check((await totp.SignInAsync("twostep", password, TimeSpan.FromHours(8), default)) is { Session: null, Challenge: null, Unavailable: true }, "no key: two-step account refused, not let through");
 auth.ConfigureTotp(Aion.Core.Security.TotpSecretProtection.TryCreate(Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32))));
 Check(!await totp.DisableAsync(twoId, password, null, null, default), "disable needs a code");
 Check(await totp.RegenerateRecoveryCodesAsync(twoId, password, null, recovery[2], default) is { Length: 10 }, "recovery codes renewed with a recovery code (changed key)");
-var staffSession = (await auth.SignInAsync("manager", password, default))!;
+var staffSession = (await totp.SignInAsync("manager", password, TimeSpan.FromHours(1), Aion.Application.Authentication.SessionKind.Staff, default))!.Session!;
 Check(!await totp.AdminResetAsync(twoSession.Token, twoId, default), "ordinary user cannot reset two-step");
+Check(!await totp.AdminResetAsync((await auth.SignInAsync("manager", password, default))!.Token, twoId, default), "an admin's player session cannot reset two-step");
 Check(await totp.AdminResetAsync(staffSession.Token, twoId, default), "admin resets two-step");
 Check(!(await totp.StatusAsync(twoId, default)).Enabled && await auth.SignInAsync("twostep", password, default) is not null, "reset account signs in with the password");
 Check(await Scalar<long>($"SELECT count(*) FROM audit.events WHERE action='totp_reset' AND details->>'target'='{twoId}'") == 1, "two-step reset audited");
@@ -210,6 +239,11 @@ Console.WriteLine($"{checks} authentication/database checks passed.");
 void Check(bool ok, string name) { if (!ok) throw new Exception("Check failed: " + name); checks++; }
 async Task<T> Scalar<T>(string sql) { await using var c = admin.CreateCommand(sql); return (T)(await c.ExecuteScalarAsync())!; }
 async Task Execute(string sql) { await using var c = admin.CreateCommand(sql); await c.ExecuteNonQueryAsync(); }
+async Task DeniedState(NpgsqlDataSource source, string sql, string state, string name)
+{
+    try { await using var c = source.CreateCommand(sql); await c.ExecuteNonQueryAsync(); throw new Exception("Unexpectedly allowed: " + name); }
+    catch (PostgresException e) when (e.SqlState == state) { Check(true, name); }
+}
 async Task Denied(NpgsqlDataSource source, string sql, string name)
 {
     try { await using var c = source.CreateCommand(sql); await c.ExecuteNonQueryAsync(); throw new Exception("Permission unexpectedly allowed: " + name); }

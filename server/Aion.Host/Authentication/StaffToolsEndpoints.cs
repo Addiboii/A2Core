@@ -40,10 +40,10 @@ public static partial class StaffToolsEndpoints
 
         // ---------- Moderation ----------
         staff.MapGet("/sanctions", async (bool? all, HttpContext ctx, IAccountAuthentication auth, IStaffTools tools, CancellationToken ct) =>
-            await Signed(ctx, auth, ct) is { } a ? Results.Ok(await tools.SanctionsAsync(a, all == true, ct)) : Results.Unauthorized());
+            await StaffSessions.StaffAsync(ctx, auth, ct) is { } a ? Results.Ok(await tools.SanctionsAsync(a, all == true, ct)) : Results.Unauthorized());
         staff.MapPost("/sanctions", async (SanctionRequest input, HttpContext ctx, IAccountAuthentication auth, IStaffTools tools, ServerControl control, CancellationToken ct) =>
         {
-            if (await Signed(ctx, auth, ct) is not { } a) return Results.Unauthorized();
+            if (await StaffSessions.StaffAsync(ctx, auth, ct) is not { } a) return Results.Unauthorized();
             TimeSpan? duration = input.Hours is { } h ? TimeSpan.FromHours(h) : null;
             var sanction = await tools.SanctionAsync(a, input.Player ?? "", input.Kind ?? "", input.Reason ?? "", duration, ct);
             await control.RefreshAsync(ct);
@@ -52,28 +52,28 @@ public static partial class StaffToolsEndpoints
         });
         staff.MapDelete("/sanctions/{id:long}", async (long id, HttpContext ctx, IAccountAuthentication auth, IStaffTools tools, ServerControl control, CancellationToken ct) =>
         {
-            if (await Signed(ctx, auth, ct) is not { } a) return Results.Unauthorized();
+            if (await StaffSessions.StaffAsync(ctx, auth, ct) is not { } a) return Results.Unauthorized();
             var revoked = await tools.RevokeSanctionAsync(a, id, ct);
             await control.RefreshAsync(ct);
             return Results.Ok(new { revoked });
         });
         staff.MapGet("/chat", async (string? q, string? sender, long? before, int? limit, HttpContext ctx, IAccountAuthentication auth, IStaffTools tools, CancellationToken ct) =>
-            await Signed(ctx, auth, ct) is { } a ? Results.Ok(await tools.ChatLogAsync(a, q, sender, before, limit ?? 150, ct)) : Results.Unauthorized());
+            await StaffSessions.StaffAsync(ctx, auth, ct) is { } a ? Results.Ok(await tools.ChatLogAsync(a, q, sender, before, limit ?? 150, ct)) : Results.Unauthorized());
         staff.MapGet("/tickets", async (string? status, HttpContext ctx, IAccountAuthentication auth, IStaffTools tools, CancellationToken ct) =>
-            await Signed(ctx, auth, ct) is { } a ? Results.Ok(await tools.TicketsAsync(a, status ?? "open", ct)) : Results.Unauthorized());
+            await StaffSessions.StaffAsync(ctx, auth, ct) is { } a ? Results.Ok(await tools.TicketsAsync(a, status ?? "open", ct)) : Results.Unauthorized());
         staff.MapPost("/tickets/{id:long}", async (long id, TicketUpdate input, HttpContext ctx, IAccountAuthentication auth, IStaffTools tools, CancellationToken ct) =>
-            await Signed(ctx, auth, ct) is { } a ? Results.Ok(new { updated = await tools.UpdateTicketAsync(a, id, input.Status ?? "", input.Note ?? "", ct) }) : Results.Unauthorized());
+            await StaffSessions.StaffAsync(ctx, auth, ct) is { } a ? Results.Ok(new { updated = await tools.UpdateTicketAsync(a, id, input.Status ?? "", input.Note ?? "", ct) }) : Results.Unauthorized());
 
         // ---------- Maintenance ----------
         staff.MapGet("/maintenance", async (HttpContext ctx, IAccountAuthentication auth, IStaffTools tools, CancellationToken ct) =>
         {
-            if (await Signed(ctx, auth, ct) is not { } a) return Results.Unauthorized();
+            if (await StaffSessions.StaffAsync(ctx, auth, ct) is not { } a) return Results.Unauthorized();
             if ((await tools.RolesAsync(a, ct)).Count == 0) return Results.StatusCode(403);
             return Results.Ok(await tools.MaintenanceAsync(ct));
         });
         staff.MapPost("/maintenance", async (MaintenanceRequest input, HttpContext ctx, IAccountAuthentication auth, IStaffTools tools, ServerControl control, CancellationToken ct) =>
         {
-            if (await Signed(ctx, auth, ct) is not { } a) return Results.Unauthorized();
+            if (await StaffSessions.StaffAsync(ctx, auth, ct) is not { } a) return Results.Unauthorized();
             var state = await tools.SetMaintenanceAsync(a, input.Enabled, input.Message ?? "", ct);
             await control.RefreshAsync(ct);
             var kicked = input.Enabled && input.Kick ? await control.KickPlayersAsync(state.Message, ct) : 0;
@@ -82,19 +82,19 @@ public static partial class StaffToolsEndpoints
 
         // ---------- Events and boosts ----------
         staff.MapGet("/events", async (HttpContext ctx, IAccountAuthentication auth, IStaffTools tools, ServerControl control, CancellationToken ct) =>
-            await Signed(ctx, auth, ct) is { } a
+            await StaffSessions.StaffAsync(ctx, auth, ct) is { } a
                 ? Results.Ok(new { events = await tools.EventsAsync(a, ct), boosts = new { exp = control.Boosts.Exp, drop = control.Boosts.Drop } })
                 : Results.Unauthorized());
         staff.MapPost("/events", async (EventRequest input, HttpContext ctx, IAccountAuthentication auth, IStaffTools tools, ServerControl control, CancellationToken ct) =>
         {
-            if (await Signed(ctx, auth, ct) is not { } a) return Results.Unauthorized();
+            if (await StaffSessions.StaffAsync(ctx, auth, ct) is not { } a) return Results.Unauthorized();
             var created = await tools.CreateEventAsync(a, new NewScheduledEvent(input.Kind ?? "", input.StartsAt, input.EndsAt, input.RepeatMinutes, input.Text ?? "", input.Multiplier), ct);
             await control.RefreshAsync(ct);
             return Results.Ok(created);
         });
         staff.MapDelete("/events/{id:long}", async (long id, HttpContext ctx, IAccountAuthentication auth, IStaffTools tools, ServerControl control, CancellationToken ct) =>
         {
-            if (await Signed(ctx, auth, ct) is not { } a) return Results.Unauthorized();
+            if (await StaffSessions.StaffAsync(ctx, auth, ct) is not { } a) return Results.Unauthorized();
             var cancelled = await tools.CancelEventAsync(a, id, ct);
             await control.RefreshAsync(ct);
             return Results.Ok(new { cancelled });
@@ -102,10 +102,10 @@ public static partial class StaffToolsEndpoints
 
         // ---------- Population, economy and anti-cheat ----------
         staff.MapGet("/population", async (double? hours, HttpContext ctx, IAccountAuthentication auth, IStaffTools tools, CancellationToken ct) =>
-            await Signed(ctx, auth, ct) is { } a ? Results.Ok(await tools.PopulationAsync(a, TimeSpan.FromHours(hours ?? 24), ct)) : Results.Unauthorized());
+            await StaffSessions.StaffAsync(ctx, auth, ct) is { } a ? Results.Ok(await tools.PopulationAsync(a, TimeSpan.FromHours(hours ?? 24), ct)) : Results.Unauthorized());
         staff.MapGet("/economy", async (HttpContext ctx, IAccountAuthentication auth, IStaffTools tools, IServiceProvider services, CancellationToken ct) =>
         {
-            if (await Signed(ctx, auth, ct) is not { } a) return Results.Unauthorized();
+            if (await StaffSessions.StaffAsync(ctx, auth, ct) is not { } a) return Results.Unauthorized();
             var report = await tools.EconomyAsync(a, ct);
             // Live anti-cheat signals: speed-check rejects of players in the world now (read under the world lock).
             var suspects = new List<object>();
@@ -125,7 +125,7 @@ public static partial class StaffToolsEndpoints
         staff.MapPost("/rewards", async (RewardRequest input, HttpContext ctx, IAccountAuthentication auth, IGameplayStore game, IStaffTools tools,
             IServiceProvider services, CancellationToken ct) =>
         {
-            if (await Signed(ctx, auth, ct) is not { } a) return Results.Unauthorized();
+            if (await StaffSessions.StaffAsync(ctx, auth, ct) is not { } a) return Results.Unauthorized();
             var profile = await game.AdminProfileAsync(a, ct);
             if (profile.BuildId is not { } build) return Results.BadRequest(new { error = "no_catalogue" });
             var items = (input.Items ?? []).Where(i => i.Quantity > 0).Select(i => (i.TemplateId, i.Quantity)).ToList();
@@ -181,7 +181,7 @@ public static partial class StaffToolsEndpoints
         // ---------- Monsters on the live map ----------
         staff.MapGet("/npcs", async (string? q, HttpContext ctx, IAccountAuthentication auth, IStaffTools tools, CancellationToken ct) =>
         {
-            if (await Signed(ctx, auth, ct) is not { } a) return Results.Unauthorized();
+            if (await StaffSessions.StaffAsync(ctx, auth, ct) is not { } a) return Results.Unauthorized();
             if ((await tools.RolesAsync(a, ct)).Count == 0) return Results.StatusCode(403);
             var text = (q ?? "").Trim();
             if (text.Length is < 2 or > 64) return Results.Ok(Array.Empty<object>());
@@ -190,7 +190,7 @@ public static partial class StaffToolsEndpoints
         staff.MapGet("/maps/{id:int}/monsters", async (int id, double x, double y, double? r, HttpContext ctx, IAccountAuthentication auth, IStaffTools tools,
             IServiceProvider services, CancellationToken ct) =>
         {
-            if (await Signed(ctx, auth, ct) is not { } a) return Results.Unauthorized();
+            if (await StaffSessions.StaffAsync(ctx, auth, ct) is not { } a) return Results.Unauthorized();
             if ((await tools.RolesAsync(a, ct)).Count == 0) return Results.StatusCode(403);
             var result = await OnMapAsync(services, id, map => map.Monsters(x, y, Math.Clamp(r ?? 20000, 100, 60000), 1500), ct);
             return Results.Ok(result ?? []);

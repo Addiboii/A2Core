@@ -1,7 +1,8 @@
 // Staff dashboard: live overview with the game's maps, characters (level/class/roles, items), announcements,
 // the activity log and server health, through the audited /api/admin endpoints. The server checks roles on every
-// request; this page only hides controls. "Keep me signed in" keeps the session token in localStorage (a 30-day
-// session); otherwise it lives in sessionStorage until the tab closes.
+// request; this page only hides controls. It signs in for a staff session ({ staff: true }, migration 075): the admin
+// API refuses player sessions, so a token from the account page does not work here. "Keep me signed in" keeps the
+// session token in localStorage (a 30-day session); otherwise it lives in sessionStorage until the tab closes.
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { api, ApiError } from '../api';
 import { Button, Icon, Status, type StatusMessage } from '../ui/components';
@@ -177,7 +178,8 @@ function SignIn({ message, onSignedIn, onMessage }:
           body: { challengeToken: challenge.token, code: digits ? code : null, recoveryCode: digits ? null : code } }));
         setChallenge(null);
       } else {
-        const result = await api<{ token?: string; requiresTotp?: boolean; challengeToken?: string }>('/api/accounts/login', { method: 'POST', body: { username, password: data.get('password'), remember } });
+        const result = await api<{ token?: string; requiresTotp?: boolean; challengeToken?: string }>('/api/accounts/login',
+          { method: 'POST', body: { username, password: data.get('password'), remember, staff: true } });
         if (result.requiresTotp && result.challengeToken) {
           setChallenge({ token: result.challengeToken, username, remember });
           onMessage({ text: '', kind: '' });
@@ -194,7 +196,8 @@ function SignIn({ message, onSignedIn, onMessage }:
       }
     } catch (error) {
       onMessage({ text: error instanceof ApiError && error.status === 401
-        ? challenge ? 'That code did not work, or the sign-in expired.' : 'Sign-in failed. Check your details.' : describe(error), kind: 'error' });
+        ? challenge ? 'That code did not work, or the sign-in expired.' : 'Sign-in failed. Check your details.'
+        : error instanceof ApiError && error.code === 'forbidden' ? ERRORS.forbidden : describe(error), kind: 'error' });
     } finally {
       setBusy(false);
       for (const name of ['password', 'code']) {

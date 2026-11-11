@@ -115,7 +115,7 @@ public static class StaffEndpoints
         staff.MapGet("/audit", async (string? action, Guid? character, long? before, int? limit, HttpContext ctx, IAccountAuthentication auth,
             IGameplayStore game, CancellationToken ct) =>
         {
-            var account = await auth.AuthenticateAsync(Bearer(ctx), ct);
+            var account = await auth.AuthenticateStaffAsync(Bearer(ctx), ct);
             if (account is null) return Results.Unauthorized();
             return Results.Ok(await game.AdminAuditAsync(account, action, character, before, limit ?? 100, ct));
         });
@@ -182,10 +182,11 @@ public static class StaffEndpoints
 
     static bool ValidColor(string? color) => color is { Length: 6 or 8 } && color.All(char.IsAsciiHexDigit);
 
-    /// <summary>The account when it holds a staff role (admin: the admin role); a forbidden GameplayException otherwise.</summary>
+    /// <summary>The account of a staff session when it holds a staff role (admin: the admin role); null without a staff
+    /// session (401); a forbidden GameplayException without the role.</summary>
     public static async Task<VerifiedAccount?> StaffAsync(HttpContext ctx, IAccountAuthentication auth, IGameplayStore game, CancellationToken ct, bool admin = false)
     {
-        var account = await auth.AuthenticateAsync(Bearer(ctx), ct);
+        var account = await StaffSessions.StaffAsync(ctx, auth, ct);
         if (account is null) return null;
         var profile = await game.AdminProfileAsync(account, ct);
         if (admin && !profile.Roles.Contains("admin")) throw new GameplayException("forbidden");

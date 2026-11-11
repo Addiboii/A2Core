@@ -38,7 +38,7 @@ public static class GameplayEndpoints
             await management.ChangePasswordAsync(Bearer(ctx),input.CurrentPassword,input.NewPassword,ct) ? Results.NoContent() : Results.Unauthorized());
         api.MapPost("/accounts/revoke-sessions",async(HttpContext ctx,IAccountManagement management,CancellationToken ct) =>
             await management.RevokeSessionsAsync(Bearer(ctx),ct) ? Results.NoContent() : Results.Unauthorized());
-        // Staff dashboard: role-checked in the store; a separate, larger rate budget than account entry.
+        // Staff dashboard: staff sessions only (StaffSessions), role-checked in the store; a separate, larger rate budget than account entry.
         var admin=app.MapGroup("/api/admin").RequireRateLimiting("admin");
         admin.AddEndpointFilter(async (context,next) =>
         {
@@ -48,33 +48,33 @@ public static class GameplayEndpoints
         });
         admin.MapGet("/me",async(HttpContext ctx,IAccountAuthentication auth,IGameplayStore game,CancellationToken ct) =>
         {
-            var account=await auth.AuthenticateAsync(Bearer(ctx),ct); if(account is null) return Results.Unauthorized();
+            var account=await auth.AuthenticateStaffAsync(Bearer(ctx),ct); if(account is null) return Results.Unauthorized();
             return Results.Ok(await game.AdminProfileAsync(account,ct));
         });
         admin.MapGet("/characters",async(string? q,HttpContext ctx,IAccountAuthentication auth,IGameplayStore game,CancellationToken ct) =>
         {
-            var account=await auth.AuthenticateAsync(Bearer(ctx),ct); if(account is null) return Results.Unauthorized();
+            var account=await auth.AuthenticateStaffAsync(Bearer(ctx),ct); if(account is null) return Results.Unauthorized();
             return Results.Ok(await game.AdminFindCharactersAsync(account,q??"",ct));
         });
         admin.MapGet("/characters/{id:guid}",async(Guid id,HttpContext ctx,IAccountAuthentication auth,IGameplayStore game,CancellationToken ct) =>
         {
-            var account=await auth.AuthenticateAsync(Bearer(ctx),ct); if(account is null) return Results.Unauthorized();
+            var account=await auth.AuthenticateStaffAsync(Bearer(ctx),ct); if(account is null) return Results.Unauthorized();
             var detail=await game.AdminCharacterAsync(account,id,ct); return detail is null ? Results.NotFound() : Results.Ok(detail);
         });
         admin.MapGet("/items",async(string? q,string? category,int? offset,int? limit,HttpContext ctx,IAccountAuthentication auth,IGameplayStore game,CancellationToken ct) =>
         {
-            var account=await auth.AuthenticateAsync(Bearer(ctx),ct); if(account is null) return Results.Unauthorized();
+            var account=await auth.AuthenticateStaffAsync(Bearer(ctx),ct); if(account is null) return Results.Unauthorized();
             return Results.Ok(await game.AdminCatalogAsync(account,q??"",category,offset??0,limit??120,ct));
         });
         admin.MapPost("/commands",async(AdminCommand input,HttpContext ctx,IAccountAuthentication auth,IGameplayStore game,CancellationToken ct) =>
         {
-            var account=await auth.AuthenticateAsync(Bearer(ctx),ct); if(account is null) return Results.Unauthorized();
+            var account=await auth.AuthenticateStaffAsync(Bearer(ctx),ct); if(account is null) return Results.Unauthorized();
             return Results.Ok(await game.AdminAsync(account,input,ct));
         });
         // Live overview: who is in the world now and where (in-memory, read under the world gate).
         admin.MapGet("/live",async(HttpContext ctx,IAccountAuthentication auth,IGameplayStore game,IServiceProvider services,CancellationToken ct) =>
         {
-            var account=await auth.AuthenticateAsync(Bearer(ctx),ct); if(account is null) return Results.Unauthorized();
+            var account=await auth.AuthenticateStaffAsync(Bearer(ctx),ct); if(account is null) return Results.Unauthorized();
             await game.AdminProfileAsync(account,ct);   // staff only
             var presence=services.GetService<Aion.World.WorldPresence>();
             var world=services.GetService<Aion.World.SharedWorld>();
@@ -102,7 +102,7 @@ public static class GameplayEndpoints
         // Minimap outlines: a map's subzone polygons (2D, cm), the same data that clears world-map fog.
         admin.MapGet("/maps/{id:int}/outline",async(int id,HttpContext ctx,IAccountAuthentication auth,IGameplayStore game,CancellationToken ct) =>
         {
-            var account=await auth.AuthenticateAsync(Bearer(ctx),ct); if(account is null) return Results.Unauthorized();
+            var account=await auth.AuthenticateStaffAsync(Bearer(ctx),ct); if(account is null) return Results.Unauthorized();
             await game.AdminProfileAsync(account,ct);   // staff only
             var areas=Aion.World.Subzones.OnMap(id).OrderBy(a => a.Priority).Select(a => new {
                 a.Name, a.Priority, Points=a.Points.Select(p => new[]{Math.Round(p[0]),Math.Round(p[1])}).ToArray() });

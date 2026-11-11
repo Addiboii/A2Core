@@ -27,19 +27,21 @@ public sealed partial class PostgresAccountAuthentication : ITotpAuthentication
 
     public bool Available => totpKeys is not null;
 
-    Task<PasswordSignIn?> ITotpAuthentication.SignInAsync(string username, string password, TimeSpan lifetime, CancellationToken ct) =>
-        PasswordSignInAsync(username, password, lifetime, twoStepChallenge: true, ct);
+    Task<PasswordSignIn?> ITotpAuthentication.SignInAsync(string username, string password, TimeSpan lifetime, SessionKind kind, CancellationToken ct) =>
+        PasswordSignInAsync(username, password, lifetime, twoStepChallenge: true, kind, ct);
 
-    async Task<TotpLoginChallenge?> CreateTotpChallengeAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, Guid account, TimeSpan lifetime, CancellationToken ct)
+    async Task<TotpLoginChallenge?> CreateTotpChallengeAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, Guid account, TimeSpan lifetime,
+        SessionKind kind, CancellationToken ct)
     {
         var token = Token();
         await using var command = new NpgsqlCommand($"""
-            INSERT INTO auth.totp_login_challenges(token_hash,account_id,expires_at,session_seconds)
-            VALUES($1,$2,now()+interval '{ChallengeMinutes} minutes',$3) RETURNING expires_at
+            INSERT INTO auth.totp_login_challenges(token_hash,account_id,expires_at,session_seconds,session_kind)
+            VALUES($1,$2,now()+interval '{ChallengeMinutes} minutes',$3,$4) RETURNING expires_at
             """, connection, transaction);
         command.Parameters.AddWithValue(Hash(token));
         command.Parameters.AddWithValue(account);
         command.Parameters.AddWithValue((int)Math.Clamp(lifetime.TotalSeconds, 1, MaxSessionLifetime.TotalSeconds));
+        command.Parameters.AddWithValue(KindName(kind));
         var expires = (DateTime)(await command.ExecuteScalarAsync(ct))!;
         return new(token, new DateTimeOffset(expires));
     }
@@ -51,8 +53,9 @@ public sealed partial class PostgresAccountAuthentication : ITotpAuthentication
         await using var transaction = await connection.BeginTransactionAsync(ct);
         Guid account;
         int seconds;
+        string kind;
         await using (var query = new NpgsqlCommand("""
-            SELECT account_id, session_seconds FROM auth.totp_login_challenges
+            SELECT account_id, session_seconds, session_kind FROM auth.totp_login_challenges
             WHERE token_hash=$1 AND expires_at>now() FOR UPDATE
             """, connection, transaction))
         {
@@ -61,6 +64,7 @@ public sealed partial class PostgresAccountAuthentication : ITotpAuthentication
             if (!await reader.ReadAsync(ct)) return null;
             account = reader.GetGuid(0);
             seconds = reader.GetInt32(1);
+            kind = reader.GetString(2);
         }
         if (await CheckCodeAsync(connection, transaction, account, code, recoveryCode, ct) != CodeCheck.Accepted)
         {
@@ -74,14 +78,23 @@ public sealed partial class PostgresAccountAuthentication : ITotpAuthentication
         }
         var sessionToken = Token();
         await using var session = new NpgsqlCommand("""
-            INSERT INTO auth.sessions(token_hash,account_id,expires_at)
-            SELECT $1,account_id,now()+make_interval(secs=>$3) FROM auth.accounts WHERE account_id=$2 AND disabled_at IS NULL
+            INSERT INTO auth.sessions(token_hash,account_id,expires_at,kind)
+            SELECT $1,account_id,now()+make_interval(secs=>$3),$4 FROM auth.accounts WHERE account_id=$2 AND disabled_at IS NULL
             RETURNING expires_at
             """, connection, transaction);
         session.Parameters.AddWithValue(Hash(sessionToken));
         session.Parameters.AddWithValue(account);
         session.Parameters.AddWithValue((double)seconds);
-        if (await session.ExecuteScalarAsync(ct) is not DateTime expires)
+        session.Parameters.AddWithValue(kind);
+        // A staff challenge whose account lost its staff role meanwhile: the session trigger refuses it (migration 075).
+        object? inserted;
+        try { inserted = await session.ExecuteScalarAsync(ct); }
+        catch (PostgresException error) when (error.SqlState == PostgresErrorCodes.InsufficientPrivilege)
+        {
+            await transaction.RollbackAsync(ct);
+            return null;
+        }
+        if (inserted is not DateTime expires)
         {
             await transaction.RollbackAsync(ct);
             return null;

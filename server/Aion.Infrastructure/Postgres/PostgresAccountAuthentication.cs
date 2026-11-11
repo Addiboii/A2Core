@@ -66,9 +66,12 @@ public sealed partial class PostgresAccountAuthentication : IAccountAuthenticati
 
     /// <summary>No session for a two-step (TOTP) account: those sign in through ITotpAuthentication.SignInAsync.</summary>
     public async Task<AccountSession?> SignInAsync(string username, string password, TimeSpan lifetime, CancellationToken cancellationToken) =>
-        (await PasswordSignInAsync(username, password, lifetime, twoStepChallenge: false, cancellationToken))?.Session;
+        (await PasswordSignInAsync(username, password, lifetime, twoStepChallenge: false, SessionKind.Player, cancellationToken))?.Session;
 
-    async Task<PasswordSignIn?> PasswordSignInAsync(string username, string password, TimeSpan lifetime, bool twoStepChallenge, CancellationToken cancellationToken)
+    static string KindName(SessionKind kind) => kind == SessionKind.Staff ? "staff" : "player";
+
+    async Task<PasswordSignIn?> PasswordSignInAsync(string username, string password, TimeSpan lifetime, bool twoStepChallenge, SessionKind kind,
+        CancellationToken cancellationToken)
     {
         lifetime = lifetime <= TimeSpan.Zero ? DefaultSessionLifetime : lifetime > MaxSessionLifetime ? MaxSessionLifetime : lifetime;
         if (!ValidUsername(username) || password is null || password.Length > 256) return null;
@@ -126,6 +129,18 @@ public sealed partial class PostgresAccountAuthentication : IAccountAuthenticati
                 ? hasher.HashPassword(new(account), password) : storedHash);
             await reset.ExecuteNonQueryAsync(cancellationToken);
         }
+        // A staff session (the staff dashboard) needs a staff role (migration 075). The password was right, so the
+        // failure count reset above stands and the caller says "not staff" rather than "wrong password".
+        if (kind == SessionKind.Staff)
+        {
+            await using var staff = new NpgsqlCommand("SELECT auth.staff_account($1)", connection, transaction);
+            staff.Parameters.AddWithValue(account);
+            if (await staff.ExecuteScalarAsync(cancellationToken) is not true)
+            {
+                await transaction.CommitAsync(cancellationToken);
+                return new(null, null, NotStaff: true);
+            }
+        }
         // Two-step accounts get a code challenge instead of a session (migration 040).
         bool twoStep;
         await using (var totp = new NpgsqlCommand("SELECT 1 FROM auth.account_totp WHERE account_id=$1", connection, transaction))
@@ -136,17 +151,18 @@ public sealed partial class PostgresAccountAuthentication : IAccountAuthenticati
         if (twoStep)
         {
             var challenge = twoStepChallenge && totpKeys is not null
-                ? await CreateTotpChallengeAsync(connection, transaction, account, lifetime, cancellationToken) : null;
+                ? await CreateTotpChallengeAsync(connection, transaction, account, lifetime, kind, cancellationToken) : null;
             await transaction.CommitAsync(cancellationToken);
             return new(null, challenge, Unavailable: totpKeys is null);
         }
         var token = Token();
         await using var session = new NpgsqlCommand("""
-            INSERT INTO auth.sessions(token_hash,account_id,expires_at) VALUES($1,$2,now()+make_interval(secs=>$3)) RETURNING expires_at
+            INSERT INTO auth.sessions(token_hash,account_id,expires_at,kind) VALUES($1,$2,now()+make_interval(secs=>$3),$4) RETURNING expires_at
             """, connection, transaction);
         session.Parameters.AddWithValue(Hash(token));
         session.Parameters.AddWithValue(account);
         session.Parameters.AddWithValue(lifetime.TotalSeconds);
+        session.Parameters.AddWithValue(KindName(kind));
         var expires = (DateTime)(await session.ExecuteScalarAsync(cancellationToken))!;
         await transaction.CommitAsync(cancellationToken);
         return new(new(token, account, new DateTimeOffset(expires)), null);
@@ -158,6 +174,18 @@ public sealed partial class PostgresAccountAuthentication : IAccountAuthenticati
         await using var command = source.CreateCommand("""
             SELECT s.account_id FROM auth.sessions s JOIN auth.accounts a USING(account_id)
             WHERE s.token_hash=$1 AND s.expires_at>now() AND a.disabled_at IS NULL
+            """);
+        command.Parameters.AddWithValue(Hash(token));
+        var id = await command.ExecuteScalarAsync(cancellationToken);
+        return id is Guid account ? new(account) : null;
+    }
+
+    public async Task<VerifiedAccount?> AuthenticateStaffAsync(string token, CancellationToken cancellationToken)
+    {
+        if (!ValidToken(token)) return null;
+        await using var command = source.CreateCommand("""
+            SELECT s.account_id FROM auth.sessions s JOIN auth.accounts a USING(account_id)
+            WHERE s.token_hash=$1 AND s.expires_at>now() AND s.kind='staff' AND a.disabled_at IS NULL
             """);
         command.Parameters.AddWithValue(Hash(token));
         var id = await command.ExecuteScalarAsync(cancellationToken);

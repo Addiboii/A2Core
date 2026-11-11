@@ -211,13 +211,19 @@ def main():
             check(request('/api/characters/' + character + '/inventory', token=second_token)[0] == 404, 'HTTP inventory owner scope')
             check(request('/api/characters/' + character + '/inventory', token=token)[0] == 200, 'HTTP inventory read')
             command = {'requestId': str(uuid.uuid4()), 'characterId': character, 'command': 'level', 'level': 8}
-            check(request('/api/admin/commands', 'POST', command, token)[0] == 403, 'HTTP ordinary user denied GM command')
-            check(request('/api/admin/me', token=token)[0] == 403, 'HTTP ordinary user has no staff profile')
-            check(request('/api/admin/characters', token=token)[0] == 403, 'HTTP ordinary user cannot search characters')
-            check(request('/api/admin/characters/' + character, token=token)[0] == 403, 'HTTP ordinary user cannot inspect characters')
+            # The admin API takes staff sessions only (migration 075): a player session gets 401 before any handler.
+            check(request('/api/admin/commands', 'POST', command, token)[0] == 401, 'HTTP ordinary user denied GM command')
+            check(request('/api/admin/me', token=token)[0] == 401, 'HTTP ordinary user has no staff profile')
+            check(request('/api/admin/characters', token=token)[0] == 401, 'HTTP ordinary user cannot search characters')
+            check(request('/api/admin/characters/' + character, token=token)[0] == 401, 'HTTP ordinary user cannot inspect characters')
+            check(request('/api/accounts/login', 'POST', {**second, 'staff': True})[0] == 403, 'HTTP staff sign-in refused without a staff role')
             sql(f"INSERT INTO auth.account_roles VALUES('{account}','admin');", database=name)
-            check(request('/api/admin/me', token=token)[1]['roles'] == ['admin'], 'HTTP staff profile lists role')
-            check(request('/api/admin/commands', 'POST', command, token)[0] == 200, 'HTTP admin changes level')
+            check(request('/api/admin/me', token=token)[0] == 401, 'HTTP a player session of a staff account cannot open the admin API')
+            status, staff_login, _ = request('/api/accounts/login', 'POST', {**first, 'staff': True})
+            check(status == 200, 'HTTP staff sign-in of a staff account')
+            staff_token = staff_login['token']
+            check(request('/api/admin/me', token=staff_token)[1]['roles'] == ['admin'], 'HTTP staff profile lists role')
+            check(request('/api/admin/commands', 'POST', command, staff_token)[0] == 200, 'HTTP admin changes level')
             check(request('/api/characters/' + character, token=token)[1]['progress']['level'] == 8, 'HTTP level persisted')
             sql("""
                 INSERT INTO catalog.builds VALUES('http-test','{}',now());
@@ -235,33 +241,33 @@ def main():
             inventory = request(starter_path + '/inventory', token=token)[1]
             check(len(inventory['items']) == 1 and inventory['skills'][0]['slot'] == 0, 'HTTP starter inventory and skills')
             item = inventory['items'][0]
-            check(request('/api/admin/me', token=token)[1]['buildId'] == 'http-test', 'HTTP staff profile names catalogue build')
-            found = request('/api/admin/characters?q=httpstar', token=token)[1]
+            check(request('/api/admin/me', token=staff_token)[1]['buildId'] == 'http-test', 'HTTP staff profile names catalogue build')
+            found = request('/api/admin/characters?q=httpstar', token=staff_token)[1]
             check([row['name'] for row in found] == ['HttpStarter'] and found[0]['accountName'] == 'web_first', 'HTTP staff character search')
-            check(request('/api/admin/characters?q=' + 'a' * 65, token=token)[0] == 400, 'HTTP staff search length bound')
+            check(request('/api/admin/characters?q=' + 'a' * 65, token=staff_token)[0] == 400, 'HTTP staff search length bound')
             sql("""INSERT INTO catalog.items VALUES('http-test',102,'Sword of Tests','Greatsword','{"facts":{"ItemGrade":"EItemGrade::Unique","ItemLevel":45}}');""", database=name)
-            catalog = request('/api/admin/items?q=sword', token=token)[1]
+            catalog = request('/api/admin/items?q=sword', token=staff_token)[1]
             check(catalog['total'] == 2 and [i['templateId'] for i in catalog['items']] == [101, 102], 'HTTP staff catalogue search')
             check(catalog['items'][1] == {'templateId': 102, 'name': 'Sword of Tests', 'category': 'Greatsword', 'grade': 'Unique', 'level': 45}
                   and catalog['categories'] == ['Greatsword', 'weapon'], 'HTTP catalogue grade, level and categories')
-            check(request('/api/admin/items?q=102', token=token)[1]['items'][0]['templateId'] == 102, 'HTTP catalogue ID first')
-            paged = request('/api/admin/items?category=Greatsword&offset=0&limit=1', token=token)[1]
+            check(request('/api/admin/items?q=102', token=staff_token)[1]['items'][0]['templateId'] == 102, 'HTTP catalogue ID first')
+            paged = request('/api/admin/items?category=Greatsword&offset=0&limit=1', token=staff_token)[1]
             check(paged['total'] == 1 and paged['items'][0]['templateId'] == 102, 'HTTP catalogue category filter')
-            check(request('/api/admin/items?limit=500', token=token)[0] == 400, 'HTTP catalogue page bound')
-            check(request('/api/admin/items', token=second_token)[0] == 403, 'HTTP ordinary user cannot browse the catalogue')
+            check(request('/api/admin/items?limit=500', token=staff_token)[0] == 400, 'HTTP catalogue page bound')
+            check(request('/api/admin/items', token=second_token)[0] == 401, 'HTTP ordinary user cannot browse the catalogue')
             new_account = {'username': 'made_by_admin', 'password': 'admin-made-password-1'}
-            check(request('/api/admin/accounts', 'POST', new_account, second_token)[0] == 403, 'HTTP ordinary user cannot create accounts')
-            check(request('/api/admin/accounts', 'POST', new_account, token)[0] == 201, 'HTTP admin creates an account')
-            check(request('/api/admin/accounts', 'POST', new_account, token)[1] == {'error': 'username_taken'}, 'HTTP admin account name taken')
-            check(request('/api/admin/accounts', 'POST', {'username': 'x', 'password': 'short'}, token)[1] == {'error': 'invalid_account'}, 'HTTP admin account validation')
+            check(request('/api/admin/accounts', 'POST', new_account, second_token)[0] == 401, 'HTTP ordinary user cannot create accounts')
+            check(request('/api/admin/accounts', 'POST', new_account, staff_token)[0] == 201, 'HTTP admin creates an account')
+            check(request('/api/admin/accounts', 'POST', new_account, staff_token)[1] == {'error': 'username_taken'}, 'HTTP admin account name taken')
+            check(request('/api/admin/accounts', 'POST', {'username': 'x', 'password': 'short'}, staff_token)[1] == {'error': 'invalid_account'}, 'HTTP admin account validation')
             check(request('/api/accounts/login', 'POST', new_account)[0] == 200, 'HTTP admin-made account signs in')
             grant = {'requestId': str(uuid.uuid4()), 'characterId': created['characterId'], 'command': 'grant',
                      'buildId': 'http-test', 'templateId': 101, 'quantity': 3}
-            granted = request('/api/admin/commands', 'POST', grant, token)
-            check(granted[0] == 200 and request('/api/admin/commands', 'POST', grant, token)[1] == granted[1], 'HTTP grant and idempotent retry')
-            detail = request('/api/admin/characters/' + created['characterId'], token=token)[1]
+            granted = request('/api/admin/commands', 'POST', grant, staff_token)
+            check(granted[0] == 200 and request('/api/admin/commands', 'POST', grant, staff_token)[1] == granted[1], 'HTTP grant and idempotent retry')
+            detail = request('/api/admin/characters/' + created['characterId'], token=staff_token)[1]
             check(len(detail['inventory']['items']) == 2 and detail['character']['name'] == 'HttpStarter', 'HTTP staff detail shows granted item')
-            check(request('/api/admin/characters/' + str(uuid.uuid4()), token=token)[0] == 404, 'HTTP staff detail of unknown character')
+            check(request('/api/admin/characters/' + str(uuid.uuid4()), token=staff_token)[0] == 404, 'HTTP staff detail of unknown character')
             world_created = world_store.create(uuid.uuid4(), 'http-test', 'WorldStarter', b'\x00\xff\x01', voice_type=4, lobby_slot=2)
             check(world_store.load(world_created['characterId'])['appearance'] == 'AP8B', 'world bridge preserves appearance bytes')
             check(len(world_store.inventory(world_created['characterId'])['items']) == 1, 'world bridge loads starter inventory')
@@ -329,7 +335,8 @@ def main():
             check(request('/api/accounts/register', 'POST', {'username': 'late_user', 'password': password})[0] == 403, 'closed registration refuses sign-up')
             check(request('/wardrobe/data')[0] == 404 and request('/wardrobe/files/icons/a.webp')[0] == 404, 'staff-only wardrobe hidden anonymously')
             check(request('/wardrobe-viewer.js')[0] == 200, 'viewer module stays public')
-            staff = request('/api/accounts/login', 'POST', first)[1]['token']
+            staff = request('/api/accounts/login', 'POST', {**first, 'staff': True})[1]['token']
+            check(request('/api/admin/wardrobe-access', 'POST', token=player)[0] == 401, 'a player session gets no wardrobe pass')
             check(request('/api/admin/wardrobe-access', 'POST', token=second_token)[0] in (401, 403), 'ordinary user gets no wardrobe pass')
             granted = urlopen(Request(f'http://127.0.0.1:{port}/api/admin/wardrobe-access', method='POST', headers={'Authorization': 'Bearer ' + staff}), timeout=10)
             cookie = granted.headers.get('Set-Cookie', '')

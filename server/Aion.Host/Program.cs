@@ -296,6 +296,8 @@ app.Use(async (context, next) =>
 });
 if (platform.Port is { } platformPort) app.UsePlatformBootstrap(platformPort, platformResponses!, platform.RequestLog);
 app.UseRateLimiter();
+// /api/admin/* takes staff sessions only (migration 075): a player session's token is refused before any handler.
+app.UseStaffSessions();
 app.UseWebSockets();
 // The staff dashboard can live at a private address (Aion:Web:StaffPath, e.g. "/k3x9..."); then
 // /admin.html is not found. Obscurity only: every staff API call still needs a staff sign-in.

@@ -12,8 +12,9 @@ public sealed record TotpLoginChallenge(string ChallengeToken, DateTimeOffset Ex
 }
 
 /// <summary>A password sign-in: a session, or (two-step accounts) a challenge to complete with a code.
-/// Unavailable: the account has two-step sign-in but this host cannot check codes (no encryption key).</summary>
-public sealed record PasswordSignIn(AccountSession? Session, TotpLoginChallenge? Challenge, bool Unavailable = false);
+/// Unavailable: the account has two-step sign-in but this host cannot check codes (no encryption key).
+/// NotStaff: a staff sign-in with the right password on an account without a staff role.</summary>
+public sealed record PasswordSignIn(AccountSession? Session, TotpLoginChallenge? Challenge, bool Unavailable = false, bool NotStaff = false);
 
 /// <summary>Account-site two-step sign-in. Ported from A2Core PR #4 (Artezianec); see server/Aion.Host/Authentication/TotpEndpoints.cs.</summary>
 public interface ITotpAuthentication
@@ -22,7 +23,11 @@ public interface ITotpAuthentication
     bool Available { get; }
     /// <summary>Password sign-in that returns a challenge instead of a session for two-step accounts
     /// (IAccountAuthentication.SignInAsync returns no session for those).</summary>
-    Task<PasswordSignIn?> SignInAsync(string username, string password, TimeSpan lifetime, CancellationToken ct);
+    Task<PasswordSignIn?> SignInAsync(string username, string password, TimeSpan lifetime, CancellationToken ct) =>
+        SignInAsync(username, password, lifetime, SessionKind.Player, ct);
+    /// <summary>As above for a session of the given kind; a staff session needs a staff role (and the code, when the
+    /// account has two-step sign-in), and the challenge carries the kind to the session it becomes.</summary>
+    Task<PasswordSignIn?> SignInAsync(string username, string password, TimeSpan lifetime, SessionKind kind, CancellationToken ct);
     Task<AccountSession?> CompleteSignInAsync(string challengeToken, string? code, string? recoveryCode, CancellationToken ct);
     Task<TotpStatus> StatusAsync(Guid accountId, CancellationToken ct);
     /// <summary>Starts enrolment after checking the account password; null when the password is wrong or two-step is already on.</summary>

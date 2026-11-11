@@ -45,8 +45,7 @@ public sealed class WardrobeAccess(TimeProvider clock)
         });
         app.MapPost("/api/admin/wardrobe-access", async (HttpContext context, IAccountAuthentication auth, IGameplayStore game, CancellationToken ct) =>
         {
-            var header = context.Request.Headers.Authorization.ToString();
-            var account = await auth.AuthenticateAsync(header.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase) ? header[7..] : "", ct);
+            var account = await Aion.Host.Authentication.StaffSessions.StaffAsync(context, auth, ct);
             if (account is null) return Results.Unauthorized();
             try { await game.AdminProfileAsync(account, ct); }   // throws "forbidden" without a staff role
             catch (GameplayException) { return Results.StatusCode(403); }

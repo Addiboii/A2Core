@@ -6,7 +6,8 @@ namespace Aion.Host.Authentication;
 
 public static class AccountEndpoints
 {
-    private sealed record Credentials(string? Username, string? Password, bool? Remember = null);
+    /// <param name="Staff">The staff dashboard's sign-in: a staff session (migration 075), refused (403) without a staff role.</param>
+    private sealed record Credentials(string? Username, string? Password, bool? Remember = null, bool? Staff = null);
     private sealed record TicketRequest(int WorldId);
 
     /// <param name="registration">Self-registration on the account page (Aion:Accounts:Registration); when off,
@@ -34,7 +35,7 @@ public static class AccountEndpoints
         app.MapPost("/api/admin/accounts", async (Credentials input, HttpContext context, IAccountAuthentication auth,
             Aion.Application.Gameplay.IGameplayStore game, ILoggerFactory logs, CancellationToken ct) =>
         {
-            var actor = await auth.AuthenticateAsync(Bearer(context), ct);
+            var actor = await auth.AuthenticateStaffAsync(Bearer(context), ct);
             if (actor is null) return Results.Unauthorized();
             try
             {
@@ -53,7 +54,9 @@ public static class AccountEndpoints
             if (input.Username is null || input.Password is null) return Results.Unauthorized();
             // "Keep me signed in" (the staff dashboard): a 30-day session instead of the standard 8 hours.
             var lifetime = input.Remember == true ? TimeSpan.FromDays(30) : PostgresAccountAuthentication.DefaultSessionLifetime;
-            var result = await totp.SignInAsync(input.Username, input.Password, lifetime, ct);
+            var kind = input.Staff == true ? SessionKind.Staff : SessionKind.Player;
+            var result = await totp.SignInAsync(input.Username, input.Password, lifetime, kind, ct);
+            if (result?.NotStaff == true) return Results.Json(new { error = "forbidden" }, statusCode: StatusCodes.Status403Forbidden);
             if (result?.Session is { } session) return Results.Ok(session);
             // Two-step accounts: the code goes to POST /api/accounts/login/totp (TotpEndpoints).
             if (result?.Challenge is { } challenge)
