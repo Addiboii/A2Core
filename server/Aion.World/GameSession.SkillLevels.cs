@@ -61,6 +61,7 @@ public sealed partial class GameSession
     {
         if (plain.Length < 6) return [];
         var skillId = BitConverter.ToInt32(plain, 2);
+        if (StigmaData.IsStigma(skillId)) return await StigmaLevelUpAsync(skillId, ct);   // GameSession.Stigmas.cs
         byte[] Reply(int result) => PacketWriter.Opcode(SkillLevelUpRs).U16(result).I32(skillId).ToArray();
         var next = SkillLevel(skillId) + 1;
         if (!learned.Contains(skillId) || data.SkillLevelCost(skillId, next) is not { } cost) return [Reply(1)];
@@ -112,6 +113,8 @@ public sealed partial class GameSession
             foreach (var id in reset) w.I32(id).I32(KitSkillLevel(id));
             return w.Varint(1).U8(SkillPointTypePoint).I32(SkillPointsLeft).ToArray();
         }
+        // A stigma reset (ESkillAcquireType Stigma) is not served (GameSession.Stigmas.cs) and never touches the bought levels.
+        if (acquireType == StigmaAcquireType) return [Reply(1, [])];
         if (targets.Count == 0) return [Reply(1, [])];
         var updates = new List<byte[]>();
         foreach (var id in targets)

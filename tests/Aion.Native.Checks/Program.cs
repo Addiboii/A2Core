@@ -2112,6 +2112,14 @@ Check(devDepot[0].SequenceEqual(GamePackets.ItemDepotList([new InventoryItem(1, 
       "development: the starter weapon in the official inventory format");
 Console.WriteLine($"{checks} stored game session checks passed.");
 Console.WriteLine($"{await EconomyChecks.RunAsync(staffSession, staffStore, Now)} economy checks passed (godstones, exceed, legion warehouse and wallet, broker).");
+async Task<GameSession> StigmaGladiator(FakeStore stigmaStore)
+{
+    var session = new GameSession(data, new GameSessionOptions(), new Random(3)) { Store = stigmaStore };
+    await session.HandleAsync(Strings(0x3613, Session, "", "t", "").Concat(new byte[9]).ToArray(), Now);
+    await session.HandleAsync(create, Now);
+    return session;
+}
+Console.WriteLine($"{await StigmaChecks.RunAsync(StigmaGladiator, Now)} stigma checks passed (learn, raise, refusals, slots, shard item, login keeps saved stigmas).");
 
 // ---------- Multiplayer: the shared world (players see each other, shared NPCs) ----------
 checks = 0;

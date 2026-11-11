@@ -1630,6 +1630,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
                 equippedWing = await store.EquippedWingAsync(state.Summary.CharacterId, ct);
                 var extras = await store.ExtrasAsync(state.Summary.CharacterId, ct);
                 LoadSkillLevels(await store.SkillsAsync(state.Summary.CharacterId, ct));
+                LoadStigmas(await store.StigmasAsync(state.Summary.CharacterId, ct));   // GameSession.Stigmas.cs
                 LoadAchievements(await store.AchievementsAsync(state.Summary.CharacterId, ct), await store.GroupRewardsTakenAsync(state.Summary.CharacterId, ct), now);
                 LoadCollections(await store.CollectionsAsync(state.Summary.CharacterId, ct));
                 LoadBossChallenges(await store.BossChallengesAsync(state.Summary.CharacterId, ct));
@@ -1851,8 +1852,11 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             if (profile is not null)
             {
                 // Owned skills before the hotbar (0x5100 then 0x5600; not the usmap ordinals).
-                replies.Add(GamePackets.SkillList(WithLevels(kit)));
+                // The learned stigmas follow the kit in the same list (CANDIDATE: no recording has one), with the shards left when
+                // they differ from Exp.dat's level total (items, spent shards).
+                replies.Add(GamePackets.SkillList([.. WithLevels(kit), .. StigmaSkillList()]));
                 replies.Add(GamePackets.SkillOptionSlots(learned.Where(id => id >= 11_000_000 && !IsDodgeId(id) && data.Skill(id)?.Type == "Active").Order().ToList()));
+                if (stigmas.Count > 0 || stigmaItemShards > 0) replies.Add(StigmaShardUpdate());
                 replies.AddRange(GamePackets.EmptyEntryLists());
                 replies.AddRange(SettingsAtEntry(now));
                 // The player's saved hotbar, else the class's default bar for its level.
@@ -2006,7 +2010,8 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         var weapons = (definition?.Weapons ?? []).Where(w => w != "None").ToList();
         var accepted = definition is not null && resources is not null && !dead
             && resources.Mp >= cost.Mp && resources.Sp >= cost.Sp && resources.Hp > cost.Hp
-            && (learned.Contains(skill) || normalDodge || ChainStepReady(skill, now))   // a chain step on offer (GameSession.SkillChains.cs)
+            && (learned.Contains(skill) || normalDodge || ChainStepReady(skill, now)   // a chain step on offer (GameSession.SkillChains.cs)
+                || StigmaReady(skill))   // a learned stigma in an open stigma slot (GameSession.Stigmas.cs)
             && (weapons.Count == 0 || weapons.Contains(data.WeaponType(equippedWeapon) ?? ""))
             && (noCool || now >= cooldowns.GetValueOrDefault(cooldownKey))
             && (dodging || InCastRange(definition, request.TargetKey));

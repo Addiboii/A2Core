@@ -292,10 +292,13 @@ public sealed class GameData
         return known.Select(k => (k.Key, k.Value)).ToList();
     }
 
-    public SkillDefinition? Skill(int skillId) => classes.Skills.GetValueOrDefault(skillId.ToString(System.Globalization.CultureInfo.InvariantCulture));
-    /// <summary>SkillProjectile.dat Speed of a projectile a class skill fires (0: unknown).</summary>
+    /// <summary>Cast data of a class skill (class-skills.json), else of a stigma skill (stigmas.json, the same Skill.dat reading).</summary>
+    public SkillDefinition? Skill(int skillId) => classes.Skills.GetValueOrDefault(skillId.ToString(System.Globalization.CultureInfo.InvariantCulture))
+        ?? StigmaTables.Embedded.Skill(skillId);
+    /// <summary>SkillProjectile.dat Speed of a projectile a class or stigma skill fires (0: unknown).</summary>
     public int ProjectileSpeed(int projectileId) =>
-        classes.ProjectileSpeeds?.GetValueOrDefault(projectileId.ToString(System.Globalization.CultureInfo.InvariantCulture)) ?? 0;
+        classes.ProjectileSpeeds?.GetValueOrDefault(projectileId.ToString(System.Globalization.CultureInfo.InvariantCulture)) is > 0 and var speed
+            ? speed : StigmaTables.Embedded.ProjectileSpeed(projectileId);
 
     /// <summary>Level-one weapon of the class's weapon type for race 1 (Light) or 2 (Dark).</summary>
     public int? StarterWeapon(StarterProfile? profile) =>

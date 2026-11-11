@@ -117,6 +117,7 @@ public sealed partial class GameSession
         catch (ProtocolException) { return []; }
         byte[] Reply(int result) => PacketWriter.Opcode(QuickSlotSetRs).U16(result).Raw(plain.AsSpan(2)).ToArray();
         if (Store is not { } store || CharacterId is not { } character || type is < 0 or > 4) return [Reply(1)];
+        if (StigmaSlotResult(number, type, skillId) is > 0) return [Reply(1)];   // stigma slots 21-24 (GameSession.Stigmas.cs)
         var slot = new QuickSlotRecord(number, type, uid, itemId, skillId);
         var saved = await Stored(async () => await store.SaveQuickSlotAsync(character, number, slot, ct) ? [[]] : []);
         if (saved.Count == 0) return [Reply(1)];

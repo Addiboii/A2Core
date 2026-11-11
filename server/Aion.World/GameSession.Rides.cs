@@ -124,6 +124,8 @@ public sealed partial class GameSession
             "GetTitle" when use.Values is [var titleText, ..] && int.TryParse(titleText, out var titleId) => await UseTitleItemAsync(store, character, row, titleId, reply, ct),
             "GetSkin" or "GetSkinSet" when use.Values is [{ Length: > 0 }, ..] => await UseSkinItemAsync(store, character, row, use, reply, ct),
             "GetSocialAction" when use.Values is [var emoteText, ..] && int.TryParse(emoteText, out var emote) => await UseSocialActionItemAsync(store, character, row, emote, reply, ct),
+            "GetStigmaShard" when use.Values is [var shardText, ..] && int.TryParse(shardText, out var shards) && shards > 0 =>
+                await UseStigmaShardItemAsync(store, character, row, shards, reply, ct),
             _ => null,
         };
         if (replies is null) return Fail();
