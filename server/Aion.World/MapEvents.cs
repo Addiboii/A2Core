@@ -117,7 +117,9 @@ public sealed record DungeonInfo(
     [property: JsonPropertyName("quest_gate")] System.Text.Json.JsonElement[][]? QuestGate = null,
     [property: JsonPropertyName("reward_light")] long[][]? RewardLight = null,
     [property: JsonPropertyName("reward_dark")] long[][]? RewardDark = null,
-    [property: JsonPropertyName("arrival_cutscene")] string? ArrivalCutscene = null);
+    [property: JsonPropertyName("arrival_cutscene")] string? ArrivalCutscene = null,
+    // Revives allowed per run (Dungeon.dat bUseRebirthLimit + RebirthLimitCount, OBSERVED in the table, build 26262663); 0: no limit.
+    [property: JsonPropertyName("rebirth_limit")] int RebirthLimit = 0);
 
 /// <summary>A base map's EnterInstanceLayer trigger actor: walking into it enters the dungeon.</summary>
 public sealed record DungeonEntry(

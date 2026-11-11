@@ -30,6 +30,9 @@ public sealed class DungeonCopy(GameSession host, int dungeonId, long now)
     public HashSet<int> CubeBossesKilled { get; } = [];
     /// <summary>Player deaths in this copy (the death-limit achievements).</summary>
     public int Deaths { get; set; }
+    /// <summary>Revives each character used in this run (character id, or player key for a development login), for
+    /// Dungeon.dat RebirthLimitCount.</summary>
+    public Dictionary<string, int> Revives { get; } = [];
     /// <summary>The final boss's cube reward each player took (player key → items), once per run.</summary>
     public Dictionary<int, List<(int ItemId, long Count)>> CubeTaken { get; } = [];
 }

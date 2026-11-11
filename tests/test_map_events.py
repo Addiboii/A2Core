@@ -61,6 +61,15 @@ class MapEventTests(unittest.TestCase):
         self.assertEqual(seal['quest_gate'], [['EQ1810001', 1]])
         self.assertEqual(seal['reward_light'][0], [930100001, 15000])
 
+    def test_generated_data_carries_the_revive_limits(self):
+        data = json.loads((ROOT / 'tools/data/map-events.json').read_text(encoding='utf-8'))
+        limits = {data['dungeons'][d]['name']: data['dungeons'][d]['rebirth_limit'] for d in data['dungeons']
+                  if 'rebirth_limit' in data['dungeons'][d]}
+        self.assertEqual(limits, {'KraoCave_Hard': 3, 'Urugugu_Canyon_Hard': 3, 'Draupnir_Hard': 3, 'BakronIsland_Hard': 3,
+                                  'ReforgedAbyss_Normal': 2, 'ReforgedAbyss_Hard': 2, 'ErosionPurifier_01': 2,
+                                  'MusphelHolyGrail_01': 2, 'MusphelHolyGrail_02': 2})
+        self.assertNotIn('rebirth_limit', data['dungeons']['600002'])   # KraoCave_Normal: no limit
+
     def test_generated_data_serves_the_poeta_layers(self):
         data = json.loads((ROOT / 'tools/data/map-events.json').read_text(encoding='utf-8'))
         self.assertIn(100010, data['served_maps'])

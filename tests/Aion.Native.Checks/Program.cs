@@ -1900,6 +1900,29 @@ Check(timedOut.Any(b => Op(b) == GameSession.DungeonStateNt && b[6] == GameSessi
 var timedExit = await staffSession.TickAsync(Now + 7300 + GameSession.DungeonFailExitMs);
 Check(timedExit.Any(b => b[0] == 0x21 && b[1] == 0x36 && BitConverter.ToInt32(b, 6) == 1010) && staffSession.InstanceKey == 0, "and the copy empties back to the field map");
 await staffSession.HandleAsync(new PacketWriter().U16(0x3622).I32(1).ToArray(), Now + 7400);
+// Revive limit (Dungeon.dat RebirthLimitCount): KraoCave_Hard allows 3 revives per run; then a spiritstone is refused and
+// the respawn request revives the player outside the dungeon.
+Check(MapEventTables.Embedded.Dungeon(600004) is { RebirthLimit: 3 } && MapEventTables.Embedded.Dungeon(600083) is { RebirthLimit: 2 }
+      && MapEventTables.Embedded.Dungeon(600002) is { RebirthLimit: 0 } && staffSession.RevivesLeft() is null, "revive limits: Krao Hard 3, ReforgedAbyss Hard 2, Krao Easy none; none outside a dungeon");
+staffSession.EnterDungeonById(600004, Now + 7401);
+await staffSession.HandleAsync(new PacketWriter().U16(0x3622).I32(1).ToArray(), Now + 7402);
+Check(staffSession.MapId == 600004 && staffSession.InstanceKey != 0 && staffSession.RevivesLeft() == 3, "inside Krao Cave Hard: 3 revives left");
+for (var life = 0; life < 3; life++)
+{
+    staffSession.NpcHitsPlayer(staffSession.Resource.HpMax * 10, Now + 7403 + life * 4, killerKey: 2001);
+    await staffSession.HandleAsync(new PacketWriter().U16(0x8d22).U8(2).I64(0).ToArray(), Now + 7404 + life * 4);
+    await staffSession.HandleAsync(new PacketWriter().U16(0x3622).I32(1).ToArray(), Now + 7405 + life * 4);
+}
+Check(!staffSession.Dead && staffSession.MapId == 600004 && staffSession.RevivesLeft() == 0, "three deaths, three revives inside the dungeon: none left");
+staffSession.NpcHitsPlayer(staffSession.Resource.HpMax * 10, Now + 7420, killerKey: 2001);
+var stonesLeft = staffStore.Items.Single(i => i.WireId == 25).Quantity;
+var refusedStone = await staffSession.HandleAsync(new PacketWriter().U16(0x8d22).U8(3).I64(25).ToArray(), Now + 7421);
+Check(refusedStone.Single().SequenceEqual(RidePackets.RespawnReply(1)) && staffSession.Dead && staffStore.Items.Single(i => i.WireId == 25).Quantity == stonesLeft,
+      "revives used up: the spiritstone is refused and kept");
+var revivedOutside = await staffSession.HandleAsync(new PacketWriter().U16(0x8d22).U8(2).I64(0).ToArray(), Now + 7422);
+Check(revivedOutside[0].SequenceEqual(RidePackets.RespawnReply(0)) && !staffSession.Dead && staffSession.InstanceKey == 0
+      && revivedOutside.Any(b => b[0] == 0x21 && b[1] == 0x36 && BitConverter.ToInt32(b, 6) == 1010), "revives used up: the respawn revives the player outside (back on map 1010)");
+await staffSession.HandleAsync(new PacketWriter().U16(0x3622).I32(1).ToArray(), Now + 7423);
 // Field events: an EnterFieldEvent NPC (NpcData FuncValues name the event; FieldEvent.dat gives its map, 180 s ready time
 // and the event time) moves the party into the event's copy; the scripts wait for DungeonState Process, which the host
 // declares when the ready time ends.

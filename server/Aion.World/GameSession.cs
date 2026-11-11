@@ -2275,6 +2275,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         if (!dead) return [RidePackets.RespawnReply(1)];
         if (type == RidePackets.RespawnItem)
         {
+            if (RevivesLeft() == 0) return [RidePackets.RespawnReply(1)];   // the run's revives are used up: only out of the dungeon
             if (Store is not { } store || CharacterId is not { } character || !storedItems.TryGetValue(itemUid, out var row) || row.Location != "bag" || !IsRebirthItem(row.TemplateId))
                 return [RidePackets.RespawnReply(1)];
             var used = await Stored(async () => await store.ConsumeItemAsync(character, row.InstanceId, row.Revision, 1, ct) ? [[]] : []);
@@ -2288,7 +2289,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
     List<byte[]> UseRebirth(bool use, long now)
     {
         if (!use) return [RidePackets.UseRebirthReply(0, false)];
-        if (!dead || !CanRebirth) return [RidePackets.UseRebirthReply(1, false)];
+        if (!dead || !CanRebirth || RevivesLeft() == 0) return [RidePackets.UseRebirthReply(1, false)];
         var reborn = RidePackets.Reborn(playerKey);
         worldPlayer?.Map?.Broadcast(worldPlayer, [reborn]);
         return [RidePackets.UseRebirthReply(0, true), .. UseRebirthBuff(), reborn, .. Revive(now, inPlace: true)];
@@ -2296,12 +2297,33 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
 
     const byte DecreaseUseRebirthItem = 85;   // EDecreaseReason kUseRebirthItem
 
-    /// <summary>Revive: full HP/MP and a map load where the player fell (in place) or at the map's respawn point (else its start, else here).</summary>
-    List<byte[]> Revive(long now, bool inPlace = false)
+    string ReviveKey => CharacterId?.ToString() ?? playerKey.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+    /// <summary>
+    /// The revives this character has left in the current dungeon run (Dungeon.dat RebirthLimitCount: 3 for the party _Hard
+    /// dungeons, 2 for five raids), or null without a limit. CANDIDATE: every revive counts (respawn, item, rebirth buff,
+    /// the automatic one), per character and run (the client's texts: "Exceeded the number of manual and skill
+    /// resurrections allowed"; its HUD also has a party variant, not modelled). Staff revives do not count (OURS).
+    /// </summary>
+    public int? RevivesLeft() =>
+        copy is { } c && MapEventData.DungeonOfMap(worldMap) is { RebirthLimit: > 0 } room
+            ? Math.Max(0, room.RebirthLimit - c.Revives.GetValueOrDefault(ReviveKey))
+            : null;
+
+    /// <summary>
+    /// Revive: full HP/MP and a map load where the player fell (in place) or at the map's respawn point (else its start, else
+    /// here). In a dungeon whose revives are used up the player revives outside instead (the dungeon's way out, as leaving).
+    /// </summary>
+    List<byte[]> Revive(long now, bool inPlace = false, bool counted = true)
     {
         dead = false;
         if (resources is null) return [];
         (resources.Hp, resources.Mp) = (resources.HpMax, resources.MpMax);
+        if (counted && RevivesLeft() is { } left && copy is { } run)
+        {
+            if (left == 0 && instanceKey != 0) return [resources.Update(), .. LeaveInstance(now)];
+            run.Revives[ReviveKey] = run.Revives.GetValueOrDefault(ReviveKey) + 1;
+        }
         if (inPlace && diedAt is { } fell) return [resources.Update(), .. Teleport(worldMap, fell, now)];
         // Inside a dungeon: the running stage's revival point, else the dungeon's start (the reload keeps the events).
         var raceWord = profileRace == 2 ? "Dark" : "Light";

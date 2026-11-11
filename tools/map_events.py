@@ -279,6 +279,10 @@ def dungeons(table=DUNGEONS, names=None, entrances=ENTRANCES, reward_dungeon=REW
                  'hold': int(row.get('CompleteStateHoldingTime') or 0),
                  'limit': int(row.get('ProcessStateHoldingTime') or 0),
                  'group': row.get('DungeonGroupName') or 'None'}
+        # Revive limit per run (Dungeon.dat bUseRebirthLimit, RebirthLimitCount; OBSERVED in the table, build 26262663: 3 for
+        # the four party _Hard dungeons, 2 for five raids).
+        if row.get('bUseRebirthLimit') and int(row.get('RebirthLimitCount') or 0) > 0:
+            entry['rebirth_limit'] = int(row['RebirthLimitCount'])
         gate = gates.get(row['Name'])
         if gate:
             entry.update({'min_level': int(gate.get('MinLevel') or 0), 'max_level': int(gate.get('MaxLevel') or 0),
