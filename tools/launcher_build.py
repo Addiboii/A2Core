@@ -23,6 +23,9 @@ SOURCE = ROOT / 'research/local/client-26262663/verification.json'
 OUTPUT = ROOT / 'launcher/supported-build.json'
 BUILD = {'appId': 3393110, 'depotId': 3393111, 'manifestId': '586322693862358479',
          'executable': 'Aion2/Binaries/Win64/AION2.exe'}
+# Earlier supported builds (newest first): the launcher matches a game folder from before it kept its installed-build record
+# against these, so updating it downloads only the changed pieces. 1699273097574069541 = 2.0.6 (25767555).
+PREVIOUS = ['1699273097574069541']
 
 
 def quick(path):
@@ -113,7 +116,7 @@ def build(verification, depot=None):
         if f['quick']:
             digest.update(f"{f['path'].lower()}\0{f['size']}\0{f['sha256']}\n".encode())
     return {**BUILD, 'fingerprint': digest.hexdigest(), 'fileCount': len(files),
-            'totalBytes': sum(f['size'] for f in files), 'files': files}
+            'totalBytes': sum(f['size'] for f in files), 'files': files, 'previousManifests': PREVIOUS}
 
 
 def main(argv=None):

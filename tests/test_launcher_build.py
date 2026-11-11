@@ -48,6 +48,12 @@ class LauncherBuildTests(unittest.TestCase):
         self.assertEqual([f['path'] for f in result['files']], [EXE])
         self.assertEqual((result['fileCount'], result['totalBytes']), (1, 10))
 
+    def test_previous_builds_are_named_for_updates(self):
+        # The launcher matches a game folder without an installed-build record against these (ClientPatch).
+        result = launcher_build.build(_verification([(EXE, 10)]))
+        self.assertEqual(result['previousManifests'], ['1699273097574069541'])
+        self.assertNotIn(result['manifestId'], result['previousManifests'])
+
     def test_copy_must_hold_every_depot_file_at_its_size(self):
         for entries in ([('Aion2\\Binaries\\Win64\\AION2.exe', 10, 0), ('Engine\\x.dll', 5, 0)],
                         [('Aion2\\Binaries\\Win64\\AION2.exe', 11, 0)]):

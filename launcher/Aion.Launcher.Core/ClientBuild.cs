@@ -20,7 +20,10 @@ public sealed record SupportedBuild(
     [property: JsonPropertyName("fingerprint")] string Fingerprint,
     [property: JsonPropertyName("fileCount")] int FileCount,
     [property: JsonPropertyName("totalBytes")] long TotalBytes,
-    [property: JsonPropertyName("files")] IReadOnlyList<BuildFile> Files)
+    [property: JsonPropertyName("files")] IReadOnlyList<BuildFile> Files,
+    // Earlier supported builds: a game folder from before the launcher kept its InstalledManifest is matched against these, so an
+    // update still downloads only the pieces that changed.
+    [property: JsonPropertyName("previousManifests")] IReadOnlyList<string>? PreviousManifests = null)
 {
     public static SupportedBuild Embedded { get; } = Load();
 
@@ -97,10 +100,11 @@ public static class ClientFiles
     /// <summary>
     /// Places the build's files from <paramref name="source"/> into <paramref name="target"/>: copies,
     /// hard links (same volume, no extra space) or moves (Steam's download_depot folder). Only the
-    /// listed files are touched.
+    /// listed files are touched. A file already there at the right size is kept, unless
+    /// <paramref name="replace"/> (an older build in the folder: same size is not same content).
     /// </summary>
     public static async Task PlaceAsync(string source, string target, SupportedBuild build, Mode mode,
-        IProgress<(long Done, long Total)>? progress = null, CancellationToken ct = default)
+        IProgress<(long Done, long Total)>? progress = null, CancellationToken ct = default, bool replace = false)
     {
         long total = build.TotalBytes, done = 0;
         foreach (var file in build.Files)
@@ -110,7 +114,7 @@ public static class ClientFiles
             var to = Path.Combine(target, file.Path);
             Directory.CreateDirectory(Path.GetDirectoryName(to)!);
             var existing = new FileInfo(to);
-            if (existing.Exists && existing.Length == file.Size && mode != Mode.Move) { done += file.Size; progress?.Report((done, total)); continue; }
+            if (existing.Exists && existing.Length == file.Size && mode != Mode.Move && !replace) { done += file.Size; progress?.Report((done, total)); continue; }
             if (existing.Exists) existing.Delete();
             switch (mode)
             {

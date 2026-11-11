@@ -205,6 +205,118 @@ try
 }
 finally { root.Delete(recursive: true); }
 
+// ---------- Update by pieces (ClientPatch): only what the folder does not hold is fetched ----------
+{
+    var patchRoot = Directory.CreateTempSubdirectory("aion-patch-");
+    try
+    {
+        const int piece = 4096;
+        var random = new Random(3);
+        byte[] Block() { var b = new byte[piece]; random.NextBytes(b); return b; }
+        static string Sha(ReadOnlySpan<byte> data) => Convert.ToHexStringLower(System.Security.Cryptography.SHA1.HashData(data));
+        static ManifestFile Describe(byte[] content, int size)
+        {
+            var chunks = new List<ChunkRef>();
+            for (var at = 0; at < content.Length; at += size)
+            {
+                var length = Math.Min(size, content.Length - at);
+                chunks.Add(new(at, length, Sha(content.AsSpan(at, length))));
+            }
+            return new(content.Length, chunks);
+        }
+        byte[] a = Block(), b = Block(), c = Block(), d = Block(), e = Block(), f = Block();
+        // Old build: pak = a b c, other = d e, gone = f. New build: pak = b X c a (pieces moved, one new, longer),
+        // other = d e (unchanged), moved = e d (pieces from another file), fresh = new file.
+        var x = Block();
+        var oldFiles = new Dictionary<string, byte[]> { ["Aion2/pak.pak"] = [.. a, .. b, .. c], ["Aion2/other.bin"] = [.. d, .. e], ["Aion2/gone.bin"] = f };
+        var newFiles = new Dictionary<string, byte[]> { ["Aion2/pak.pak"] = [.. b, .. x, .. c, .. a], ["Aion2/other.bin"] = [.. d, .. e], ["Aion2/moved.bin"] = [.. e, .. d], ["Aion2/fresh.bin"] = [.. x, .. x[..100]] };
+        InstalledManifest Manifest(string id, Dictionary<string, byte[]> files) =>
+            new(id, files.ToDictionary(kv => kv.Key, kv => Describe(kv.Value, piece), StringComparer.OrdinalIgnoreCase));
+        var oldManifest = Manifest("1", oldFiles);
+        var newManifest = Manifest("2", newFiles);
+        var folder = Path.Combine(patchRoot.FullName, "game");
+        foreach (var (path, content) in oldFiles)
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(Path.Combine(folder, path))!);
+            File.WriteAllBytes(Path.Combine(folder, path), content);
+        }
+        // The player's own Steam copy hard-linked into the folder: patching must never write into it.
+        var steamFolder = Path.Combine(patchRoot.FullName, "steam");
+        var steamCopy = Path.Combine(steamFolder, "Aion2/pak.pak");
+        var linked = OperatingSystem.IsWindows();
+        if (linked)
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(steamCopy)!);
+            File.WriteAllBytes(steamCopy, oldFiles["Aion2/pak.pak"]);
+            File.Delete(Path.Combine(folder, "Aion2/pak.pak"));
+            var steamBuild = new SupportedBuild(0, 0, "0", "Aion2/pak.pak", "", 1, oldFiles["Aion2/pak.pak"].Length,
+                [new BuildFile("Aion2/pak.pak", oldFiles["Aion2/pak.pak"].Length, "", false)]);
+            await ClientFiles.PlaceAsync(steamFolder, folder, steamBuild, ClientFiles.Mode.HardLink);
+        }
+
+        oldManifest.Save(folder);
+        var loaded = InstalledManifest.Load(folder)!;
+        Check(loaded.ManifestId == "1" && loaded.Files["aion2/PAK.pak"].Chunks.Count == 3 && loaded.Matches(folder),
+            "installed-build record round-trips (paths case-insensitive)");
+        Check(ClientPatch.Unchanged(oldManifest.Files["Aion2/other.bin"], newManifest.Files["Aion2/other.bin"])
+              && !ClientPatch.Unchanged(oldManifest.Files["Aion2/pak.pak"], newManifest.Files["Aion2/pak.pak"])
+              && !ClientPatch.Unchanged(null, newManifest.Files["Aion2/fresh.bin"]), "unchanged = same size and same pieces at the same places");
+        Check(ClientPatch.BytesToFetch(oldManifest, newManifest) == piece + piece + 100 && ClientPatch.BytesToFetch(null, newManifest) == newFiles.Values.Sum(v => (long)v.Length),
+            "to fetch: only pieces the old build lacks (x twice and its tail), everything without a record");
+        Check(ClientPatch.Removed(oldManifest, newManifest).SequenceEqual(["Aion2/gone.bin"]) && ClientPatch.Removed(null, newManifest).Count == 0,
+            "only files of the old record that the new build dropped are removed");
+
+        var fetched = 0L;
+        var bySha = newFiles.Values.SelectMany(v => Describe(v, piece).Chunks.Select(ch => (ch.Sha1, Data: v.AsSpan((int)ch.Offset, ch.Length).ToArray())))
+            .GroupBy(p => p.Sha1).ToDictionary(g => g.Key, g => g.First().Data);
+        Task<int> Fetch(ChunkRef chunk, byte[] buffer, CancellationToken _)
+        {
+            Interlocked.Add(ref fetched, chunk.Length);
+            bySha[chunk.Sha1].CopyTo(buffer, 0);
+            return Task.FromResult(chunk.Length);
+        }
+        var sources = ClientPatch.Index(oldManifest);
+        long reported = 0;
+        foreach (var (path, file) in newManifest.Files)
+        {
+            if (ClientPatch.Unchanged(oldManifest.Files.GetValueOrDefault(path), file)) continue;
+            await ClientPatch.PatchFileAsync(folder, path, file, sources, Fetch, n => Interlocked.Add(ref reported, n), 4, CancellationToken.None);
+        }
+        Check(newFiles.All(kv => File.ReadAllBytes(Path.Combine(folder, kv.Key)).SequenceEqual(kv.Value)), "every changed file is the new build's afterwards");
+        Check(fetched == piece * 2 + 100, $"only the missing pieces were fetched ({fetched} bytes, not {newFiles.Values.Sum(v => v.Length)})");
+        Check(!Directory.EnumerateFiles(folder, "*" + ClientPatch.PartSuffix, SearchOption.AllDirectories).Any(), "no .patch files are left behind");
+        if (linked) Check(File.ReadAllBytes(steamCopy).SequenceEqual(oldFiles["Aion2/pak.pak"]), "the player's own copy of a file is never written into");
+
+        // A folder without a record: pieces at the same place are kept, the rest fetched; an interrupted .patch is resumed.
+        var bare = Path.Combine(patchRoot.FullName, "bare");
+        Directory.CreateDirectory(Path.Combine(bare, "Aion2"));
+        File.WriteAllBytes(Path.Combine(bare, "Aion2/pak.pak"), [.. b, .. a, .. c, .. a]);   // pieces 0, 2 and 3 already right
+        fetched = 0;
+        var pak = newManifest.Files["Aion2/pak.pak"];
+        Check(!await ClientPatch.AlreadyMatchesAsync(bare, "Aion2/pak.pak", pak, CancellationToken.None), "a differing file is not taken as done");
+        File.WriteAllBytes(Path.Combine(bare, "Aion2/pak.pak" + ClientPatch.PartSuffix), [.. new byte[piece], .. x, .. new byte[piece * 2]]);   // x already fetched before
+        await ClientPatch.PatchFileAsync(bare, "Aion2/pak.pak", pak, new Dictionary<string, ChunkSource>(), Fetch, _ => { }, 4, CancellationToken.None);
+        Check(File.ReadAllBytes(Path.Combine(bare, "Aion2/pak.pak")).SequenceEqual(newFiles["Aion2/pak.pak"]) && fetched == 0,
+            "without a record: same-place pieces and the interrupted .patch's piece are reused, nothing fetched");
+        Check(await ClientPatch.AlreadyMatchesAsync(bare, "Aion2/pak.pak", pak, CancellationToken.None), "a file holding every piece is taken as done");
+
+        // A bad piece from the network is refused, and the old file stays as it was.
+        var broken = Path.Combine(patchRoot.FullName, "broken");
+        Directory.CreateDirectory(Path.Combine(broken, "Aion2"));
+        File.WriteAllBytes(Path.Combine(broken, "Aion2/fresh.bin"), a);
+        try
+        {
+            await ClientPatch.PatchFileAsync(broken, "Aion2/fresh.bin", newManifest.Files["Aion2/fresh.bin"], new Dictionary<string, ChunkSource>(),
+                (chunk, buffer, _) => { Array.Clear(buffer); return Task.FromResult(chunk.Length); }, _ => { }, 2, CancellationToken.None);
+            Check(false, "a piece that does not match its id was accepted");
+        }
+        catch (InvalidDataException) { checks++; }
+        Check(File.ReadAllBytes(Path.Combine(broken, "Aion2/fresh.bin")).SequenceEqual(a), "a failed patch leaves the old file untouched");
+        Check(SupportedBuild.Embedded.PreviousManifests is ["1699273097574069541"], "the supported build names the earlier build to match old folders against");
+    }
+    finally { patchRoot.Delete(recursive: true); }
+}
+
 // ---------- Real Steam cache (this PC, read-only) ----------
 var steamRoot = Environment.GetEnvironmentVariable("AION_STEAM_ROOT") ?? @"C:\Program Files (x86)\Steam";
 var steam = new SteamInstall(steamRoot);

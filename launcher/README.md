@@ -85,6 +85,18 @@ next one itself; the player only confirms and answers Windows prompts.
    quick hash check runs (game binary and pak index files). Then, elevated once (UAC): firewall rules named "Private game server" for
    every exe in the copy, blocking all remote addresses except loopback and the server, in and out.
 
+Game updates (0.6.0): when the server moves to a newer build (a new `supported-build.json`), an installed copy that no
+longer matches it by size gets "Update the game" instead of Play. If the player's Steam install already is the new
+build on the same drive, it is hard-linked again (instant). Otherwise the launcher updates the folder in place the way
+Steam does (`ClientPatch`): it compares the new manifest's pieces (SHA-1 chunk ids) with what the folder holds and
+downloads only the missing ones. What the folder holds comes from `.installed-build.json`, written after every
+finished download; a folder from before that file existed is matched against the build's `previousManifests`
+(fetched from Steam; written by tools/launcher_build.py). A changed file is put together in `<file>.patch` from the
+pieces at hand (any old file, any place, each checked against its SHA-1) and the missing ones from Steam, then moved
+over the old file, so an old file is never written in place (it may be a hard link into the player's Steam install).
+Unchanged files are not touched, files the build dropped are removed (only those listed in the old record), an
+interrupted update resumes from its `.patch` files, and the firewall rules are kept (same folder, no UAC prompt).
+
 The reference lists only files the depot contains. A copy that has been run also holds files the
 game creates: `Aion2/InstallLog.txt` and NCGuard's `Aion2/Binaries/Win64/NCGuard/bb64.dll`
 (15.8 MB, not the 7.7 MB `Plugins/NCGuardSDK` copy). Whether a fresh copy creates that module while
@@ -114,7 +126,7 @@ used) download the same manifest.
 ```powershell
 dotnet run --project tests/Aion.Launcher.Checks
 dotnet publish launcher/AionLauncher -c Release -r win-x64 -o research/local/launcher-publish -p:DebugType=none
-echo 0.5.0 > "research/local/launcher-publish/A2Core Launcher.exe.version"
+echo 0.6.0 > "research/local/launcher-publish/A2Core Launcher.exe.version"
 scp "research/local/launcher-publish/A2Core Launcher.exe" "research/local/launcher-publish/A2Core Launcher.exe.version" root@<server>:/var/lib/aion/downloads/
 ```
 

@@ -286,10 +286,13 @@ sealed class MainForm : Form
     async Task NextAsync()
     {
         if (!workflow.Account.SignedIn) { ShowSignIn(); return; }
-        if (workflow.Installed) { ShowPlay(); return; }
+        var updating = workflow.Installed && await workflow.OutdatedAsync();
+        if (workflow.Installed && !updating) { ShowPlay(); return; }
         steam ??= Workflow.FindSteam();
         if (steam is null) { ShowNoSteam(); return; }
-        Page(GameStep, "Looking for the game", "Checking your Steam library for the version this server needs…");
+        Page(GameStep, updating ? "Updating the game" : "Looking for the game", updating
+            ? "This server moved to a newer version of the game. Checking your Steam library for it…"
+            : "Checking your Steam library for the version this server needs…");
         ClientSource? source = null;
         if (!await RunAsync(async _ => source = await workflow.FindSourceAsync(steam)))
         {
@@ -297,7 +300,19 @@ sealed class MainForm : Form
             return;
         }
         if (source is not null) ShowInstall(source);
+        else if (updating) ShowUpdate();
         else ShowDownload();
+    }
+
+    /// <summary>The installed game is an older build: update it in place, downloading only what changed.</summary>
+    void ShowUpdate()
+    {
+        if (workflow.Updating) { ShowDownload(); return; }
+        Page(GameStep, "Update the game", "This server moved to a newer version of the game. Only the parts that changed are downloaded "
+            + "from Steam with your own Steam account; everything else in your game folder is reused.");
+        AddRequirement(null).Set(true, $"Updating {workflow.Settings.InstallFolder} ({Gb(Workflow.FreeBytes(workflow.Settings.InstallFolder!))} free).");
+        AddButton("Sign in to Steam and update", primary: true, () => { workflow.StartUpdate(); return DownloadAsync(); }, wide: true);
+        AddLabel("You sign in by scanning a QR code with the Steam app on your phone. A2Core Launcher never sees your Steam password.", muted: true);
     }
 
     // ---------- Sign in ----------
@@ -443,14 +458,18 @@ sealed class MainForm : Form
     void ShowDownload(string? message = null)
     {
         var resuming = workflow.Settings.DownloadFolder is not null;
-        Page(GameStep, resuming ? "Continue the download" : "Download the game", "This server runs one specific version of the game (about 88 GB). "
+        var updating = workflow.Updating;
+        Page(GameStep, updating ? "Continue the update" : resuming ? "Continue the download" : "Download the game", updating
+            ? "Only the parts of the game that changed are downloaded; everything else in your game folder is reused."
+            : "This server runs one specific version of the game (about 88 GB). "
             + "A2Core Launcher downloads it from Steam with your own Steam account. Your normal Steam copy of the game is not changed.");
         var folder = workflow.DownloadFolder();
         var spaceRow = AddRequirement(null);
         spaceRow.Set(folder is not null, folder is null
             ? $"No drive has {Gb(workflow.Build.TotalBytes)} free. Free up space, then press Check again."
+            : updating ? $"Updating {folder} ({Gb(Workflow.FreeBytes(folder))} free)."
             : $"Saving to {folder} ({Gb(workflow.StillNeeded(folder))} to download, {Gb(Workflow.FreeBytes(folder))} free).");
-        var start = AddButton(resuming ? "Continue download" : "Sign in to Steam and download", primary: true, null, wide: true);
+        var start = AddButton(updating ? "Continue update" : resuming ? "Continue download" : "Sign in to Steam and download", primary: true, null, wide: true);
         start.Visible = folder is not null;
         if (folder is null) AddButton("Check again", primary: false, () => { ShowDownload(); return Task.CompletedTask; });
         AddLabel("You sign in by scanning a QR code with the Steam app on your phone. A2Core Launcher never sees your Steam password.", muted: true);

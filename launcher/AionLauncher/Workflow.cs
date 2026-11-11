@@ -27,6 +27,21 @@ sealed class Workflow(LauncherConfig config, LauncherSettings settings)
 
     public bool Installed => settings.InstallFolder is { } folder && File.Exists(Path.Combine(folder, Build.Executable));
 
+    /// <summary>The installed folder holds another build (the server moved to a newer game version): sizes only, instant.</summary>
+    public async Task<bool> OutdatedAsync() =>
+        Installed && !(await ClientFiles.CheckAsync(settings.InstallFolder!, Build, CheckLevel.Sizes)).Ok;
+
+    /// <summary>An update of the installed folder is under way (it is the download's folder).</summary>
+    public bool Updating => settings.InstallFolder is { } installed && settings.DownloadFolder is { } downloading
+        && string.Equals(Path.GetFullPath(installed), Path.GetFullPath(downloading), StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Updates the installed folder in place: the download goes there and reuses every piece it already has.</summary>
+    public void StartUpdate()
+    {
+        settings.DownloadFolder = settings.InstallFolder;
+        settings.Save();
+    }
+
     /// <summary>
     /// The private copy's folder, on the same drive as its source so placing it is a hard link or a
     /// move (no extra space): under %LOCALAPPDATA% on the system drive, else &lt;drive&gt;:\A2CorePrivate.
@@ -49,8 +64,10 @@ sealed class Workflow(LauncherConfig config, LauncherSettings settings)
     {
         if (steam.FindApp() is { } app && (app.Manifest == Build.ManifestId || (await ClientFiles.CheckAsync(app.Folder, Build, CheckLevel.Sizes)).Ok))
         {
-            var mode = ClientFiles.SameVolume(app.Folder, TargetFor(app.Folder)) ? ClientFiles.Mode.HardLink : ClientFiles.Mode.Copy;
-            if (mode == ClientFiles.Mode.HardLink || FreeBytes(TargetFor(app.Folder)) > Build.TotalBytes)
+            var mode = ClientFiles.SameVolume(app.Folder, InstallTarget(app.Folder)) ? ClientFiles.Mode.HardLink : ClientFiles.Mode.Copy;
+            // An update copies nothing: linking is instant, else only the changed pieces are downloaded.
+            if (Installed && mode != ClientFiles.Mode.HardLink) return null;
+            if (mode == ClientFiles.Mode.HardLink || FreeBytes(InstallTarget(app.Folder)) > Build.TotalBytes)
                 return new(app.Folder, mode, "your Steam install");
         }
         return null;
@@ -97,14 +114,21 @@ sealed class Workflow(LauncherConfig config, LauncherSettings settings)
 
     // ---------- Install ----------
 
+    /// <summary>Where files from <paramref name="source"/> go: the installed folder when updating it on the same drive, else <see cref="TargetFor"/>.</summary>
+    public string InstallTarget(string source) =>
+        Installed && ClientFiles.SameVolume(source, settings.InstallFolder!) ? settings.InstallFolder! : TargetFor(source);
+
     public async Task InstallAsync(ClientSource source, Action<string> status, IProgress<(long, long)> progress, CancellationToken ct)
     {
-        var target = TargetFor(source.Folder);
+        var target = InstallTarget(source.Folder);
+        var updating = Installed;
         Directory.CreateDirectory(target);
         status(source.Mode == ClientFiles.Mode.HardLink
             ? "Linking the game files from your Steam install (no extra disk space)…"
             : "Copying the game files from your Steam install (about 88 GB)…");
-        await ClientFiles.PlaceAsync(source.Folder, target, Build, source.Mode, progress, ct);
+        await ClientFiles.PlaceAsync(source.Folder, target, Build, source.Mode, progress, ct, replace: updating);
+        // Its pieces are not known here (no Steam manifest): a later update matches the folder against previousManifests.
+        File.Delete(Path.Combine(target, InstalledManifest.FileName));
         status("Checking the game files…");
         var check = await ClientFiles.CheckAsync(target, Build, CheckLevel.Quick, progress, ct);
         if (!check.Ok) throw new LauncherException($"The installed files do not match the supported build ({check.Problem}).");
@@ -126,9 +150,14 @@ sealed class Workflow(LauncherConfig config, LauncherSettings settings)
 
     async Task FinishAsync(string folder, Action<string> status)
     {
-        status("Allowing the game to reach only this server (approve the Windows prompt)…");
-        if (!await Elevated.RunAsync("--setup-firewall", folder, config.ServerAddress))
-            throw new LauncherException("The Windows permission prompt was declined, so the firewall rules were not added. Press Try again and choose Yes.");
+        // An update in place keeps the folder, so the firewall rules for it are already there (no Windows prompt).
+        var sameFolder = settings.InstallFolder is { } installed && string.Equals(Path.GetFullPath(installed), Path.GetFullPath(folder), StringComparison.OrdinalIgnoreCase);
+        if (!sameFolder || !FirewallRulesPresent())
+        {
+            status("Allowing the game to reach only this server (approve the Windows prompt)…");
+            if (!await Elevated.RunAsync("--setup-firewall", folder, config.ServerAddress))
+                throw new LauncherException("The Windows permission prompt was declined, so the firewall rules were not added. Press Try again and choose Yes.");
+        }
         settings.InstallFolder = folder;
         settings.VerifiedStamp = QuickStamp(folder);
         // The Steam sign-in was only kept to resume the download.

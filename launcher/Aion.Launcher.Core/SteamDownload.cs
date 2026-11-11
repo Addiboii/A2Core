@@ -12,7 +12,7 @@ public sealed class SteamDownloadException(string message) : Exception(message);
 /// <summary>
 /// Downloads the supported build straight from Steam with the player's own account (SteamKit2):
 /// QR sign-in in the Steam mobile app, the depot key and manifest request code for that one
-/// manifest, then every chunk from Steam's content servers into the target folder. Each chunk is
+/// manifest, then the chunks the target folder does not already hold (ClientPatch) from Steam's content servers. Each chunk is
 /// checked by SteamKit2 (Adler) and against its SHA-1 id; a bad chunk is fetched again from
 /// another server. Interrupted downloads resume: finished files are listed in a state file and
 /// other existing chunks are kept when their SHA-1 matches.
@@ -116,11 +116,15 @@ public sealed class SteamDownload : IDisposable
         return result;
     }
 
-    /// <summary>Downloads every file of the build into <paramref name="target"/> (signed in first).</summary>
+    /// <summary>
+    /// Brings <paramref name="target"/> to the build (signed in first), fetching only what it does not already hold: the folder's
+    /// <see cref="InstalledManifest"/> (or, for a folder from before it was written, the build's <c>previousManifests</c> fetched from
+    /// Steam when the folder matches one) tells which pieces are there; unchanged files are skipped, changed ones are put together
+    /// from the pieces at hand plus the missing ones from Steam (<see cref="ClientPatch"/>), files the build dropped are removed.
+    /// </summary>
     public async Task DownloadAsync(SupportedBuild build, string target, IProgress<Status> progress, CancellationToken ct)
     {
         uint appId = (uint)build.AppId, depotId = (uint)build.DepotId;
-        var manifestId = ulong.Parse(build.ManifestId);
         progress.Report(new(0, build.TotalBytes, "Asking Steam for the game version…"));
 
         var key = await apps.GetDepotDecryptionKey(depotId, appId);
@@ -128,28 +132,39 @@ public sealed class SteamDownload : IDisposable
             throw new SteamDownloadException(key.Result == EResult.AccessDenied
                 ? "This Steam account does not have the game. Add it to your Steam library, then try again."
                 : $"Steam refused the game files ({key.Result}).");
-        var code = await content.GetManifestRequestCode(depotId, appId, manifestId, "public", null);
-        if (code == 0) throw new SteamDownloadException("Steam did not allow downloading this game version.");
-
         var servers = (await content.GetServersForSteamPipe())
             .Where(s => s.Type is "SteamCache" or "CDN" && (s.AllowedAppIds.Length == 0 || s.AllowedAppIds.Contains(appId)))
             .OrderBy(s => s.WeightedLoad).ToList();
         if (servers.Count == 0) throw new SteamDownloadException("Steam offered no download servers.");
         using var cdn = new Client(client);
 
-        DepotManifest? manifest = null;
-        for (var attempt = 0; manifest is null; attempt++)
-        {
-            try { manifest = await cdn.DownloadManifestAsync(depotId, manifestId, code, servers[attempt % servers.Count], key.DepotKey); }
-            catch (Exception error) when (attempt < Attempts && error is HttpRequestException or SteamKitWebRequestException or TaskCanceledException && !ct.IsCancellationRequested) { }
-        }
-        var files = (manifest.Files ?? []).Where(f => !f.Flags.HasFlag(EDepotFileFlag.Directory))
-            .ToDictionary(f => f.FileName.Replace('\\', '/'), StringComparer.OrdinalIgnoreCase);
+        var manifest = await ManifestAsync(cdn, servers, appId, depotId, ulong.Parse(build.ManifestId), key.DepotKey, ct)
+            ?? throw new SteamDownloadException("Steam did not allow downloading this game version.");
+        var files = Listed(manifest);
         foreach (var file in build.Files)
             if (!files.TryGetValue(file.Path, out var listed) || (long)listed.TotalSize != file.Size)
                 throw new SteamDownloadException($"Steam's file list differs from this server's version ({file.Path}).");
+        var now = ToInstalled(build.ManifestId, build.Files.Select(f => f.Path), files);
 
         Directory.CreateDirectory(target);
+        var old = InstalledManifest.Load(target);
+        if (old is null && build.PreviousManifests is { Count: > 0 } previous && Directory.Exists(Path.Combine(target, "Aion2")))
+        {
+            progress.Report(new(0, build.TotalBytes, "Looking at the game files already in the folder…"));
+            foreach (var id in previous)
+            {
+                if (await ManifestAsync(cdn, servers, appId, depotId, ulong.Parse(id), key.DepotKey, ct) is not { } before) continue;
+                var candidate = ToInstalled(id, null, Listed(before));
+                if (candidate.Matches(target)) { old = candidate; break; }
+            }
+        }
+        var sources = ClientPatch.Index(old);
+        // SteamKit fetches a piece by its own chunk record (compressed length and checksum included).
+        var chunkData = new Dictionary<string, DepotManifest.ChunkData>(StringComparer.Ordinal);
+        foreach (var path in now.Files.Keys)
+            foreach (var chunk in files[path].Chunks)
+                chunkData.TryAdd(Convert.ToHexStringLower(chunk.ChunkID!), chunk);
+
         var statePath = Path.Combine(target, StateFile);
         var finished = new ConcurrentDictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
         if (File.Exists(statePath))
@@ -157,79 +172,93 @@ public sealed class SteamDownload : IDisposable
         var stateLock = new object();
 
         long done = 0, total = build.TotalBytes, reported = 0;
+        var phase = old is null ? "Downloading…" : $"Updating: about {ClientPatch.BytesToFetch(old, now) / 1e9:0.0} GB to download, the rest is already here…";
+        progress.Report(new(0, total, phase));
         void Add(long bytes)
         {
-            var now = Interlocked.Add(ref done, bytes);
-            if (now - Interlocked.Read(ref reported) > 8 << 20 || now == total)
+            var at = Interlocked.Add(ref done, bytes);
+            if (at - Interlocked.Read(ref reported) > 8 << 20 || at == total)
             {
-                Interlocked.Exchange(ref reported, now);
-                progress.Report(new(now, total, "Downloading…"));
+                Interlocked.Exchange(ref reported, at);
+                progress.Report(new(at, total, phase));
             }
         }
 
         var chunkSlots = new SemaphoreSlim(ParallelChunks);
         var serverIndex = 0;
-        await Parallel.ForEachAsync(build.Files, new ParallelOptions { MaxDegreeOfParallelism = ParallelFiles, CancellationToken = ct }, async (file, token) =>
+        async Task<int> FetchAsync(ChunkRef piece, byte[] buffer, CancellationToken token)
         {
-            var path = Path.Combine(target, file.Path);
-            var info = new FileInfo(path);
-            if (finished.ContainsKey(file.Path) && info.Exists && info.Length == file.Size) { Add(file.Size); return; }
-            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-            var existed = info.Exists && info.Length == file.Size;
-            using (var handle = File.OpenHandle(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.Read, FileOptions.Asynchronous))
+            var data = chunkData[piece.Sha1];
+            await chunkSlots.WaitAsync(token);
+            try
             {
-                if (RandomAccess.GetLength(handle) != file.Size) RandomAccess.SetLength(handle, file.Size);
-                var chunks = files[file.Path].Chunks;
-                await Parallel.ForEachAsync(chunks, new ParallelOptions { MaxDegreeOfParallelism = ParallelChunks, CancellationToken = token }, async (chunk, chunkToken) =>
+                for (var attempt = 1; ; attempt++)
                 {
-                    var buffer = ArrayPool<byte>.Shared.Rent((int)chunk.UncompressedLength);
+                    var server = servers[(Interlocked.Increment(ref serverIndex) & int.MaxValue) % servers.Count];
                     try
                     {
-                        if (existed && await HasChunkAsync(handle, chunk, buffer, chunkToken)) { Add(chunk.UncompressedLength); return; }
-                        await chunkSlots.WaitAsync(chunkToken);
-                        try
-                        {
-                            for (var attempt = 1; ; attempt++)
-                            {
-                                var server = servers[(Interlocked.Increment(ref serverIndex) & int.MaxValue) % servers.Count];
-                                try
-                                {
-                                    var length = await cdn.DownloadDepotChunkAsync(depotId, chunk, server, buffer, key.DepotKey);
-                                    if (length != chunk.UncompressedLength || !SHA1.HashData(buffer.AsSpan(0, length)).AsSpan().SequenceEqual(chunk.ChunkID))
-                                        throw new InvalidDataException("Chunk does not match its id");
-                                    await RandomAccess.WriteAsync(handle, buffer.AsMemory(0, length), (long)chunk.Offset, chunkToken);
-                                    break;
-                                }
-                                catch (Exception error) when (attempt < Attempts && !chunkToken.IsCancellationRequested
-                                    && error is HttpRequestException or SteamKitWebRequestException or InvalidDataException or TaskCanceledException or IOException)
-                                {
-                                    await Task.Delay(TimeSpan.FromMilliseconds(250 * attempt), chunkToken);
-                                }
-                            }
-                        }
-                        finally { chunkSlots.Release(); }
-                        Add(chunk.UncompressedLength);
+                        var length = await cdn.DownloadDepotChunkAsync(depotId, data, server, buffer, key.DepotKey);
+                        if (length != piece.Length || !SHA1.HashData(buffer.AsSpan(0, length)).AsSpan().SequenceEqual(data.ChunkID))
+                            throw new InvalidDataException("Chunk does not match its id");
+                        return length;
                     }
-                    finally { ArrayPool<byte>.Shared.Return(buffer); }
-                });
+                    catch (Exception error) when (attempt < Attempts && !token.IsCancellationRequested
+                        && error is HttpRequestException or SteamKitWebRequestException or InvalidDataException or TaskCanceledException or IOException)
+                    {
+                        await Task.Delay(TimeSpan.FromMilliseconds(250 * attempt), token);
+                    }
+                }
             }
-            lock (stateLock) File.AppendAllText(statePath, file.Path + "\n");
+            finally { chunkSlots.Release(); }
+        }
+
+        await Parallel.ForEachAsync(now.Files, new ParallelOptions { MaxDegreeOfParallelism = ParallelFiles, CancellationToken = ct }, async (entry, token) =>
+        {
+            var (path, file) = (entry.Key, entry.Value);
+            var info = new FileInfo(Path.Combine(target, path));
+            var skip = finished.ContainsKey(path) && info.Exists && info.Length == file.Size
+                || old is not null && info.Exists && info.Length == file.Size && ClientPatch.Unchanged(old.Files.GetValueOrDefault(path), file)
+                || old is null && await ClientPatch.AlreadyMatchesAsync(target, path, file, token);
+            if (skip) Add(file.Size);
+            else await ClientPatch.PatchFileAsync(target, path, file, sources, FetchAsync, Add, ParallelChunks, token);
+            lock (stateLock) File.AppendAllText(statePath, path + "\n");
         });
+        foreach (var path in ClientPatch.Removed(old, now))
+        {
+            var stale = Path.Combine(target, path);
+            if (File.Exists(stale)) File.Delete(stale);
+        }
+        now.Save(target);
         File.Delete(statePath);
-        progress.Report(new(total, total, "Download finished."));
+        progress.Report(new(total, total, old is null ? "Download finished." : "Update finished."));
     }
 
-    static async Task<bool> HasChunkAsync(Microsoft.Win32.SafeHandles.SafeFileHandle handle, DepotManifest.ChunkData chunk, byte[] buffer, CancellationToken ct)
+    /// <summary>A manifest from Steam, or null when Steam does not hand out its request code (an old or withdrawn version).</summary>
+    async Task<DepotManifest?> ManifestAsync(Client cdn, IReadOnlyList<Server> servers, uint appId, uint depotId, ulong manifestId, byte[]? depotKey, CancellationToken ct)
     {
-        var length = (int)chunk.UncompressedLength;
-        var read = 0;
-        while (read < length)
+        var code = await content.GetManifestRequestCode(depotId, appId, manifestId, "public", null);
+        if (code == 0) return null;
+        for (var attempt = 0; ; attempt++)
         {
-            var n = await RandomAccess.ReadAsync(handle, buffer.AsMemory(read, length - read), (long)chunk.Offset + read, ct);
-            if (n == 0) return false;
-            read += n;
+            try { return await cdn.DownloadManifestAsync(depotId, manifestId, code, servers[attempt % servers.Count], depotKey); }
+            catch (Exception error) when (attempt < Attempts && error is HttpRequestException or SteamKitWebRequestException or TaskCanceledException && !ct.IsCancellationRequested) { }
         }
-        return SHA1.HashData(buffer.AsSpan(0, length)).AsSpan().SequenceEqual(chunk.ChunkID);
+    }
+
+    static Dictionary<string, DepotManifest.FileData> Listed(DepotManifest manifest) =>
+        (manifest.Files ?? []).Where(f => !f.Flags.HasFlag(EDepotFileFlag.Directory))
+            .ToDictionary(f => f.FileName.Replace('\\', '/'), StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>The pieces of the listed files (all files when <paramref name="only"/> is null) as an <see cref="InstalledManifest"/>.</summary>
+    static InstalledManifest ToInstalled(string manifestId, IEnumerable<string>? only, IReadOnlyDictionary<string, DepotManifest.FileData> files)
+    {
+        var result = new Dictionary<string, ManifestFile>(StringComparer.OrdinalIgnoreCase);
+        foreach (var path in only ?? files.Keys)
+        {
+            var file = files[path];
+            result[path] = new((long)file.TotalSize, file.Chunks.Select(c => new ChunkRef((long)c.Offset, (int)c.UncompressedLength, Convert.ToHexStringLower(c.ChunkID!))).ToList());
+        }
+        return new(manifestId, result);
     }
 
     public void Dispose()
