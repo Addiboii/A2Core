@@ -16,6 +16,26 @@ Opcode names in `research/local/tooling/opcodes.json` and several packet layouts
 (https://github.com/nuriland/a2kit, commit fb693ba), MIT License, Copyright (c) 2026 nuri. NOIA2, Aether-Aion2-DPS-meter-Global
 and AIon2-Dps-Meter (GPL-3.0) were used only to compare packet layouts; no code was copied from them.
 
+## Credits
+
+- **Artezianec**: pull requests #2 to #21 and the fork A2Core-ChanAge
+  (https://github.com/Artezianec/A2Core-ChanAge). Ported from them with fixes, each file naming the pull request in its
+  header: two-step sign-in (TOTP), the launcher's certificate pin, host log files, chat following a character switch
+  and friend-list blocks, the per-class dodges, purchased skill levels, the cast reply order, chain skills and
+  projectiles, abnormal stacking, the map-event object directives, the dungeon entry gate, entry tickets, object hit
+  limits and carried boxes, quest teleport, godstones, exceed enchanting, the legion warehouse, wallet and officers,
+  the broker and the gift box.
+- **Artezianec (A2Core-ChanAge) and ckrealm** (https://github.com/ckrealm/A2Core): their forks pointed to the
+  following, which was then built from the client's tables and our own recordings of the official server (no code or
+  data was copied from the forks): skill ranges, stigmas, wings, the Daevanion tables, stagger per skill, the Fighter
+  unlock rows, dungeon revive limits, skill-effect conditions, quest zone fields, default subzones, stigma shard
+  boxes, recovery orbs, the item-use-by-template and death-reason messages, separate staff sessions and ranks,
+  configurable rates, the diagnostics API, nightly backups, and several tool fixes. The forks name KiskEmu as the
+  source of parts of their own work.
+- **The release thread on RaGEZONE**: the reports and questions there (the Asmodian race bug, the Shadow Forest quest,
+  the administrator launcher and NCGuard, closed registration, running on Windows) shaped the fixes and the
+  documentation.
+
 A2Core contains no game client and no client archive key. Players use their own copy of the game, obtained through
 their own Steam account.
 
