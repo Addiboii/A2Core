@@ -639,6 +639,12 @@ Check((await game.HandleAsync([0x30, 0x36], Now)).Single().SequenceEqual(GamePac
           && staggered.FindIndex(b => b.SequenceEqual(GamePackets.NpcHp(1001, staggerer.Targets[1001].Hp))) == guardAt + 1,
           "a cast on a guarded NPC: its hit, the drain 0x3804, 0xe005 energy 40, then the NPC's HP");
 }
+// Skill-effect conditions (SkillEffectConditions.cs, SkillEffect.dat SkillEffectConditionList; loaded, not evaluated yet).
+Check(SkillEffectConditions.Count == 10003 && SkillEffectConditions.EffectsOf(15200058).SequenceEqual([1520005811])
+      && SkillEffectConditions.Of(1520005811) is [{ Type: "Target_HasAbnormalGroupId", Values: ["152000021", "0"], Negate: false }],
+      "15200058's effect needs the target's abnormal group 152000021 (value \"0\")");
+Check(SkillEffectConditions.Of(1604000011) is [{ Type: "IsMainTarget", Negate: false }] && SkillEffectConditions.Of(1604000012) is [{ Type: "IsMainTarget", Negate: true }]
+      && SkillEffectConditions.Of(1604000013).Count == 0, "ConditionalExpression false negates: 16040000's main-target and splash rows; its stagger row is unconditional");
 async Task<GameSession> BarSession(int level = 1)
 {
     var session = new GameSession(data, new GameSessionOptions { CharacterLevel = level }, new Random(9));
