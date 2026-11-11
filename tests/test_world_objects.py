@@ -31,6 +31,22 @@ class WorldObjectTests(unittest.TestCase):
             {'Value': {'Name': 'Sound', 'Location': {'X': 0, 'Y': 0, 'Z': 0}, 'FuncType': 'ETriggerActorFuncType::Sound'}}]}, wanted=set())
         self.assertEqual([(a['name'], a['shape'], a['box']) for a in areas], [('Trigger_Q_A', 'Box', [100, 50])])
 
+    def test_recovery_orbs_carry_life_time_radius_and_hit_skills(self):
+        rows = world_objects.envobj_rows({'Properties': [
+            {'ID': {'Value': 7}, 'Name': 'Basic_RecoveryOrb_01', 'Usage': 'EEnvObjectUsage::Overlap', 'LifeTime': 30000,
+             'CollisionCylinderRadius': 45, 'HitSkillIdList': [{'Value': 1801510}, {'Value': 1801520}]},
+            {'ID': {'Value': 8}, 'Name': 'Box', 'Usage': 'EEnvObjectUsage::Quest'}]})
+        spawn = {'SpawnInfoList': [{'Name': n, 'EnvObjIdList': [{'Value': e}],
+                                    'Positions': [{'Location': {'X': 0, 'Y': 0, 'Z': 0}, 'Rotation': {'Yaw': 0}}]} for n, e in (('o', 7), ('b', 8))]}
+        orb, box = world_objects.objects(spawn, rows, wanted=set(), everything=True)
+        self.assertEqual(orb['recovery_orb'], {'life_time': 30000, 'radius': 45, 'hit_skills': [1801510, 1801520]})
+        self.assertNotIn('recovery_orb', box)
+        self.assertEqual(world_objects.recovery_orbs(rows), {'7': {'name': 'Basic_RecoveryOrb_01', 'life_time': 30000, 'radius': 45,
+                                                                   'hit_skills': [1801510, 1801520]}})
+        data = json.loads((ROOT / 'tools/data/world-objects.json').read_text(encoding='utf-8'))
+        self.assertEqual(data['recovery_orbs']['1100133']['life_time'], 30000)
+        self.assertEqual(sum('recovery_orb' in o for m in data['maps'].values() for o in m['objects']), 104)
+
     def test_spawn_named_after_another_object_keeps_its_own_name(self):
         names = {'e_d0_firewood_001', 'e_d0_firewood_002'}
         self.assertTrue(world_objects.misleading('E_D0_FireWood_001_2', 'E_D0_FireWood_002', names))

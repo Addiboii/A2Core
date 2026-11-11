@@ -65,6 +65,8 @@ def envobj_rows(table):
                 'finish_duration': int(row.get('FinishDuration') or 0),
                 'not_have_abnormal_group': not_have_abnormal_group(row.get('InteractConditionList')),
                 'combat_power': int(row.get('CombatPower') or 0),
+                'life_time': int(row.get('LifeTime') or 0),
+                'collision_radius': int(row.get('CollisionCylinderRadius') or 0),
                 'level': int(row.get('Level') or 0), 'item_level': int(row.get('ItemLevel') or 0)}
     return rows
 
@@ -233,6 +235,11 @@ def objects(data, rows, wanted, gathers=None, everything=False, portals=None, du
                 if row.get('not_have_abnormal_group'):
                     found[-1]['carry'] = {'group': row['not_have_abnormal_group'], 'despawn': row['despawn'],
                                           'finish_duration': row['finish_duration']}
+                # Recovery orbs and their boxes (EnvObjData name *RecoveryOrb*; OBSERVED in EnvObjData.dat, build 26262663):
+                # LifeTime (ms, 0 = unset), CollisionCylinderRadius (cm) and HitSkillIdList. Data only: the pickup effect is unknown.
+                if 'RecoveryOrb' in str(row.get('name') or ''):
+                    found[-1]['recovery_orb'] = {'life_time': row['life_time'], 'radius': row['collision_radius'],
+                                                 'hit_skills': row.get('hit_skills') or []}
                 # Gated objects (EnvObjData CombatPower, with its Level and ItemLevel: the Morheim / Eltnen portals).
                 if row.get('combat_power'):
                     found[-1]['required_combat_power'] = row['combat_power']
@@ -265,6 +272,15 @@ def triggers(data, wanted, map_events=False):
     return found
 
 
+def recovery_orbs(rows):
+    """Every EnvObjData recovery orb or orb box (name *RecoveryOrb*), placed or not: id -> name, LifeTime (ms), collision
+    radius (cm) and HitSkillIdList. The timed orbs (LifeTime 30000, hit skills 1801510/1801520/1801531) are not placed by
+    any MapData; something spawns them at run time (unknown what). OBSERVED in EnvObjData.dat; data only."""
+    return {str(env): {'name': row['name'], 'life_time': row['life_time'], 'radius': row['collision_radius'],
+                       'hit_skills': row.get('hit_skills') or []}
+            for env, row in sorted(rows.items()) if 'RecoveryOrb' in str(row.get('name') or '')}
+
+
 def served_instance_maps(path=ROOT / 'tools/data/map-events.json'):
     """The instance layers and dungeons with map events (tools/map_events.py): all their objects and triggers are kept."""
     try:
@@ -294,7 +310,8 @@ def build():
             entry = maps.setdefault(str(data['MapId']), {'objects': [], 'triggers': []})
             entry['objects'].extend(placed)
             entry['triggers'].extend(areas)
-    return {'source': 'MapData.dat SpawnInfoList/TriggerActorDataMap + EnvObjData.dat', 'maps': maps}
+    return {'source': 'MapData.dat SpawnInfoList/TriggerActorDataMap + EnvObjData.dat', 'maps': maps,
+            'recovery_orbs': recovery_orbs(rows)}
 
 
 def main():
