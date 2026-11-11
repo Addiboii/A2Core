@@ -370,8 +370,9 @@ hold.DashVariant = 6;
 var sp6 = hold.Resource.Sp;
 Check((await hold.HandleAsync(holdOn, Now + 100)).Select(b => b[0] | b[1] << 8).SequenceEqual(new[] { 0x8d03, 0x3741 }), "dash variant 6: the sprint reply goes out at once");
 var dashRefused = await hold.HandleAsync(Cast(GameSession.CombatDodge, 1, new Vector3d(100, 0, 0)), Now + 104);
-Check(dashRefused.Count == 1 && dashRefused[0].SequenceEqual(GamePackets.DodgeResult(GameSession.CombatDodge, 1)) && hold.Resource.Sp == sp6,
-      "dash variant 6: the dash is refused (9-byte 0x3801 result 1), no skill start, no SP");
+Check(dashRefused.Count == 2 && dashRefused[0].SequenceEqual(GamePackets.DodgeResult(GameSession.CombatDodge, 1))
+      && dashRefused[1].SequenceEqual(GamePackets.SkillEnd(1, GameSession.CombatDodge, 9)) && hold.Resource.Sp == sp6,
+      "dash variant 6: the dash is refused (9-byte 0x3801 result 1) and its swing ended (0x3806), no skill start, no SP");
 Check((await hold.HandleAsync(holdOff, Now + 110)).Select(b => b[0] | b[1] << 8).SequenceEqual(new[] { 0x3722, 0x3742 }), "dash variant 6: sprint off after the refusal");
 var standing6 = await hold.HandleAsync(Cast(GameSession.CombatDodge, 1, new Vector3d(100, 0, 0)), Now + 120);
 Check(standing6.Select(b => b[0] | b[1] << 8).SequenceEqual(new[] { 0x3801, 0x8d00, 0x3802 }) && standing6[0].Length == 11
@@ -426,10 +427,26 @@ Check(variant9Fx.Any(b => Op(b) == 0x3804) && !variant9Fx.Any(b => b[0] == 0x06 
 var variant9End = await hold.TickAsync(Now + 2204);
 Check(variant9End.Any(b => b[0] == 0x06 && b[1] == 0x38) && variant9End.Any(b => b[0] == 0x2c && b[1] == 0x38), "dash variant 9: the dash ends 200 ms later");
 await hold.HandleAsync(holdOff, Now + 2210);
-hold.DashVariant = 10;
-Check((await hold.HandleAsync(holdOn, Now + 2600)).Select(b => b[0] | b[1] << 8).SequenceEqual(new[] { 0x8d03, 0x3741 }), "dash variant 10: the sprint reply goes out at once");
-Check((await hold.HandleAsync(Cast(GameSession.CombatDodge, 1, new Vector3d(100, 0, 0)), Now + 2604)).Count == 0, "dash variant 10: the dash request gets no reply");
+// Every cast request gets exactly one reply (0x3801 refusal or acceptance; a queued dash leaves later, never dropped).
+Check(GameSession.DashVariantMax == 9, "dash variant 10 (no reply to the dash) is retired");
+hold.DashVariant = 8;
+await hold.HandleAsync(holdOn, Now + 2600);
+var twoDashes = (await hold.HandleAsync(Cast(GameSession.CombatDodge, 1, new Vector3d(100, 0, 0)), Now + 2604)).Count
+    + (await hold.HandleAsync(Cast(GameSession.CombatDodge, 1, new Vector3d(100, 0, 0)), Now + 2606)).Count;
+var resprint = await hold.HandleAsync(holdOn, Now + 2610);
+Check(twoDashes == 0 && resprint.Count(b => Op(b) == 0x3801) == 2,
+      "dash variant 8: two dashes held before the tick both get their 0x3801 when a new sprint-on arrives (neither is dropped)");
 await hold.HandleAsync(holdOff, Now + 2700);
+hold.DashVariant = 0;
+var unreadable = await hold.HandleAsync(new PacketWriter().U16(0x3800).U16(16).I32(11020000).U8(2).ToArray(), Now + 2800);
+Check(unreadable.Count == 1 && unreadable[0].SequenceEqual(GamePackets.CastResult(false, 11020000)), "an unreadable 0x3800 is refused once, naming its skill");
+Check((await hold.HandleAsync([0x00, 0x38, 0x01], Now + 2801)).Single().SequenceEqual(GamePackets.CastResult(false, 0)), "a 0x3800 too short for a skill is refused with skill 0");
+hold.SetResource('S', 0);
+var brokeDodge = await hold.HandleAsync(Cast(GameSession.CombatDodge, 1, new Vector3d(100, 0, 0)), Now + 2900);
+Check(brokeDodge.Count == 2 && brokeDodge[0].SequenceEqual(GamePackets.CastReply(false, GameSession.CombatDodge, 9))
+      && brokeDodge[1].SequenceEqual(GamePackets.SkillEnd(1, GameSession.CombatDodge, 9)),
+      "a dodge refused for SP: one 0x3801 refusal, then 0x3806 ends the client's swing");
+Check((await hold.HandleAsync(Cast(11020000, 1, new Vector3d(100, 0, 0)), Now + 2901)).Count(b => Op(b) == 0x3801) == 1, "any other cast: exactly one 0x3801");
 hold.DashVariant = 0;
 game.DashVariant = 0;
 Check(Convert.ToHexStringLower(GamePackets.CharPoints(1, [(CharPoint.Mp, 1500), (CharPoint.MaxMp, 1500), (CharPoint.MaxSp, 100000), (CharPoint.MaxOp, 100000)], [(CharPoint.Hp, 119), (CharPoint.MaxHp, 119)]))[6..]

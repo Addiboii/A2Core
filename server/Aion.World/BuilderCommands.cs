@@ -42,7 +42,7 @@ public sealed class BuilderCommands(WorldPresence presence, GmPolicy policy, Act
         ["SetInvincible"] = "SetInvincible [true|false] or HP:true MP:true SP:true",
         ["SetInvincibleHP"] = "SetInvincibleHP [true|false]",
         ["NoCool"] = "NoCool [true|false]",
-        ["DashVariant"] = "DashVariant <0-10> (the sprint dash's reply shape, for live tests)",
+        ["DashVariant"] = "DashVariant <0-9> (the sprint dash's reply shape, for live tests)",
         ["Hp"] = "Hp [value]", ["Mp"] = "Mp [value]", ["Sp"] = "Sp [value]",
         ["FixHpPercent"] = "FixHpPercent [percent]",
         ["Teleport"] = "Teleport [MapID] [X] [Y] (Z), or Teleport [destination name]",

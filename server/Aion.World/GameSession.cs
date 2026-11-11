@@ -176,11 +176,11 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
     /// same write as the recorded dash (official: one batch). 8 is 7, held until <see cref="DashBatchDelayMs"/> after the sprint
     /// request (official answers 45-85 ms later, one tick). 9 is 7 but starts CombatDodge instead of NormalDodge.
     /// Variants 1-5 sent the sprint reply on its own, a frame before the dash, and the client never left the dash.
-    /// 10 answers the sprint and sends nothing for the dash request.
-    /// A standing dodge (no sprint) on 6-10 keeps variant 0: that is the reply this client already finishes.
+    /// (10, no reply to the dash request, froze too and was retired 2026-11-11: every cast request is answered once.)
+    /// A standing dodge (no sprint) on 6-9 keeps variant 0: that is the reply this client already finishes.
     /// </summary>
     public int DashVariant { get; set; }
-    public const int DashVariantMax = 10, DodgeLateEndMs = 600, DashBatchDelayMs = 50, SprintReplyHoldMs = 80;
+    public const int DashVariantMax = 9, DodgeLateEndMs = 600, DashBatchDelayMs = 50, SprintReplyHoldMs = 80;
     /// <summary>Sprint-on reply (and, for variant 8, the dash) waiting to share one write. Official sends them at one timestamp.</summary>
     List<byte[]>? pendingSprintReply, pendingDashBatch;
     long sprintOnAt;
@@ -1111,9 +1111,16 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         List<byte[]> reply = [GamePackets.SprintCooltime(playerKey), GamePackets.SprintOnReply(playerKey)];
         if (DashVariant is 7 or 8 or 9)
         {
+            // A dash still held from the previous sprint is that cast's only reply: it leaves now instead of being dropped.
+            var earlier = TakePendingSprint();
+            if (pendingDashBatch is { } held)
+            {
+                pendingDashBatch = null;
+                earlier.AddRange(held);
+                worldPlayer?.Map?.Broadcast(worldPlayer, held.Where(SharedCastPacket));
+            }
             pendingSprintReply = reply;
-            pendingDashBatch = null;
-            return [];
+            return earlier;
         }
         return reply;
     }
@@ -1126,7 +1133,8 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
     {
         if (variant == 8)
         {
-            pendingDashBatch = dash;
+            // A second dash before the tick joins the held batch: each cast request keeps its one reply.
+            pendingDashBatch = [.. pendingDashBatch ?? [], .. dash];
             return [];
         }
         var replies = TakePendingSprint();
@@ -1949,10 +1957,23 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         if (caster.Distance2d(target) - targetRadius > definition.UseRange + CastRangeTolerance) return false;
         return definition.UseHeightRange <= 0 || Math.Abs(caster.Z - target.Z) <= definition.UseHeightRange + CastRangeTolerance;
     }
+    /// <summary>
+    /// OURS: a 0x3800 we cannot parse is still answered once, refused (the 0x3801 of <see cref="GamePackets.CastResult"/>) with the
+    /// skill at its fixed place (bytes 4-7 after opcode and mask) when the body holds it, else skill 0. Silence left the client's
+    /// cast waiting.
+    /// </summary>
+    static byte[] UnreadableCastRefusal(byte[] body) => GamePackets.CastResult(false, body.Length >= 8 ? BitConverter.ToInt32(body, 4) : 0);
+
+    /// <summary>
+    /// A refused dodge: its refusal, then the dodge's end (0x3806 with the request's action uid) so the swing the client started on
+    /// its own ends too. CANDIDATE: no refused dodge is recorded; 0x3806 is the end the official server sends after every dodge.
+    /// </summary>
+    List<byte[]> RefusedDodge(byte[] refusal, int skill, CastRequest request) =>
+        [refusal, GamePackets.SkillEnd(playerKey, skill, request.ClientActionUid)];
 
     List<byte[]> CastReplies(byte[] body, long now)
     {
-        if (ParseCast(body) is not { } request) return [];
+        if (ParseCast(body) is not { } request) return [UnreadableCastRefusal(body)];
         var skill = request.SkillId;
         // OBSERVED (official 2026-10-19: 36 dodges, 64 sprint starts; live trace 2026-10-20: the client sends 0x3704 then its
         // CombatDodge request): a dodge requested while the sprint is on starts NormalDodge 11000101 (the running dash, SP 10,000)
@@ -1966,9 +1987,9 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         // Variant 6: the sprint stands on its own. A 9-byte refusal (result 1, no skill start) so the client does not read the
         // mask-first reply as a failed dash and drop the sprint. The live question is whether the sprint run then holds on land.
         if (dodging && sprinting && variant == 6)
-            return [GamePackets.DodgeResult(combatDodge, 1)];
-        // Variant 10: no reply at all to the dodge the client sends with the sprint (6 refused it and still froze, live 2026-10-20).
-        if (dodging && sprinting && variant == 10) return [];
+            return RefusedDodge(GamePackets.DodgeResult(combatDodge, 1), skill, request);
+        // Variant 10 (no reply at all to the sprint's dodge) was retired 2026-11-11: it froze too (tenth live test, 2026-10-20) and
+        // every cast request gets one reply.
         // Variant 9 starts CombatDodge while sprinting (official starts NormalDodge). The rest of the sprint dashes are NormalDodge.
         // OBSERVED (official 2026-10-19 and 2026-10-20): the server picks the dodge by combat state. All 36 CombatDodge starts came
         // within 8 s of the player's own attack; out of combat the dodge is NormalDodge (10,000 SP, no 0x3804 effect) whether the
@@ -1993,9 +2014,9 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         {
             // A sprint dash refused for cost or cooldown stays on the 9-byte form. The mask-first reply drops the sprint.
             if (dodging && sprinting && variant is 7 or 8 or 9)
-                return DeliverDash([GamePackets.DodgeResult(skill, 1)], variant);
-            // must not end another action
-            return [dodging ? GamePackets.CastReply(false, skill, request.ClientActionUid) : CastResultFor(request, false)];
+                return DeliverDash(RefusedDodge(GamePackets.DodgeResult(skill, 1), skill, request), variant);
+            // A refused cast must not end another action; a refused dodge ends its own swing.
+            return dodging ? RefusedDodge(GamePackets.CastReply(false, skill, request.ClientActionUid), skill, request) : [CastResultFor(request, false)];
         }
         var dismount = ForceDismount().Concat(InterruptItemCast()).ToList();
         skillMoveGraceUntil = now + SkillMoveGraceMs;
