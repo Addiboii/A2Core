@@ -1630,6 +1630,23 @@ var crystalRide = new[] { 1005, 1006, 1007, 1008 }.First(r => !staffSession.Ride
 var bought = await staffSession.HandleAsync(new PacketWriter().U16(0x9007).I32(crystalRide).ToArray(), Now + 400_300);
 Check(staffSession.Rides.Contains(crystalRide) && staffSession.Crystals.GetValueOrDefault(6) == 0 && bought.Any(b => b.SequenceEqual(RidePackets.CrystalsSpent(new Dictionary<int, int> { [6] = 5 }))),
       "5 All crystals acquire a ride without souls (0x9012)");
+// ItemUseByItemID 0x5614/0x5615: the item by its template; the count is capped by the stack and each use is an ordinary item use.
+staffStore.Items.Add(Stored(531900005, 5, "bag", null, 7101));   // Feral Soul Crystal: SoulCrystalFeral x1, no cooldown
+await staffSession.InventoryChangesAsync(default);
+byte[] UseById(long uid, int item, long count) => new PacketWriter().U16(GameSession.ItemUseByItemIdRq).I64(uid).I32(item).I64(count).ToArray();
+var feralBefore = staffSession.Crystals.GetValueOrDefault(1);
+var byIdThree = await staffSession.HandleAsync(UseById(0, 531900005, 3), Now + 400_400);
+Check(byIdThree[0].SequenceEqual(new PacketWriter().U16(GameSession.ItemUseByItemIdRs).U16(0).I64(0).I32(531900005).I64(3).ToArray())
+      && staffSession.Crystals.GetValueOrDefault(1) == feralBefore + 3 && staffStore.Items.Single(i => i.WireId == 7101).Quantity == 2,
+      "ItemUseByItemID for 3 of a stack of 5: three ordinary uses (0x5615 count 3), two left");
+var byIdHuge = await staffSession.HandleAsync(UseById(24, 531900005, long.MaxValue), Now + 400_500);
+Check(BitConverter.ToInt64(byIdHuge[0], 16) == 2 && BitConverter.ToUInt16(byIdHuge[0], 2) == 0 && staffSession.Crystals.GetValueOrDefault(1) == feralBefore + 5
+      && staffStore.Items.All(i => i.WireId != 7101) && staffStore.Items.Single(i => i.WireId == 24).Quantity == 1,
+      "a count of long.MaxValue is capped by the stack (2 used, no overflow); a uid of another template is not used");
+Check((await staffSession.HandleAsync(UseById(0, 531900005, 1), Now + 400_600))[0].SequenceEqual(
+          new PacketWriter().U16(GameSession.ItemUseByItemIdRs).U16(1).I64(0).I32(531900005).I64(0).ToArray())
+      && (await staffSession.HandleAsync(UseById(0, 502760001, -4), Now + 400_600))[0][2] == 1,
+      "no stack left, or a count below 1: refused (result 1, count 0)");
 // Death and respawn. The Resurrection Spiritstone gives a rebirth buff that survives death; UseRebirth_RQ (0x8d24)
 // revives in place. CharRespawn_RQ (0x8d22) type 2 goes to the respawn point; type 3 with a spiritstone revives
 // in place and uses one up.

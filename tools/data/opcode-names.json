@@ -84,6 +84,8 @@
  "0x5611": "ItemDepotList_RS",
  "0x5612": "ItemUse_RQ",
  "0x5613": "ItemUse_RS",
+ "0x5614": "ItemUseByItemID_RQ",
+ "0x5615": "ItemUseByItemID_RS",
  "0x5616": "ItemUse_NT",
  "0x5617": "ItemUseStarted_NT",
  "0x5618": "ItemUseInterrupted_NT",
