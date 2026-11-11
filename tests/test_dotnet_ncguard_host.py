@@ -17,6 +17,26 @@ ROOT = Path(__file__).resolve().parents[1]
 HOST = ROOT / 'server/Aion.Host/bin/Debug/net10.0/Aion.Host.dll'
 
 
+def key_identifiers(pem):
+    """(subject key id, authority key id) of a PEM certificate: the extension values read from its DER."""
+    der = ssl.PEM_cert_to_DER_cert(pem)
+
+    def value(oid):
+        at = der.find(b'U' + oid)
+        if at < 0:
+            return None
+        at += 5
+        if der[at] == 0x01:  # critical flag
+            at += 3
+        assert der[at] == 0x04  # extnValue OCTET STRING
+        return der[at + 2:at + 2 + der[at + 1]]
+
+    ski, aki = value(b''), value(b'#')
+    ski = ski and ski[2:2 + ski[1]]          # OCTET STRING keyIdentifier
+    aki = aki and aki[4:4 + aki[3]] if aki and aki[2] == 0x80 else None   # SEQUENCE { [0] keyIdentifier }
+    return ski, aki
+
+
 def free_port():
     with socket.socket() as s:
         s.bind(('127.0.0.1', 0))
@@ -94,6 +114,22 @@ class DotnetNcGuardTests(unittest.TestCase):
         response = connection.getresponse()
         self.assertEqual(response.status, 200)
         response.read(); connection.close()
+
+    def test_chain_has_key_identifiers_for_strict_verifiers(self):
+        ca_ski, ca_aki = key_identifiers((self.run / 'ca.pem').read_text())
+        leaf_ski, leaf_aki = key_identifiers((self.run / (self.hosts[0] + '.pem')).read_text())
+        self.assertEqual(len(ca_ski), 20)
+        self.assertEqual(ca_aki, ca_ski)
+        self.assertEqual(len(leaf_ski), 20)
+        self.assertNotEqual(leaf_ski, ca_ski)
+        self.assertEqual(leaf_aki, ca_ski)
+        strict = ssl.create_default_context(cafile=str(self.run / 'ca.pem'))
+        strict.verify_flags |= ssl.VERIFY_X509_STRICT
+        self.context = strict
+        self.assertEqual(self.request(self.hosts[0], 'GET', '/def.ec'), (200, self.body))
+        # Subject names unchanged.
+        self.assertIn(b'AionResearch loopback CA', ssl.PEM_cert_to_DER_cert((self.run / 'ca.pem').read_text()))
+        self.assertIn(self.hosts[0].encode(), ssl.PEM_cert_to_DER_cert((self.run / (self.hosts[0] + '.pem')).read_text()))
 
     def test_large_post_capture_cap_and_graceful_stop(self):
         body = bytes(range(256)) * 500

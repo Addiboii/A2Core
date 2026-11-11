@@ -79,6 +79,11 @@ public sealed class NcGuardSink : BackgroundService
         var request = new CertificateRequest("CN=AionResearch loopback CA", key, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
         request.CertificateExtensions.Add(new X509BasicConstraintsExtension(true, false, 0, true));
         request.CertificateExtensions.Add(new X509KeyUsageExtension(X509KeyUsageFlags.KeyCertSign, true));
+        // OURS: key identifiers (RFC 5280 4.2.1.1/4.2.1.2) on the CA and every leaf; strict verifiers (OpenSSL's
+        // X509_V_FLAG_X509_STRICT, Python 3.13's default context) refuse a chain without them.
+        var authorityKeyId = new X509SubjectKeyIdentifierExtension(request.PublicKey, false);
+        request.CertificateExtensions.Add(authorityKeyId);
+        request.CertificateExtensions.Add(X509AuthorityKeyIdentifierExtension.CreateFromSubjectKeyIdentifier(authorityKeyId));
         authority = request.CreateSelfSigned(DateTimeOffset.UtcNow.AddMinutes(-5), DateTimeOffset.UtcNow.AddDays(2));
         File.WriteAllText(Path.Combine(RunDirectory, "ca.pem"), authority.ExportCertificatePem());
         foreach (var host in options.Hosts.Append("localhost").Distinct(StringComparer.OrdinalIgnoreCase))
@@ -90,6 +95,8 @@ public sealed class NcGuardSink : BackgroundService
             leaf.CertificateExtensions.Add(new X509BasicConstraintsExtension(false, false, 0, true));
             leaf.CertificateExtensions.Add(new X509KeyUsageExtension(X509KeyUsageFlags.DigitalSignature | X509KeyUsageFlags.KeyEncipherment, true));
             leaf.CertificateExtensions.Add(new X509EnhancedKeyUsageExtension(new OidCollection { new("1.3.6.1.5.5.7.3.1") }, false));
+            leaf.CertificateExtensions.Add(new X509SubjectKeyIdentifierExtension(leaf.PublicKey, false));
+            leaf.CertificateExtensions.Add(X509AuthorityKeyIdentifierExtension.CreateFromSubjectKeyIdentifier(authorityKeyId));
             using var signed = leaf.Create(authority, DateTimeOffset.UtcNow.AddMinutes(-1), DateTimeOffset.UtcNow.AddDays(1), RandomNumberGenerator.GetBytes(16));
             using var withKey = signed.CopyWithPrivateKey(leafKey);
             // Schannel cannot use ephemeral private keys. Default temporary user-key
