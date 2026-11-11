@@ -266,7 +266,10 @@ def main():
             granted = request('/api/admin/commands', 'POST', grant, staff_token)
             check(granted[0] == 200 and request('/api/admin/commands', 'POST', grant, staff_token)[1] == granted[1], 'HTTP grant and idempotent retry')
             detail = request('/api/admin/characters/' + created['characterId'], token=staff_token)[1]
-            check(len(detail['inventory']['items']) == 2 and detail['character']['name'] == 'HttpStarter', 'HTTP staff detail shows granted item')
+            # A sword does not stack (catalogue facts without a stack size: 1), so three granted are three bag items beside the equipped one.
+            granted_rows = [i for i in detail['inventory']['items'] if i['location'] == 'bag' and i['templateId'] == 101]
+            check(len(detail['inventory']['items']) == 4 and len(granted_rows) == 3 and sum(i['quantity'] for i in granted_rows) == 3
+                  and detail['character']['name'] == 'HttpStarter', 'HTTP staff detail shows granted items')
             check(request('/api/admin/characters/' + str(uuid.uuid4()), token=staff_token)[0] == 404, 'HTTP staff detail of unknown character')
             world_created = world_store.create(uuid.uuid4(), 'http-test', 'WorldStarter', b'\x00\xff\x01', voice_type=4, lobby_slot=2)
             check(world_store.load(world_created['characterId'])['appearance'] == 'AP8B', 'world bridge preserves appearance bytes')
