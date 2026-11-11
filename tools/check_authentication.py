@@ -325,7 +325,7 @@ def main():
             status, link, _ = request('/api/downloads/launcher', 'POST', token=player)
             check(status == 200 and link['url'].startswith('/download/launcher?ticket='), 'signed-in player gets a download link')
             status, body, headers = request(link['url'])
-            check(status == 200 and body == b'MZ launcher' and 'Aion%20Horizon.exe' in headers.get('Content-Disposition', ''), 'A2Core Launcher.exe downloaded as an attachment with the link')
+            check(status == 200 and body == b'MZ launcher' and 'A2Core%20Launcher.exe' in headers.get('Content-Disposition', ''), 'A2Core Launcher.exe downloaded as an attachment with the link')
             status, manifest, _ = request('/api/downloads/launcher/manifest')
             check(status == 200 and manifest == {'sha256': hashlib.sha256(b'MZ launcher').hexdigest(), 'size': 11, 'version': None},
                   'launcher manifest (hash and size) for the launcher\'s own update check, no sign-in needed')
