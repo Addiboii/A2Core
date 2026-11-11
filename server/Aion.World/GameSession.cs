@@ -2079,6 +2079,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             // In a scripted layer or dungeon the dead stay dead for the run (official dungeon mobs do not respawn).
             if (RunsMapEvents) continue;
             target.Hp = target.HpMax;
+            target.GroggyEnergy = null;   // a respawn brings its groggy guard back full (OURS)
             target.CorpseRemoved = false;
             replies.Add(GamePackets.NpcAppear(target.Appearance()));
         }

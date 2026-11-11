@@ -93,6 +93,7 @@ partial class GameSession
                 ? GamePackets.ProjectileHit(target.Key, playerKey, skill, hit.EffectId, hit.Amount, hit.Critical, uid, seq)
                 : GamePackets.SkillHit(target.Key, playerKey, skill, hit.EffectId, hit.Amount, hit.Critical, seq: seq, actionUid: uid));
         }
+        if (!target.Dead) replies.AddRange(DrainGuard(skill, target, uid));
         replies.Add(GamePackets.NpcHp(target.Key, target.Hp));
         replies.AddRange(MapEventHp(target, now));
         if (target.Dead)
@@ -113,6 +114,16 @@ partial class GameSession
         else replies.AddRange(ai.Engage(targets!, target, now, playerKey, hits.Sum(h => h.Amount)));    // a hit monster chases its attacker
         return replies;
     }
+
+    /// <summary>
+    /// The cast's drain of a guarded NPC's groggy guard (Stagger.cs): per drain row the 0x3804 switch 00 with its effect id and hit
+    /// seq, then 0xe005 with the energy left, or the broken state at 0 (order OBSERVED 20261019-231752 #31013-#31016, after the
+    /// damage hit and before the NPC's HP). A broken guard takes no more drains (OURS, until the respawn).
+    /// </summary>
+    List<byte[]> DrainGuard(int skill, Target target, byte uid) => Stagger.Drain(target, skill, playerKey, uid);
+
+    /// <summary>For the checks: put an NPC on the current map.</summary>
+    public void AddTargetForChecks(Target target) { if (targets is not null) targets[target.Key] = target; }
 
     /// <summary>A projectile skill's 0x3803s now and its hits after the flight; any other skill's hits at once.</summary>
     List<byte[]> HitOrFire(int skill, Target target, IReadOnlyList<Hit> hits, byte uid, long now)

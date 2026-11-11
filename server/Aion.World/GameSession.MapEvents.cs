@@ -488,6 +488,7 @@ public sealed partial class GameSession : IMapEventHost
         {
             if (!t.Dead && !t.CorpseRemoved) continue;
             t.Hp = t.HpMax;
+            t.GroggyEnergy = null;   // the guard comes back full with the spawn (OURS)
             t.CorpseRemoved = false;
             t.Held = false;
             t.Immune = false;
@@ -561,6 +562,7 @@ public sealed partial class GameSession : IMapEventHost
             var angle = index++ * 2 * Math.PI / Math.Max(1, count);
             t.Position = centre with { X = centre.X + Math.Cos(angle) * Math.Min(radius, 400), Y = centre.Y + Math.Sin(angle) * Math.Min(radius, 400) };
             t.Hp = t.HpMax;
+            t.GroggyEnergy = null;   // the guard comes back full with the spawn (OURS)
             t.CorpseRemoved = false;
             seenNpcs.Add(t.Key);
             mapEventOut.Add(GamePackets.NpcAppear(t.Appearance()));

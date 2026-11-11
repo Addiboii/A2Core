@@ -41,6 +41,7 @@
     <EmbeddedResource Include="../../tools/data/skins.json" LogicalName="skins.json" />
     <EmbeddedResource Include="../../tools/data/abnormal-stack-rules.json" LogicalName="abnormal-stack-rules.json" />
     <EmbeddedResource Include="../../tools/data/expedition.json" LogicalName="expedition.json" />
+    <EmbeddedResource Include="../../tools/data/stagger.json" LogicalName="stagger.json" />
     <!-- tools/economy_data.py (build 26262663 tables): godstones, exceed enchanting, item trade/storage rules, legions. -->
     <EmbeddedResource Include="../../tools/data/godstones.json" LogicalName="godstones.json" />
     <EmbeddedResource Include="../../tools/data/exceed-enchant.json" LogicalName="exceed-enchant.json" />

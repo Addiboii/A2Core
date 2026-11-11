@@ -666,7 +666,7 @@ public static class GamePackets
     /// [energy i32] | u8. OBSERVED (2.0.6 recording 20261019-231752, boss a2eb01, 9 messages): mask 03 state 01 max 50 with the
     /// energy falling 50 -> 7 under the player's hits, then mask 00 state 03 once it broke; the last byte was 02 in all nine.
     /// CANDIDATE: the state names and the last byte's meaning (A2Core PR #4 wrote it as "activated ? 2 : 0", which the recording
-    /// contradicts: 02 while the guard still held). Not sent yet: what drains the guard is not recovered.
+    /// contradicts: 02 while the guard still held). Sent by Aion.World.Stagger's drains (SkillEffect.dat GroggyGuardDecreaseEnergy).
     /// </summary>
     public static byte[] UpdateGroggyInfo(int key, byte state, int? maxEnergy, int? energy, byte tail = 2)
     {
@@ -1174,10 +1174,15 @@ public static class GamePackets
     /// <summary>
     /// 0x3804 with switch 00: a self skill's effect (OBSERVED 50-60 ms after all 36 official CombatDodge starts): target, 00 00, actor,
     /// skill, the start's action uid, 02, effect id (skill x 100 + 13 for the dodge), i32 1, attack speed 10000, 01, 00.
+    /// The same form carries a skill's groggy-guard drain on its hit (OBSERVED 20261019-231752 #31014: effect 1119000022, the hit's
+    /// seq 3 in both the u32 and the u8 where the dodge has 1).
     /// </summary>
-    public static byte[] SkillEffect(int targetKey, int actorKey, int skill, int actionUid, int effectId) =>
-        PacketWriter.Opcode(0x3804).Varint(targetKey).U8(0).U8(0).Varint(actorKey).U32((uint)skill).U8((byte)actionUid).U8(2)
-            .U32((uint)effectId).U32(1).Varint(10000).U8(1).U8(0).ToArray();
+    public static byte[] SkillEffect(int targetKey, int actorKey, int skill, int actionUid, int effectId, int seq = 1)
+    {
+        if (seq is < 0 or > 255) throw new ArgumentException("Hit sequence must fit one byte");
+        return PacketWriter.Opcode(0x3804).Varint(targetKey).U8(0).U8(0).Varint(actorKey).U32((uint)skill).U8((byte)actionUid).U8(2)
+            .U32((uint)effectId).U32((uint)seq).Varint(10000).U8((byte)seq).U8(0).ToArray();
+    }
 
     /// <summary>0x3806 skill end: key, skill, action uid, u8 0 (OBSERVED 200 ms after every official dodge and sprint dash, before the abnormal's 0x382c).</summary>
     public static byte[] SkillEnd(int key, int skill, int actionUid) => PacketWriter.Opcode(0x3806).Varint(key).I32(skill).U8((byte)actionUid).U8(0).ToArray();

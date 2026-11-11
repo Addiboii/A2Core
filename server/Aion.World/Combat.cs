@@ -48,6 +48,11 @@ public sealed class Target
     /// <summary>Walking its route now (the appear says move_state Walk).</summary>
     public bool Walking { get; set; }
 
+    /// <summary>
+    /// The groggy guard's energy (Stagger.cs) once a player's skill drained it; null while full or after a respawn (OURS). 0 = broken.
+    /// </summary>
+    public int? GroggyEnergy { get; set; }
+
     public bool Dead => Hp <= 0;
     /// <summary>The corpse was removed (0x3642) and the NPC waits for its respawn.</summary>
     public bool CorpseRemoved { get; set; }

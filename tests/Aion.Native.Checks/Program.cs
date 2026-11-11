@@ -605,6 +605,39 @@ Check((await game.HandleAsync([0x30, 0x36], Now)).Single().SequenceEqual(GamePac
           && !GameSession.WithinCastRange(melee, Vector3d.Zero, new Vector3d(0, 0, 401 + GameSession.CastRangeTolerance))
           && GameSession.WithinCastRange(melee with { UseRange = 0 }, Vector3d.Zero, new Vector3d(1e6, 0, 1e6)),
           "range geometry: horizontal to the target's edge plus the tolerance, height separately, no range never refuses");
+// Stagger (Stagger.cs, tools/data/stagger.json from SkillEffect.dat GroggyGuardDecreaseEnergy): the 2.0.6 recording 20261019-231752
+// drained the guarded 2701034's guard (key 30114) under player 9655's casts 50 -> 40 -> 25 -> 23 -> 13 -> 11 -> 9 -> 7 -> broken.
+{
+    string Hex(List<byte[]> packets) => string.Concat(packets.Select(Convert.ToHexStringLower));
+    var guarded = new Target { Key = 30114, Name = "boss", Hp = 100000, HpMax = 100000, NpcId = 2701034 };
+    Check(Stagger.HasGuard(2701034) && Stagger.GroggyTimeMs(2701034) == 5000 && !Stagger.HasGuard(2400032), "NpcData GroggyGuard: the guarded has a guard, the sandbag none");
+    Check(Hex(Stagger.Drain(guarded, 11190000, 9655, 0xe1)) == "0438a2eb010000b74bf0beaa00e102d695b24203000000904e0300" + "05e0a2eb010301320000002800000002",
+          "11190000 drains 10 on its hit 3 (#31014 effect 1119000022, #31015 energy 40)");
+    Check(Hex(Stagger.Drain(guarded, 11290001, 9655, 0xe2)) == "0438a2eb010000b74b9145ac00e202b02c4b4301000000904e0100" + "05e0a2eb010301320000001900000002",
+          "11290001 drains 15 (#31066, #31067 energy 25)");
+    Check(Hex(Stagger.Drain(guarded, 11010000, 9655, 0xf3)) == "0438a2eb010000b74bd0ffa700f3024ced9f4101000000904e0100" + "05e0a2eb010301320000001700000002",
+          "11010000 drains 2 once per cast (#31745, #31746 energy 23)");
+    var energies = new[] { (11190000, 13), (11010000, 11), (11420000, 9), (11010000, 7) }
+        .Select(step => Stagger.Drain(guarded, step.Item1, 9655, 1).Last().SequenceEqual(GamePackets.UpdateGroggyInfo(30114, 1, 50, step.Item2))).ToList();
+    Check(energies.All(ok => ok), "the next drops as recorded (#32179 13, #32911 11, #32963 9, #33421 7)");
+    Check(Hex(Stagger.Drain(guarded, 11190000, 9655, 0x19)) == "0438a2eb010000b74bf0beaa001902d695b24203000000904e0300" + "05e0a2eb01000302" && guarded.GroggyEnergy == 0,
+          "the last 10 breaks the guard (#33474, #33475 mask 00 state 03)");
+    Check(Stagger.Drain(guarded, 11190000, 9655, 1).Count == 0 && Stagger.Drain(new Target { Key = 5, Name = "m", HpMax = 1, NpcId = 2400032 }, 11190000, 1, 1).Count == 0
+          && Stagger.Drain(new Target { Key = 6, Name = "b", HpMax = 1, NpcId = 2701034 }, 11020000, 1, 1).Count == 0,
+          "no drain on a broken guard, an NPC without a guard, or from a skill without a drain row");
+    // In a session: a level-1 Gladiator's 11190000 on a guarded NPC sends the drain between its hits and the NPC's HP.
+    var staggerer = new GameSession(data, new GameSessionOptions { TrainingDummy = true }, new Random(5));
+    await staggerer.HandleAsync(Strings(0x3613, Session, "", "t", "").Concat(new byte[9]).ToArray(), Now);
+    await staggerer.HandleAsync(create, Now);
+    await staggerer.HandleAsync(select, Now);
+    await staggerer.HandleAsync(new PacketWriter().U16(0x3622).I32(1).ToArray(), Now);
+    var dummyAt = staggerer.Targets[Combat.TrainingDummyKey].Position;
+    staggerer.AddTargetForChecks(new Target { Key = 1001, Name = "boss", Hp = 1000000, HpMax = 1000000, NpcId = 2701034, Position = dummyAt });
+    var staggered = await staggerer.HandleAsync(Cast(11190000, 1001, pos), Now + 1000);
+    var guardAt = staggered.FindIndex(b => b.SequenceEqual(GamePackets.UpdateGroggyInfo(1001, 1, 50, 40)));
+    Check(guardAt > 0 && Op(staggered[guardAt - 1]) == 0x3804 && staggered[guardAt - 1][4] == 0
+          && staggered.FindIndex(b => b.SequenceEqual(GamePackets.NpcHp(1001, staggerer.Targets[1001].Hp))) == guardAt + 1,
+          "a cast on a guarded NPC: its hit, the drain 0x3804, 0xe005 energy 40, then the NPC's HP");
 }
 async Task<GameSession> BarSession(int level = 1)
 {
