@@ -1044,11 +1044,18 @@ public static class GamePackets
     /// 0x8d04 CharDie_NT (catalogue index 819 under the 0x8d base; official capture 20261013-144836, 15 kills,
     /// also sent for other players' kills; the last byte is EPCDieType: 0 for NPCs, 2 DiePvE for a player CANDIDATE):
     /// victim, skill u32, killer, u16 (0x0523 for both killers; CANDIDATE server id), killer name,
-    /// 8 zero bytes, 01 00. Follows NPC HP 0 and 0x3835; CANDIDATE trigger of the death animation.
+    /// 8 zero bytes, reason u8, die type u8. Follows NPC HP 0 and 0x3835; CANDIDATE trigger of the death animation.
+    /// Reason, OBSERVED in all 137 recorded deaths (2.0.6 recordings 20261013-144836: 15, 20261019-231752: 122):
+    /// <see cref="DieByKiller"/> 01 in all 69 with a killer (skill, killer key, server 0x0523, name); <see cref="DieNoKiller"/> 00 in
+    /// all 68 with none (skill 0, killer 0, server 0, empty name, e.g. #32324): NPCs that died with no attacker after their own
+    /// skill (0x3641 appear, own 0x3802/0x3806, HP 0, then 0x8d04; #88660-#88664 five at once). CANDIDATE: the reason's name.
     /// </summary>
-    public static byte[] Kill(int victimKey, int skillId, int killerKey, int serverId, string killerName, byte dieType = 0) =>
+    public static byte[] Kill(int victimKey, int skillId, int killerKey, int serverId, string killerName, byte dieType = 0, byte reason = DieByKiller) =>
         PacketWriter.Opcode(0x8d04).Varint(victimKey).U32((uint)skillId).Varint(killerKey).U16(serverId).String(killerName)
-            .Zeros(8).U8(1).U8(dieType).ToArray();
+            .Zeros(8).U8(reason).U8(dieType).ToArray();
+
+    /// <summary>0x8d04 reason byte: 01 a killer is named, 00 no killer (OBSERVED, see <see cref="Kill"/>).</summary>
+    public const byte DieByKiller = 1, DieNoKiller = 0;
 
     /// <summary>0x8d21: key | 00 | 1 in combat / 0 out.</summary>
     public static byte[] CombatState(int key, bool inCombat) => PacketWriter.Opcode(0x8d21).Varint(key).U8(0).U8(inCombat ? 1 : 0).ToArray();

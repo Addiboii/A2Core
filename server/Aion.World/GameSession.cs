@@ -2254,7 +2254,9 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         reviveAt = now + ReviveDelayMs;
         diedAt = position;
         inCombat = false;
-        var kill = GamePackets.Kill(playerKey, 0, killerKey, ServerId, "", dieType: 2);
+        // Reason 00 when nothing killed the player (suffocation), as the 68 recorded deaths without a killer (CANDIDATE for a player).
+        var kill = GamePackets.Kill(playerKey, 0, killerKey, ServerId, "", dieType: 2,
+            reason: killerKey == 0 ? GamePackets.DieNoKiller : GamePackets.DieByKiller);
         worldPlayer?.Map?.Broadcast(worldPlayer, [kill]);
         return [.. ForceDismount(), .. ClearBuffs(), kill, GamePackets.CombatState(playerKey, false)];
     }

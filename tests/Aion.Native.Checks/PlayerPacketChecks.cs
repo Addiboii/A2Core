@@ -241,6 +241,10 @@ public static class PlayerPacketChecks
             "2a388e2c01110281778e06ffffffffffffffff8075d52abb0300008e2c01008e0ab345feb595c600e2ac46");
         Same("Kill (official #3257)", GamePackets.Kill(47494, 11040000, 5646, 1315, "heuheuheu"),
             "048d86f3020075a8008e2c23050968657568657568657500000000000000000100");
+        Same("Kill with no killer, reason 00 (20261019-231752 #32324)", GamePackets.Kill(46406, 0, 0, 0, "", reason: GamePackets.DieNoKiller),
+            "048dc6ea02000000000000000000000000000000000000");
+        Same("Kill by the player, reason 01 (20261019-231752 #1410)", GamePackets.Kill(40051, 11020000, 9655, 1315, "Player1y"),
+            "048df3b802e026a800b74b230508506c61796572317900000000000000000100");
         Same("GlideStart (official #7953)", PlayerPackets.GlideStart(10361, V(0xc579fbd5, 0xc682af4c, 0x46aaaf85), D(0x4f54), V(0xc4bfb976, 0x453408bc, 0xc4bb3223), glideMode: 0, deadReckoning: true),
             "2337f95002d5fb79c54caf82c685afaa46544f76b9bfc4bc0834452332bbc401");
         Same("GlideSnapshot (official #7967)", PlayerPackets.GlideSnapshot(10361, V(0xc5947b7c, 0xc66d9757, 0x46a4bd0d), D(0x4e56), V(0xc48184fb, 0x45306219, 0xc495064e), deadReckoning: true),
