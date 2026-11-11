@@ -59,6 +59,12 @@ def _int(value, default=0):
         return default
 
 
+def subzone_group(value):
+    """ESubzoneGroupID::ESubzoneGroupID_21 -> 21; ESubzoneGroupID_None or unset -> 0 (as tools/subzones.py fog_group)."""
+    tail = str(value or '').rsplit('_', 1)[-1]
+    return int(tail) if tail.isdigit() else 0
+
+
 def table_rows(path):
     data = json.loads(Path(path).read_text(encoding='utf-8'))
     return [row for rows in data['Properties'].values() for row in rows]
@@ -215,6 +221,12 @@ def convert(quests, steps, reward_rows=(), class_rewards=(), strings=(), unlocks
             'prerequisites': [c['value'] for c in conditions if c['type'] == 'ClearQuest'],
             'previous': sorted(previous.get(code, [])),
             'next': _none(q.get('NextQuestName')),
+            # OBSERVED (Quest.dat SubzoneGroup, ExplorationType; build 26262663, every row has both): the world-map fog
+            # group the quest belongs to (ESubzoneGroupID_<n>, 0 = None) and its exploration kind (None, Seal,
+            # OccupationTerritory; ClearQuestExplorationType objectives count quests by it). Data only: the server
+            # does not use them yet.
+            'subzone_group': subzone_group(q.get('SubzoneGroup')),
+            'exploration': _enum(q.get('ExplorationType') or 'EExplorationType::None'),
         }
         other = [c for c in conditions if c['type'] != 'ClearQuest']
         if other:

@@ -93,6 +93,15 @@ class QuestConverterTests(unittest.TestCase):
     def test_unlocks_keep_only_quest_gated_rows(self):
         self.assertEqual(self.data['unlocks'], [{'id': 44, 'type': 'Chat', 'level': 0, 'light': 'HQ1', 'dark': 'HQ9'}])
 
+    def test_subzone_group_and_exploration_type(self):
+        data = quests.convert([quest_row('SQ1', 3, SubzoneGroup='ESubzoneGroupID::ESubzoneGroupID_21',
+                                         ExplorationType='EExplorationType::Seal'),
+                               quest_row('SQ2', 4, SubzoneGroup='ESubzoneGroupID::ESubzoneGroupID_None',
+                                         ExplorationType='EExplorationType::None')], [])
+        self.assertEqual((data['quests']['SQ1']['subzone_group'], data['quests']['SQ1']['exploration']), (21, 'Seal'))
+        self.assertEqual((data['quests']['SQ2']['subzone_group'], data['quests']['SQ2']['exploration']), (0, 'None'))
+        self.assertEqual((self.data['quests']['HQ1']['subzone_group'], self.data['quests']['HQ1']['exploration']), (0, 'None'))
+
     def test_unknown_objective_keeps_raw_values(self):
         o = quests.objective(goal('KillPC', 'LastHit,Contribute', '50', '22'), {}, {}, {})
         self.assertEqual(o['value'], ['LastHit,Contribute', '50', '22', '', ''])
