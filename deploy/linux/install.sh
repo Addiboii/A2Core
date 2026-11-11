@@ -5,12 +5,13 @@
 #   sudo deploy/linux/install.sh --public-address 203.0.113.5 --self-signed
 #   sudo deploy/linux/install.sh --public-address 203.0.113.5 --certificate cert.pem --key key.pem
 #   sudo deploy/linux/install.sh --public-address 203.0.113.5 --proxy   (your own TLS proxy; see README)
+# --open-registration lets anyone make an account on the account page (default: only the first account, then staff).
 # --data is needed on the first install (pack_server_data.py makes it on the development PC);
 # later runs rebuild the host, apply new migrations and restart. See deploy/linux/README.md.
 set -euo pipefail
 
 ARGS=("$@")
-PUBLIC_ADDRESS="" DATA_ARCHIVE="" TLS="" CERT="" KEY="" DOMAIN="" EMAIL="" SKIP_PACKAGES=0
+PUBLIC_ADDRESS="" DATA_ARCHIVE="" TLS="" CERT="" KEY="" DOMAIN="" EMAIL="" SKIP_PACKAGES=0 OPEN_REGISTRATION=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --public-address) PUBLIC_ADDRESS="$2"; shift 2 ;;
@@ -22,6 +23,7 @@ while [[ $# -gt 0 ]]; do
     --certificate) TLS=files; CERT="$(realpath "$2")"; shift 2 ;;
     --key) KEY="$(realpath "$2")"; shift 2 ;;
     --skip-packages) SKIP_PACKAGES=1; shift ;;
+    --open-registration) OPEN_REGISTRATION=1; shift ;;
     *) echo "Unknown option $1" >&2; exit 2 ;;
   esac
 done
@@ -122,6 +124,7 @@ STAFF_PATH="$(grep -s '^Aion__Web__StaffPath=' $CONFIG/aion.env | cut -d= -f2- |
 # Keep the two-step sign-in key too: a new key would invalidate every enrolled authenticator.
 TOTP_KEY="$(grep -s '^Aion__Totp__EncryptionKey=' $CONFIG/aion.env | cut -d= -f2- || true)"
 [[ -n "$TOTP_KEY" ]] && TLS_ARGS+=(--totp-key "$TOTP_KEY")
+[[ $OPEN_REGISTRATION -eq 1 ]] && TLS_ARGS+=(--open-registration)
 as_aion python3 $SRC/tools/server_env.py --public-address "$PUBLIC_ADDRESS" --data $DATA --state $STATE "${TLS_ARGS[@]}" > $CONFIG/aion.env.new
 chown root:aion $CONFIG/aion.env.new && chmod 640 $CONFIG/aion.env.new && mv $CONFIG/aion.env.new $CONFIG/aion.env
 # Operator settings that survive updates (aion.env is rewritten each run): created once, never overwritten.

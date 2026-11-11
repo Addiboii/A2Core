@@ -51,7 +51,7 @@ def environment(args, credentials):
         'ConnectionStrings__Aion': connection('aion_app', credentials['aion_app'], 32),
         'ConnectionStrings__Auth': connection('aion_auth', credentials['aion_auth'], 16),
         'Aion__LocalPort': PORTS['account'],
-        # Closed by default: admins create accounts on the dashboard.
+        # Closed by default: the first account registers on the account page, later ones are made on the dashboard.
         'Aion__Accounts__Registration': 'true' if getattr(args, 'open_registration', False) else 'false',
         'Aion__Network__BindAddress': args.bind,
         'Aion__Network__PublicAddress': args.public_address,
@@ -132,8 +132,13 @@ def main(argv=None):
         address = ipaddress.ip_address(args.public_address)
     except ValueError:
         parser.error('--public-address must be an IPv4 address')
-    if address.version != 4 or address.is_loopback:
-        parser.error('--public-address must be a non-loopback IPv4 address')
+    # A loopback address only for a server that also listens on loopback alone (one PC: deploy/windows -Local).
+    try:
+        local_only = ipaddress.ip_address(args.bind).is_loopback
+    except ValueError:
+        parser.error('--bind must be an IP address')
+    if address.version != 4 or (address.is_loopback and not local_only):
+        parser.error('--public-address must be a non-loopback IPv4 address (or loopback together with --bind 127.0.0.1)')
     if args.certificate and not args.key:
         parser.error('--certificate needs --key')
     if args.staff_path is not None and (len(args.staff_path) < 9 or not args.staff_path.startswith('/')
