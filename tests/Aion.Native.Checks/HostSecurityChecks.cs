@@ -52,6 +52,24 @@ static class HostSecurityChecks
         var differ = rows.Keys.Union(StaffPermissions.Minimum.Keys)
             .Where(a => !rows.TryGetValue(a, out var r) || !StaffPermissions.Minimum.TryGetValue(a, out var m) || StaffPermissions.RankOf(r) != m).ToList();
         C(rows.Count > 0 && differ.Count == 0, "ranks: auth.staff_permissions rows equal StaffPermissions" + (differ.Count > 0 ? ": differ " + string.Join(", ", differ) : ""));
+
+        // Listener diagnostics (OURS): counts and timings only, reasons as fixed codes.
+        var stats = new Aion.World.ListenerStats("game");
+        stats.Accepted(); stats.Accepted(); stats.Ended("closed");
+        stats.Refused("capacity"); stats.Refused("capacity"); stats.Refused("Hello world: someone's chat text"); stats.Refused(null!);
+        stats.Malformed();
+        var tick = System.Diagnostics.Stopwatch.Frequency / 1000;  // 1 ms
+        stats.Handled(0x3613, tick); stats.Handled(0x3613, 3 * tick); stats.Handled(0x3600, 2 * tick); stats.Handled(-1, tick); stats.Handled(0x10000, tick);
+        Parallel.For(0, 1000, _ => stats.Handled(0x3600, tick));
+        var view = stats.Read();
+        C(view.Accepted == 2 && view.Active == 1 && view.Ends["closed"] == 1 && view.MalformedSkips == 1, "diagnostics: connections, ends and malformed skips counted");
+        C(view.Refusals.Count == 2 && view.Refusals["capacity"] == 2 && view.Refusals["other"] == 2, "diagnostics: refusal reasons are fixed codes, other text is 'other'");
+        C(view.Opcodes.Count == 2 && view.Opcodes[0].Opcode == "0x3600" && view.Opcodes[0].Count == 1001 && view.Opcodes[1].Opcode == "0x3613"
+          && view.Opcodes[1].Count == 2 && view.Opcodes[1].MaxMs == 3 && view.Opcodes[1].MeanMs == 2 && view.Opcodes[1].TotalMs == 4,
+          "diagnostics: per-opcode count, total, mean and max; out-of-range opcodes not recorded; busiest first");
+        C(stats.Read(maxOpcodes: 1).Opcodes.Count == 1, "diagnostics: opcode list bounded");
+        var json = System.Text.Json.JsonSerializer.Serialize(view);
+        C(!json.Contains("someone", StringComparison.OrdinalIgnoreCase) && !json.Contains("Hello", StringComparison.Ordinal), "diagnostics: no text from requests kept");
         return count;
     }
 }

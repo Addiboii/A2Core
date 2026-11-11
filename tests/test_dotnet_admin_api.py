@@ -76,12 +76,18 @@ class DotnetAdminApiTests(unittest.TestCase):
         for method, path, body in [('GET', '/api/admin/me', None), ('GET', '/api/admin/characters?q=a', None),
                                    ('POST', '/api/admin/commands', {}), ('POST', '/api/admin/accounts', {}),
                                    ('POST', '/api/admin/wardrobe-access', None), ('GET', '/api/admin/no-such-route', None),
+                                   ('GET', '/api/admin/diagnostics', None),
                                    ('POST', f'/api/admin/accounts/{"0" * 8}-0000-0000-0000-{"0" * 12}/roles', {'role': 'admin', 'granted': True})]:
             for token in (None, 'not-a-session', 'A' * 63):
                 status, data, headers = self.request(method, path, token, body)
                 self.assertEqual(status, 401, (method, path, token))
                 self.assertEqual(json.loads(data), {'error': 'staff_session_required'})
                 self.assertEqual(headers.get('Cache-Control'), 'no-store')
+
+    def test_liveness_is_anonymous_and_says_only_its_status(self):
+        status, data, _ = self.request('GET', '/health/live')
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(data), {'status': 'alive'})
 
     def test_wardrobe_sign_out_needs_no_session(self):
         status, _, _ = self.request('DELETE', '/api/admin/wardrobe-access')

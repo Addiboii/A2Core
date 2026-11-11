@@ -38,6 +38,7 @@ public static class StaffPermissions
         ["api GET /api/admin/maps/{id:int}/outline"] = G,
         ["api GET /api/admin/maps/{id:int}/image"] = G,
         ["api GET /api/admin/server"] = G,
+        ["api GET /api/admin/diagnostics"] = M,  // migration 077
         ["api POST /api/admin/players/{name}/message"] = G,
         ["api POST /api/admin/players/{name}/kick"] = G,
         ["api POST /api/admin/players/{name}/unstuck"] = G,

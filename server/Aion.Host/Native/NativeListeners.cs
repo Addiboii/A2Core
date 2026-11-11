@@ -67,7 +67,11 @@ public abstract class NativeListener(int port, ushort greetingTag, NativeOptions
     readonly SemaphoreSlim slots = new(options.MaxConnections, options.MaxConnections);
 
     protected abstract string Name { get; }
+    /// <summary>This listener's counts and timings for the staff diagnostics API (no bodies); null when not registered.</summary>
+    protected virtual ListenerStats? Stats => null;
     protected abstract byte[] HandshakeReply(RsaPublicKey key, byte[] sessionKey);
+    /// <summary>The opcode of a decrypted body (its first two bytes, little-endian), or -1 when shorter.</summary>
+    protected static int OpcodeOf(byte[] plain) => plain.Length >= 2 ? plain[0] | plain[1] << 8 : -1;
     protected abstract Task RunAsync(NetworkStream stream, Rc4 cipher, FrameBuffer buffer, CancellationToken ct);
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -80,16 +84,24 @@ public abstract class NativeListener(int port, ushort greetingTag, NativeOptions
             while (!stoppingToken.IsCancellationRequested)
             {
                 var client = await listener.AcceptTcpClientAsync(stoppingToken);
-                if (client.Client.RemoteEndPoint is not IPEndPoint { Address: var address } || (Options.Network.LoopbackOnly && !IPAddress.IsLoopback(address))
-                    || !await slots.WaitAsync(0, stoppingToken))
+                if (client.Client.RemoteEndPoint is not IPEndPoint { Address: var address } || (Options.Network.LoopbackOnly && !IPAddress.IsLoopback(address)))
                 {
+                    Stats?.Refused("address");
                     client.Dispose();
                     continue;
                 }
+                if (!await slots.WaitAsync(0, stoppingToken))
+                {
+                    Stats?.Refused("capacity");
+                    client.Dispose();
+                    continue;
+                }
+                Stats?.Accepted();
                 _ = Task.Run(async () =>
                 {
-                    try { await ServeAsync(client, stoppingToken); }
-                    finally { slots.Release(); client.Dispose(); }
+                    var ended = "error";
+                    try { ended = await ServeAsync(client, stoppingToken); }
+                    finally { slots.Release(); client.Dispose(); Stats?.Ended(ended); }
                 }, stoppingToken);
             }
         }
@@ -100,7 +112,8 @@ public abstract class NativeListener(int port, ushort greetingTag, NativeOptions
         }
     }
 
-    async Task ServeAsync(TcpClient client, CancellationToken stoppingToken)
+    /// <summary>Serves one connection; returns how it ended (a fixed code for the diagnostics).</summary>
+    async Task<string> ServeAsync(TcpClient client, CancellationToken stoppingToken)
     {
         client.NoDelay = true;
         KeepAlive(client);
@@ -117,7 +130,7 @@ public abstract class NativeListener(int port, ushort greetingTag, NativeOptions
             do
             {
                 var read = await stream.ReadAsync(chunk, greetingWindow.Token);
-                if (read == 0) return;
+                if (read == 0) return "client_closed";
                 buffer.Append(chunk.AsSpan(0, read));
                 if (buffer.Length > 65536) throw new ProtocolException("Greeting too large");
                 frames = buffer.Drain();
@@ -130,15 +143,23 @@ public abstract class NativeListener(int port, ushort greetingTag, NativeOptions
             // The client waits for the reply before its first encrypted body; like the Python
             // server, anything framed alongside the greeting is ignored.
             await RunAsync(stream, cipher, buffer, connection.Token);
+            return "closed";
         }
         catch (Exception error) when (error is ProtocolException or IOException or SocketException or OperationCanceledException or ObjectDisposedException)
         {
             Logger.LogInformation("{Name} connection ended: {Reason}", Name, error.GetType().Name);
+            return error switch
+            {
+                ProtocolException => "protocol",
+                OperationCanceledException => "timeout_or_stop",
+                _ => "network",
+            };
         }
         catch (Exception error)
         {
             // Anything else ended the connection without a trace before (live 2026-10-16).
             Logger.LogWarning(error, "{Name} connection ended by an unexpected error", Name);
+            return "error";
         }
     }
 
@@ -198,6 +219,7 @@ public sealed class NativeLoginListener(NativeOptions options, IServiceProvider 
     : NativeListener(options.LoginPort ?? 0, NativeHandshake.LoginGreeting, options, logger)
 {
     protected override string Name => "Native login";
+    protected override ListenerStats? Stats => services.GetService<ListenerDiagnostics>()?.Login;
     protected override byte[] HandshakeReply(RsaPublicKey key, byte[] sessionKey) => NativeHandshake.LoginReply(key, sessionKey);
 
     protected override async Task RunAsync(NetworkStream stream, Rc4 cipher, FrameBuffer buffer, CancellationToken ct)
@@ -216,11 +238,15 @@ public sealed class NativeLoginListener(NativeOptions options, IServiceProvider 
         {
             foreach (var body in buffer.Drain())
             {
-                var step = await session.HandleAsync(cipher.Crypt(body), DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), ct);
+                var plain = cipher.Crypt(body);
+                var started = System.Diagnostics.Stopwatch.GetTimestamp();
+                var step = await session.HandleAsync(plain, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), ct);
+                Stats?.Handled(OpcodeOf(plain), System.Diagnostics.Stopwatch.GetTimestamp() - started);
                 await SendAsync(stream, step.Replies, ct);
                 if (step.Close is { } reason)
                 {
                     Logger.LogInformation("Native login closed: {Reason}", reason);
+                    Stats?.Refused(reason);  // replay_rejected, rejected, required
                     return;
                 }
             }
@@ -243,6 +269,7 @@ public sealed class NativeLoginListener(NativeOptions options, IServiceProvider 
         if (services.GetService<Aion.Host.Authentication.ServerControl>() is { } control && await control.LoginBlockedAsync(grant.AccountId, ct) is { } blocked)
         {
             Logger.LogInformation("Native login refused: {Reason}", blocked);
+            Stats?.Refused("blocked");  // also counted as "rejected" when the session closes
             return null;
         }
         // The login port's character list (0x390b) shows a per-server character count.
@@ -262,6 +289,7 @@ public sealed class NativeGameListener(NativeOptions options, IServiceProvider s
 {
     static readonly TimeSpan TickInterval = TimeSpan.FromMilliseconds(50);
     protected override string Name => "Native game";
+    protected override ListenerStats? Stats => services.GetService<ListenerDiagnostics>()?.Game;
     protected override byte[] HandshakeReply(RsaPublicKey key, byte[] sessionKey) => NativeHandshake.GameReply(key, sessionKey);
 
     protected override async Task RunAsync(NetworkStream stream, Rc4 cipher, FrameBuffer buffer, CancellationToken ct)
@@ -358,27 +386,30 @@ public sealed class NativeGameListener(NativeOptions options, IServiceProvider s
                     {
                         if (header == 0x3613)
                         {
-                            if (authenticated) { Logger.LogInformation("Native game closed: replay_rejected"); return; }
+                            if (authenticated) { Logger.LogInformation("Native game closed: replay_rejected"); Stats?.Refused("replay_rejected"); return; }
                             session.Store = await AuthenticateAsync(plain, ct);
                             if (session.Store is { } opened && turn is not null) session.Store = TurnStore.Wrap(opened, turn);
-                            if (session.Store is null) { Logger.LogInformation("Native game closed: rejected"); return; }
+                            if (session.Store is null) { Logger.LogInformation("Native game closed: rejected"); Stats?.Refused("rejected"); return; }
                             authenticated = true;
                         }
-                        else if (!authenticated && header != 0x3602) { Logger.LogInformation("Native game closed: required"); return; }
+                        else if (!authenticated && header != 0x3602) { Logger.LogInformation("Native game closed: required"); Stats?.Refused("required"); return; }
                     }
                     trace?.Record(plain);
                     var errorsBefore = session.PersistenceErrors.Count;
                     var mapRequest = GameSession.IsMapRequest(plain);
                     List<byte[]> replies;
+                    var started = System.Diagnostics.Stopwatch.GetTimestamp();
                     try
                     {
                         replies = await InTurnAsync(() => session.HandleAsync(plain, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), ct), () => mapRequest);
+                        Stats?.Handled(header, System.Diagnostics.Stopwatch.GetTimestamp() - started);
                     }
                     // A malformed body (short, out-of-range field) is that request's failure, not the connection's: it ended the
                     // session before (idea from A2Core PR #4). Logged so a handler bug does not go unseen.
                     catch (Exception error) when (authenticated && error is ArgumentException or IndexOutOfRangeException or OverflowException or InvalidCastException)
                     {
                         Logger.LogWarning("Native game request 0x{Opcode:x4} ({Length} bytes) failed and was skipped: {Error}", header, plain.Length, error.Message);
+                        Stats?.Malformed();
                         replies = [];
                     }
                     // A request the store refused (constraint, missing row): which one and why (it was silent before).
@@ -483,6 +514,7 @@ public sealed class NativeGameListener(NativeOptions options, IServiceProvider s
         if (services.GetService<Aion.Host.Authentication.ServerControl>() is { } control && await control.LoginBlockedAsync(who.Account.AccountId, ct) is { } blocked)
         {
             Logger.LogInformation("Native game login refused: {Reason}", blocked);
+            Stats?.Refused("blocked");  // also counted as "rejected" when the connection closes
             return null;
         }
         return new ServiceNativeCharacterStore(opened.Token, who, sessions, services.GetRequiredService<IWireCharacterRepository>(),

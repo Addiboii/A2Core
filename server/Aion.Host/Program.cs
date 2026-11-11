@@ -189,6 +189,8 @@ if (native.LoginPort is not null || native.GamePort is not null)
             },
         };
     });
+    // Listener counts and timings for the staff diagnostics API (GET /api/admin/diagnostics).
+    builder.Services.AddSingleton<Aion.World.ListenerDiagnostics>();
     if (native.LoginPort is not null) builder.Services.AddHostedService<NativeLoginListener>();
     if (native.GamePort is not null) builder.Services.AddHostedService<NativeGameListener>();
     if (native.GamePort is not null)

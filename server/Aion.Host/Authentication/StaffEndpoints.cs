@@ -112,6 +112,30 @@ public static class StaffEndpoints
             return Results.Ok(load.Health(presence, services.GetService<ScheduledRestart>()?.At));
         });
 
+        // Diagnostics (staff only, OURS): per native listener the connections, refusals and ends by reason, malformed
+        // requests skipped, and per opcode the request count and handling time; plus the process and world-lock figures
+        // of /internal/world. Counts and timings only: no packet bodies, names, chat or addresses are kept.
+        staff.MapGet("/diagnostics", async (HttpContext ctx, IAccountAuthentication auth, IGameplayStore game, IServiceProvider services, CancellationToken ct) =>
+        {
+            if (await StaffAsync(ctx, auth, game, ct) is null) return Results.Unauthorized();
+            var diagnostics = services.GetService<ListenerDiagnostics>();
+            var presence = services.GetService<WorldPresence>();
+            return Results.Ok(new
+            {
+                startedAt = diagnostics?.StartedAt,
+                uptimeSeconds = diagnostics is null ? (double?)null : Math.Round((DateTimeOffset.UtcNow - diagnostics.StartedAt).TotalSeconds),
+                process = new
+                {
+                    cpuSeconds = WorldLoadReporter.CpuSeconds(),
+                    gcHeapBytes = GC.GetTotalMemory(false),
+                    gen0 = GC.CollectionCount(0), gen1 = GC.CollectionCount(1), gen2 = GC.CollectionCount(2),
+                },
+                world = services.GetService<SharedWorld>() is { } world
+                    ? new { players = presence?.All.Count ?? 0, connections = presence?.Connections ?? 0, locks = world.Lock.Stats.Read() } : null,
+                listeners = diagnostics?.All.Select(l => l.Read()).ToList() ?? [],
+            });
+        });
+
         staff.MapGet("/audit", async (string? action, Guid? character, long? before, int? limit, HttpContext ctx, IAccountAuthentication auth,
             IGameplayStore game, CancellationToken ct) =>
         {
