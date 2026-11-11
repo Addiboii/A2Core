@@ -30,6 +30,22 @@ class SubzoneTests(unittest.TestCase):
                                     'z': [100.0, 200.0], 'points': [[0, 0], [10, 0], [10, 10]]})
         self.assertEqual((areas[1]['name'], areas[1]['group']), ('Other', 0))   # no fog group: still an EnterSubZone target
 
+    def test_map_default_subzones(self):
+        subzone_table = {'Properties': {'Data': [
+            {'ID': {'Value': 2000}, 'Name': 'Verteron_Subzone_default', 'Priority': 1,
+             'WorldMapFogGroupId': 'ESubzoneGroupID::ESubzoneGroupID_50'}]}}
+        map_table = {'Properties': {'Data': [{'ID': {'Value': 1010}, 'DefaultSubzoneID': 2000},
+                                             {'ID': {'Value': 99}, 'DefaultSubzoneID': 4242},
+                                             {'ID': {'Value': 98}, 'DefaultSubzoneID': 0}]}}
+        self.assertEqual(subzones.defaults(map_table, subzone_table), {
+            '1010': {'subzone': 2000, 'name': 'Verteron_Subzone_default', 'group': 50},
+            '99': {'subzone': 4242, 'name': None, 'group': 0}})
+
+    def test_generated_defaults_cover_every_map(self):
+        data = json.loads((ROOT / 'tools/data/subzones.json').read_text(encoding='utf-8'))
+        self.assertEqual(len(data['defaults']), 741)
+        self.assertEqual(data['defaults']['600083'], {'subzone': 60830, 'name': 'ReforgedAbyss_Subzone_Hard', 'group': 0})
+
     def test_generated_poeta_groups(self):
         data = json.loads((ROOT / 'tools/data/subzones.json').read_text(encoding='utf-8'))
         self.assertEqual(sorted({a['group'] for a in data['maps']['1000']} - {0}), [63, 64, 65, 66])

@@ -27,13 +27,23 @@ public sealed record SubzoneArea(
     }
 }
 
+/// <summary>
+/// A map's default subzone (tools/subzones.py): Map.dat DefaultSubzoneID with its Subzone.dat Name and fog group (OBSERVED,
+/// build 26262663 tables). Used for a position no subzone volume contains (CANDIDATE: what the field's name suggests).
+/// </summary>
+public sealed record DefaultSubzone(
+    [property: JsonPropertyName("subzone")] int Subzone,
+    [property: JsonPropertyName("name")] string? Name,
+    [property: JsonPropertyName("group")] int Group);
+
 /// <summary>World-map fog (the clouds on the M map): which group a position uncovers, by map (embedded subzones.json).</summary>
 public static class Subzones
 {
     public const double HeightSlack = 2000;
 
     sealed record File([property: JsonPropertyName("groups")] int[] Groups,
-                       [property: JsonPropertyName("maps")] Dictionary<string, SubzoneArea[]> Maps);
+                       [property: JsonPropertyName("maps")] Dictionary<string, SubzoneArea[]> Maps,
+                       [property: JsonPropertyName("defaults")] Dictionary<string, DefaultSubzone>? Defaults = null);
 
     static readonly Lazy<File> data = new(() =>
     {
@@ -48,20 +58,37 @@ public static class Subzones
     public static IReadOnlyList<SubzoneArea> OnMap(int mapId) =>
         data.Value.Maps.GetValueOrDefault(mapId.ToString(System.Globalization.CultureInfo.InvariantCulture)) ?? [];
 
-    /// <summary>The fog group uncovered at a position: the highest-priority area containing it, else none.</summary>
+    /// <summary>The map's default subzone (Map.dat DefaultSubzoneID), if the map is in Map.dat.</summary>
+    public static DefaultSubzone? DefaultOf(int mapId) =>
+        data.Value.Defaults?.GetValueOrDefault(mapId.ToString(System.Globalization.CultureInfo.InvariantCulture));
+
+    /// <summary>Whether no subzone volume of the map contains a position (then the map's default subzone applies).</summary>
+    static bool Outside(int mapId, Vector3d at) => !OnMap(mapId).Any(a => a.Contains(at));
+
+    /// <summary>The fog group uncovered at a position: the highest-priority area containing it with a group; outside every
+    /// area, the default subzone's group (CANDIDATE); else none.</summary>
     public static int? GroupAt(int mapId, Vector3d at)
     {
         SubzoneArea? best = null;
+        var any = false;
         foreach (var area in OnMap(mapId))
-            if (area.Group > 0 && (best is null || area.Priority > best.Priority) && area.Contains(at)) best = area;
-        return best?.Group;
+        {
+            if (!area.Contains(at)) continue;
+            any = true;
+            if (area.Group > 0 && (best is null || area.Priority > best.Priority)) best = area;
+        }
+        if (best is not null) return best.Group;
+        return !any && DefaultOf(mapId) is { Group: > 0 } fallback ? fallback.Group : null;
     }
 
-    /// <summary>The internal name of the highest-priority subzone containing a position, if any.</summary>
+    /// <summary>The internal name of the highest-priority subzone containing a position; outside every area, the map's
+    /// default subzone's name; else none.</summary>
     public static string? AreaAt(int mapId, Vector3d at) =>
-        OnMap(mapId).Where(a => a.Contains(at)).MaxBy(a => a.Priority)?.Name;
+        OnMap(mapId).Where(a => a.Contains(at)).MaxBy(a => a.Priority)?.Name ?? DefaultOf(mapId)?.Name;
 
-    /// <summary>Whether a position lies in a named subzone (EnterSubZone objectives).</summary>
+    /// <summary>Whether a position lies in a named subzone (EnterSubZone objectives, SubZone conditions): a volume of that
+    /// name contains it, or no volume does and the name is the map's default subzone (CANDIDATE).</summary>
     public static bool InSubzone(int mapId, string name, Vector3d at) =>
-        OnMap(mapId).Any(a => string.Equals(a.Name, name, StringComparison.OrdinalIgnoreCase) && a.Contains(at));
+        OnMap(mapId).Any(a => string.Equals(a.Name, name, StringComparison.OrdinalIgnoreCase) && a.Contains(at))
+        || DefaultOf(mapId) is { Name: { } fallback } && string.Equals(fallback, name, StringComparison.OrdinalIgnoreCase) && Outside(mapId, at);
 }

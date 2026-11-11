@@ -464,6 +464,16 @@ Check(Subzones.GroupAt(1000, pos) is not { } spawnGroup ? movedReplies.Count == 
       : movedReplies.Single().SequenceEqual(GamePackets.AddSubzoneGroup(spawnGroup)) && game.Fog.Contains(spawnGroup),
       "entering a subzone uncovers its world-map fog group (0x56ad)");
 Check(Subzones.GroupAt(1000, new Vector3d(6297.9, -44596.4, 20000)) == 65, "Poeta's base area is fog group 65 (MapData polygon + Subzone.dat)");
+// Map.dat DefaultSubzoneID: a position no volume contains is in the map's default subzone (CANDIDATE); inside a volume the
+// volume wins. 600083 ReforgedAbyss_Hard (new in 26262663) defaults to 60830; Verteron (1010) to 2000, fog group 50.
+var nowhere = new Vector3d(9.9e6, 9.9e6, 0);
+Check(Subzones.DefaultOf(600083) is { Subzone: 60830, Name: "ReforgedAbyss_Subzone_Hard" } && Subzones.AreaAt(600083, nowhere) == "ReforgedAbyss_Subzone_Hard"
+      && Subzones.InSubzone(600083, "ReforgedAbyss_Subzone_Hard", nowhere), "600083: outside every volume is the Map.dat default subzone");
+Check(Subzones.GroupAt(1010, nowhere) == 50 && Subzones.AreaAt(1010, nowhere) == "Verteron_Subzone_default" && Subzones.GroupAt(1000, nowhere) is null,
+      "outside every volume: the default subzone's fog group (Verteron 50; Poeta's default has none)");
+Check(Subzones.AreaAt(1000, new Vector3d(6297.9, -44596.4, 20000)) == "L_Starter_Subzone_Base" && Subzones.AreaAt(1000, nowhere) == "L_Starter_Subzone_Default"
+      && !Subzones.InSubzone(600083, "Verteron_Subzone_default", nowhere),
+      "inside a volume the volume's subzone wins over the map default");
 // Diving (0x3717 CharSwimmingDiveUpdate_RQ: _pos first) spends the Diving Gauge (OP, type 5); at 0 the HP drops 5% a second;
 // a surface swim (0x3715) refills it.
 var diveAt = game.Position!.Value;
