@@ -1,4 +1,5 @@
 using System.Globalization;
+using Aion.Core.Accounts;
 using Aion.Protocol.Native;
 
 namespace Aion.World;
@@ -15,8 +16,9 @@ public sealed record BuilderOutcome(int Result, string Message, List<byte[]> Pac
 /// which sends 0x362e BuilderCmd_RQ; "//&lt;command&gt;" in chat reaches the same code. Names
 /// and arguments follow the client's Content/Data/BuilderCommand.json (656 commands, see
 /// research/builder-commands.md); only <see cref="Supported"/> is backed here. Runs on the
-/// actor's game loop. GM rights come from <see cref="GmPolicy"/>; every command is audited
-/// (name and outcome only).
+/// actor's game loop. GM rights come from <see cref="GmPolicy"/>; each command also needs the rank the staff permission
+/// table names ("gm.&lt;command&gt;", migration 076), and value for the actor's own account needs grant.own_account. Every
+/// command is audited (name and outcome only).
 /// </summary>
 public sealed class BuilderCommands(WorldPresence presence, GmPolicy policy, Action<string, string, string> audit, GameData? data = null)
 {
@@ -78,6 +80,45 @@ public sealed class BuilderCommands(WorldPresence presence, GmPolicy policy, Act
         return actor.CharacterName is { } name && policy.DevelopmentNames.Contains(name);
     }
 
+    /// <summary>
+    /// The rank check of one command (migration 076): every action it needs must be allowed by the permission table
+    /// and, where a database is configured, by auth.staff_allowed. Development logins (named in configuration, no
+    /// accounts) have no rank.
+    /// </summary>
+    public async Task<bool> PermittedAsync(GameSession actor, string command, string[] args, CancellationToken ct)
+    {
+        if (actor.Store is not { } store) return true;
+        try
+        {
+            var actions = new List<string> { StaffPermissions.GmAction(command) };
+            if (StaffPermissions.SelfValueCommands.Contains(command)) actions.Add(StaffPermissions.GrantOwnAccount);
+            if (command == "Mail" && MailAttachment(args))
+            {
+                actions.Add(StaffPermissions.MailItem);
+                if (await MailToOwnAccountAsync(store, args[0], ct)) actions.Add(StaffPermissions.GrantOwnAccount);
+            }
+            var role = await policy.StaffRole(store.AccountId, ct);
+            foreach (var action in actions)
+            {
+                if (!StaffPermissions.Allows(role, action)) return false;
+                if (policy.Allowed is { } database && !await database(store.AccountId, action, ct)) return false;
+            }
+            return true;
+        }
+        catch (Exception error) when (error is not OperationCanceledException) { return false; }
+    }
+
+    static bool MailAttachment(string[] args) =>
+        args.Length >= 4 && int.TryParse(args[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out var item) && item > 0
+        && long.TryParse(args[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out var count) && count > 0;
+
+    /// <summary>Whether the named recipient is a character of the actor's own account; unknown owner counts as own.</summary>
+    async Task<bool> MailToOwnAccountAsync(INativeCharacterStore store, string name, CancellationToken ct)
+    {
+        if (await store.CharacterByNameAsync(name, ct) is not { } target) return false;  // no such character: the mail fails anyway
+        return policy.CharacterAccount is not { } owner || await owner(target, ct) is not { } account || account == store.AccountId;
+    }
+
     public async Task<BuilderOutcome> RunAsync(GameSession actor, string line, long now, CancellationToken ct)
     {
         var words = line.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
@@ -90,6 +131,11 @@ public sealed class BuilderCommands(WorldPresence presence, GmPolicy policy, Act
         {
             audit(who, label, "denied");
             return BuilderOutcome.Fail("GM permission required.");
+        }
+        if (command is not null && !await PermittedAsync(actor, command, words[1..], ct))
+        {
+            audit(who, label, "denied");
+            return BuilderOutcome.Fail($"{command}: your staff rank does not allow this.");
         }
         audit(who, label, "requested");  // before any change
         BuilderOutcome outcome;

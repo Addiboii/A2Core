@@ -14,6 +14,7 @@ if (!connectionOptions.Database!.StartsWith("aion_repository_test_", StringCompa
 var first = new VerifiedAccount(Guid.Parse(Environment.GetEnvironmentVariable("AION_TEST_FIRST")!));
 var second = new VerifiedAccount(Guid.Parse(Environment.GetEnvironmentVariable("AION_TEST_SECOND")!));
 var disabled = new VerifiedAccount(Guid.Parse(Environment.GetEnvironmentVariable("AION_TEST_DISABLED")!));
+var moderator = new VerifiedAccount(Guid.Parse(Environment.GetEnvironmentVariable("AION_TEST_MODERATOR")!));
 var disabledCharacter = Guid.Parse(Environment.GetEnvironmentVariable("AION_TEST_DISABLED_CHARACTER")!);
 var checks = 0;
 Guid createdId;
@@ -257,7 +258,16 @@ await using(var source=NpgsqlDataSource.Create(connectionString))
     await Reject(()=>game.AdminCharacterAsync(first,id),"forbidden");
     await Reject(()=>game.AdminProfileAsync(disabled),"forbidden");
     var profile=await game.AdminProfileAsync(second);
-    Check(profile.Roles.SequenceEqual(["gamemaster"]) && profile.BuildId=="test","staff profile reports roles and catalogue build");
+    Check(profile.Roles.SequenceEqual(["admin"]) && profile.BuildId=="test","staff profile reports roles and catalogue build");
+    // Staff ranks (migration 076): a Moderator levels and grants to others' characters, but the staff flag is an
+    // Administrator's, and value for a character of one's own account needs grant.own_account (Administrator).
+    Check((await game.AdminAsync(moderator,new(Guid.NewGuid(),id,"wings",Wings:[30200600]))).GetProperty("added").GetInt32()==0,"a moderator registers wings (one already held: no change)");
+    await Reject(()=>game.AdminAsync(moderator,new(Guid.NewGuid(),gmChar,"staff",Staff:true)),"forbidden");
+    Check((await game.StaffAccessAsync(moderator,"command.grant")).Allows("command.grant") && !(await game.StaffAccessAsync(moderator,"grant.own_account")).Allows("grant.own_account")
+          && !(await game.StaffAccessAsync(first,"command.grant")).Allows("command.grant"),"rank answers from the database and the table");
+    Check((await game.CharacterAccountAsync(gmChar))==second.AccountId && await game.CharacterAccountAsync(Guid.NewGuid()) is null,"character owner lookup");
+    var ownGrant=new AdminCommand(Guid.NewGuid(),gmChar,"grant","test",101);
+    Check((await game.AdminAsync(second,ownGrant)).TryGetProperty("instanceId",out _),"an Administrator may grant to their own account");
     var everyone=await game.AdminFindCharactersAsync(second,"");
     Check(everyone.Count==5 && everyone.Any(x=>x.AccountId==first.AccountId) && everyone.Any(x=>x.AccountId==second.AccountId),"staff search spans accounts");
     Check(everyone.Single(x=>x.Name=="PreviouslyOwned").AccountDisabled,"staff search flags disabled accounts");

@@ -71,6 +71,12 @@ public sealed record SocialRelation(Guid CharacterId, string Name, int Level, in
 public sealed record AdminClass(int CreationId, string Name);
 // Staff views (gamemaster/admin only). Account names come from the identity subject.
 public sealed record AdminProfile(IReadOnlyList<string> Roles, string? BuildId);
+/// <summary>An account's staff role and whether the database's permission table (auth.staff_allowed) allows an action.</summary>
+public sealed record StaffAccess(string? Role, bool DatabaseAllows)
+{
+    /// <summary>Allowed only when the C# table and the database both allow it (migration 076).</summary>
+    public bool Allows(string action) => DatabaseAllows && Aion.Core.Accounts.StaffPermissions.Allows(Role, action);
+}
 /// <summary>An audit event for the staff activity log: who did what to which character, with the event's details (JSON).</summary>
 public sealed record AdminAuditEntry(long Id, DateTimeOffset At, string Action, Guid? CharacterId, string? CharacterName, string? ActorName, string Details);
 public sealed record AdminCharacter(Guid CharacterId, string Name, Guid AccountId, string AccountName,
@@ -272,6 +278,11 @@ public interface IGameplayStore
     Task<bool> AscendAsync(VerifiedAccount account, Guid character, int grade, CancellationToken ct = default) => Task.FromResult(false);
     // Throw GameplayException("forbidden") unless the actor holds gamemaster or admin.
     Task<AdminProfile> AdminProfileAsync(VerifiedAccount actor, CancellationToken ct = default);
+    /// <summary>The actor's rank and the database's answer for one permission-table action (migration 076).</summary>
+    Task<StaffAccess> StaffAccessAsync(VerifiedAccount actor, string action, CancellationToken ct = default) =>
+        Task.FromResult(new StaffAccess(null, false));
+    /// <summary>The account a character belongs to (staff value checks), or null.</summary>
+    Task<Guid?> CharacterAccountAsync(Guid character, CancellationToken ct = default) => Task.FromResult<Guid?>(null);
     Task<IReadOnlyList<AdminCharacter>> AdminFindCharactersAsync(VerifiedAccount actor, string query, CancellationToken ct = default);
     Task<AdminCharacterDetail?> AdminCharacterAsync(VerifiedAccount actor, Guid character, CancellationToken ct = default);
     // Latest catalogue build: exact template ID or name substring, at most five rows (GM chat command).

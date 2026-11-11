@@ -1319,6 +1319,8 @@ Check(new[] { "GM_Elyra", "[GM]Elyra", "[GM] Elyra", "gm elyra", "GMElyra", "Gam
 Check(CharacterNames.Display("Elyra", "gamemaster") == "[GM] Elyra" && CharacterNames.Display("Elyra", "admin") == "[Admin] Elyra"
       && CharacterNames.Display("GM_Elyra", "gamemaster") == "GM_Elyra" && CharacterNames.Display("Elyra", null) == "Elyra", "display names per role");
 Check(CharacterNames.DisplayRole(["gamemaster", "admin"]) == "admin" && CharacterNames.DisplayRole(["gamemaster"]) == "gamemaster" && CharacterNames.DisplayRole([]) is null, "admin is shown over gamemaster");
+Check(CharacterNames.DisplayRole(["moderator"]) == "moderator" && CharacterNames.DisplayRole(["moderator", "gamemaster"]) == "moderator"
+      && CharacterNames.Display("Elyra", "moderator") == "[GM] Elyra", "moderators: shown as their rank, tagged [GM] in the world");
 Check(CharacterNames.Stored("<Legend>[GM]</> Elyra") == "Elyra" && CharacterNames.Stored("<Mythic>[Admin]</> Elyra") == "Elyra" && CharacterNames.Stored("[GM] Elyra") == "Elyra"
       && CharacterNames.Stored("Elyra") == "Elyra" && CharacterNames.Stored("GM_Elyra") == "GM_Elyra", "stored names behind displayed ones");
 var staffStore = new FakeStore();
@@ -1329,6 +1331,31 @@ Check((await staffSession.HandleAsync(NameRequest("GM_Elyra"), Now)).Single().Se
 Check((await stored.HandleAsync(NameRequest("GM_Elyra"), Now)).Single().SequenceEqual(GamePackets.NameCheck("GM_Elyra", GamePackets.NameBannedWord))
       && (await stored.HandleAsync(NameRequest("Gmork"), Now)).Single().SequenceEqual(GamePackets.NameCheck("Gmork")), "players may not");
 await staffSession.HandleAsync(create, Now);
+// Staff ranks (migration 076): a builder command needs its table rank; value for the actor's own character also needs
+// grant.own_account (Administrator); the database's half refuses even when the table allows.
+foreach (var (rankRole, rankCommand, rankArgs, rankAllowed) in new (string?, string, string[], bool)[]
+{
+    ("gamemaster", "SetInvisible", ["true"], true), ("gamemaster", "SetLevel", ["5"], false), ("moderator", "SetLevel", ["5"], true),
+    ("moderator", "AcquireItem", ["100"], false), ("admin", "AcquireItem", ["100"], true), ("moderator", "QuestReward", ["1"], false),
+    ("admin", "QuestReward", ["1"], true), ("gamemaster", "Mail", ["Someone", "0", "0", "hi"], true), ("gamemaster", "Mail", ["Someone", "5", "1", "hi"], false),
+    ("moderator", "Mail", ["Someone", "5", "1", "hi"], true), (null, "SetInvisible", ["true"], false),
+})
+{
+    var rankBuilder = new BuilderCommands(new WorldPresence(), new GmPolicy { StaffRole = (_, _) => Task.FromResult(rankRole) }, (_, _, _) => { });
+    Check(await rankBuilder.PermittedAsync(staffSession, rankCommand, rankArgs, default) == rankAllowed,
+          $"rank {rankRole ?? "none"}: {rankCommand} {string.Join(' ', rankArgs)} {(rankAllowed ? "allowed" : "refused")}");
+}
+{
+    var askedActions = new List<string>();
+    var databaseNo = new BuilderCommands(new WorldPresence(), new GmPolicy
+    {
+        StaffRole = (_, _) => Task.FromResult<string?>("admin"),
+        Allowed = (_, action, _) => { askedActions.Add(action); return Task.FromResult(action != "grant.own_account"); },
+    }, (_, _, _) => { });
+    Check(await databaseNo.PermittedAsync(staffSession, "SetInvisible", ["true"], default)
+          && !await databaseNo.PermittedAsync(staffSession, "AcquireItem", ["100"], default)
+          && askedActions.SequenceEqual(["gm.SetInvisible", "gm.AcquireItem", "grant.own_account"]), "the database's rank answer is asked and can refuse");
+}
 // A new character on a staff account is a player until it is flagged by hand (migration 035; the dashboard's "staff" command).
 {
     var plainStore = new FakeStore();

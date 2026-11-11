@@ -3,7 +3,7 @@ import { ApiError, requestId } from '../api';
 import { Badge, Button, Tabs } from '../ui/components';
 import { describe } from './AdminApp';
 import type { Tools } from './Dashboard';
-import { ROLE_LABEL, type AdminCharacter, type CharacterDetail } from './types';
+import { RANKS, ROLE_LABEL, type AdminCharacter, type CharacterDetail } from './types';
 import { iconUrl, type Wardrobe } from './useWardrobe';
 
 const GENDER_NAME: Record<number, string> = { 1: 'Male', 2: 'Female' };
@@ -129,12 +129,14 @@ function Overview({ tools, detail, onRefresh }: { tools: Tools; detail: Characte
     command('ascension', 'Set ascension', `Set ${c.name} to ascension grade ${grade}? Applies at their next world entry.`,
       { command: 'ascension', ascension: grade }, `${c.name} is now ascension grade ${grade}.`, `Ascension ${grade} → ${c.name}`);
   }
+  // One rank per account (migration 076): making a rank replaces the held one; removing it leaves a player account.
   function toggleRole(role: string, granted: boolean) {
     const label = ROLE_LABEL[role];
     tools.confirm({
       title: granted ? `Make ${label}` : `Remove ${label}`, danger: !granted,
-      body: granted ? `Give account ${c.accountName} the ${label} role?` : `Remove the ${label} role from account ${c.accountName}?`,
-      note: 'Applies when the player next starts the game client. Admins cannot remove their own Admin role.',
+      body: granted ? `Make account ${c.accountName} a ${label}${roles.length ? ` (replacing ${roles.map(r => ROLE_LABEL[r] ?? r).join(', ')})` : ''}?`
+        : `Remove the ${label} rank from account ${c.accountName}?`,
+      note: 'Applies when the player next starts the game client. Nobody can change their own rank. Recorded in the audit log.',
       confirmLabel: granted ? `Make ${label}` : `Remove ${label}`,
       onConfirm: async () => {
         setBusy('role-' + role);
@@ -145,7 +147,7 @@ function Overview({ tools, detail, onRefresh }: { tools: Tools; detail: Characte
           await onRefresh();
         } catch (error) {
           tools.notify(error instanceof ApiError && error.code === 'forbidden'
-            ? 'Only admins can change roles, and an admin cannot remove their own Admin role.' : describe(error), 'error');
+            ? 'Only Administrators can change ranks, and nobody can change their own.' : describe(error), 'error');
         } finally { setBusy(null); }
       },
     });
@@ -189,7 +191,7 @@ function Overview({ tools, detail, onRefresh }: { tools: Tools; detail: Characte
         </div>
         {isAdmin && !c.accountDisabled && (
           <div className="row wrap">
-            {['gamemaster', 'admin'].map(role => {
+            {RANKS.map(role => {
               const has = roles.includes(role);
               return <Button key={role} size="sm" variant={has ? 'danger' : 'secondary'} busy={busy === 'role-' + role}
                 onClick={() => toggleRole(role, !has)}>{has ? 'Remove' : 'Make'} {ROLE_LABEL[role]}</Button>;

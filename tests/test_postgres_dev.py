@@ -136,7 +136,9 @@ class RoleStatementTests(unittest.TestCase):
         grant = role_statement('staffuser', 'admin')
         self.assertIn("provider='local' AND subject='staffuser'", grant)
         self.assertIn("'admin'", grant)
-        self.assertIn('ON CONFLICT DO NOTHING', grant)
+        # One rank per account (migration 076): a grant replaces the held rank.
+        self.assertIn('ON CONFLICT (account_id) DO UPDATE SET role=EXCLUDED.role', grant)
+        self.assertIn("'moderator'", role_statement('staffuser', 'moderator'))
         self.assertTrue(role_statement('staffuser', 'gamemaster', revoke=True).startswith('DELETE FROM auth.account_roles'))
 
     def test_role_statement_rejects_unsafe_input(self):

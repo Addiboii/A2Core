@@ -146,12 +146,22 @@ var managedStaff=(await staffSignIn.SignInAsync("managed",password+"new",TimeSpa
     ?? throw new Exception("Staff sign-in of the new gamemaster failed");
 Check(await Scalar<string>($"SELECT string_agg(role,',') FROM auth.account_roles WHERE account_id='{managed.AccountId}'")=="gamemaster","granted role stored");
 Check(!await auth.SetStaffRoleAsync(managerStaff.Token,managed.AccountId,"gm",true),"retired gm role rejected");
+// Staff ranks (migration 076): one rank per account, set from an Administrator's staff session, audited with from/to.
+Check(await auth.SetStaffRoleAsync(managerStaff.Token,managed.AccountId,"moderator",true),"admin makes a moderator");
+Check(!await auth.SetStaffRoleAsync(managedStaff.Token,manager.AccountId,"gamemaster",true),"a moderator cannot set ranks");
+Check(await auth.SetStaffRoleAsync(managerStaff.Token,managed.AccountId,"gamemaster",true)
+      && await Scalar<string>($"SELECT string_agg(role,',') FROM auth.account_roles WHERE account_id='{managed.AccountId}'")=="gamemaster","a new rank replaces the old one");
+Check(await Scalar<long>($"SELECT count(*) FROM audit.events WHERE action='staff_rank_changed' AND actor_id='{manager.AccountId}' AND details->>'from'='moderator' AND details->>'to'='gamemaster'")==1,
+      "rank change audited with from and to");
+Check(await Scalar<bool>($"SELECT auth.staff_allowed('{managed.AccountId}','gm.SetInvisible') AND NOT auth.staff_allowed('{managed.AccountId}','gm.SetLevel') AND NOT auth.staff_allowed('{managed.AccountId}','no.such.action') AND auth.staff_allowed('{manager.AccountId}','grant.own_account')"),
+      "rank permissions from the table");
+await DeniedState(admin,$"INSERT INTO auth.account_roles VALUES('{managed.AccountId}','admin')","23505","one rank per account");
 Check(!await auth.SetStaffRoleAsync(managerStaff.Token,manager.AccountId,"admin",false),"admin cannot remove own admin role");
 Check(await auth.SetStaffRoleAsync(managerStaff.Token,managed.AccountId,"gamemaster",false),"admin revokes gamemaster");
 Check(await Scalar<long>($"SELECT count(*) FROM auth.account_roles WHERE account_id='{managed.AccountId}'")==0,"revoked role removed");
 Check(await auth.AuthenticateAsync(managedStaff.Token,default) is null && await auth.AuthenticateAsync(managed.Token,default) is not null,
       "losing the last staff role ends the staff sessions, not the player ones");
-Check(await Scalar<long>("SELECT count(*) FROM audit.events WHERE action IN ('role_granted','role_revoked')")==2,"role changes audited");
+Check(await Scalar<long>($"SELECT count(*) FROM audit.events WHERE action='staff_rank_changed' AND actor_id='{manager.AccountId}'")==4,"rank changes audited");
 await Denied(authSource, $"INSERT INTO auth.account_roles VALUES('{managed.AccountId}','admin')", "auth role cannot write roles directly");
 Check(!await auth.DisableAccountAsync(managerStaff.Token,manager.AccountId),"self disable prevented");
 Check(await auth.DisableAccountAsync(managerStaff.Token,managed.AccountId),"admin disables target");

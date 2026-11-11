@@ -266,18 +266,21 @@ def restore(path, confirm_database):
                        '--dbname', DATABASE, path], timeout=long_timeout())
 
 
-ROLES = ('gamemaster', 'admin')
+# Staff ranks, lowest first (migration 076): one per account; a grant replaces the held rank. Audited by the database
+# (staff_rank_changed, no actor: an operator change).
+ROLES = ('gamemaster', 'moderator', 'admin')
 
 
 def role_statement(username, role, revoke=False):
-    """Operator-only staff role change for a local account; returns the SQL to run."""
+    """Operator-only staff rank change for a local account; returns the SQL to run."""
     if role not in ROLES or not username or len(username) > 32 or not all(c.isalnum() or c == '_' for c in username):
-        raise ValueError('Use a local username and a role of gamemaster or admin')
+        raise ValueError('Use a local username and a rank of gamemaster, moderator or admin')
     account = f"SELECT account_id FROM auth.accounts WHERE provider='local' AND subject={literal(username)}"
     if revoke:
         return f"DELETE FROM auth.account_roles WHERE role={literal(role)} AND account_id=({account}) RETURNING account_id;"
     return (f"INSERT INTO auth.account_roles SELECT account_id,{literal(role)} FROM auth.accounts "
-            f"WHERE provider='local' AND subject={literal(username)} ON CONFLICT DO NOTHING RETURNING account_id;")
+            f"WHERE provider='local' AND subject={literal(username)} "
+            f"ON CONFLICT (account_id) DO UPDATE SET role=EXCLUDED.role RETURNING account_id;")
 
 
 def main():
@@ -296,7 +299,7 @@ def main():
     replace = sub.add_parser('restore', help='replace the database with a backup (deploy/linux/aion-restore.sh asks first)')
     replace.add_argument('path', type=Path)
     replace.add_argument('--confirm-database', required=True, help='the database being replaced, as a safety check')
-    staff = sub.add_parser('role', help='grant or revoke a gamemaster/admin role (operator only)')
+    staff = sub.add_parser('role', help='set or remove a staff rank: gamemaster, moderator or admin (operator only)')
     staff.add_argument('username')
     staff.add_argument('role', choices=ROLES)
     staff.add_argument('--revoke', action='store_true')

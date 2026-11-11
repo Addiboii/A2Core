@@ -21,7 +21,7 @@ def main():
     if not assembly.exists():
         raise ValueError('Build tests/Aion.Persistence.Checks/Aion.Persistence.Checks.csproj first')
     name = 'aion_repository_test_' + uuid.uuid4().hex
-    accounts = [str(uuid.uuid4()) for _ in range(3)]
+    accounts = [str(uuid.uuid4()) for _ in range(4)]
     disabled_character = str(uuid.uuid4())
     credentials = json.loads((HOME / 'credentials.json').read_text())
     sql(f'CREATE DATABASE {name} OWNER aion_owner;', database='postgres')
@@ -32,7 +32,8 @@ def main():
             sql(f"INSERT INTO auth.accounts(account_id,provider,subject) VALUES('{account}','repository-test','{account}');", database=name)
         sql(f"INSERT INTO game.characters(character_id,account_id,world_id,name,creation_id,race,gender) VALUES('{disabled_character}','{accounts[2]}',1204,'PreviouslyOwned',1,1,1);", database=name)
         sql(f"UPDATE auth.accounts SET disabled_at=now() WHERE account_id='{accounts[2]}';", database=name)
-        sql(f"INSERT INTO auth.account_roles VALUES('{accounts[1]}','gamemaster');", database=name)
+        # Staff ranks (migration 076): the second account is an Administrator, the fourth a Moderator.
+        sql(f"INSERT INTO auth.account_roles VALUES('{accounts[1]}','admin'),('{accounts[3]}','moderator');", database=name)
         sql("""
             INSERT INTO catalog.builds VALUES('test','{}',now());
             INSERT INTO catalog.items VALUES('test',101,'Sword','weapon','{}'),('test',102,'Unknown','unknown','{}');
@@ -51,7 +52,7 @@ def main():
         # Passwords are generated URL-safe strings; they are passed only via child env.
         env = os.environ.copy()
         env.update(AION_TEST_DATABASE=f'Host=127.0.0.1;Port={PORT};Database={name};Username=aion_app;Password={credentials["aion_app"]};Maximum Pool Size=4;Timeout=5;Command Timeout=10',
-                   AION_TEST_FIRST=accounts[0], AION_TEST_SECOND=accounts[1], AION_TEST_DISABLED=accounts[2],
+                   AION_TEST_FIRST=accounts[0], AION_TEST_SECOND=accounts[1], AION_TEST_DISABLED=accounts[2], AION_TEST_MODERATOR=accounts[3],
                    AION_TEST_DISABLED_CHARACTER=disabled_character)
         result = subprocess.run(['dotnet', str(assembly)], env=env, cwd=ROOT,
                                 capture_output=True, text=True, encoding='utf-8', timeout=90)

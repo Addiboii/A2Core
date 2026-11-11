@@ -9,6 +9,7 @@ public static class CharacterNames
 {
     public const string AdminRole = "admin";
     public const string GameMasterRole = "gamemaster";
+    public const string ModeratorRole = "moderator";
 
     /// <summary>
     /// Tag before a staff character's name in the world (not stored). Plain text: the
@@ -17,16 +18,14 @@ public static class CharacterNames
     public static string? StaffTag(string? role) => role switch
     {
         AdminRole => "[Admin] ",
-        GameMasterRole => "[GM] ",
+        // Moderators show the GameMaster tag (OURS): players see staff, not the rank, and no new reserved name is needed.
+        GameMasterRole or ModeratorRole => "[GM] ",
         _ => null,
     };
 
-    /// <summary>The role shown for an account's roles: admin over gamemaster; null for players.</summary>
-    public static string? DisplayRole(IEnumerable<string> roles)
-    {
-        var held = roles.ToHashSet(StringComparer.Ordinal);
-        return held.Contains(AdminRole) ? AdminRole : held.Contains(GameMasterRole) ? GameMasterRole : null;
-    }
+    /// <summary>The role shown for an account's roles: the highest rank (admin, moderator, gamemaster); null for players.</summary>
+    public static string? DisplayRole(IEnumerable<string> roles) =>
+        Aion.Core.Accounts.StaffPermissions.RoleName(Aion.Core.Accounts.StaffPermissions.RankOf(roles));
 
     /// <summary>
     /// Names reserved for staff accounts: after leading brackets or separators, "GM" in

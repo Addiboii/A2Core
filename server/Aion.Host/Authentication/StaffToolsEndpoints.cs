@@ -165,7 +165,8 @@ public static partial class StaffToolsEndpoints
                             await game.AdminAsync(a, new AdminCommand(Guid.NewGuid(), character, "grant", build, template, Math.Min(left, 1_000_000)), ct);
                             granted++;
                         }
-                        catch (GameplayException error) when (error.Code is "character_unavailable")
+                        // own_account: a character of the actor's own account, without grant.own_account (migration 076).
+                        catch (GameplayException error) when (error.Code is "character_unavailable" or "own_account")
                         {
                             failed++;
                             break;

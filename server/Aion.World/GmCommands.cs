@@ -38,11 +38,16 @@ public sealed record GmPolicy
     /// <summary>Development logins only: character names granted GM (no accounts exist there).</summary>
     public IReadOnlySet<string> DevelopmentNames { get; init; } = new HashSet<string>();
     /// <summary>
-    /// Authenticated accounts: the account's staff role ("admin" or "gamemaster", see
+    /// Authenticated accounts: the account's staff role ("admin", "moderator" or "gamemaster", see
     /// CharacterNames.DisplayRole), or null for players. Read from the database on each call. A character
     /// carries the role only when flagged staff (CharacterState.Staff; GameSession.IsAdmin).
     /// </summary>
     public Func<Guid, CancellationToken, Task<string?>> StaffRole { get; init; } = (_, _) => Task.FromResult<string?>(null);
+    /// <summary>The database's half of a rank check: whether auth.staff_allowed allows (account, action) (migration 076).
+    /// Null without a database: the C# permission table alone decides.</summary>
+    public Func<Guid, string, CancellationToken, Task<bool>>? Allowed { get; init; }
+    /// <summary>The account a character belongs to (value sent to the actor's own account), when stored.</summary>
+    public Func<Guid, CancellationToken, Task<Guid?>>? CharacterAccount { get; init; }
     /// <summary>Item catalogue search (template ID or name), when the catalogue is available.</summary>
     public Func<Guid, string, CancellationToken, Task<IReadOnlyList<(int Id, string Name)>>>? SearchItems { get; init; }
     /// <summary>Stored grant: (staff account, character, template ID, count).</summary>

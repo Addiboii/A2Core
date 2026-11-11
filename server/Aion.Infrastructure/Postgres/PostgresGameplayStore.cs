@@ -27,9 +27,16 @@ public sealed partial class PostgresGameplayStore(NpgsqlDataSource source) : IGa
     { await using var q = Query(c,t,sql,args); return await q.ExecuteNonQueryAsync(ct); }
     // Roles are read inside the caller's transaction so a revoked role takes effect immediately.
     private static async Task<string[]> StaffRoles(NpgsqlConnection c, NpgsqlTransaction t, Guid actor, CancellationToken ct) =>
-        await Scalar(c,t,"SELECT array_agg(r.role ORDER BY r.role) FROM auth.accounts a JOIN auth.account_roles r USING(account_id) WHERE a.account_id=$1 AND a.disabled_at IS NULL AND r.role IN ('gamemaster','admin')",ct,actor) as string[] ?? [];
+        await Scalar(c,t,"SELECT array_agg(r.role ORDER BY r.role) FROM auth.accounts a JOIN auth.account_roles r USING(account_id) WHERE a.account_id=$1 AND a.disabled_at IS NULL AND r.role IN ('gamemaster','moderator','admin')",ct,actor) as string[] ?? [];
     private static async Task RequireStaff(NpgsqlConnection c, NpgsqlTransaction t, Guid actor, CancellationToken ct)
     { if((await StaffRoles(c,t,actor,ct)).Length==0) throw new GameplayException("forbidden"); }
+    // A rank check (migration 076): the C# permission table and the database's auth.staff_allowed must both allow it.
+    private static async Task RequireAllowed(NpgsqlConnection c, NpgsqlTransaction t, Guid actor, string action, CancellationToken ct, string refusal="forbidden")
+    {
+        var rank=StaffPermissions.RankOf(await StaffRoles(c,t,actor,ct));
+        if(!StaffPermissions.Allows(rank,action) || await Scalar(c,t,"SELECT auth.staff_allowed($1,$2)",ct,actor,action) is not true)
+            throw new GameplayException(refusal);
+    }
     private static async Task<List<ItemState>> Items(NpgsqlConnection c, NpgsqlTransaction t, Guid character, CancellationToken ct)
     {
         var items=new List<ItemState>();
@@ -1361,13 +1368,15 @@ public sealed partial class PostgresGameplayStore(NpgsqlDataSource source) : IGa
         if(command.Command=="level" && (command.Level<1 || command.Level>MaxLevel)) throw new GameplayException("invalid_level");
         if(command.Command=="teleport" && (command.MapId<=0 || !double.IsFinite(command.X) || !double.IsFinite(command.Y) || !double.IsFinite(command.Z))) throw new GameplayException("invalid_position");
         await using var c=await source.OpenConnectionAsync(ct); await using var t=await c.BeginTransactionAsync(ct);
-        await RequireStaff(c,t,actor.AccountId,ct);
+        await RequireAllowed(c,t,actor.AccountId,"command."+command.Command,ct);
         await Execute(c,t,"SELECT pg_advisory_xact_lock(hashtextextended($1,0))",ct,command.RequestId.ToString());
         var args=Json(command);
         await using(var q=Query(c,t,"SELECT result::text,(arguments=$2 AND actor_id=$3) FROM game.admin_requests WHERE request_id=$1",command.RequestId,args,actor.AccountId))
         { await using var r=await q.ExecuteReaderAsync(ct); if(await r.ReadAsync(ct)) { if(!r.GetBoolean(1)) throw new GameplayException("request_conflict"); return JsonSerializer.Deserialize<JsonElement>(r.GetString(0)); } }
-        if(await Scalar(c,t,"SELECT c.character_id FROM game.characters c JOIN auth.accounts a USING(account_id) WHERE c.character_id=$1 AND a.disabled_at IS NULL FOR UPDATE OF c",ct,command.CharacterId) is not Guid)
+        if(await Scalar(c,t,"SELECT c.account_id FROM game.characters c JOIN auth.accounts a USING(account_id) WHERE c.character_id=$1 AND a.disabled_at IS NULL FOR UPDATE OF c",ct,command.CharacterId) is not Guid owner)
             throw new GameplayException("character_unavailable");
+        // Value for a character of the actor's own account needs its own permission (grant.own_account).
+        if(command.Command=="grant" && owner==actor.AccountId) await RequireAllowed(c,t,actor.AccountId,StaffPermissions.GrantOwnAccount,ct,"own_account");
         JsonElement result;
         if(command.Command=="grant")
         {
@@ -1392,7 +1401,7 @@ public sealed partial class PostgresGameplayStore(NpgsqlDataSource source) : IGa
         else if(command.Command=="staff")
         {
             // Staff standing is per character (migration 035): only a character of an account holding a staff role can be flagged.
-            if(command.Staff && !(bool)(await Scalar(c,t,"SELECT EXISTS(SELECT FROM game.characters c JOIN auth.account_roles r USING(account_id) WHERE c.character_id=$1 AND r.role IN ('gamemaster','admin'))",ct,command.CharacterId))!)
+            if(command.Staff && !(bool)(await Scalar(c,t,"SELECT EXISTS(SELECT FROM game.characters c JOIN auth.account_roles r USING(account_id) WHERE c.character_id=$1 AND r.role IN ('gamemaster','moderator','admin'))",ct,command.CharacterId))!)
                 throw new GameplayException("not_staff_account");
             var revision=await Scalar(c,t,"UPDATE game.characters SET staff=$2 WHERE character_id=$1 RETURNING revision",ct,command.CharacterId,command.Staff);
             result=Json(new {revision=(long)revision!,staff=command.Staff});
@@ -1451,6 +1460,21 @@ public sealed partial class PostgresGameplayStore(NpgsqlDataSource source) : IGa
     private static AdminCharacter ReadStaffCharacter(NpgsqlDataReader r) =>
         new(r.GetGuid(0),r.GetString(1),r.GetGuid(2),r.GetString(3),r.GetInt32(4),r.GetInt32(5),r.GetInt32(6),r.GetInt32(7),r.GetInt32(8),r.GetBoolean(9),
             r.GetFieldValue<string[]>(10),r.GetBoolean(11));
+
+    public async Task<StaffAccess> StaffAccessAsync(VerifiedAccount actor, string action, CancellationToken ct=default)
+    {
+        await using var c=await source.OpenConnectionAsync(ct); await using var t=await c.BeginTransactionAsync(ct);
+        var roles=await StaffRoles(c,t,actor.AccountId,ct);
+        var allowed=await Scalar(c,t,"SELECT auth.staff_allowed($1,$2)",ct,actor.AccountId,action) is true;
+        await t.CommitAsync(ct); return new(StaffPermissions.RoleName(StaffPermissions.RankOf(roles)),allowed);
+    }
+
+    public async Task<Guid?> CharacterAccountAsync(Guid character, CancellationToken ct=default)
+    {
+        await using var q=source.CreateCommand("SELECT account_id FROM game.characters WHERE character_id=$1");
+        q.Parameters.AddWithValue(character);
+        return await q.ExecuteScalarAsync(ct) as Guid?;
+    }
 
     public async Task<AdminProfile> AdminProfileAsync(VerifiedAccount actor, CancellationToken ct=default)
     {

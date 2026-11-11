@@ -158,6 +158,10 @@ if (native.LoginPort is not null || native.GamePort is not null)
                 try { return Aion.Core.Characters.CharacterNames.DisplayRole((await store.AdminProfileAsync(new Aion.Core.Accounts.VerifiedAccount(account), ct)).Roles); }
                 catch (GameplayException) { return null; }  // "forbidden": not staff
             },
+            // The database's half of each rank check (auth.staff_allowed, migration 076).
+            Allowed = store is null ? null : async (account, action, ct) =>
+                (await store.StaffAccessAsync(new Aion.Core.Accounts.VerifiedAccount(account), action, ct)).DatabaseAllows,
+            CharacterAccount = store is null ? null : (character, ct) => store.CharacterAccountAsync(character, ct),
             SearchItems = store is null ? null : async (account, query, ct) =>
                 (await store.AdminSearchItemsAsync(new Aion.Core.Accounts.VerifiedAccount(account), query, ct)).Select(r => (r.TemplateId, r.Name)).ToList(),
             // Same audited, idempotent store path as the staff dashboard (applies on the next world entry).
@@ -366,6 +370,9 @@ if (accountsReady)
 if (chatPort is { } chatEndpoints) app.MapLimeChat(chatEndpoints, network.PublicAddress);
 
 app.MapGet("/health/live", () => Results.Ok(new { status = "alive" }));
+// Every admin route must have a row in the staff permission table (migration 076); an unlisted one would be refused.
+if (Aion.Host.Authentication.StaffSessions.Unlisted(((IEndpointRouteBuilder)app).DataSources) is { Count: > 0 } unlisted)
+    throw new InvalidOperationException("Admin routes missing from StaffPermissions: " + string.Join(", ", unlisted));
 // Do not advertise gameplay readiness before authentication/storage are wired.
 app.MapGet("/health/ready", () => Results.Json(
     new { status = "not_ready", reason = "Original-client game-session handoff is not connected." },

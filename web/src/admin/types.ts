@@ -41,11 +41,13 @@ export interface ViewerModule {
   createViewer(stage: HTMLElement, data: WardrobeData, hooks: { onStatus?: (t: string) => void; onError?: (t: string) => void; onChange?: () => void }): Viewer;
 }
 
-export const ROLE_LABEL: Record<string, string> = { admin: 'Admin', gamemaster: 'GameMaster' };
+export const ROLE_LABEL: Record<string, string> = { admin: 'Administrator', moderator: 'Moderator', gamemaster: 'GameMaster' };
+/** Staff ranks, lowest first (migration 076); an account holds one. */
+export const RANKS = ['gamemaster', 'moderator', 'admin'] as const;
 export const GENDER: Record<number, 'GM' | 'GF'> = { 1: 'GM', 2: 'GF' };   // EGender::Male = 1, Female = 2
 
 export const ERRORS: Record<string, string> = {
-  forbidden: 'Your account does not have the GameMaster or Admin role.',
+  forbidden: 'Your staff rank does not allow this, or your account has no staff rank.',
   unknown_item: 'This item is not in the server catalogue build.',
   character_unavailable: 'That character is unavailable (deleted or its account is disabled).',
   invalid_grant: 'Quantity must be between 1 and 1,000,000.',

@@ -36,7 +36,7 @@ public sealed class PostgresStaffTools(NpgsqlDataSource source) : IStaffTools
 
     static async Task<string[]> Roles(NpgsqlConnection c, NpgsqlTransaction t, Guid actor, CancellationToken ct)
     {
-        await using var q = Query(c, t, "SELECT array_agg(r.role ORDER BY r.role) FROM auth.accounts a JOIN auth.account_roles r USING(account_id) WHERE a.account_id=$1 AND a.disabled_at IS NULL AND r.role IN ('gamemaster','admin')", actor);
+        await using var q = Query(c, t, "SELECT array_agg(r.role ORDER BY r.role) FROM auth.accounts a JOIN auth.account_roles r USING(account_id) WHERE a.account_id=$1 AND a.disabled_at IS NULL AND r.role IN ('gamemaster','moderator','admin')", actor);
         return await q.ExecuteScalarAsync(ct) as string[] ?? [];
     }
     static async Task RequireStaff(NpgsqlConnection c, NpgsqlTransaction t, VerifiedAccount actor, CancellationToken ct, bool admin = false)
