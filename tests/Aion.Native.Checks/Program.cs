@@ -570,6 +570,42 @@ Check((await game.HandleAsync([0x30, 0x36], Now)).Single().SequenceEqual(GamePac
     var arrowLanded = await ranger.TickAsync(Now + 1000 + GameSession.MaxProjectileFlightMs);
     Check(arrowLanded.Any(b => Op(b) == 0x3804 && b[4] == 0x14), "the hit lands after the flight (0x3804 presence 0x14)");
 }
+// Cast range (GameSession.InCastRange): Skill.dat NeedSkillUseRange against the server's own positions (the caster's last accepted
+// movement report, the NPC's server position), never the request's location; CastRangeTolerance (OURS) on top.
+{
+    const int keen = 11020000, detector = 4900220;   // Keen Strike: range 400; Fake Detector: Self, no range
+    Check(data.Skill(keen) is { UseRange: 400, UseHeightRange: 400, FollowRange: 130 } && data.Skill(14020000) is { UseRange: 2000 }
+          && data.Skill(detector) is { UseRange: 0 } && data.Skill(GameSession.CombatDodge) is { UseRange: 0 },
+          "class-skills.json carries Skill.dat's ranges (Keen Strike 400/400/130, Snipe 2000, Self skills 0)");
+    async Task<(GameSession Session, Vector3d Dummy)> RangeSession()
+    {
+        var session = new GameSession(data, new GameSessionOptions { TrainingDummy = true }, new Random(7));
+        await session.HandleAsync(Strings(0x3613, Session, "", "t", "").Concat(new byte[9]).ToArray(), Now);
+        await session.HandleAsync(create, Now);
+        await session.HandleAsync(select, Now);
+        await session.HandleAsync(new PacketWriter().U16(0x3622).I32(1).ToArray(), Now);
+        return (session, session.Targets[Combat.TrainingDummyKey].Position);
+    }
+    var (inRange, nearDummy) = await RangeSession();
+    await inRange.HandleAsync(MoveUpdate(nearDummy with { X = nearDummy.X - 300 }), Now + 100);
+    Check((await inRange.HandleAsync(Cast(keen, Combat.TrainingDummyKey, pos), Now + 200)).Any(b => b.SequenceEqual(GamePackets.CastResult(true, keen))),
+          "a cast within range (3 m, Keen Strike 400) is accepted");
+    var (outOfRange, farDummy) = await RangeSession();
+    await outOfRange.HandleAsync(MoveUpdate(farDummy with { X = farDummy.X - 3000 }), Now + 100);
+    // The request names the dummy's own spot as its location: the check uses the server's position, not the client's.
+    Check((await outOfRange.HandleAsync(Cast(keen, Combat.TrainingDummyKey, farDummy), Now + 200)).Single().SequenceEqual(GamePackets.CastResult(false, keen))
+          && outOfRange.Targets[Combat.TrainingDummyKey].Hp == outOfRange.Targets[Combat.TrainingDummyKey].HpMax,
+          "a cast out of range (30 m, Keen Strike 400) is refused with the usual 0x3801 refusal and does no damage");
+    Check((await outOfRange.HandleAsync(Cast(detector, Combat.TrainingDummyKey, pos), Now + 300)).Any(b => b.SequenceEqual(GamePackets.CastResult(true, detector))),
+          "a skill without a range (Fake Detector, Self) is not range-checked");
+    var melee = data.Skill(keen)!;
+    Check(GameSession.WithinCastRange(melee, Vector3d.Zero, new Vector3d(400 + GameSession.CastRangeTolerance, 0, 0))
+          && !GameSession.WithinCastRange(melee, Vector3d.Zero, new Vector3d(401 + GameSession.CastRangeTolerance, 0, 0))
+          && GameSession.WithinCastRange(melee, Vector3d.Zero, new Vector3d(600 + GameSession.CastRangeTolerance, 0, 0), targetRadius: 200)
+          && !GameSession.WithinCastRange(melee, Vector3d.Zero, new Vector3d(0, 0, 401 + GameSession.CastRangeTolerance))
+          && GameSession.WithinCastRange(melee with { UseRange = 0 }, Vector3d.Zero, new Vector3d(1e6, 0, 1e6)),
+          "range geometry: horizontal to the target's edge plus the tolerance, height separately, no range never refuses");
+}
 async Task<GameSession> BarSession(int level = 1)
 {
     var session = new GameSession(data, new GameSessionOptions { CharacterLevel = level }, new Random(9));

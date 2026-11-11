@@ -1924,6 +1924,37 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         }
     }
 
+    /// <summary>Latency allowance on top of a skill's Skill.dat use range (OURS, cm): a target running away or a position report
+    /// still in flight should not refuse a cast the client drew in range.</summary>
+    public const double CastRangeTolerance = 150;
+
+    /// <summary>
+    /// Is the cast's target within the skill's Skill.dat NeedSkillUseRange (horizontal, from the caster to the target's edge) and
+    /// NeedSkillUseHeightRange (vertical)? Positions are the server's own: the caster's last accepted movement report, an NPC's
+    /// server position, another player's shared-world position; never the request's location. A skill without a range, a cast
+    /// at the caster itself or at an unknown key, and a caster with no position yet are not checked (CANDIDATE reading of the
+    /// fields: horizontal reach to the collision edge and a separate height limit; the client's own check is not recovered).
+    /// </summary>
+    bool InCastRange(SkillDefinition? definition, int targetKey)
+    {
+        if (definition is not { UseRange: > 0 } || position is not { } caster || targetKey == playerKey) return true;
+        Vector3d at;
+        double radius;
+        if (targets is not null && targets.TryGetValue(targetKey, out var npc)) (at, radius) = (npc.Position, npc.Radius);
+        else if (worldPlayer?.Map is { } map && map.Players.TryGetValue(targetKey, out var other)) (at, radius) = (other.Position, NpcAi.PlayerRadius);
+        else return true;
+        return WithinCastRange(definition, caster, at, radius);
+    }
+
+    /// <summary>The geometry of <see cref="InCastRange"/>: horizontal distance to the target's edge within UseRange, height difference
+    /// within UseHeightRange (when set), each plus <see cref="CastRangeTolerance"/>.</summary>
+    public static bool WithinCastRange(SkillDefinition definition, Vector3d caster, Vector3d target, double targetRadius = 0)
+    {
+        if (definition.UseRange <= 0) return true;
+        if (caster.Distance2d(target) - targetRadius > definition.UseRange + CastRangeTolerance) return false;
+        return definition.UseHeightRange <= 0 || Math.Abs(caster.Z - target.Z) <= definition.UseHeightRange + CastRangeTolerance;
+    }
+
     List<byte[]> CastReplies(byte[] body, long now)
     {
         if (ParseCast(body) is not { } request) return [];
@@ -1961,7 +1992,8 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             && resources.Mp >= cost.Mp && resources.Sp >= cost.Sp && resources.Hp > cost.Hp
             && (learned.Contains(skill) || normalDodge || ChainStepReady(skill, now))   // a chain step on offer (GameSession.SkillChains.cs)
             && (weapons.Count == 0 || weapons.Contains(data.WeaponType(equippedWeapon) ?? ""))
-            && (noCool || now >= cooldowns.GetValueOrDefault(cooldownKey));
+            && (noCool || now >= cooldowns.GetValueOrDefault(cooldownKey))
+            && (dodging || InCastRange(definition, request.TargetKey));
         if (!accepted)
         {
             // A sprint dash refused for cost or cooldown stays on the 9-byte form. The mask-first reply drops the sprint.

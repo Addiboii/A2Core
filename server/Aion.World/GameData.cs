@@ -55,7 +55,12 @@ public sealed record SkillDefinition(
     [property: JsonPropertyName("chain_prev")] int ChainPrev = 0,
     [property: JsonPropertyName("chain_window_ms")] int ChainWindowMs = 0,
     [property: JsonPropertyName("chain_rate")] int ChainRate = 0,
-    [property: JsonPropertyName("chain_next")] int[]? ChainNext = null);
+    [property: JsonPropertyName("chain_next")] int[]? ChainNext = null,
+    // Skill.dat NeedSkillUseRange / NeedSkillUseHeightRange / NeedSkillFollowRange (OBSERVED, Skill.dat build 26262663; cm is
+    // CANDIDATE: melee 400, Snipe 2000). 0: the skill names no range (every Self skill) and is not range-checked.
+    [property: JsonPropertyName("use_range")] double UseRange = 0,
+    [property: JsonPropertyName("use_height_range")] double UseHeightRange = 0,
+    [property: JsonPropertyName("follow_range")] double FollowRange = 0);
 
 public sealed record WeaponStats(
     [property: JsonPropertyName("min")] int Min,

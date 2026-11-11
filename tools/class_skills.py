@@ -89,6 +89,19 @@ def chain_fields(entry):
             'chain_rate': int(raw.get('ChainSkillActivateRate') or 0), 'chain_deactivate': _short(raw.get('ChainSkillDeactivateType', 'None'))}
 
 
+def _whole(value):
+    number = float(value or 0)
+    return int(number) if number.is_integer() else number
+
+
+def range_fields(entry):
+    """Skill.dat NeedSkillUseRange, NeedSkillUseHeightRange and NeedSkillFollowRange (OBSERVED, Skill.dat build 26262663), in
+    world units (cm, CANDIDATE: melee 400, Snipe 2000). 0 means the skill names no range (every Self skill)."""
+    raw = entry.get('raw', {})
+    return {'use_range': _whole(raw.get('NeedSkillUseRange')), 'use_height_range': _whole(raw.get('NeedSkillUseHeightRange')),
+            'follow_range': _whole(raw.get('NeedSkillFollowRange'))}
+
+
 def cast_row(entry):
     facts = entry.get('facts', {})
     return {
@@ -101,6 +114,7 @@ def cast_row(entry):
         'casting_ms': int(facts.get('CastingTime') or 0),
         'cost': {k: int(facts.get('NeedCost' + k.title()) or 0) for k in ('mp', 'hp', 'sp')},
         'damage': damage_rows(entry),
+        **range_fields(entry),
         **chain_fields(entry),
     }
 
@@ -228,7 +242,8 @@ def build(tables=TABLES, catalog=CATALOG):
                          'starter_weapons': 'Item.dat equip_wp_<Type>_<L|D>_c_begin_001a_b (L for race 1, D for race 2)',
                          'chains': 'Skill.dat ChainSkillPrevSkillId/AvailableTime/ActivateRate/DeactivateType; chain-only player skills reachable from the auto-learned ones added (A2Core PR #4)',
                          'projectile': 'Skill.dat SkillEffectTimeDataList ProjectileId of the time row a Damage row belongs to',
-                         'projectile_speeds': 'SkillProjectile.dat Speed (newest research/local export naming the table)'}}
+                         'projectile_speeds': 'SkillProjectile.dat Speed (newest research/local export naming the table)',
+                         'ranges': 'Skill.dat NeedSkillUseRange/NeedSkillUseHeightRange/NeedSkillFollowRange (cm, CANDIDATE unit; 0 no range)'}}
 
 
 @lru_cache(maxsize=1)

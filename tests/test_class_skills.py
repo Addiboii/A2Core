@@ -159,5 +159,26 @@ class ChainAndProjectileTests(unittest.TestCase):
                 self.assertIn(str(row['chain_prev']), skills, sid)
 
 
+
+class RangeTests(unittest.TestCase):
+    """Skill.dat NeedSkillUseRange / NeedSkillUseHeightRange / NeedSkillFollowRange on every cast row."""
+
+    def test_range_fields_read_the_skill_row(self):
+        entry = {'raw': {'NeedSkillUseRange': 2000.0, 'NeedSkillUseHeightRange': 1000.0, 'NeedSkillFollowRange': 1950.0}}
+        self.assertEqual(class_skills.range_fields(entry), {'use_range': 2000, 'use_height_range': 1000, 'follow_range': 1950})
+        self.assertEqual(class_skills.range_fields({'raw': {}}), {'use_range': 0, 'use_height_range': 0, 'follow_range': 0})
+        self.assertEqual(class_skills.range_fields({'raw': {'NeedSkillUseRange': 12.5}})['use_range'], 12.5)
+
+    def test_tracked_data_carries_ranges(self):
+        skills = class_skills.data()['skills']
+        self.assertEqual({k: skills['11020000'][k] for k in ('use_range', 'use_height_range', 'follow_range')},
+                         {'use_range': 400, 'use_height_range': 400, 'follow_range': 130})   # Keen Strike, melee
+        self.assertEqual(skills['14020000']['use_range'], 2000)                               # Snipe
+        for sid, row in skills.items():
+            self.assertIn('use_range', row, sid)
+            if row['target'] == 'Self':
+                self.assertEqual(row['use_range'], 0, sid)
+
+
 if __name__ == '__main__':
     unittest.main()
