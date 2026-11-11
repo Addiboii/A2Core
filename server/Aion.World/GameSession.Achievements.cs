@@ -292,15 +292,27 @@ public sealed partial class GameSession
 
     // ---------- Rewards ----------
 
-    /// <summary>0x5685 TakeAchievementReward_RQ {id i32, step u8}: the step's items once the step's count is reached and not yet rewarded.</summary>
+    /// <summary>
+    /// 0x5685 TakeAchievementReward_RQ {id i32, step u8}: every unclaimed step up to the requested one (an attendance board
+    /// claimed on day three after days one and two were never claimed pays all three). The steps come from the character's
+    /// own progress (RewardedStep, Count), each taken once (TakeStepAsync: the store only moves rewarded_step forward); the
+    /// client's step only bounds the claim (OURS). The reply and its order are unchanged: 0x5686 first, then per step the
+    /// state update and the inventory change.
+    /// </summary>
     async Task<List<byte[]>> TakeAchievementRewardAsync(byte[] plain, CancellationToken ct)
     {
         if (plain.Length < 7) return [];
         var id = BitConverter.ToInt32(plain, 2);
         var step = plain[6];
         byte[] Reply(int result) => PacketWriter.Opcode(TakeAchievementRewardRs).U16(result).I32(id).U8(step).ToArray();
-        var taken = await TakeStepAsync(id, step, ct);
-        return taken is null ? [Reply(1)] : [Reply(0), .. taken];
+        var replies = new List<byte[]>();
+        var last = Math.Min((int)step, Achievements.Of(id)?.Steps.Length ?? 0);
+        for (var s = (achievements.GetValueOrDefault(id)?.RewardedStep ?? 0) + 1; s <= last; s++)
+        {
+            if (await TakeStepAsync(id, s, ct) is not { } taken) break;
+            replies.AddRange(taken);
+        }
+        return replies.Count == 0 ? [Reply(1)] : [Reply(0), .. replies];
     }
 
     /// <summary>Takes one step's reward; null when not claimable. Returns the state update and the inventory change.</summary>

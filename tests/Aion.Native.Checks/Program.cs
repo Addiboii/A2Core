@@ -1965,6 +1965,21 @@ Check(BitConverter.ToUInt16((await staffSession.HandleAsync(new PacketWriter().U
       "step 2 (day two) cannot be taken yet");
 await staffSession.TickAsync(Now + 3_600_000);   // past the two-second flush throttle whatever clock the earlier checks ticked this session at
 Check(staffStore.Achievements.Any(a => a.Id == boardAch && a.Count == 1 && a.RewardedStep == 1), "the states are written to the store on the tick");
+// Days two and three checked in but never claimed: claiming step 3 pays steps 2 and 3, each once, in the existing reply order
+// (0x5686, then per step the 0x5684 state update and the inventory change).
+const long Day = 86_400_000;
+var lateDays = Enumerable.Range(1, 30).Select(d => Now + 7490 + d * Day).Where(t => AchievementTables.Embedded.OpenBoards(1, t).Any(b => b.Achievement == boardAch)).Take(2).ToList();
+Check(lateDays.Count == 2, "the first board stays open for two more days");
+foreach (var t in lateDays) await staffSession.HandleAsync(new PacketWriter().U16(GameSession.AttendanceRq).ToArray(), t);
+var stepRewards = new[] { 2, 3 }.SelectMany(s => AchievementTables.Embedded.Of(boardAch)!.StepRewards(s)).GroupBy(r => r.ItemId).ToDictionary(g => g.Key, g => g.Sum(r => r.Count));
+var heldBefore = stepRewards.Keys.ToDictionary(item => item, item => staffStore.Items.Where(i => i.TemplateId == item).Sum(i => i.Quantity));
+var claimAll = await staffSession.HandleAsync(new PacketWriter().U16(GameSession.TakeAchievementRewardRq).I32(boardAch).U8(3).ToArray(), lateDays[1] + 10);
+var stateSteps = claimAll.Where(b => Op(b) == GameSession.AchievementCountUpdateNt).Select(b => (int)b[^1]).ToList();
+Check(staffSession.AchievementCount(boardAch) == 3 && claimAll[0].SequenceEqual(PacketWriter.Opcode(GameSession.TakeAchievementRewardRs).U16(0).I32(boardAch).U8(3).ToArray())
+      && stateSteps.SequenceEqual([2, 3]) && stepRewards.All(r => staffStore.Items.Where(i => i.TemplateId == r.Key).Sum(i => i.Quantity) == heldBefore[r.Key] + r.Value),
+      "claiming step 3 with steps 2 and 3 unclaimed pays both, each once (0x5686 first, then 0x5684 step 2 and step 3)");
+Check(BitConverter.ToUInt16((await staffSession.HandleAsync(new PacketWriter().U16(GameSession.TakeAchievementRewardRq).I32(boardAch).U8(3).ToArray(), lateDays[1] + 20))[0], 2) == 1
+      && stepRewards.All(r => staffStore.Items.Where(i => i.TemplateId == r.Key).Sum(i => i.Quantity) == heldBefore[r.Key] + r.Value), "claiming again pays nothing");
 // Artifact dungeons (type AbyssArtifact, no scripts): served for their points and monsters; the builder's EnterDungeon enters one.
 var artifactIn = staffSession.EnterDungeonById(503001, Now + 7480);
 await staffSession.HandleAsync(new PacketWriter().U16(0x3622).I32(1).ToArray(), Now + 7480);
