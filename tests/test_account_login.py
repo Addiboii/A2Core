@@ -69,6 +69,14 @@ class AccountLoginTests(unittest.TestCase):
         with patch.object(account_login, 'login_window', window):
             self.assertEqual(sign_in_for_launch(self.session)['authorization'], 'A' * 64)
 
+    def test_without_tk_the_terminal_prompt_is_used(self):
+        # A Python without tkinter (or without a display): no window, the terminal asks instead.
+        with patch.dict('sys.modules', {'tkinter': None}):
+            with self.assertRaises(RuntimeError):
+                account_login.login_window(lambda name, password: None)
+            with patch('builtins.input', return_value='hero'),                     patch.object(account_login.getpass, 'getpass', return_value='correct horse'),                     patch('builtins.print'):
+                self.assertEqual(sign_in_for_launch(self.session)['authorization'], 'A' * 64)
+
     def test_cancelled_window_launches_nothing(self):
         with patch.object(account_login, 'login_window', lambda attempt, username='': False):
             self.assertIsNone(sign_in_for_launch(self.session))

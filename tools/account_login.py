@@ -76,11 +76,17 @@ class AccountSession:
 def login_window(attempt, username=''):
     """Show a sign-in window until `attempt(username, password)` returns None
     (success) or the user cancels. `attempt` returns an error message to show.
-    Returns True when signed in. Raises RuntimeError when no display exists."""
-    import tkinter
-    from tkinter import ttk
-
-    root = tkinter.Tk()
+    Returns True when signed in. Raises RuntimeError when Tk is missing (a Python
+    built without tkinter) or no display exists."""
+    try:
+        import tkinter
+        from tkinter import ttk
+    except ImportError as error:
+        raise RuntimeError('No Tk toolkit') from error
+    try:
+        root = tkinter.Tk()
+    except tkinter.TclError as error:
+        raise RuntimeError('No display') from error
     root.title('AION2 dev sign-in')
     root.resizable(False, False)
     frame = ttk.Frame(root, padding=16)
@@ -137,13 +143,9 @@ def sign_in_for_launch(session, username=''):
 
     signed_in = None
     try:
-        import tkinter
-        try:
-            signed_in = login_window(attempt, username)
-        except tkinter.TclError:
-            pass  # no display
-    except ImportError:
-        pass
+        signed_in = login_window(attempt, username)
+    except RuntimeError:
+        pass  # no Tk toolkit or no display
     if signed_in is None:  # terminal prompt
         signed_in = False
         for _ in range(3):
