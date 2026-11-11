@@ -180,5 +180,27 @@ class RangeTests(unittest.TestCase):
                 self.assertEqual(row['use_range'], 0, sid)
 
 
+
+class FighterTests(unittest.TestCase):
+    """Fighter has no PCCreationInfo row on 26262663; PcData 45-48 name it (Gauntlet) and SkillAcquireData has its rows."""
+
+    def test_fighter_unlocks_like_the_other_classes(self):
+        fighter = class_skills.data()['classes']['Fighter']
+        self.assertEqual(fighter['weapon_type'], 'Gauntlet')   # also PcData 45-48 ReferMainWeaponType
+        self.assertEqual(fighter['starter_weapons'], {})       # no equip_wp_Gauntlet_*_c_begin_001a_b item
+        unlocks = fighter['unlocks']
+        self.assertEqual(len(unlocks), 25)                     # SkillAcquireData auto-learn Mastery rows
+        self.assertEqual(unlocks, sorted(unlocks, key=lambda e: (e[1], e[0], e[2])))
+        self.assertEqual((min(n for _, n, _ in unlocks), max(n for _, n, _ in unlocks)), (1, 25))
+        self.assertIn([19000100, 1, 1], unlocks)               # the class dodge (prefix 19)
+        self.assertTrue(all(19_000_000 <= s < 20_000_000 and level == 1 for s, _, level in unlocks))
+        for skill_id, _, _ in unlocks:
+            self.assertIsNotNone(class_skills.skill(skill_id), skill_id)
+        counts = [len(class_skills.learned_skills('Fighter', level)) for level in (1, 10, 25)]
+        self.assertEqual(counts, sorted(counts))
+        self.assertLess(counts[0], counts[2])
+        self.assertIn('Fighter', class_skills.data()['stats'])
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -1,7 +1,7 @@
 """Class skill kits that follow character level, plus the cast data each skill needs.
 
 Derived from offline exports: SkillAcquireData (research/local/starter-skills-tables
-table-002), PCCreationInfo (table-000), PcStatLevel (table-007) and the item/skill
+table-002), PCCreationInfo (table-000), PcData (table-001), PcStatLevel (table-007) and the item/skill
 catalogue (research/local/game-catalog-v2). Rebuild the tracked summary with
 `python tools/class_skills.py`.
 
@@ -176,7 +176,7 @@ def merge_chain_skills(cast, skills, seeds):
 def build(tables=TABLES, catalog=CATALOG):
     def rows(index):
         return json.loads((tables / f'table-{index:03}.json').read_text(encoding='utf-8'))['Properties']['Data']
-    creations, acquire, stat_levels = rows(0), rows(2), rows(7)
+    creations, pc_data, acquire, stat_levels = rows(0), rows(1), rows(2), rows(7)
     skills, begin_weapons, weapon_stats = {}, {}, {}
     with open(catalog, encoding='utf-8') as source:
         for line in source:
@@ -210,7 +210,9 @@ def build(tables=TABLES, catalog=CATALOG):
         entries.sort()
 
     classes = {}
-    for creation in creations:
+    # PCCreationInfo's classes first, then any class only PcData names (Fighter, PcData 45-48: no creation row on 26262663),
+    # built the same way.
+    for creation in creations + pc_data:
         cls = _short(creation['Class'])
         if cls in classes:
             continue
@@ -237,6 +239,7 @@ def build(tables=TABLES, catalog=CATALOG):
             'evidence': {'acquire': 'SkillAcquireData bAutoLearn rows without costs/prerequisites/ascension',
                          'levels': 'SkillAcquireData Mastery rows of SkillLevel 2+: level, CostSkillPoint, NeedCharacterLevel',
                          'max_level': 'PcStatLevel highest Level',
+                         'classes': 'PCCreationInfo Class, then PcData Class rows without a creation row (Fighter)',
                          'damage': 'Damage EffectValueList, candidate reading: flat min/max, weapon ratio min/max (1/10000)',
                          'weapon_type': "most frequent NeedMainWeaponTypes of the class's auto-learned skills",
                          'starter_weapons': 'Item.dat equip_wp_<Type>_<L|D>_c_begin_001a_b (L for race 1, D for race 2)',
