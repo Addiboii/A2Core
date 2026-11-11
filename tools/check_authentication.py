@@ -20,6 +20,9 @@ except ImportError:
     from postgres_dev import ROOT, HOME, sql, migration_script
     from run_account_server import host_environment, connection_string
 
+# The account page's title (web/index.html); tests/test_check_authentication.py keeps the two in step.
+ACCOUNT_PAGE_TITLE = b'<title>Sign in</title>'
+
 
 def main():
     credentials = json.loads((HOME / 'credentials.json').read_text())
@@ -111,7 +114,7 @@ def main():
             def page_assets(page):
                 return re.findall(rb'(?:src|href)="(/assets/[^"]+)"', page)
             status, page, headers = request('/')
-            check(status == 200 and b' Account</title>' in page and page_assets(page), 'account page')
+            check(status == 200 and ACCOUNT_PAGE_TITLE in page and page_assets(page), 'account page')
             check("frame-ancestors 'none'" in headers.get('Content-Security-Policy', ''), 'browser security headers')
             check(all(request(a.decode())[0] == 200 for a in page_assets(page)), 'page resources')
             check(b'<script>' not in page and b'<style' not in page, 'no inline scripts or styles')
