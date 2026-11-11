@@ -2527,6 +2527,7 @@ Check(released.Any(b => Op(b) == 0x382c && KeyOf(b) == eve.PlayerKey) && release
 eve.ExitSharedWorld();
 MapEventChecks.Run(Check);
 QuestWorldChecks.Run(Check);
+Console.WriteLine($"{HostSecurityChecks.Run(Check)} host security checks passed.");
 var questTeleportUnknown = await game.HandleAsync(new PacketWriter().U16(GameSession.QuestTeleportRequest).I32(424242).ToArray(), Now);
 Check(questTeleportUnknown.Single().SequenceEqual(PacketWriter.Opcode(GameSession.QuestTeleportReply).U16(1).I32(424242).I32(0).ToArray()),
       "0x8d16 for a quest the character does not have: 0x8d17 result 1 (CANDIDATE layout), no move");

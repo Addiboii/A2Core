@@ -308,25 +308,19 @@ public sealed partial class PostgresAccountAuthentication : ITotpAuthentication
         return null;
     }
 
-    /// <summary>Recovery codes: 10 random XXXXX-XXXXX (40 bits each), stored as SHA-256 of the normalized code.</summary>
+    /// <summary>Recovery codes: 10 random XXXXX-XXXXX (40 bits each), stored as SHA-256 of the normalized code (RecoveryCodes).</summary>
     static (string[] Plain, string[] Hashed) GenerateRecoveryCodes()
     {
-        var plain = Enumerable.Range(0, RecoveryCodeCount).Select(_ =>
-        {
-            var hex = Convert.ToHexString(RandomNumberGenerator.GetBytes(5));
-            return hex[..5] + "-" + hex[5..];
-        }).ToArray();
-        return (plain, plain.Select(RecoveryHash).ToArray());
+        var plain = Enumerable.Range(0, RecoveryCodeCount).Select(_ => RecoveryCodes.Generate()).ToArray();
+        return (plain, plain.Select(code => RecoveryCodes.Hash(code)!).ToArray());
     }
-
-    static string RecoveryHash(string code) =>
-        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(code.Replace("-", "").Replace(" ", "").Trim().ToUpperInvariant())));
 
     static bool TryConsumeRecovery(string[] stored, string? code, out string[] remaining)
     {
         remaining = stored;
-        if (code is null || code.Length is < 10 or > 32) return false;
-        var digest = Encoding.ASCII.GetBytes(RecoveryHash(code));
+        // Any letter case; spaces and dashes anywhere are ignored (RecoveryCodes.Normalize).
+        if (RecoveryCodes.Hash(code) is not { } hash) return false;
+        var digest = Encoding.ASCII.GetBytes(hash);
         var index = -1;
         for (var i = 0; i < stored.Length; i++)  // compares every entry (no early exit)
             if (CryptographicOperations.FixedTimeEquals(Encoding.ASCII.GetBytes(stored[i]), digest) && index < 0) index = i;
