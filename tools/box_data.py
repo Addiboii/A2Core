@@ -9,7 +9,8 @@ Item.dat (research/local/game-catalog-v2). Rebuild the tracked summary with
   the server applies: RewardBox (values[0] = BoxReward Group), GetVehicle ([ride ID]),
   GetVehicleSoul ([ride ID, count]), GetVehicleSoulCrystal ([ESoulCrystalType name, count]),
   Fix_VehicleCreatureLevel ([ECreatureType name, board level]), Skill ([item skill ID]: potions, food, drinks, scrolls),
-  Telpo_Home (return scroll) and GetKina/GetNonBindingKina ([amount]).
+  Telpo_Home (return scroll), GetKina/GetNonBindingKina ([amount]) and GetStigmaShard ([shards]: stigma shards,
+  tools/stigmas.py; GetStigmaShardSuperior stays out, superior shards buy nothing in SkillAcquireData).
 - cool: usable item ID -> [Cooltime ms, CoolTimeGroup, CastingTime ms (0 without NeedCasting)].
 - skills: item skill ID -> its effect rows [ESkillEffectType, EffectValueList...] (HpHeal_Item,
   HpHealRatio_Item, MpHeal_Item, FpHeal_Item, Abnormal_True ...).
@@ -35,16 +36,19 @@ Item.dat (research/local/game-catalog-v2). Rebuild the tracked summary with
 Items are referenced by internal name in the tables; names Item.dat does not have are dropped.
 """
 import json
+import os
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / 'tools/data/boxes.json'
-ABNORMALS = ROOT / 'research/local/abnormal-tables-20261016'
-TABLES = ROOT / 'research/local/pet-tables-20261016'
-CATALOG = ROOT / 'research/local/game-catalog-v2/entries.jsonl'
+# research/local lives in the main checkout only (git-ignored); a worktree points there with AION_RESEARCH_LOCAL.
+LOCAL = Path(os.environ.get('AION_RESEARCH_LOCAL', ROOT / 'research/local'))
+ABNORMALS = LOCAL / 'abnormal-tables-20261016'
+TABLES = LOCAL / 'pet-tables-20261016'
+CATALOG = LOCAL / 'game-catalog-v2/entries.jsonl'
 MAP_EVENTS = ROOT / 'tools/data/map-events.json'
 EFFECTS = {'RewardBox', 'GetVehicle', 'GetVehicleSoul', 'GetVehicleSoulCrystal', 'Fix_VehicleCreatureLevel', 'Skill', 'Telpo_Home', 'GetKina', 'GetNonBindingKina',
-           'GetTitle', 'GetSkin', 'GetSkinSet', 'GetSocialAction'}
+           'GetTitle', 'GetSkin', 'GetSkinSet', 'GetSocialAction', 'GetStigmaShard'}
 CRYSTALS = {'SoulCrystalFeral': 1, 'SoulCrystalIntellect': 2, 'SoulCrystalNature': 3, 'SoulCrystalTrans': 4, 'SoulCrystalSpecial': 5,
             'SoulCrystalAll': 6}   # usmap ESoulCrystalType
 CREATURES = {'Intellect': 2, 'Feral': 3, 'Nature': 4, 'Trans': 5, 'Special': 6}   # usmap ECreatureType
@@ -61,10 +65,10 @@ def _short(value):
 def _stat_ids():
     """EStat name -> number (usmap enum; the wire's stat type)."""
     try:
-        from .packet_schema import PacketSchema
+        from .packet_schema import DEFAULT_USMAP, PacketSchema
     except ImportError:
-        from packet_schema import PacketSchema
-    return {name: number for number, name in PacketSchema().parser.enums['EStat'].items()}
+        from packet_schema import DEFAULT_USMAP, PacketSchema
+    return {name: number for number, name in PacketSchema(LOCAL / 'tooling/mappings' / DEFAULT_USMAP.name).parser.enums['EStat'].items()}
 
 
 def _map_event_abnormals(path=MAP_EVENTS):

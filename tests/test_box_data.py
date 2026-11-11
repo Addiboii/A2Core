@@ -38,6 +38,13 @@ class BoxDataTests(unittest.TestCase):
         self.assertEqual(skins['skins']['AR_0067_T05_Torso'], 30067101)
         self.assertEqual(len(skins['sets']['AR_0001_T04']), 7)
 
+    def test_stigma_shard_item_gives_one_shard(self):
+        # Item.dat 531900010 Charge_StigmaShardPoint_1_A_s_01a_b: UseEffect GetStigmaShard, UseEffectValues ["1"], AutoUseWhenAcquire.
+        self.assertEqual(DATA['uses']['531900010'], ['GetStigmaShard', 1, '1'])
+        # The superior shard (GetStigmaShardSuperior) buys nothing in SkillAcquireData and stays out.
+        self.assertNotIn('531900027', DATA['uses'])
+        self.assertEqual({u[0] for u in DATA['uses'].values() if 'Stigma' in u[0]}, {'GetStigmaShard'})
+
     def test_cogni_pet_chest_holds_41_equally_likely_pets(self):
         self.assertEqual(DATA['uses']['533700117'][:3], ['RewardBox', 0, 'Box_Vehicle_A_06_b'])
         pets = DATA['packages']['Box_Package_Vehicle_A_06_b']
