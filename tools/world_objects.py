@@ -256,6 +256,10 @@ def objects(data, rows, wanted, gathers=None, everything=False, portals=None, du
                 if row.get('not_have_abnormal_group'):
                     found[-1]['carry'] = {'group': row['not_have_abnormal_group'], 'despawn': row['despawn'],
                                           'finish_duration': row['finish_duration']}
+                # EnvObjData FinishDuration (ms) of an object that dies after use (bDespawn): it times EnvObjDie and the despawn
+                # (OBSERVED in our recordings: EnvObjDie 50 ms after the use with none, about 650 / 1150 ms with 500 / 1000).
+                if row['despawn'] and row['finish_duration']:
+                    found[-1]['finish_ms'] = row['finish_duration']
                 # Field-event treasure boxes: the reward table opening one pays (chest_tables; CANDIDATE link by name).
                 if env in chests:
                     found[-1]['loot'] = chests[env]
