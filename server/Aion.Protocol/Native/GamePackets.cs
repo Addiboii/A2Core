@@ -934,8 +934,12 @@ public static class GamePackets
     /// <summary>A message by string key (ShowMessage / BroadCastingMessage directives). CANDIDATE: the caption's layout with ShowMessage.</summary>
     public static byte[] Message(string key) => EventFunc(FuncShowMessage, key, 1);
 
-    /// <summary>0x39cd RelationshipEntityUpdate_NT: key | ERelationshipEntity u8 (usmap fields; the enum byte as in the appears). CANDIDATE: no official sample.</summary>
-    public static byte[] RelationshipUpdate(int key, int relationship) => PacketWriter.Opcode(0x39cd).Varint(key).U8((byte)relationship).ToArray();
+    /// <summary>
+    /// 0x8d92 RelationshipEntityUpdate_NT: key varint | ERelationshipEntity u8. OBSERVED: 18 in 8 recordings (ours of
+    /// 2026-10-19, 2.0.6, and the community recordings of 2026-11-04 to 06, 26262663), always this layout; the 0x39cd we
+    /// derived before never occurs (the community fork found the same in its recordings).
+    /// </summary>
+    public static byte[] RelationshipUpdate(int key, int relationship) => PacketWriter.Opcode(0x8d92).Varint(key).U8((byte)relationship).ToArray();
 
     /// <summary>0x9507 SocialActionStart_NT / 0x9508 SocialActionEnd_NT: NPC key, social action id, 1 start / 2 end, i32 0 (OBSERVED #10524/#10811).</summary>
     public static byte[] SocialAction(int key, int action, bool stop) =>

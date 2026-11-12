@@ -85,7 +85,9 @@ static class MapEventChecks
         C(GamePackets.Note("Note_D2_DQ2203030_01").AsSpan(2).SequenceEqual(Convert.FromHexString("000f14" + "4e6f74655f44325f4451323230333033305f3031" + "000000000000000000" + "01000000" + "00"))
           && GamePackets.Message("Str_BlasphemyLab_Notice_1")[3] == 16,
           "0x8d15 ShowNote (15) / ShowMessage (16) take the caption's layout with the note or string key");
-        C(GamePackets.RelationshipUpdate(0x9b9a, 6).AsSpan(2).SequenceEqual(Convert.FromHexString("9ab70206")), "0x39cd RelationshipEntityUpdate: key varint, relationship byte");
+        C(GamePackets.RelationshipUpdate(0x9b9a, 6).SequenceEqual(Convert.FromHexString("928d9ab70206")), "0x8d92 RelationshipEntityUpdate: key varint, relationship byte");
+        C(GamePackets.RelationshipUpdate(0x8674, 0).SequenceEqual(Convert.FromHexString("928df48c0200")) && GamePackets.RelationshipUpdate(0x8674, 13).SequenceEqual(Convert.FromHexString("928df48c020d")),
+            "0x8d92 byte-exact to the recording of 2026-10-19 231752 (key 0x8674, relationship 0 then 13)");
         C(MapEventTables.Relationship("Monster_AntiCompanion") == 11 && MapEventTables.Relationship("NPC_Companion") == 13 && MapEventTables.Relationship("PC_FriendlyToAll") == 23
           && MapEventTables.Relationship("Nothing") is null, "ERelationshipEntity names resolve to the usmap ordinals");
         C(GamePackets.SocialAction(0x9b9a, 1195, false).AsSpan(2).SequenceEqual(Convert.FromHexString("9ab702ab0400000100000000"))

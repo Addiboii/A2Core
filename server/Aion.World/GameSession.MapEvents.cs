@@ -649,7 +649,7 @@ public sealed partial class GameSession : IMapEventHost
 
     /// <summary>
     /// ChangeRelationshipEntity: the spawner's NPCs take the relationship (Monster: attackable, and fighting when aggressive;
-    /// NPC_Companion / NPC_Neutral: at peace), 0x39cd per visible NPC. Dormant ones spawn with it.
+    /// NPC_Companion / NPC_Neutral: at peace), 0x8d92 per visible NPC. Dormant ones spawn with it.
     /// </summary>
     void IMapEventHost.SetRelationship(string spawner, string relationship)
     {
