@@ -9,7 +9,7 @@ namespace Aion.World;
 // - Learning and raising: SkillLevelUp_RQ 0x383f {skill i32} on a stigma of the character's class. Reply 0x3840 {result u16,
 //   skill i32} (the recorded form; usmap says i32 result, the recording u16). A new stigma is announced with AddSkillList_NT
 //   0x5101 (OBSERVED layout, reason SkillPointLevelUp 3: CANDIDATE), a higher level with SkillLevelUpdate_NT 0x3813 reason 3,
-//   then SkillPointUpdate_NT 0x5105 {count 1, mask 01, type u8 2 StigmaShard (usmap ESkillPointType), shards left varint}.
+//   then SkillPointUpdate_NT 0x5105 {count 1, type u8 2 StigmaShard, shards spent u16} (OBSERVED 2026-11-06, one stigma 1 -> 20).
 //   Result 1: not a stigma of the class, or no further level; result 2: character level, ascension grade or shards short.
 // - Slotting: QuickSlotSet_RQ 0x5601 on a stigma quick slot (QuickSlotData QuickSlot_Stigma_1..4 = wire slots 20-23, SlotId - 1, OBSERVED 2026-11-05),
 //   stored in game.quick_slots as any slot. Checked: the slot is open at the character level (Exp.dat
@@ -49,8 +49,7 @@ public sealed partial class GameSession
     List<(int SkillId, int Level)> StigmaSkillList() =>
         stigmas.Where(s => !learned.Contains(s.Key)).OrderBy(s => s.Key).Select(s => (s.Key, Math.Clamp(s.Value, 1, 255))).ToList();
 
-    byte[] StigmaShardUpdate() =>
-        PacketWriter.Opcode(SkillPointUpdateNt).Varint(1).U8(1).U8(SkillPointTypeStigmaShard).Varint(Math.Max(0, StigmaShardsLeft)).ToArray();
+    byte[] StigmaShardUpdate() => SkillPointUpdate(SkillPointTypeStigmaShard, StigmaShardsSpent);
 
     /// <summary>Whether a learned stigma sits in a stigma quick slot open at the character level (CANDIDATE: only then castable).</summary>
     public bool StigmaReady(int skillId) =>

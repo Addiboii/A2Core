@@ -7,8 +7,9 @@ namespace Aion.World;
 // Gladiator raising skill 11020000 to level 2, #18470-18472): the client's SkillLevelUp_RQ 0x383f {skill i32} (the 0x38
 // run of the combat messages, positional opcode + 0x157), the reply 0x3840 {result u16 0, skill i32},
 // SkillLevelUpdate_NT 0x3813 {count 1, skill i32, Skill {mask 01, skill i32, level u8, original u8, 5 zero bytes},
-// reason u8 3 SkillPointLevelUp}, then SkillPointUpdate_NT 0x5105 {count 1, mask 01, type u8 1 Point, points left
-// varint} (00: the level's one point spent). Points: Exp.dat BonusSkillPoint at the character level (cumulative,
+// reason u8 3 SkillPointLevelUp}, then SkillPointUpdate_NT 0x5105 {count, then per entry type u8 (1 Point, 2 StigmaShard),
+// points SPENT u16} (`01 01 0100`: one point spent; OBSERVED again in the community recordings of 2026-11-05, nine
+// level-ups 1, 2, 3, 5, 7, 9, 13, 17, 21 and a reset to 0; it was read as a mask and "points left" before). Points: Exp.dat BonusSkillPoint at the character level (cumulative,
 // CANDIDATE) minus the costs spent (SkillAcquireData Mastery rows: levels 2-4 cost 1, 5-7 cost 2, 8-10 cost 4).
 // The points message is sent after a purchase only, as recorded: the client knows the total from Exp.dat.
 // Only levels bought here cost points: the class kit raises skills above 1 by itself (sync_character_skills), so a bought
@@ -54,7 +55,11 @@ public sealed partial class GameSession
 
     public int SkillPointsLeft => Math.Max(0, data.SkillPoints(level) - SpentSkillPoints());
 
-    byte[] SkillPointUpdate() => PacketWriter.Opcode(SkillPointUpdateNt).Varint(1).U8(1).U8(1).Varint(SkillPointsLeft).ToArray();
+    byte[] SkillPointUpdate() => SkillPointUpdate(SkillPointTypePoint, SpentSkillPoints());
+
+    /// <summary>0x5105 SkillPointUpdate_NT {count, [type u8, points spent u16]} (OBSERVED, 2026-11-05 #1544/#2001/#2940).</summary>
+    static byte[] SkillPointUpdate(byte type, int spent) =>
+        PacketWriter.Opcode(SkillPointUpdateNt).Varint(1).U8(type).U16(Math.Clamp(spent, 0, ushort.MaxValue)).ToArray();
 
     /// <summary>0x383f SkillLevelUp_RQ {skill i32}: the next level of a learned skill for its skill points.</summary>
     async Task<List<byte[]>> SkillLevelUpAsync(byte[] plain, CancellationToken ct)
@@ -98,8 +103,10 @@ public sealed partial class GameSession
 
     /// <summary>
     /// 0x3843 SkillLevelReset_RQ {ESkillAcquireType u8, skill i32}: the skill (or every bought level when skill is 0) back
-    /// to its kit level with the points refunded (free, OURS). Reply 0x3844 {result u16, type, skill, modify list {skill → level},
-    /// modify points [{type u8 Point, points left}]} (usmap fields, CANDIDATE), then the level updates (SkillLevelModify).
+    /// to its kit level with the points refunded, free. Reply 0x3844 {result u16, type, skill, count + {skill i32, level u8},
+    /// count + {type u8, points refunded u16}}, then the level updates (SkillLevelModify) and 0x5105. OBSERVED in the community
+    /// recordings of 2026-11-05 (#1999 one skill, refund 21; #2312 all, refund 362; no cost message in any reset; the skill
+    /// window's "one level down" is this same request).
     /// </summary>
     async Task<List<byte[]>> SkillLevelResetAsync(byte[] plain, CancellationToken ct)
     {
@@ -107,11 +114,12 @@ public sealed partial class GameSession
         var acquireType = plain[2];
         var skillId = BitConverter.ToInt32(plain, 3);
         var targets = (skillId == 0 ? skillLevels.Keys.ToList() : skillLevels.ContainsKey(skillId) ? [skillId] : []).ToList();
+        var spentBefore = SpentSkillPoints();
         byte[] Reply(int result, IReadOnlyList<int> reset)
         {
             var w = PacketWriter.Opcode(SkillLevelResetRs).U16(result).U8(acquireType).I32(skillId).Varint((uint)reset.Count);
-            foreach (var id in reset) w.I32(id).I32(KitSkillLevel(id));
-            return w.Varint(1).U8(SkillPointTypePoint).I32(SkillPointsLeft).ToArray();
+            foreach (var id in reset) w.I32(id).U8((byte)KitSkillLevel(id));
+            return w.Varint(1).U8(SkillPointTypePoint).U16(Math.Max(0, spentBefore - SpentSkillPoints())).ToArray();
         }
         // A stigma reset (ESkillAcquireType Stigma) is not served (GameSession.Stigmas.cs) and never touches the bought levels.
         if (acquireType == StigmaAcquireType) return [Reply(1, [])];

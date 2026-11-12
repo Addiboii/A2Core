@@ -289,8 +289,8 @@ Check(pointed.Level == 10 && data.SkillPoints(10) == 16 && pointed.SkillPointsLe
 var boughtLevel = await pointed.HandleAsync(new PacketWriter().U16(0x383f).I32(11010000).ToArray(), Now);
 Check(boughtLevel.Count == 3 && boughtLevel[0].SequenceEqual(Convert.FromHexString("4038" + "0000" + "D0FFA700"))
       && boughtLevel[1].SequenceEqual(Convert.FromHexString("1338" + "01" + "D0FFA700" + "01" + "D0FFA700" + "0202" + "0000000000" + "03"))
-      && boughtLevel[2].SequenceEqual(Convert.FromHexString("0551" + "010101" + "0F")) && pointed.SkillLevel(11010000) == 2,
-      "SkillLevelUp_RQ 0x383f: 0x3840, 0x3813 and 0x5105 laid out as recorded (level 2 for one point, 15 left)");
+      && boughtLevel[2].SequenceEqual(Convert.FromHexString("0551" + "01" + "01" + "0100")) && pointed.SkillLevel(11010000) == 2,
+      "SkillLevelUp_RQ 0x383f: 0x3840, 0x3813 and 0x5105 {count, type 1, spent u16 1} as recorded (`01 01 01 00`)");
 Check((await pointed.HandleAsync(new PacketWriter().U16(0x383f).I32(99999999).ToArray(), Now))[0][2] == 1
       && (await game.HandleAsync(new PacketWriter().U16(0x383f).I32(11010000).ToArray(), Now))[0][2] == 2, "an unknown skill is refused (1); without skill points, result 2");
 // Skill level down (0x3841) and reset (0x3843): the points come back.
@@ -301,6 +301,9 @@ Check(levelDown.Count == 3 && levelDown[0].SequenceEqual(Convert.FromHexString("
 var levelReset = await pointed.HandleAsync(new PacketWriter().U16(GameSession.SkillLevelResetRq).U8(1).I32(0).ToArray(), Now);
 Check(levelReset[0][0] == 0x44 && levelReset[0][1] == 0x38 && BitConverter.ToUInt16(levelReset[0], 2) == 0 && pointed.SkillLevel(11010000) == 1 && pointed.SkillPointsLeft == 16
       && levelReset.Any(b => Op(b) == 0x3813 && b[^1] == 5), "SkillLevelReset_RQ with skill 0: every bought level back to 1 (0x3844), all points back");
+Check(levelReset[0].SequenceEqual(Convert.FromHexString("4438" + "0000" + "01" + "00000000" + "01" + "D0FFA700" + "01" + "01" + "01" + "0100"))
+      && levelReset[^1].SequenceEqual(Convert.FromHexString("0551" + "01" + "01" + "0000")),
+      "0x3844 {result, type, skill, [skill i32, level u8], [type u8, refunded u16]} and 0x5105 spent 0 (official 2026-11-05 #2312-2314)");
 Check((await pointed.HandleAsync(new PacketWriter().U16(GameSession.SkillLevelDownRq).I32(11010000).ToArray(), Now))[0][2] == 1, "a level-1 skill cannot go down (result 1)");
 // Every class has its own dodge (class prefix * 1,000,000 + 100) and running dash (+1): a Templar's 12000100 is a dodge too.
 Check(GameSession.IsCombatDodgeId(12000100) && GameSession.IsCombatDodgeId(19000100) && GameSession.IsDodgeId(16000101) && GameSession.IsDodgeId(GameSession.NormalDodge)

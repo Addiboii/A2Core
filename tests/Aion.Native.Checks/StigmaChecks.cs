@@ -18,7 +18,7 @@ static class StigmaChecks
     static byte[] LevelUp(int skill) => new PacketWriter().U16(0x383f).I32(skill).ToArray();
     static byte[] SlotSet(int slot, int type, int skill) =>
         new PacketWriter().U16(0x5601).U8(0).U8(slot).U8(type).I64(0).I32(0).I32(skill).U8(0).I32(0).U8(0).ToArray();
-    static byte[] Shards(int left) => new PacketWriter().U16(0x5105).Varint(1).U8(1).U8(2).Varint(left).ToArray();
+    static byte[] Shards(int spent) => new PacketWriter().U16(0x5105).Varint(1).U8(2).U16(spent).ToArray();   // {count, type 2, spent u16}
 
     /// <summary>
     /// <paramref name="created"/> logs in and creates a Gladiator on the store (not selected yet); the character is then set to
@@ -60,13 +60,13 @@ static class StigmaChecks
         Check(glad.StigmaShardsLeft == 8, "level 30: 8 shards (Exp.dat BonusStigmaPoint)");
         var learn = await glad.HandleAsync(LevelUp(WrathWave), now);
         Check(learn.Count == 3 && learn[0].SequenceEqual(Convert.FromHexString("4038" + "0000" + Hex(WrathWave)))
-              && learn[1].SequenceEqual(GamePackets.AddSkillList(glad.PlayerKey, [(WrathWave, 1)], 3)) && learn[2].SequenceEqual(Shards(7))
+              && learn[1].SequenceEqual(GamePackets.AddSkillList(glad.PlayerKey, [(WrathWave, 1)], 3)) && learn[2].SequenceEqual(Shards(1))
               && glad.StigmaLevel(WrathWave) == 1 && gladStore.StigmaRows[WrathWave] == 1,
-              "learning a stigma: 0x3840 result 0, AddSkillList 0x5101 (reason 3), 0x5105 StigmaShard 7 left; saved at level 1");
+              "learning a stigma: 0x3840 result 0, AddSkillList 0x5101 (reason 3), 0x5105 StigmaShard 1 spent; saved at level 1");
         var raise = await glad.HandleAsync(LevelUp(WrathWave), now);
-        Check(raise.Count == 3 && raise[0][2] == 0 && Op(raise[1]) == 0x3813 && raise[1][^1] == 3 && raise[2].SequenceEqual(Shards(6))
+        Check(raise.Count == 3 && raise[0][2] == 0 && Op(raise[1]) == 0x3813 && raise[1][^1] == 3 && raise[2].SequenceEqual(Shards(2))
               && glad.StigmaLevel(WrathWave) == 2 && gladStore.StigmaRows[WrathWave] == 2,
-              "raising it: 0x3813 level 2 (reason 3), 6 shards left; saved at level 2");
+              "raising it: 0x3813 level 2 (reason 3), 2 shards spent; saved at level 2");
         for (var i = 0; i < 4; i++) await glad.HandleAsync(LevelUp(WrathWave), now);   // levels 3-5 (1 each), 6 (2): 1 left
         Check(glad.StigmaLevel(WrathWave) == 6 && glad.StigmaShardsLeft == 1, "levels 3-6 cost 1, 1, 1, 2 (1 shard left)");
         var broke = await glad.HandleAsync(LevelUp(WrathWave), now);
@@ -125,8 +125,8 @@ static class StigmaChecks
         var skillList = overEntry.First(b => Op(b) == 0x5100);
         Check(over.StigmaLevel(WrathWave) == 10 && overStore.StigmaRows[WrathWave] == 10 && over.StigmaShardsLeft < 0
               && skillList.AsSpan().IndexOf(Convert.FromHexString("01" + Hex(WrathWave) + "0A0A")) > 0
-              && overEntry.Any(b => b.SequenceEqual(Shards(0))),
-              "world entry lists the saved level-10 stigma (0x5100) and 0 shards left; nothing is lowered or forgotten");
+              && overEntry.Any(b => b.SequenceEqual(Shards(15))),
+              "world entry lists the saved level-10 stigma (0x5100) and its 15 shards spent; nothing is lowered or forgotten");
         Check((await over.HandleAsync(LevelUp(WrathWave), now)).Single()[2] == 2 && (await over.HandleAsync(LevelUp(BladeToss), now)).Single()[2] == 2
               && overStore.StigmaRows.Count == 1 && overStore.StigmaRows[WrathWave] == 10,
               "over budget: every further level and stigma is refused until the shards cover them");
@@ -135,9 +135,9 @@ static class StigmaChecks
         var (charged, chargedStore, _) = await Enter(23, 3, s => s.Items.Add(new ItemState(Guid.NewGuid(), "b", 531900010, 2, "bag", null, 1, Empty, Empty, 7001)));
         await charged.InventoryChangesAsync(default);   // the bag as the store has it (as the item-use checks do)
         var used = await charged.HandleAsync(new PacketWriter().U16(0x5612).I64(7001).ToArray(), now);
-        Check(used[0][2] == 0 && used.Any(b => b.SequenceEqual(Shards(2))) && chargedStore.StigmaItemShards == 1 && charged.StigmaShardsLeft == 2
+        Check(used[0][2] == 0 && used.Any(b => b.SequenceEqual(Shards(0))) && chargedStore.StigmaItemShards == 1 && charged.StigmaShardsLeft == 2
               && chargedStore.Items.Single(i => i.TemplateId == 531900010).Quantity == 1,
-              "a stigma shard item: one used, +1 shard (0x5105 StigmaShard 2 left), stored with the item's consumption");
+              "a stigma shard item: one used, +1 shard (0x5105 StigmaShard, none spent), stored with the item's consumption");
         return checks;
     }
 
