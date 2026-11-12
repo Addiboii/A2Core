@@ -465,8 +465,11 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             case SkillLevelResetRq: return await SkillLevelResetAsync(plain, ct);
             // InteractEnvObjStop_RQ {key}: a timed interaction cancelled (moved, or the client's cancel).
             case 0x363d when QuestKey(plain, 2) is { } stopKey:
-                if (pendingUse?.Key == stopKey) pendingUse = null;
-                return [GamePackets.InteractEnvObjStopReply(stopKey)];
+                // OBSERVED (185000 #6763-#6764, #26846-#26847; 162208 #5193): 0x363e {0, key} with 0x3639 reason 0x1906 for the use
+                // in progress; with none, 0x363e {0x3813, key 0}.
+                if (pendingUse?.Key != stopKey) return [GamePackets.InteractEnvObjStopReply(0, GamePackets.InteractStopNothing)];
+                pendingUse = null;
+                return [GamePackets.InteractEnvObjStopReply(stopKey), GamePackets.InteractEnvObjInterrupted(stopKey, GamePackets.InterruptStopped, playerKey)];
             case 0xe242 when QuestKey(plain, 2) is { } npcKey:
                 // Once the conversation is over on the server's side (the partner removed and a map load pending, as after an
                 // NPC's layer entry) the official answer is the failure 0x3e08 with key 0 (OBSERVED #9656); the talk mode ends on it.
@@ -778,10 +781,12 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
     }
 
     /// <summary>
-    /// Using a quest object (0x3636 with its key): in range, 0x3638 started; after its InteractTime
-    /// (EnvObjData; 0 at once) 0x363a completed, 0x8d6d finish state, 0x363b available state, then the 0x3637 reply
-    /// (the official order of the player's own interaction, capture 20261013-144836 #10090-10093) and UseEnvObj quest
-    /// progress. Without 0x8d6d/0x363b the client kept the interaction (the gather result panel) open.
+    /// Using a quest object (0x3636 with its key): in range, 0x3638 started. OBSERVED (community recordings 2026-11-04 to 06,
+    /// reports/movement.md 1-2): an object with an InteractTime (EnvObjData) answers 0x3637 at once (+50 ms) and at the end
+    /// 0x363a with 0x8d6d (finish state) when it is used up or 0x363b (available) when it stays; an instant one sends 0x363a,
+    /// 0x8d6d, [0x363b], then the 0x3637 reply (capture 20261013-144836 #10090-10093). CANDIDATE: the rule "0x8d6d = used up,
+    /// 0x363b = usable again" (8 env ids). Gather nodes keep 0x363a, 0x8d6d, 0x363b, 0x3637 (not recorded; without 0x8d6d/0x363b
+    /// the client kept the gather result panel open).
     /// </summary>
     async Task<List<byte[]>> UseObjectAsync(byte[] plain, long now, CancellationToken ct)
     {
@@ -807,6 +812,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         if (o.InteractTime > 0)
         {
             pendingUse = (found, key2, now + o.InteractTime);
+            if (o.Gather is null) replies.Add(GamePackets.InteractEnvObjReply(key2));   // OBSERVED: the reply at the start
             return replies;
         }
         replies.AddRange(await CompleteUseAsync(found, ct, now));
@@ -834,21 +840,26 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
 
     public const int FlightRingAbnormal = 18999040;
 
-    async Task<List<byte[]>> CompleteUseAsync(int index, CancellationToken ct, long now = 0)
+    async Task<List<byte[]>> CompleteUseAsync(int index, CancellationToken ct, long now = 0, bool timed = false)
     {
         var objects = WorldObjects.ObjectsOn(worldMap);
         if (index >= objects.Count) return [];
         var key = WorldObjects.FirstKey + index;
-        var replies = new List<byte[]>
+        var consumed = (CopyOwner ?? this).mapEventRuns.Any(r => r.WantsObject(objects[index].Name, objects[index].EnvName));
+        var replies = new List<byte[]> { GamePackets.InteractEnvObjCompleted(key, playerKey) };
+        if (objects[index].Gather is not null)
+            replies.AddRange([GamePackets.InteractEnvObjFinishState(key), GamePackets.InteractEnvObjAvailableState(key), GamePackets.InteractEnvObjReply(key)]);
+        else if (timed) replies.Add(consumed ? GamePackets.InteractEnvObjFinishState(key) : GamePackets.InteractEnvObjAvailableState(key));
+        else
         {
-            GamePackets.InteractEnvObjCompleted(key, playerKey), GamePackets.InteractEnvObjFinishState(key), GamePackets.InteractEnvObjAvailableState(key),
-            GamePackets.InteractEnvObjReply(key),
-        };
+            replies.Add(GamePackets.InteractEnvObjFinishState(key));
+            if (!consumed) replies.Add(GamePackets.InteractEnvObjAvailableState(key));
+            replies.Add(GamePackets.InteractEnvObjReply(key));
+        }
         if (objects[index].Gather is not null) replies.AddRange(await CompleteGatherAsync(index, objects[index], now, ct));
         CarryBoxUsed(index, objects[index], now, replies);   // GameSession.EnvObjects.cs
         if (questLog is not null)
             replies.AddRange(await Stored(() => QuestChangesAsync(questLog.UsedObject(objects[index].Env, level), ct)));
-        var consumed = (CopyOwner ?? this).mapEventRuns.Any(r => r.WantsObject(objects[index].Name, objects[index].EnvName));
         replies.AddRange(MapEventUsedObject(objects[index].Name, now, objects[index].EnvName));
         if (consumed)
         {
@@ -2290,6 +2301,13 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         combatUntil = now + CombatTimeoutMs;
         if (!invincible.Hp) resources.Hp = Math.Max(0, resources.Hp - damage);
         replies.Add(GamePackets.NpcHp(playerKey, resources.Hp));
+        // A hit ends a timed object use: 0x363b, then 0x3639 reason 0x1905 (OBSERVED 234912 #10314-#10315, 185000 #5953-#5957).
+        if (pendingUse is { } use && WorldObjects.ObjectsOn(worldMap) is var hitObjects && use.Index < hitObjects.Count && hitObjects[use.Index].Gather is null)
+        {
+            pendingUse = null;
+            replies.Add(GamePackets.InteractEnvObjAvailableState(use.Key));
+            replies.Add(GamePackets.InteractEnvObjInterrupted(use.Key, GamePackets.InterruptDamaged, playerKey));
+        }
         if (resources.Hp == 0) replies.AddRange(Die(killerKey, now, killerSkill));
         return replies;
     }
@@ -3021,7 +3039,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         if (pendingUse is { } use && now >= use.DueMs)
         {
             pendingUse = null;
-            replies.AddRange(await CompleteUseAsync(use.Index, ct, now));
+            replies.AddRange(await CompleteUseAsync(use.Index, ct, now, timed: true));
         }
         if (dead && now >= reviveAt) replies.AddRange(Revive(now));
         if (itemCast is { } cast && now >= cast.DueMs) replies.AddRange(await CompleteItemCastAsync(now, ct));

@@ -999,8 +999,18 @@ public static class GamePackets
 
     /// <summary>0x3635 EnvObjDespawn_NT: key, state, reason, despawn act (official sample e4ec03 01 01 00; widths CANDIDATE).</summary>
     public static byte[] EnvObjDespawn(int key, byte state = 1, byte reason = 1) => PacketWriter.Opcode(0x3635).Varint(key).U8(state).U8(reason).Varint(0).ToArray();
-    /// <summary>0x363e InteractEnvObjStop_RS: result, object key (usmap; answering 0x363d). CANDIDATE.</summary>
+    /// <summary>0x363e InteractEnvObjStop_RS: result u16, object key (OBSERVED 185000 #6764 `0000 bcef01`; nothing in progress 162208 #5193 `1338 00`).</summary>
     public static byte[] InteractEnvObjStopReply(int key, int result = 0) => PacketWriter.Opcode(0x363e).U16(result).Varint(key).ToArray();
+    /// <summary>0x363e's result for a stop with no use in progress (OBSERVED 0x3813, key 0).</summary>
+    public const int InteractStopNothing = 0x3813;
+    /// <summary>0x3639 reasons OBSERVED: 0x1905 after a hit on the player, 0x1906 with the player's stop. CANDIDATE: the names.</summary>
+    public const ushort InterruptDamaged = 0x1905, InterruptStopped = 0x1906;
+    /// <summary>
+    /// 0x3639 InteractEnvObjInterrupted_NT: key varint, reason u16, interactor key varint, interaction count i32 (OBSERVED, 18 samples
+    /// of the community recordings 2026-11-04 to 06, e.g. 185000 #5957 `3936 bcef01 0519 d223 00000000`).
+    /// </summary>
+    public static byte[] InteractEnvObjInterrupted(int key, ushort reason, int interactor, int count = 0) =>
+        PacketWriter.Opcode(0x3639).Varint(key).U16(reason).Varint(interactor).I32(count).ToArray();
     /// <summary>EnvObjSpawn for a quest object: relationship from EnvObjData (Kibelisks: 8 EnvObj_Light).</summary>
     public static byte[] EnvObjSpawn(int key, int envObjId, Vector3d position, double yaw, long createTime, int uniqueKey, byte relationship) =>
         PacketWriter.Opcode(0x3634).Varint(key).U8(4).U8(0).I32(envObjId).F32(position.X).F32(position.Y).F32(position.Z)
