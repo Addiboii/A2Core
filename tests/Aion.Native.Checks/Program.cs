@@ -2211,6 +2211,22 @@ Check(BitConverter.ToUInt16((await staffSession.HandleAsync(new PacketWriter().U
 var passClaim = await staffSession.HandleAsync(new PacketWriter().U16(GameSession.TakeBattlePassRewardRq).I32(20047).I32(820439000).U8(31).Varint(0).ToArray(), Now + 7496);
 Check(passClaim.Count == 1 && Convert.ToHexStringLower(passClaim[0]) == "23e3" + "0100" + "4f4e0000" + "d8e7e630" + "1f" + "00",
       "TakeBattlePassReward: 0xe323 {result, group, achievement, step, empty map} alone (the recorded form, 163412 #894; refused here: not reached)");
+// With 1400 pass exp (levels 1 and 2 of the free pass 820439000), a claim of level 2 pays both levels' items (503700032 x2)
+// in one 0x561b with increase reason 72, then 0xe323 0000, nothing else (as recorded: 163412 #893-894); a second claim is refused.
+staffStore.Achievements.Add(new AchievementRecord(820439000, 1400, null, 0, DateTimeOffset.UtcNow));
+var passSession = new GameSession(data, new GameSessionOptions { StaffRole = (_, _) => Task.FromResult<string?>("admin") }, new Random(3)) { Store = staffStore };
+await passSession.HandleAsync(Strings(0x3613, Session, "", "t", "").Concat(new byte[9]).ToArray(), Now + 7497);
+await passSession.HandleAsync(new PacketWriter().U16(0x361f).Varint(staffStore.States[0].WireId << 16).I32(0).Vec3(Vector3d.Zero).ToArray(), Now + 7497);
+await passSession.HandleAsync(new PacketWriter().U16(0x3622).I32(1).ToArray(), Now + 7497);
+await passSession.InventoryChangesAsync(default);
+var passItemBefore = staffStore.Items.Where(i => i.TemplateId == 503700032).Sum(i => i.Quantity);
+var passPaid = await passSession.HandleAsync(new PacketWriter().U16(GameSession.TakeBattlePassRewardRq).I32(20047).I32(820439000).U8(2).Varint(0).ToArray(), Now + 7498);
+Check(passPaid.Count == 2 && Op(passPaid[0]) == 0x561b && ReadModifications(passPaid[0]).All(m => m is { ItemId: 503700032, Increase: 72 })
+      && Convert.ToHexStringLower(passPaid[1]) == "23e3" + "0000" + "4f4e0000" + "d8e7e630" + "02" + "00"
+      && staffStore.Items.Where(i => i.TemplateId == 503700032).Sum(i => i.Quantity) == passItemBefore + 2 && staffStore.Achievements.Single(a => a.Id == 820439000).RewardedStep == 2,
+      "TakeBattlePassReward level 2: both levels' items in one 0x561b (reason 72), then 0xe323 0000 (OBSERVED order 163412 #893-894)");
+Check(BitConverter.ToUInt16((await passSession.HandleAsync(new PacketWriter().U16(GameSession.TakeBattlePassRewardRq).I32(20047).I32(820439000).U8(2).Varint(0).ToArray(), Now + 7499))[0], 2) == 1
+      && staffStore.Items.Where(i => i.TemplateId == 503700032).Sum(i => i.Quantity) == passItemBefore + 2, "a claimed level is not paid twice");
 // Period collections: the official day (2026-10-13 15:00 UTC) opens the Light daily 5401317 (week 13, day 7), the weekly 5401321,
 // Craft and Boss; registering a list's target items pays its reward when the count is reached.
 var officialDay = 1791900000000L;

@@ -454,7 +454,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             case TakeAchievementGroupRewardRq: return await TakeGroupRewardAsync(plain, ct);
             case TakeAchievementRewardBatchRq: return await TakeRewardBatchAsync(plain, ct);
             case AttendanceRq: return Attendance(now);
-            case TakeBattlePassRewardRq: return TakeBattlePassReward(plain, now);
+            case TakeBattlePassRewardRq: return await TakeBattlePassRewardAsync(plain, ct);
             case MatchingStartRq: return MatchingStart(plain, now);
             case MatchingStartResponseRq: return MatchingStartResponse(plain, now);
             case MatchingCancelRq: return MatchingCancel(now);

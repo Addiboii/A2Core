@@ -7,8 +7,8 @@ namespace Aion.World;
 // BattlePass-category achievements at world entry). A group's missions are the achievements of its mission group; a
 // completed mission step pays its AchievementReward.RewardPoint as pass exp (OURS: at completion, not on a claim) to
 // the exp achievement (type BattlePassExp, 101 steps = levels) of every pass of the group; level rewards come through
-// TakeAchievementReward on that achievement, the paid pass's only after a purchase (none is sold here).
-// BattlePassInfoList_NT 0xe324 at entry, TakeBattlePassReward 0xe322/0xe323 (acknowledged), BattlePassPurchase
+// TakeBattlePassReward (or TakeAchievementReward) on that achievement, the paid pass's only after a purchase (none is sold here).
+// BattlePassInfoList_NT 0xe324 at entry, TakeBattlePassReward 0xe322/0xe323 (pays the level), BattlePassPurchase
 // 0xe32d/0xe32e (refused). OBSERVED 0xe324 and 0xe323 in the community recordings 2026-11-04 to 06 (161 lists; claims
 // 163412 #893-894, 162114, 234912; reports/progression.md 4): the catalogue's 0xe3 run (base 0xdd6e), not 0xdd07; the
 // others by position (CANDIDATE). Bodies from the usmap; the list's third map, i32 and second bool are not decoded
@@ -54,19 +54,33 @@ public sealed partial class GameSession
         return w.ToArray();
     }
 
+    /// <summary>EIncreaseReason kBattlePassReward (OBSERVED: 72 in every single-item 0x561b before a recorded 0xe323, 2026-11-04 to 06).</summary>
+    const byte IncreaseBattlePassReward = 72;
+
     /// <summary>
-    /// 0xe322 TakeBattlePassReward_RQ {group, mission, step, map}: the mission's exp was paid at completion; the step is marked
-    /// rewarded. The reply alone, with an empty map (OBSERVED 163412 #894 `0000 4f4e0000 d8e7e630 1f 00`: no 0x5684 or 0xe324 follows).
+    /// 0xe322 TakeBattlePassReward_RQ {group, pass exp achievement, level, map}: the level's items (the achievement's step
+    /// reward), then the reply with an empty map. OBSERVED (community recordings 2026-11-04 to 06, 26262663): 11 of 13
+    /// replies follow a 0x561b with the level's item, increase reason 72, e.g. 163412 #893-894 (503700032 for level 31 of
+    /// 820439000, then `0000 4f4e0000 d8e7e630 1f 00`); no 0x5684 or 0xe324 between or after. Until now the level was
+    /// marked rewarded without its items (the community fork found it). OURS: every unclaimed level up to the one
+    /// asked is paid, in one 0x561b, as TakeAchievementReward does; a paid pass's levels stay locked (none is sold).
     /// </summary>
-    List<byte[]> TakeBattlePassReward(byte[] plain, long now)
+    async Task<List<byte[]>> TakeBattlePassRewardAsync(byte[] plain, CancellationToken ct)
     {
         if (plain.Length < 11) return [];
         var groupId = BitConverter.ToInt32(plain, 2);
         var achievementId = BitConverter.ToInt32(plain, 6);
         var step = plain[10];
-        var state = achievements.GetValueOrDefault(achievementId);
-        var ok = Achievements.Of(achievementId) is { } entry && state is not null && state.Count >= entry.StepCount(step) && state.RewardedStep < step;
-        if (ok) { state!.RewardedStep = step; achievementDirty.Add(achievementId); }
-        return [PacketWriter.Opcode(TakeBattlePassRewardRs).U16(ok ? 0 : 1).I32(groupId).I32(achievementId).U8(step).Varint(0).ToArray()];
+        byte[] Reply(int result) => PacketWriter.Opcode(TakeBattlePassRewardRs).U16(result).I32(groupId).I32(achievementId).U8(step).Varint(0).ToArray();
+        if (Achievements.Of(achievementId) is not { Type: "BattlePassExp" } entry || achievements.GetValueOrDefault(achievementId) is not { } state)
+            return [Reply(1)];
+        var paid = false;
+        for (var level = state.RewardedStep + 1; level <= Math.Min((int)step, entry.Steps.Length); level++)
+        {
+            if (await TakeStepAsync(achievementId, level, ct, send: false) is null) break;
+            paid = true;
+        }
+        if (!paid) return [Reply(1)];
+        return [.. await InventoryChangesAsync(ct, IncreaseBattlePassReward, 0), Reply(state.RewardedStep >= step ? 0 : 1)];
     }
 }

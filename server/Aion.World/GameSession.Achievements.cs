@@ -317,8 +317,11 @@ public sealed partial class GameSession
         return replies.Count == 0 ? [Reply(1)] : [Reply(0), .. replies];
     }
 
-    /// <summary>Takes one step's reward; null when not claimable. Returns the state update and the inventory change.</summary>
-    async Task<List<byte[]>?> TakeStepAsync(int id, int step, CancellationToken ct)
+    /// <summary>
+    /// Takes one step's reward; null when not claimable. Returns the state update and the inventory change, or nothing when
+    /// send is false (the caller sends one inventory change for several steps).
+    /// </summary>
+    async Task<List<byte[]>?> TakeStepAsync(int id, int step, CancellationToken ct, bool send = true)
     {
         if (Achievements.Of(id) is not { } entry || !achievements.TryGetValue(id, out var state) || state.RewardedStep >= step || state.Count < entry.StepCount(step)) return null;
         if (PaidPassLocked(id)) return null;   // the paid pass's levels need a purchase (none is sold)
@@ -330,6 +333,7 @@ public sealed partial class GameSession
         }
         state.RewardedStep = step;
         achievementDirty.Add(id);
+        if (!send) return [];
         return [AchievementUpdate([id]), .. items.Count > 0 ? await InventoryChangesAsync(ct, IncreaseAchievementReward, 0) : []];
     }
 
