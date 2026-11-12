@@ -169,28 +169,38 @@ public sealed partial class GameSession
         return null;
     }
 
-    /// <summary>0x8c02 NpcShopBuyGoods_RQ {char key, NPC key, array {goods id, count}}: Kina paid, items granted, answered 0x8c03.</summary>
+    // EResult codes of the merchant replies (read from the usmap of client 2.0.6; BuyGoods success 0x0600 OBSERVED 2026-11-06
+    // 234912 i30338).
+    const int BuyGoodsSuccess = 0x0600, BuyGoodsFail = 0x0601, BuyGoodsFailLimit = 0x0602, BuyGoodsFailLevel = 0x0603,
+        NotEnoughMoney = 0x0107, SellItemSuccess = 0x0610, SellItemFail = 0x0611;
+
+    /// <summary>
+    /// 0x8c02 NpcShopBuyGoods_RQ {char key, NPC key, array {goods id, count}}: Kina paid, items granted, answered 0x8c03
+    /// {result u16, NPC key i32, array {goods i32, count i32}} after the inventory change (OBSERVED 2026-11-06 234912 i30338:
+    /// 0006 ad7e0000 01 0a7f2406 e8030000, the 0x561b before it).
+    /// </summary>
     async Task<List<byte[]>> BuyGoodsAsync(byte[] plain, long now, CancellationToken ct)
     {
         var request = ReadShopRequest(plain, withCharKey: true, wideEntries: false);
         var entries = request?.Entries ?? [];
         byte[] Reply(int result, int npc)
         {
-            var w = PacketWriter.Opcode(ShopBuyRs).U16(result).Varint(npc).Varint(entries.Count);
+            var w = PacketWriter.Opcode(ShopBuyRs).U16(result).I32(npc).Varint(entries.Count);
             foreach (var (goods, count) in entries) w.I32((int)goods).I32((int)count);
             return w.ToArray();
         }
-        if (request is not { } req) return [Reply(1, openShop ?? 0)];
+        if (request is not { } req) return [Reply(BuyGoodsFail, openShop ?? 0)];
         var npcKey = targets?.ContainsKey(req.Npc) == true ? req.Npc : openShop ?? req.Npc;
         if (Store is not { } store || CharacterId is not { } character || targets?.TryGetValue(npcKey, out var npc) != true || entries.Count == 0)
-            return [Reply(1, npcKey)];
+            return [Reply(BuyGoodsFail, npcKey)];
         var rewards = new List<(int, long)>();
         var prices = new Dictionary<int, long>();
         var limits = new List<(int, int, string, int, int)>();
         var at = DateTimeOffset.FromUnixTimeMilliseconds(now);
         foreach (var (goodsId, count) in entries)
         {
-            if (count < 1 || count > 10_000 || Shops.Goods(npc!.NpcId, profileRace, (int)goodsId) is not { } g || level < g.Level) return [Reply(1, npcKey)];
+            if (count < 1 || count > 10_000 || Shops.Goods(npc!.NpcId, profileRace, (int)goodsId) is not { } g) return [Reply(BuyGoodsFail, npcKey)];
+            if (level < g.Level) return [Reply(BuyGoodsFailLevel, npcKey)];
             rewards.Add((g.ItemId, g.Bundle * count));
             prices[g.Currency] = prices.GetValueOrDefault(g.Currency) + g.Price * count;
             if (g.Limit > 0) limits.Add((g.LimitTarget, (int)goodsId, ShopTables.Period(g.LimitPeriod, at), (int)count, g.Limit));
@@ -199,37 +209,40 @@ public sealed partial class GameSession
         foreach (var (currency, price) in prices)
         {
             if (price <= 0) continue;
-            if (CostStacks(currency, price) is not { } stacks) return [Reply(2, npcKey)];
+            if (CostStacks(currency, price) is not { } stacks) return [Reply(NotEnoughMoney, npcKey)];
             costs.AddRange(stacks);
         }
         var done = await Stored(async () => await store.ShopBuyAsync(character, costs, rewards, limits, ct) ? [[]] : []);
-        if (done.Count == 0) return [Reply(limits.Count > 0 ? 3 : 1, npcKey)];
-        return [Reply(0, npcKey), .. await InventoryChangesAsync(ct, IncreaseShopBuy, DecreaseShopBuy)];
+        if (done.Count == 0) return [Reply(limits.Count > 0 ? BuyGoodsFailLimit : BuyGoodsFail, npcKey)];
+        return [.. await InventoryChangesAsync(ct, IncreaseShopBuy, DecreaseShopBuy), Reply(BuyGoodsSuccess, npcKey)];
     }
 
-    /// <summary>0x8c04 NpcShopSellItem_RQ {NPC key, map item key -> count}: items sold for their Item.dat SellPrice in Kina, answered 0x8c05.</summary>
+    /// <summary>
+    /// 0x8c04 NpcShopSellItem_RQ {NPC key, map item key -> count}: items sold for their Item.dat SellPrice in Kina, answered 0x8c05
+    /// {result u16, NPC key i32 (CANDIDATE, as 0x8c03; no sale recorded), array {item key i64, count i64}}.
+    /// </summary>
     async Task<List<byte[]>> SellItemsAsync(byte[] plain, CancellationToken ct)
     {
         var request = ReadShopRequest(plain, withCharKey: false, wideEntries: true);
         var entries = request?.Entries ?? [];
         byte[] Reply(int result, int npc)
         {
-            var w = PacketWriter.Opcode(ShopSellRs).U16(result).Varint(npc).Varint(entries.Count);
+            var w = PacketWriter.Opcode(ShopSellRs).U16(result).I32(npc).Varint(entries.Count);
             foreach (var (key, count) in entries) w.I64(key).I64(count);
             return w.ToArray();
         }
-        if (request is not { } req) return [Reply(1, openShop ?? 0)];
+        if (request is not { } req) return [Reply(SellItemFail, openShop ?? 0)];
         var npcKey = targets?.ContainsKey(req.Npc) == true ? req.Npc : openShop ?? req.Npc;
         if (Store is not { } store || CharacterId is not { } character || targets?.TryGetValue(npcKey, out var npc) != true || !Shops.IsMerchant(npc!.NpcId) || entries.Count == 0)
-            return [Reply(1, npcKey)];
+            return [Reply(SellItemFail, npcKey)];
         foreach (var (key, count) in entries)
         {
             if (!storedItems.TryGetValue(key, out var row) || row.Location != "bag" || count < 1 || count > row.Quantity || Shops.SellPrice(row.TemplateId) is not { } price)
-                return [Reply(1, npcKey), .. await InventoryChangesAsync(ct, IncreaseShopSell, DecreaseShopSell)];
+                return [Reply(SellItemFail, npcKey), .. await InventoryChangesAsync(ct, IncreaseShopSell, DecreaseShopSell)];
             var sold = await Stored(async () => await store.SellToMerchantAsync(character, row.InstanceId, row.Revision, (int)count, price * count, ct) ? [[]] : []);
-            if (sold.Count == 0) return [Reply(1, npcKey), .. await InventoryChangesAsync(ct, IncreaseShopSell, DecreaseShopSell)];
+            if (sold.Count == 0) return [Reply(SellItemFail, npcKey), .. await InventoryChangesAsync(ct, IncreaseShopSell, DecreaseShopSell)];
         }
-        var replies = new List<byte[]> { Reply(0, npcKey) };
+        var replies = new List<byte[]> { Reply(SellItemSuccess, npcKey) };
         replies.AddRange(await InventoryChangesAsync(ct, IncreaseShopSell, DecreaseShopSell));
         await Stored(async () => { await LoadBuybackAsync(store, character, ct); return []; });
         replies.Add(RestorableItems());

@@ -1858,21 +1858,23 @@ Check(shopOpen.Single().SequenceEqual(new PacketWriter().U16(0x8c01).U16(0).Vari
 var potionsBefore = staffStore.Items.Where(i => i.TemplateId == 530126003).Sum(i => i.Quantity);
 var shopKina = KinaTotal();
 var shopBought = await staffSession.HandleAsync(new PacketWriter().U16(0x8c02).Varint(1).Varint((uint)grocer.Key).Varint(1).I32(103015101).I32(2).ToArray(), Now);
-Check(shopBought[0][0] == 0x03 && shopBought[0][1] == 0x8c && shopBought[0][2] == 0 && KinaTotal() == shopKina - 500
-      && staffStore.Items.Where(i => i.TemplateId == 530126003).Sum(i => i.Quantity) == potionsBefore + 2, "buying 2 Life Potions costs 500 Kina (0x8c03)");
-Check((await staffSession.HandleAsync(new PacketWriter().U16(0x8c02).Varint(1).Varint((uint)grocer.Key).Varint(1).I32(103055110).I32(1).ToArray(), Now))[0][2] == 1
-      && (await staffSession.HandleAsync(new PacketWriter().U16(0x8c02).Varint(1).Varint((uint)grocer.Key).Varint(1).I32(103065101).I32(1).ToArray(), Now))[0][2] == 1,
-      "goods above the character's level (a level-45 Kisk) or from another shop are refused");
+Check(Op(shopBought[0]) == 0x561b && shopBought[^1].SequenceEqual(new PacketWriter().U16(0x8c03).U16(0x0600).I32(grocer.Key).Varint(1).I32(103015101).I32(2).ToArray())
+      && KinaTotal() == shopKina - 500 && staffStore.Items.Where(i => i.TemplateId == 530126003).Sum(i => i.Quantity) == potionsBefore + 2,
+      "buying 2 Life Potions costs 500 Kina: the bag first, then 0x8c03 0x0600 with the NPC key as i32 (official 2026-11-06 234912 i30338)");
+static int ShopResult(byte[] reply) => BitConverter.ToUInt16(reply, 2);
+Check(ShopResult((await staffSession.HandleAsync(new PacketWriter().U16(0x8c02).Varint(1).Varint((uint)grocer.Key).Varint(1).I32(103055110).I32(1).ToArray(), Now))[0]) == 0x0603
+      && ShopResult((await staffSession.HandleAsync(new PacketWriter().U16(0x8c02).Varint(1).Varint((uint)grocer.Key).Varint(1).I32(103065101).I32(1).ToArray(), Now))[0]) == 0x0601,
+      "goods above the character's level (a level-45 Kisk, 0x0603) or from another shop (0x0601) are refused");
 var bigKina = staffStore.Items.Where(i => i.TemplateId == 930100001).MaxBy(i => i.Quantity)!;
 staffStore.Items.Remove(bigKina);
 await staffSession.InventoryChangesAsync(default);
-Check((await staffSession.HandleAsync(new PacketWriter().U16(0x8c02).Varint(1).Varint((uint)grocer.Key).Varint(1).I32(103015102).I32(9_999).ToArray(), Now))[0][2] == 2,
-      "not enough Kina: result 2");
+Check(ShopResult((await staffSession.HandleAsync(new PacketWriter().U16(0x8c02).Varint(1).Varint((uint)grocer.Key).Varint(1).I32(103015102).I32(9_999).ToArray(), Now))[0]) == 0x0107,
+      "not enough Kina: kItem_Common_Fail_NotEnoughCountMoney 0x0107");
 staffStore.Items.Add(bigKina);
 await staffSession.InventoryChangesAsync(default);
 var shopPotion = staffStore.Items.First(i => i.TemplateId == 530126003 && i.Location == "bag");
 var soldReply = await staffSession.HandleAsync(new PacketWriter().U16(0x8c04).Varint((uint)grocer.Key).Varint(1).I64(shopPotion.WireId).I64(1).ToArray(), Now);
-Check(soldReply[0][0] == 0x05 && soldReply[0][1] == 0x8c && soldReply[0][2] == 0
+Check(Op(soldReply[0]) == 0x8c05 && ShopResult(soldReply[0]) == 0x0610 && BitConverter.ToInt32(soldReply[0], 4) == grocer.Key
       && KinaTotal() == shopKina - 498, "selling a Life Potion pays its SellPrice of 2 Kina (0x8c05)");
 // The sold potion waits for buyback (0xe342 after the sale); restoring it (0xe344) costs its 2 Kina and returns it.
 var soldPotion = staffStore.Items.Single(i => i.Location == "buyback");
@@ -1886,8 +1888,8 @@ staffStore.Purchases.Add((1, 110019901, ShopTables.Period(0, DateTimeOffset.From
 var limitedOpen = await staffSession.HandleAsync(new PacketWriter().U16(0x8c00).Varint((uint)limitedMerchant.Key).ToArray(), Now);
 Check(limitedOpen.Single().SequenceEqual(new PacketWriter().U16(0x8c01).U16(0).Varint((uint)limitedMerchant.Key).Varint(1).I32(110019901).I32(1).I64(Now).ToArray()),
       "the shop opens with what was bought of its limited goods (0x8c01 map)");
-Check((await staffSession.HandleAsync(new PacketWriter().U16(0x8c02).Varint(1).Varint((uint)limitedMerchant.Key).Varint(1).I32(110019901).I32(1).ToArray(), Now))[0][2] == 3,
-      "buying past the limit is refused (result 3)");
+Check(ShopResult((await staffSession.HandleAsync(new PacketWriter().U16(0x8c02).Varint(1).Varint((uint)limitedMerchant.Key).Varint(1).I32(110019901).I32(1).ToArray(), Now))[0]) == 0x0602,
+      "buying past the limit is refused (0x0602 NotEnoughLimitedGoodsCount)");
 Check(ShopTables.Period(1, DateTimeOffset.Parse("2026-10-16T06:59:00Z")) == "2026-10-15" && ShopTables.Period(1, DateTimeOffset.Parse("2026-10-16T07:00:00Z")) == "2026-10-16"
       && ShopTables.Period(2, DateTimeOffset.Parse("2026-10-16T12:00:00Z")) == "w2026-10-14", "limits reset at 07:00 UTC, weekly from Wednesday");
 // Enchanting (0x5622 -> 0x5623): the starter sword goes +0 -> +1 for 125 Kina and 5 enchant coins (Enchant_Common_1);
