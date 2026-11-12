@@ -1899,6 +1899,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             replies.Add(BossChallengeList());
             replies.AddRange(EntryConstants(now));
             replies.AddRange(EconomyAtEntry());
+            if (Store is not null) replies.Add(ContentTicketList(now));   // 0x610b (GameSession.ContentTickets.cs)
             replies.AddRange(AchieveSet("EquipItemLevel", EquipItemLevel(), now: now));
             if (fresh) { replies.AddRange(Achieve("LoginCharacter", now: now)); elapsedAchieveAt = now + 60_000; }
             replies.AddRange(CraftListsAtEntry());
@@ -3082,6 +3083,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         await FlushAchievementsAsync(now, ct);
         await FlushBossChallengeAsync(ct);
         await FlushContentTicketsAsync(ct);
+        replies.AddRange(ContentTicketUpdates());   // 0x610c for the tickets spent since the last tick
         // Play time: a minute at a time to the ElapsedTime achievements without a movement state (steps are minutes:
         // "Accumulate 3 hours of playtime" = 180). The ones naming states (Glide, Flying, Swimming) count their own minutes below.
         if (resources is not null && elapsedAchieveAt != 0 && now >= elapsedAchieveAt)

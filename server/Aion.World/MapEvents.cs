@@ -114,6 +114,8 @@ public sealed record DungeonInfo(
     [property: JsonPropertyName("max_member")] int MaxMember = 0,
     [property: JsonPropertyName("cube_boss")] int CubeBoss = 0,
     [property: JsonPropertyName("cube")] Dictionary<string, long[][]>? Cube = null,
+    // RewardOdEnergyCube.dat TicketName and ConsumeTicketCount: what opening the cube costs (build 26262663).
+    [property: JsonPropertyName("cube_ticket")] System.Text.Json.JsonElement[]? CubeTicket = null,
     [property: JsonPropertyName("quest_gate")] System.Text.Json.JsonElement[][]? QuestGate = null,
     [property: JsonPropertyName("reward_light")] long[][]? RewardLight = null,
     [property: JsonPropertyName("reward_dark")] long[][]? RewardDark = null,

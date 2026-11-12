@@ -2052,6 +2052,10 @@ var cubeReply = cubeReward.First(b => Op(b) == GameSession.CubeRewardRs);
 var cubeKina = staffStore.Items.Where(i => i.TemplateId == 930100001).Sum(i => i.Quantity);
 Check(BitConverter.ToUInt16(cubeReply, 2) == 0 && cubeReply[5] == 3 && cubeKina - kinaBeforeMid >= 50000,
       "the cube pays the final boss's and the killed mid boss's tables in one (0x5715; 084658 #62929: 25000 kina each)");
+Check(staffSession.ContentTicketCount(60000001, Now + 7270) == 540
+      && cubeReward.FindIndex(b => Convert.ToHexStringLower(b) == "0c61" + "00" + "04" + "01879303" + "9c04" + "03") is var energyAt and >= 0
+      && energyAt < cubeReward.FindIndex(b => Op(b) == GameSession.CubeRewardRs),
+      "the cube costs its ConsumeTicketCount: 20 of ticket 60000001 (560 -> 540), 0x610c reason 3 before the reply (084658 #62922)");
 await staffSession.HandleAsync(new PacketWriter().U16(GameSession.CubeRewardRq).U8(1).ToArray(), Now + 7280);
 Check(staffStore.Items.Where(i => i.TemplateId == 930100001).Sum(i => i.Quantity) == cubeKina, "asking again pays nothing more");
 staffSession.Copy!.DeadlineMs = Now + 7290;
@@ -2276,6 +2280,9 @@ Check((await staffSession.SetMasteryAsync("gather", 0, 5, default)) is [var gath
 // Titles: the entry list (official empty bytes), acquiring (0x567d, the owned stats), equipping by category (0x5680, the equip stats), the shown title (0x567b, 0x567c).
 Check(craftEntry.Any(b => b.SequenceEqual(Convert.FromHexString("79560000"))) && craftEntry.Any(b => b.SequenceEqual(Convert.FromHexString("5B8D000000010000"))),
       "world entry sends TitleList_NT 0x5679 and SkinInfo_NT 0x8d5b with the official empty layouts");
+Check(craftEntry.Single(b => Op(b) == GameSession.ContentsTicketsNt) is var ticketList
+      && Convert.ToHexStringLower(ticketList).StartsWith("0b614904010000000c0103000000808580010000000004040000000e000600000004070000001c04080000000701090000008085800100000000040a0000000e"),
+      "world entry lists the 73 content tickets (0x610b; tickets 1-10 byte-exact to 2026-11-06 084658 #1129: counts, full Time tickets, 6 empty)");
 var titled = await staffSession.AcquireTitleAsync(11010002, default);
 Check(titled.Count > 0 && titled[0].SequenceEqual(Convert.FromHexString("7D56" + "D2FFA700")) && staffSession.OwnedTitles.Contains(11010002) && staffSession.TitleStat("Critical") == 5
       && staffStore.Titles.Contains(11010002), "AcquireTitle 11010002: TitleAcquire_NT 0x567d, owned (saved), its StatList (Critical 5) applies");

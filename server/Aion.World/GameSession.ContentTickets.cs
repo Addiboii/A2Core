@@ -1,16 +1,24 @@
 using Aion.Application.Gameplay;
+using Aion.Protocol.Native;
 
 namespace Aion.World;
 
 // Entry tickets (ContentTicketTables; idea from A2Core PR #4, Artezianec). MapEntrance.dat ContentsTicketList names, per
 // dungeon, the tickets the entry checks and when it takes them (DeductType Enter at the entry, Clear at the clear; None and
 // Unclaimed take nothing here). Counted always for stored characters; the refusal is behind
-// GameSessionOptions.EnforceContentTickets (Native:EnforceContentTickets, default off). OURS: the rules above, no message to
-// the client: ContentsTickets_NT 0x610b is OBSERVED at world entry (the same 45-byte body for three new characters,
-// usmap {_tickets: [{_id, _remain_time i64, _remain_charge_time i64, _remain_count, _remain_charge_count}]}) but its
-// encoding is not settled, so it is not built from these counts yet.
+// GameSessionOptions.EnforceContentTickets (Native:EnforceContentTickets, default off). OURS: the rules above.
+// OBSERVED (community recordings 2026-11-04 to 06, reports/dungeons.md 6; all 31 0x610b and 43 0x610c consumed exactly):
+// ContentsTickets_NT 0x610b at world entry = count varint, then per ticket by id {mask u8, id i32, bit0 remain time i64 ms,
+// bit1 remain charge time i64, bit2 remain count varint, bit3 remain charge count varint}, a zero field left out (all 73
+// tickets of our table, in its order); ContentsTicketUpdate_NT 0x610c = mask u8, one ticket as above, reason u8 (3 spent).
+// The cube costs RewardOdEnergyCube ConsumeTicketCount of its ticket (KraoCave Easy 20, Normal 40, taken at the cube).
+// CANDIDATE: a Time ticket with a weekly or daily recharge shows full (max s as ms), one without shows nothing (as the
+// recording's fresh rows); time spent is not tracked. Not modelled: the charge count (the "(+n)" pool).
 public sealed partial class GameSession
 {
+    public const ushort ContentsTicketsNt = 0x610b, ContentsTicketUpdateNt = 0x610c;
+    const byte TicketSpent = 3;
+    readonly List<byte[]> contentTicketOut = [];
     static ContentTicketTables ContentTickets => ContentTicketTables.Embedded;
 
     /// <summary>Ticket id -> (count, at ms); no entry: full.</summary>
@@ -55,9 +63,62 @@ public sealed partial class GameSession
         foreach (var use in ContentTickets.UsesOf(dungeonId))
         {
             if (use.Deduct != moment || use.Count <= 0 || ContentTickets.Of(use.TicketId) is not { Counted: true }) continue;
-            contentTickets[use.TicketId] = (Math.Max(0, ContentTicketCount(use.TicketId, now) - use.Count), now);
-            contentTicketsDirty.Add(use.TicketId);
+            SpendTicket(use.TicketId, use.Count, now);
         }
+    }
+
+    /// <summary>Takes <paramref name="count"/> of a counted ticket (not below 0) and queues its 0x610c.</summary>
+    void SpendTicket(int ticketId, int count, long now)
+    {
+        contentTickets[ticketId] = (Math.Max(0, ContentTicketCount(ticketId, now) - count), now);
+        contentTicketsDirty.Add(ticketId);
+        if (ContentTickets.Of(ticketId) is { } ticket)
+            contentTicketOut.Add(WriteTicket(PacketWriter.Opcode(ContentsTicketUpdateNt).U8(0), ticket, now).U8(TicketSpent).ToArray());
+    }
+
+    /// <summary>One ticket as 0x610b/0x610c carry it: mask, id, then the fields the mask names.</summary>
+    PacketWriter WriteTicket(PacketWriter w, ContentTicketTables.Ticket ticket, long now)
+    {
+        long time = ticket.Type == "Time" && (ticket.Weekly is not null || ticket.Daily is not null) ? ticket.Max * 1000L : 0;
+        var count = ticket.Counted ? Math.Max(0, ContentTicketCount(ticket.Id, now)) : 0;
+        w.U8((byte)((time > 0 ? 1 : 0) | (count > 0 ? 4 : 0))).I32(ticket.Id);
+        if (time > 0) w.I64(time);
+        if (count > 0) w.Varint((uint)count);
+        return w;
+    }
+
+    /// <summary>ContentsTickets_NT 0x610b: every ticket of the table, by id.</summary>
+    byte[] ContentTicketList(long now)
+    {
+        var all = ContentTickets.All;
+        var w = PacketWriter.Opcode(ContentsTicketsNt).Varint((uint)all.Count);
+        foreach (var ticket in all) WriteTicket(w, ticket, now);
+        return w.ToArray();
+    }
+
+    /// <summary>The 0x610c updates queued since the last call.</summary>
+    List<byte[]> ContentTicketUpdates()
+    {
+        var updates = contentTicketOut.ToList();
+        contentTicketOut.Clear();
+        return updates;
+    }
+
+    /// <summary>
+    /// What the dungeon's cube costs (map-events.json cube_ticket: RewardOdEnergyCube TicketName, ConsumeTicketCount), taken when
+    /// it pays; false when not enough is left and EnforceContentTickets is on.
+    /// </summary>
+    bool PayCubeTicket(DungeonInfo room, long now)
+    {
+        if (room.CubeTicket is not [var name, var cost] || ContentTickets.ByName(name.GetString() ?? "") is not { Counted: true } ticket || Store is null) return true;
+        var count = cost.GetInt32();
+        if (ContentTicketCount(ticket.Id, now) < count)
+        {
+            if (options.EnforceContentTickets) return false;
+            Note($"cube: {ticket.Name} {ContentTicketCount(ticket.Id, now)} < {count} (not enforced)");
+        }
+        SpendTicket(ticket.Id, count, now);
+        return true;
     }
 
     async Task FlushContentTicketsAsync(CancellationToken ct)

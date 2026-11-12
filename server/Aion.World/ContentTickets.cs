@@ -52,6 +52,10 @@ public sealed class ContentTicketTables
 
     public static ContentTicketTables Embedded => embedded.Value;
     public Ticket? Of(int id) => tickets.GetValueOrDefault(id);
+    /// <summary>A ticket by its ContentsTicket.dat name.</summary>
+    public Ticket? ByName(string name) => tickets.Values.FirstOrDefault(t => t.Name == name);
+    /// <summary>Every ticket, by id (the order 0x610b lists them).</summary>
+    public IReadOnlyList<Ticket> All => [.. tickets.Values.OrderBy(t => t.Id)];
     public IReadOnlyList<Use> UsesOf(int dungeonId) => dungeons.GetValueOrDefault(dungeonId) ?? [];
 
     /// <summary>The count after the recharges between <paramref name="from"/> and <paramref name="to"/> (ms), capped at the maximum.</summary>

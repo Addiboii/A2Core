@@ -276,6 +276,7 @@ public sealed partial class GameSession
             return plain is null ? [] : [PacketWriter.Opcode(CubeRewardRs).U16(1).U8(0).Varint(0).ToArray()];
         if (!c.CubeTaken.TryGetValue(playerKey, out var items))
         {
+            if (!PayCubeTicket(room!, now)) return plain is null ? [] : [PacketWriter.Opcode(CubeRewardRs).U16(1).U8(0).Varint(0).ToArray()];
             items = RollRewards(table, rng);
             foreach (var mid in KilledMidBosses(c, room!))
                 if (room!.Cube!.GetValueOrDefault(mid.ToString(System.Globalization.CultureInfo.InvariantCulture)) is { } midTable)
@@ -284,7 +285,8 @@ public sealed partial class GameSession
             c.CubeTaken[playerKey] = items;
             pendingRewards.Add(items);
         }
-        var replies = await GrantPendingRewardsAsync(ct);
+        var replies = ContentTicketUpdates();   // the energy first (OBSERVED 0x610c before the items: 090856 #142335-#142341)
+        replies.AddRange(await GrantPendingRewardsAsync(ct));
         var writer = PacketWriter.Opcode(CubeRewardRs).U16(0).U8(1).Varint((uint)items.Count);
         foreach (var (item, count) in items) writer.I32(item).I32((int)Math.Min(count, int.MaxValue));
         return [.. replies, writer.ToArray()];
