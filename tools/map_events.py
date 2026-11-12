@@ -233,8 +233,9 @@ def _item_ids(catalog=CATALOG):
 
 
 def cube_rewards(names, cubes=CUBES, reward_items=REWARD_ITEMS, catalog=CATALOG):
-    """RewardOdEnergyCube name -> {'boss': final boss NpcData id, 'rewards': {npc id: [[item, prob of 1e8, min, max], ...]}}
-    (RewardCommon for the final boss, RewardMiddleBossList for the mid bosses; RewardItem rows resolved to Item ids)."""
+    """RewardOdEnergyCube name -> {'boss': final boss NpcData id, 'rewards': {npc id: [[item, prob of 1e8, min, max], ...]},
+    'ticket': [ContentsTicket name, ConsumeTicketCount]} (RewardCommon for the final boss, RewardMiddleBossList for the mid
+    bosses; RewardItem rows resolved to Item ids; TicketName / ConsumeTicketCount: what opening the cube costs)."""
     ids = _item_ids(catalog)
     tables = {}
     for row in _optional_rows(reward_items):
@@ -254,6 +255,8 @@ def cube_rewards(names, cubes=CUBES, reward_items=REWARD_ITEMS, catalog=CATALOG)
                 rewards[str(npc)] = tables[mid['RewardName']]
         if boss:
             out[row['Name']] = {'boss': boss, 'rewards': rewards}
+            if row.get('TicketName') and int(row.get('ConsumeTicketCount') or 0) > 0:
+                out[row['Name']]['ticket'] = [row['TicketName'], int(row['ConsumeTicketCount'])]
     return out
 
 
@@ -300,6 +303,8 @@ def dungeons(table=DUNGEONS, names=None, entrances=ENTRANCES, reward_dungeon=REW
         if cube:
             entry['cube_boss'] = cube['boss']
             entry['cube'] = cube['rewards']
+            if 'ticket' in cube:
+                entry['cube_ticket'] = cube['ticket']
         if row['Name'] in ARRIVAL_CUTSCENES:
             entry['arrival_cutscene'] = ARRIVAL_CUTSCENES[row['Name']]
         out[dungeon_id] = entry

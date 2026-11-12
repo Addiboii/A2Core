@@ -55,6 +55,9 @@ class MapEventTests(unittest.TestCase):
         self.assertEqual((krao['min_level'], krao['item_level'], krao['max_member']), (20, 200, 5))
         self.assertEqual(krao['cube_boss'], 2310171)
         self.assertEqual(krao['cube']['2310171'][1], [930100001, 100000000, 25000, 25000])
+        # RewardOdEnergyCube.dat TicketName / ConsumeTicketCount: what the cube costs (OBSERVED spent 20 / 40 in the 2026-11 recordings).
+        self.assertEqual(krao['cube_ticket'], ['reward_ticket_PartyDungeon_Common', 20])
+        self.assertEqual(data['dungeons']['600001']['cube_ticket'], ['reward_ticket_PartyDungeon_Common', 40])
         seal = data['dungeons']['310001']
         self.assertEqual((seal['type'], seal['hold'], seal['max_member']), ('Seal', 10, 1))
         self.assertIn(310001, data['served_maps'])
