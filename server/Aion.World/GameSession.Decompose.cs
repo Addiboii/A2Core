@@ -99,14 +99,16 @@ public sealed partial class GameSession
                     if (!await store.ConsumeItemAsync(character, item, revision, count, ct)) return [];
                 return await store.ConsumeAndGrantAsync(character, row.InstanceId, row.Revision, 1, rewards, ct) ? [[]] : [];
             });
-            if (ok.Count == 0) { await InventoryChangesAsync(ct, 0, 0); break; }
+            if (ok.Count == 0) { await LoadInventoryAsync(store, character, ct); break; }
             done++;
             all.AddRange(rewards);
-            // Later items see the new kina stacks and revisions.
-            if (costs.Count > 0) await InventoryChangesAsync(ct, IncreaseDecompose, DecreaseDecompose);
+            // Later items see the new kina stacks and revisions; the bag's snapshot stays, so the list below holds the whole batch.
+            if (costs.Count > 0) await LoadInventoryAsync(store, character, ct);
         }
         var merged = all.GroupBy(r => r.Item1).Select(g => (g.Key, g.Sum(r => r.Item2))).ToList();
-        return [Reply(done > 0 ? 0 : 1, done, merged), .. await InventoryChangesAsync(ct, IncreaseDecompose, DecreaseDecompose),
+        // One 0x561b for the batch before the reply (OBSERVED 2026-11-05 204306 #28311-#28312: 30 records, then 0x5641).
+        var changes = await InventoryChangesAsync(ct, IncreaseDecompose, DecreaseDecompose);
+        return [.. changes, Reply(done > 0 ? 0 : 1, done, merged),
             .. done > 0 ? Achieve("DecomposeItem", done) : []];   // the grade in the objective is not matched (OURS)
     }
 }

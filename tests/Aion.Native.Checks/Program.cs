@@ -2247,10 +2247,39 @@ staffStore.Items.Add(Stored(930100001, 5000, "bag", 10, 941));
 await staffSession.HandleAsync(new PacketWriter().U16(0x5610).ToArray(), Now + 7560);
 var dismantleKinaBefore = staffStore.Items.Where(i => i.TemplateId == 930100001).Sum(i => i.Quantity);
 var dismantled = await staffSession.HandleAsync(new PacketWriter().U16(GameSession.ItemDecomposeRq).U8(0).Varint(1).I64(940).ToArray(), Now + 7570);
-Check(Op(dismantled[0]) == GameSession.ItemDecomposeRs && BitConverter.ToUInt16(dismantled[0], 2) == 0x0260 && BitConverter.ToInt32(dismantled[0], 5) == 1
+var dismantleReply = dismantled.First(b => Op(b) == GameSession.ItemDecomposeRs);
+Check(BitConverter.ToUInt16(dismantleReply, 2) == 0x0260 && BitConverter.ToInt32(dismantleReply, 5) == 1
       && staffStore.Items.All(i => i.WireId != 940) && staffStore.Items.Where(i => i.TemplateId == 930100001).Sum(i => i.Quantity) == dismantleKinaBefore - 1000
       && DecomposeTables.Embedded.Of(110160001) is { Cost: 1000, Groups.Length: 2 },
       "ItemDecompose_RQ: the sword is gone, 1000 kina paid, the reply counts one dismantled item");
+// ItemModificationList 0x561b read back as GamePackets.WriteItem writes it: per record {type, key, item id, increase, decrease}.
+static List<(byte Type, long Key, int ItemId, byte Increase, byte Decrease)> ReadModifications(byte[] packet)
+{
+    var r = new PacketReader(packet) { Offset = 2 };
+    var mods = new List<(byte, long, int, byte, byte)>();
+    for (var n = r.Varint(); n > 0; n--)
+    {
+        var type = r.U8(); var detail = r.U8(); var key = r.I64(); var itemId = r.I32();
+        r.I64(); r.U8(); r.I32(); r.Bool(); r.String(); r.I64(); r.Bool();
+        if (detail == 1)
+        {
+            r.U8(); r.I32(); r.I32(); r.U8(); r.I32(); r.I32(); r.Bool(); r.U8();
+            r.Take(checked((int)r.Varint() * 7)); r.I64(); r.U8(); r.Take(checked((int)r.Varint() * 4));
+            for (var i = 0; i < 7; i++) r.Varint();
+            r.U8();
+        }
+        mods.Add((type, key, itemId, r.U8(), r.U8()));
+        r.U8();
+    }
+    return mods;
+}
+var dismantleMods = ReadModifications(dismantled.First(b => Op(b) == 0x561b));
+Check(dismantleMods.Any(m => m is { Type: 2, Key: 940, ItemId: 110160001, Decrease: 9 })
+      && dismantleMods.Any(m => m.ItemId == 930100001 && m.Decrease == 9)
+      && dismantleMods.Where(m => m.ItemId != 930100001 && m.Type != 2).All(m => m.Increase == 10) && dismantleMods.Any(m => m.Increase == 10),
+      "a dismantle removes with decrease reason 9 and adds the result with increase reason 10 (OBSERVED 2026-11-05 204306 #28311)");
+Check(dismantled.Count(b => Op(b) == 0x561b) == 1 && dismantled.FindIndex(b => Op(b) == 0x561b) < dismantled.IndexOf(dismantleReply),
+      "the dismantle's bag change is one 0x561b before the 0x5641 reply (OBSERVED 204306 #28311-#28312)");
 Check(BitConverter.ToUInt16((await staffSession.HandleAsync(new PacketWriter().U16(GameSession.ItemDecomposeRq).U8(0).Varint(1).I64(13).ToArray(), Now + 7580))[0], 2) == 0x0261,
       "a potion cannot be dismantled (result 1)");
 // Crafting at map 1010's Blacksmith worktable (2910003): recipe 115016001 (2 ore + 1 additive -> an ingot). A success
