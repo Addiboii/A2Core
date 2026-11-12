@@ -6,15 +6,16 @@ namespace Aion.World;
 // corpse for the killer (0x561e DropItem_NT, owner Player), who picks them up with 0x5620 ItemLooting_RQ:
 // the items are granted (stored), answered 0x5621 ItemLooting_RS per drop, removed with 0x561f
 // DropItemRemove_NT, and auto-use items (pet souls) are used at once. Unlooted drops vanish after
-// DropLifetimeMs. Opcodes: catalogue 340-343 + 0x54ca (the 0x56 run, OBSERVED around 0x5610/0x5612/0x5646);
-// layouts are the usmap structs, no official sample (CANDIDATE).
+// DropLifetimeMs. Layouts and order OBSERVED (community recordings 2026-11-04 to 06, see LootPackets).
 public sealed partial class GameSession
 {
     sealed record GroundDrop(int Key, long Uid, int ItemId, long Count, Vector3d Center, Vector3d At, long ExpiresAt);
 
     readonly Dictionary<long, GroundDrop> drops = [];
     int dropCounter;
-    public const int DropLifetimeMs = 60_000, FirstDropKey = 950_000;
+    /// <summary>The ownership expiry: drop time + 120 s (OBSERVED, 119-122 s over 183 drops). Unlooted drops vanish then
+    /// (OURS: other players' drops were seen to vanish earlier, by a rule not known).</summary>
+    public const int DropLifetimeMs = 120_000;
     /// <summary>A drop is picked up within this distance (cm), with room for latency.</summary>
     public const double LootRange = 1500;
     const byte IncreaseDropItemGet = 5;   // EIncreaseReason kDropItemGet
@@ -36,7 +37,7 @@ public sealed partial class GameSession
         foreach (var (item, count) in rolled)
         {
             dropCounter++;
-            var key = FirstDropKey + dropCounter % 40_000;
+            var key = target.Key;   // the corpse's key (OBSERVED: equal to the CharDie_NT key in all 85 cases in view)
             var uid = ((long)playerKey << 32) | (uint)dropCounter;
             var angle = rng.NextDouble() * 2 * Math.PI;
             var radius = 60 + rng.NextDouble() * 90;
@@ -44,9 +45,9 @@ public sealed partial class GameSession
             var drop = new GroundDrop(key, uid, item, count, target.Position, at, now + DropLifetimeMs);
             drops[uid] = drop;
             placed.Add(new DropItem(key, target.Position, at, uid, item, (int)Math.Min(int.MaxValue, count), selected?.WireId ?? playerKey,
-                now + DropLifetimeMs, (byte)profileRace));
+                now + DropLifetimeMs, LootPackets.AnyRace));
         }
-        return [LootPackets.DropItems(placed)];
+        return [.. placed.Select(d => LootPackets.DropItems([d]))];   // one drop per message (OBSERVED, 184 of 184)
     }
 
     /// <summary>0x5620 ItemLooting_RQ {array of drop uids (i64), auto looting bool}.</summary>
@@ -69,7 +70,7 @@ public sealed partial class GameSession
             var ok = drops.TryGetValue(uid, out var drop) && now < drop.ExpiresAt && !dead
                 && (position is not { } p || (p.X - drop.At.X) * (p.X - drop.At.X) + (p.Y - drop.At.Y) * (p.Y - drop.At.Y) <= LootRange * LootRange);
             if (ok) taken.Add(drop!);
-            else replies.Add(LootPackets.LootReply(1, uid, auto));
+            else replies.Add(LootPackets.LootReply(LootPackets.DropInvalidId, uid, auto));
         }
         if (taken.Count == 0) return replies;
         if (Store is { } store && CharacterId is { } character)
@@ -78,9 +79,13 @@ public sealed partial class GameSession
             if (granted.Count == 0) return [.. replies, .. taken.Select(d => LootPackets.LootReply(1, d.Uid, auto))];
         }
         foreach (var d in taken) drops.Remove(d.Uid);
-        replies.AddRange(taken.Select(d => LootPackets.LootReply(0, d.Uid, auto)));
-        replies.Add(LootPackets.DropsRemoved(taken.Select(d => (d.Key, d.Uid, (long)(selected?.WireId ?? playerKey), auto)).ToList()));
+        // OBSERVED order (2026-11-04 192703 i49919-49952): the bag changes first, then per drop its reply and its removal.
         replies.AddRange(await InventoryChangesAsync(ct, IncreaseDropItemGet, 0));
+        foreach (var d in taken)
+        {
+            replies.Add(LootPackets.LootReply(0, d.Uid, auto));
+            replies.Add(LootPackets.DropsRemoved([(d.Key, d.Uid, (long)(selected?.WireId ?? playerKey), auto)]));
+        }
         // Pet souls (and pets) are used as soon as they are acquired (Item.dat AutoUseWhenAcquire).
         foreach (var d in taken)
             if (Boxes.Use(d.ItemId) is { AutoUse: true, Effect: "GetVehicle" or "GetVehicleSoul" })
