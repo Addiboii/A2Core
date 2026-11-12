@@ -10,7 +10,8 @@ Item.dat (research/local/game-catalog-v2). Rebuild the tracked summary with
   GetVehicleSoul ([ride ID, count]), GetVehicleSoulCrystal ([ESoulCrystalType name, count]),
   Fix_VehicleCreatureLevel ([ECreatureType name, board level]), Skill ([item skill ID]: potions, food, drinks, scrolls),
   Telpo_Home (return scroll), GetKina/GetNonBindingKina ([amount]) and GetStigmaShard ([shards]: stigma shards,
-  tools/stigmas.py; GetStigmaShardSuperior stays out, superior shards buy nothing in SkillAcquireData).
+  tools/stigmas.py; GetStigmaShardSuperior stays out, superior shards buy nothing in SkillAcquireData),
+  GetSkillPoint ([points]: the Wisdom Stone) and GetDaevanionPoint ([EDaevanionPointType name, points]: the crystals).
 - cool: usable item ID -> [Cooltime ms, CoolTimeGroup, CastingTime ms (0 without NeedCasting)].
 - skills: item skill ID -> its effect rows [ESkillEffectType, EffectValueList...] (HpHeal_Item,
   HpHealRatio_Item, MpHeal_Item, FpHeal_Item, Abnormal_True ...).
@@ -48,7 +49,7 @@ TABLES = LOCAL / 'pet-tables-20261016'
 CATALOG = LOCAL / 'game-catalog-v2/entries.jsonl'
 MAP_EVENTS = ROOT / 'tools/data/map-events.json'
 EFFECTS = {'RewardBox', 'GetVehicle', 'GetVehicleSoul', 'GetVehicleSoulCrystal', 'Fix_VehicleCreatureLevel', 'Skill', 'Telpo_Home', 'GetKina', 'GetNonBindingKina',
-           'GetTitle', 'GetSkin', 'GetSkinSet', 'GetSocialAction', 'GetStigmaShard'}
+           'GetTitle', 'GetSkin', 'GetSkinSet', 'GetSocialAction', 'GetStigmaShard', 'GetSkillPoint', 'GetDaevanionPoint'}
 CRYSTALS = {'SoulCrystalFeral': 1, 'SoulCrystalIntellect': 2, 'SoulCrystalNature': 3, 'SoulCrystalTrans': 4, 'SoulCrystalSpecial': 5,
             'SoulCrystalAll': 6}   # usmap ESoulCrystalType
 CREATURES = {'Intellect': 2, 'Feral': 3, 'Nature': 4, 'Trans': 5, 'Special': 6}   # usmap ECreatureType

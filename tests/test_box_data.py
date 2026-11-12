@@ -41,6 +41,9 @@ class BoxDataTests(unittest.TestCase):
     def test_stigma_shard_item_gives_one_shard(self):
         # Item.dat 531900010 Charge_StigmaShardPoint_1_A_s_01a_b: UseEffect GetStigmaShard, UseEffectValues ["1"], AutoUseWhenAcquire.
         self.assertEqual(DATA['uses']['531900010'], ['GetStigmaShard', 1, '1'])
+        # The Wisdom Stone and the Daevanion Crystal (used in the community recording 2026-11-06 234912 i46425, i47691).
+        self.assertEqual(DATA['uses']['531900001'], ['GetSkillPoint', 0, '1'])
+        self.assertEqual(DATA['uses']['531900003'], ['GetDaevanionPoint', 0, 'DaevanionCrystal', '1'])
         # The superior shard (GetStigmaShardSuperior) buys nothing in SkillAcquireData and stays out.
         self.assertNotIn('531900027', DATA['uses'])
         self.assertEqual({u[0] for u in DATA['uses'].values() if 'Stigma' in u[0]}, {'GetStigmaShard'})
