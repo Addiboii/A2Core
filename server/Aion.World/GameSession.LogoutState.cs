@@ -10,8 +10,8 @@ namespace Aion.World;
 // - the flight gauge comes back as it was (FP 549067 of 650567 at #56821);
 // - abnormal 10002 for 5000 ms right after every world-entry 0x3633 (084658 #64332, 090856 #1392, 234912 #56810).
 // Stored in the character's settings ("logout_state", as seal_stone and presets), written by the forced checkpoints (logout,
-// lobby, disconnect). Not restored (yet): the in-air state (the official character comes back in flight with abnormal
-// 100000002; our server has no in-flight abnormal); HP/MP (not settled: full in every recording). CANDIDATE: what 10002 does
+// lobby, disconnect). Not restored (yet): the in-air state (the character comes back in flight with abnormal 100000002 in
+// those recordings; the abnormal is ours since GameSession.Flight.cs, but the air state is not saved); HP/MP (not settled: full in every recording). CANDIDATE: what 10002 does
 // (its SkillAbnormal row is not in our tables: only the icon shows).
 public sealed partial class GameSession
 {
