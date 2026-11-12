@@ -2120,8 +2120,9 @@ Check(openBoards.Count >= 1 && boardReward.Count >= 1, "the attendance boards of
 var checkedIn = await staffSession.HandleAsync(new PacketWriter().U16(GameSession.AttendanceRq).ToArray(), Now + 7490);
 Check(Op(checkedIn[0]) == GameSession.AttendanceRs && BitConverter.ToUInt16(checkedIn[0], 2) == 0 && checkedIn.Count(b => Op(b) == GameSession.AchievementCountUpdateNt) >= 1
       && openBoards.All(b => staffSession.AchievementCount(b.Achievement) == 1), "Attendance_RQ: day one on every open board (0x5684 updates)");
-Check(BitConverter.ToUInt16((await staffSession.HandleAsync(new PacketWriter().U16(GameSession.AttendanceRq).ToArray(), Now + 7491))[0], 2) == 1 && staffSession.AchievementCount(boardAch) == 1,
-      "a second check-in the same day is refused");
+var checkedAgain = await staffSession.HandleAsync(new PacketWriter().U16(GameSession.AttendanceRq).ToArray(), Now + 7491);
+Check(checkedAgain.Count == 1 && Convert.ToHexStringLower(checkedAgain[0]) == "4ee30000" && staffSession.AchievementCount(boardAch) == 1,
+      "a second check-in the same day: 0xe34e `0000` alone (as at every recorded entry), no day added");
 var rewardItemBefore = staffStore.Items.Where(i => i.TemplateId == boardReward[0].ItemId).Sum(i => i.Quantity);
 var rewardTaken = await staffSession.HandleAsync(new PacketWriter().U16(GameSession.TakeAchievementRewardRq).I32(boardAch).U8(1).ToArray(), Now + 7492);
 Check(BitConverter.ToUInt16(rewardTaken[0], 2) == 0 && staffStore.Items.Where(i => i.TemplateId == boardReward[0].ItemId).Sum(i => i.Quantity) == rewardItemBefore + boardReward[0].Count
@@ -2180,7 +2181,7 @@ var bossOut = await staffSession.TickAsync(Now + 40_001 + 30_000);
 Check(bossOut.Any(b => b[0] == 0x21 && b[1] == 0x36 && BitConverter.ToInt32(b, 6) == 1010) && staffSession.InstanceKey == 0, "after the 30 s hold the challenger leaves");
 await staffSession.HandleAsync(new PacketWriter().U16(0x3622).I32(1).ToArray(), Now + 40_002 + 30_000);
 // Battle pass: the groups active at the clock (none before 2025-11-19, the two Light global passes from 2026-09-30) are listed
-// at entry (0xe2bd); at a live clock a mission's completion pays its exp to the pass's exp achievement.
+// at entry (0xe324, OBSERVED in 161 recorded lists); at a live clock a mission's completion pays its exp to the pass's exp achievement.
 var passList = kraoEntered.First(b => Op(b) == GameSession.BattlePassInfoListNt);
 var activePasses = AchievementTables.Embedded.PassGroups.Where(g => g.Race is 0 or 1 && g.FromMs <= Now + 7200 && Now + 7200 <= g.ToMs).ToList();
 Check((int)new PacketReader(passList) { Offset = 2 }.Varint() == activePasses.Count, "BattlePassInfoList_NT at entry lists the groups active for the race at that time");
@@ -2189,6 +2190,9 @@ Check(AchievementTables.Embedded.PassGroups.Count(g => g.Race == 1 && g.FromMs <
       && AchievementTables.Embedded.Of(910430800) is { Type: "GatherSuccess" } gatherMission && gatherMission.Points(1) == 30,
       "in October 2026 two Light groups are active; the gather mission is worth 30 pass exp");
 Check(BitConverter.ToUInt16((await staffSession.HandleAsync(new PacketWriter().U16(GameSession.BattlePassPurchaseRq).I32(1).ToArray(), Now + 7495))[0], 2) == 1, "the paid pass is not sold (purchase refused)");
+var passClaim = await staffSession.HandleAsync(new PacketWriter().U16(GameSession.TakeBattlePassRewardRq).I32(20047).I32(820439000).U8(31).Varint(0).ToArray(), Now + 7496);
+Check(passClaim.Count == 1 && Convert.ToHexStringLower(passClaim[0]) == "23e3" + "0100" + "4f4e0000" + "d8e7e630" + "1f" + "00",
+      "TakeBattlePassReward: 0xe323 {result, group, achievement, step, empty map} alone (the recorded form, 163412 #894; refused here: not reached)");
 // Period collections: the official day (2026-10-13 15:00 UTC) opens the Light daily 5401317 (week 13, day 7), the weekly 5401321,
 // Craft and Boss; registering a list's target items pays its reward when the count is reached.
 var officialDay = 1791900000000L;

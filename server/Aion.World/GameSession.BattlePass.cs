@@ -8,11 +8,14 @@ namespace Aion.World;
 // completed mission step pays its AchievementReward.RewardPoint as pass exp (OURS: at completion, not on a claim) to
 // the exp achievement (type BattlePassExp, 101 steps = levels) of every pass of the group; level rewards come through
 // TakeAchievementReward on that achievement, the paid pass's only after a purchase (none is sold here).
-// BattlePassInfoList_NT 0xe2bd at entry, TakeBattlePassReward 0xe2bb/0xe2bc (acknowledged), BattlePassPurchase
-// 0xe2c6/0xe2c7 (refused): the 0xe2 run, bodies from the usmap (CANDIDATE). The weekly exp limit is not applied.
+// BattlePassInfoList_NT 0xe324 at entry, TakeBattlePassReward 0xe322/0xe323 (acknowledged), BattlePassPurchase
+// 0xe32d/0xe32e (refused). OBSERVED 0xe324 and 0xe323 in the community recordings 2026-11-04 to 06 (161 lists; claims
+// 163412 #893-894, 162114, 234912; reports/progression.md 4): the catalogue's 0xe3 run (base 0xdd6e), not 0xdd07; the
+// others by position (CANDIDATE). Bodies from the usmap; the list's third map, i32 and second bool are not decoded
+// (recorded: per-pass values, 1, true; we send none, 0, false). The weekly exp limit is not applied.
 public sealed partial class GameSession
 {
-    public const ushort BattlePassInfoListNt = 0xe2bd, TakeBattlePassRewardRq = 0xe2bb, TakeBattlePassRewardRs = 0xe2bc, BattlePassPurchaseRq = 0xe2c6, BattlePassPurchaseRs = 0xe2c7;
+    public const ushort BattlePassInfoListNt = 0xe324, TakeBattlePassRewardRq = 0xe322, TakeBattlePassRewardRs = 0xe323, BattlePassPurchaseRq = 0xe32d, BattlePassPurchaseRs = 0xe32e;
 
     List<AchievementTables.PassGroup> ActivePasses(long now) =>
         Achievements.PassGroups.Where(g => (g.Race == 0 || g.Race == profileRace) && g.FromMs <= now && now <= g.ToMs).ToList();
@@ -51,7 +54,10 @@ public sealed partial class GameSession
         return w.ToArray();
     }
 
-    /// <summary>0xe2bb TakeBattlePassReward_RQ {group, mission, step, map}: the mission's exp was paid at completion; the step is marked rewarded.</summary>
+    /// <summary>
+    /// 0xe322 TakeBattlePassReward_RQ {group, mission, step, map}: the mission's exp was paid at completion; the step is marked
+    /// rewarded. The reply alone, with an empty map (OBSERVED 163412 #894 `0000 4f4e0000 d8e7e630 1f 00`: no 0x5684 or 0xe324 follows).
+    /// </summary>
     List<byte[]> TakeBattlePassReward(byte[] plain, long now)
     {
         if (plain.Length < 11) return [];
@@ -61,8 +67,6 @@ public sealed partial class GameSession
         var state = achievements.GetValueOrDefault(achievementId);
         var ok = Achievements.Of(achievementId) is { } entry && state is not null && state.Count >= entry.StepCount(step) && state.RewardedStep < step;
         if (ok) { state!.RewardedStep = step; achievementDirty.Add(achievementId); }
-        var w = PacketWriter.Opcode(TakeBattlePassRewardRs).U16(ok ? 0 : 1).I32(groupId).I32(achievementId).U8(step).Varint(ok ? 1u : 0u);
-        if (ok) w.I32(achievementId).U8(step);
-        return ok ? [w.ToArray(), AchievementUpdate([achievementId]), BattlePassInfoList(now)] : [w.ToArray()];
+        return [PacketWriter.Opcode(TakeBattlePassRewardRs).U16(ok ? 0 : 1).I32(groupId).I32(achievementId).U8(step).Varint(0).ToArray()];
     }
 }

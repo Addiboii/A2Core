@@ -120,7 +120,9 @@ public sealed partial class GameSession
 {
     public const ushort AchievementListNt = 0x5683, AchievementCountUpdateNt = 0x5684, TakeAchievementRewardRq = 0x5685, TakeAchievementRewardRs = 0x5686,
         TakeAchievementGroupRewardRq = 0x5687, TakeAchievementGroupRewardRs = 0x5688, TakeAchievementRewardBatchRq = 0x5689, TakeAchievementRewardBatchRs = 0x568a,
-        AttendanceRq = 0xe2e6, AttendanceRs = 0xe2e7, CloseNpcAchievementRq = 0xe2c8, CloseNpcAchievementRs = 0xe2c9, CloseEnvObjAchievementRq = 0xe2ca, CloseEnvObjAchievementRs = 0xe2cb;
+        // The 0xe3 run (base 0xdd6e): Attendance_RS 0xe34e OBSERVED (`0000` 3-5 s after every world entry, 27 times, community
+        // recordings 2026-11-04 to 06; reports/progression.md 4); the requests and the close reports by position (CANDIDATE).
+        AttendanceRq = 0xe34d, AttendanceRs = 0xe34e, CloseNpcAchievementRq = 0xe32f, CloseNpcAchievementRs = 0xe330, CloseEnvObjAchievementRq = 0xe331, CloseEnvObjAchievementRs = 0xe332;
     const byte IncreaseAchievementReward = 2;   // EIncreaseReason (OBSERVED 2026-11-04 162844 #1508, next to 0x568a)
     static AchievementTables Achievements => AchievementTables.Embedded;
     static readonly HashSet<string> ListedCategories = new(StringComparer.OrdinalIgnoreCase) { "Achievement", "Unlock", "SeasonMissionUnlock" };
@@ -416,7 +418,10 @@ public sealed partial class GameSession
 
     // ---------- Attendance and the close reports ----------
 
-    /// <summary>0xe2e6 Attendance_RQ: today's check-in on every open board (one day per UTC day); result 1 when already checked in.</summary>
+    /// <summary>
+    /// 0xe34d Attendance_RQ: today's check-in on every open board (one day per UTC day). Answered `0000` every time (OBSERVED at
+    /// every entry, same-day relogs too).
+    /// </summary>
     List<byte[]> Attendance(long now)
     {
         var replies = new List<byte[]>();
@@ -427,7 +432,7 @@ public sealed partial class GameSession
             if (state is { UpdatedMs: > 0 } && state.UpdatedMs >= today && state.Count > 0) continue;
             replies.AddRange(Achieve("Attendance", 1, e => e.Id == board.Achievement, now));
         }
-        return [PacketWriter.Opcode(AttendanceRs).U16(replies.Count > 0 ? 0 : 1).ToArray(), .. replies];
+        return [PacketWriter.Opcode(AttendanceRs).U16(0).ToArray(), .. replies];
     }
 
     List<byte[]> CloseNpcAchievement(byte[] plain)
