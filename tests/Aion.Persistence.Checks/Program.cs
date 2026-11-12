@@ -130,6 +130,8 @@ await using(var source=NpgsqlDataSource.Create(connectionString))
     Check(!await game.SetStigmaLevelAsync(second,id,11240000,3,2),"stigma ownership");
     var stigmaState=await game.StigmasAsync(first,id);
     Check(stigmaState.Stigmas.Single()==new StigmaRecord(11240000,2) && stigmaState.ItemShards==0 && (await game.StigmasAsync(second,id)).Stigmas.Count==0,"stigma round trip");
+    Check(await game.SetStigmaLevelAsync(first,id,11080000,1,0) && !await game.SetStigmaLevelAsync(first,id,11080000,0,2) && await game.SetStigmaLevelAsync(first,id,11080000,0,1)
+          && (await game.StigmasAsync(first,id)).Stigmas.Single().SkillId==11240000,"a stigma reset to level 0 removes its row (compare-and-set on the level)");
     var item=bag.Items[0];
     Check(item.WireId>0,"starter item receives durable wire ID");
     Check(!await game.MoveItemAsync(second,id,item.InstanceId,item.Revision,null),"foreign item move denied");

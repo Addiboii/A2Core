@@ -60,14 +60,18 @@ static class StigmaChecks
         Check(glad.StigmaShardsLeft == 8, "level 30: 8 shards (Exp.dat BonusStigmaPoint)");
         var learn = await glad.HandleAsync(LevelUp(WrathWave), now);
         Check(learn.Count == 3 && learn[0].SequenceEqual(Convert.FromHexString("4038" + "0000" + Hex(WrathWave)))
-              && learn[1].SequenceEqual(GamePackets.AddSkillList(glad.PlayerKey, [(WrathWave, 1)], 3)) && learn[2].SequenceEqual(Shards(1))
+              && learn[1].SequenceEqual(Convert.FromHexString("0F38" + "01" + Hex(WrathWave) + "0101" + "0000000000" + "02")) && learn[2].SequenceEqual(Shards(1))
               && glad.StigmaLevel(WrathWave) == 1 && gladStore.StigmaRows[WrathWave] == 1,
-              "learning a stigma: 0x3840 result 0, AddSkillList 0x5101 (reason 3), 0x5105 StigmaShard 1 spent; saved at level 1");
+              "learning a stigma: 0x3840 result 0, SkillAdd_NT 0x380f (reason 2, as official #65042-65048), 0x5105 StigmaShard 1 spent; saved at level 1");
         var raise = await glad.HandleAsync(LevelUp(WrathWave), now);
         Check(raise.Count == 3 && raise[0][2] == 0 && Op(raise[1]) == 0x3813 && raise[1][^1] == 3 && raise[2].SequenceEqual(Shards(2))
               && glad.StigmaLevel(WrathWave) == 2 && gladStore.StigmaRows[WrathWave] == 2,
               "raising it: 0x3813 level 2 (reason 3), 2 shards spent; saved at level 2");
-        for (var i = 0; i < 4; i++) await glad.HandleAsync(LevelUp(WrathWave), now);   // levels 3-5 (1 each), 6 (2): 1 left
+        var steps = new List<List<byte[]>>();
+        for (var i = 0; i < 4; i++) steps.Add(await glad.HandleAsync(LevelUp(WrathWave), now));   // levels 3-5 (1 each), 6 (2): 1 left
+        Check(steps[2][0].SequenceEqual(Convert.FromHexString("0F38" + "01" + Hex(WrathWave + 10) + "0505" + "0000000000" + "06")) && Op(steps[2][1]) == 0x3840
+              && Op(steps[3][0]) == 0x3813 && BitConverter.ToInt32(steps[3][0], 3) == WrathWave + 10 && steps[3][0][^1] == 6 && Op(steps[3][1]) == 0x3840,
+              "level 5 adds the variant (skill + 10, 0x380f reason 6) before 0x3840; level 6 updates it (0x3813 reason 6), as official #67912");
         Check(glad.StigmaLevel(WrathWave) == 6 && glad.StigmaShardsLeft == 1, "levels 3-6 cost 1, 1, 1, 2 (1 shard left)");
         var broke = await glad.HandleAsync(LevelUp(WrathWave), now);
         Check(broke.Single().SequenceEqual(Convert.FromHexString("4038" + "0200" + Hex(WrathWave))) && glad.StigmaLevel(WrathWave) == 6 && gladStore.StigmaRows[WrathWave] == 6,
@@ -77,9 +81,8 @@ static class StigmaChecks
         var learnSecond = await glad.HandleAsync(LevelUp(BladeToss), now);
         Check(learnSecond[0][2] == 0 && glad.StigmaShardsLeft == 0 && (await glad.HandleAsync(LevelUp(FocusedBlock), now)).Single()[2] == 2,
               "a second stigma takes the last shard; a third is refused for shards (result 2)");
-        Check((await glad.HandleAsync(new PacketWriter().U16(GameSession.SkillLevelResetRq).U8(2).I32(0).ToArray(), now))[0][2] == 1
-              && (await glad.HandleAsync(new PacketWriter().U16(GameSession.SkillLevelDownRq).I32(WrathWave).ToArray(), now))[0][2] == 1
-              && glad.StigmaLevel(WrathWave) == 6, "lowering or resetting stigmas is refused (no price in the tables); nothing changes");
+        Check((await glad.HandleAsync(new PacketWriter().U16(GameSession.SkillLevelDownRq).I32(WrathWave).ToArray(), now))[0][2] == 1
+              && glad.StigmaLevel(WrathWave) == 6, "lowering a stigma one level is refused (the official window resets instead); nothing changes");
 
         // Slots: 20 and 21 open at level 30, 22 not; only learned stigmas of the class, one slot each.
         var slotted = await glad.HandleAsync(SlotSet(20, 4, WrathWave), now);
@@ -112,6 +115,14 @@ static class StigmaChecks
               "skill 0 clears the slot (official `00 0000 17 00 00000000`)");
         Check((await glad.HandleAsync(ContextSkill(22, 0, BladeToss), now)).Single()[3] == 1 && (await glad.HandleAsync(ContextSkill(3, 0, BladeToss), now)).Single()[3] == 1,
               "0x5607 keeps the stigma rules: the third slot is closed at level 30, a stigma goes only into a stigma slot");
+        Check(glad.StigmaReady(WrathWave + 10) && !glad.StigmaReady(WrathWave + 20) && !glad.StigmaReady(BladeToss + 10),
+              "the level-6 Wrath Wave casts as its variant (+10) from its slot; another level's variant or an unslotted stigma's is refused");
+        var stigmaReset = await glad.HandleAsync(new PacketWriter().U16(GameSession.SkillLevelResetRq).U8(2).I32(WrathWave).ToArray(), now);
+        Check(stigmaReset[0].SequenceEqual(Convert.FromHexString("1038" + Hex(WrathWave + 10)))
+              && stigmaReset[1].SequenceEqual(Convert.FromHexString("4438" + "0000" + "02" + Hex(WrathWave) + "01" + Hex(WrathWave) + "00" + "01" + "02" + "0700"))
+              && Op(stigmaReset[2]) == 0x3813 && stigmaReset[2][12] == 0 && stigmaReset[^1].SequenceEqual(Shards(1))
+              && glad.StigmaLevel(WrathWave) == 0 && !gladStore.StigmaRows.ContainsKey(WrathWave) && !glad.StigmaReady(WrathWave + 10),
+              "a stigma reset is free (official #64945): its variant deleted, 0x3844 level 0 with 7 shards refunded, 0x3813 level 0, 0x5105");
 
         // Ascension grade and character level gates (SkillAcquireData NeedAscensionGrade / NeedCharacterLevel).
         var (grade2, grade2Store, _) = await Enter(30, 2);
@@ -125,6 +136,7 @@ static class StigmaChecks
         var skillList = overEntry.First(b => Op(b) == 0x5100);
         Check(over.StigmaLevel(WrathWave) == 10 && overStore.StigmaRows[WrathWave] == 10 && over.StigmaShardsLeft < 0
               && skillList.AsSpan().IndexOf(Convert.FromHexString("01" + Hex(WrathWave) + "0A0A")) > 0
+              && skillList.AsSpan().IndexOf(Convert.FromHexString("01" + Hex(WrathWave + 20) + "0A0A")) > 0   // its level-10 variant (official 0x5100 #643)
               && overEntry.Any(b => b.SequenceEqual(Shards(15))),
               "world entry lists the saved level-10 stigma (0x5100) and its 15 shards spent; nothing is lowered or forgotten");
         Check((await over.HandleAsync(LevelUp(WrathWave), now)).Single()[2] == 2 && (await over.HandleAsync(LevelUp(BladeToss), now)).Single()[2] == 2
@@ -153,8 +165,9 @@ sealed partial class FakeStore
         Task.FromResult(new StigmaState(StigmaRows.Select(kv => new StigmaRecord(kv.Key, kv.Value)).ToList(), StigmaItemShards));
     public Task<bool> SetStigmaLevelAsync(Guid character, int skillId, int level, int expected, CancellationToken ct)
     {
-        if (StigmaRows.GetValueOrDefault(skillId) != expected || level < 1) return Task.FromResult(false);
-        StigmaRows[skillId] = level;
+        if (StigmaRows.GetValueOrDefault(skillId) != expected || level < 0 || level == 0 && expected == 0) return Task.FromResult(false);
+        if (level == 0) StigmaRows.Remove(skillId);
+        else StigmaRows[skillId] = level;
         return Task.FromResult(true);
     }
     public Task<bool> UseStigmaShardItemAsync(Guid character, Guid item, long revision, int shards, CancellationToken ct)

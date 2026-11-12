@@ -121,8 +121,8 @@ public sealed partial class GameSession
             foreach (var id in reset) w.I32(id).U8((byte)KitSkillLevel(id));
             return w.Varint(1).U8(SkillPointTypePoint).U16(Math.Max(0, spentBefore - SpentSkillPoints())).ToArray();
         }
-        // A stigma reset (ESkillAcquireType Stigma) is not served (GameSession.Stigmas.cs) and never touches the bought levels.
-        if (acquireType == StigmaAcquireType) return [Reply(1, [])];
+        // A stigma reset (ESkillAcquireType Stigma) is the stigmas' own (GameSession.Stigmas.cs) and never touches the bought levels.
+        if (acquireType == StigmaAcquireType) return await StigmaResetAsync(skillId, ct);
         if (targets.Count == 0) return [Reply(1, [])];
         var updates = new List<byte[]>();
         foreach (var id in targets)

@@ -27,11 +27,14 @@ public sealed partial class PostgresGameplayStore
 
     public async Task<bool> SetStigmaLevelAsync(VerifiedAccount account, Guid character, int skillId, int level, int expected, CancellationToken ct=default)
     {
-        if(skillId<=0 || level is <1 or >StigmaLevelBound || expected<0 || expected>StigmaLevelBound) throw new GameplayException("invalid_stigma_level");
+        if(skillId<=0 || level is <0 or >StigmaLevelBound || expected<0 || expected>StigmaLevelBound || level==0 && expected==0) throw new GameplayException("invalid_stigma_level");
         await using var c=await source.OpenConnectionAsync(ct); await using var t=await c.BeginTransactionAsync(ct);
         if(!await Own(c,t,account.AccountId,character,ct)) return false;
+        // Level 0 is a reset (the stigma forgotten, its shards back): the row goes.
         var set=expected==0
             ? await Scalar(c,t,"INSERT INTO game.character_stigmas(character_id,skill_id,level) VALUES($1,$2,$3) ON CONFLICT DO NOTHING RETURNING skill_id",ct,character,skillId,level) is int
+            : level==0
+            ? await Scalar(c,t,"DELETE FROM game.character_stigmas WHERE character_id=$1 AND skill_id=$2 AND level=$3 RETURNING skill_id",ct,character,skillId,expected) is int
             : await Scalar(c,t,"UPDATE game.character_stigmas SET level=$3,updated_at=now() WHERE character_id=$1 AND skill_id=$2 AND level=$4 RETURNING skill_id",ct,character,skillId,level,expected) is int;
         if(!set) return false;
         await t.CommitAsync(ct); return true;

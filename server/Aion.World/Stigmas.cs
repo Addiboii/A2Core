@@ -24,6 +24,7 @@ public sealed class StigmaTables
         [property: JsonPropertyName("shards")] Dictionary<string, int> Shards,
         [property: JsonPropertyName("slot_max")] Dictionary<string, int> SlotMax,
         [property: JsonPropertyName("slots")] int[] Slots,
+        [property: JsonPropertyName("variants")] Dictionary<string, int[][]>? Variants,
         [property: JsonPropertyName("skills")] Dictionary<string, SkillDefinition> Skills,
         [property: JsonPropertyName("projectile_speeds")] Dictionary<string, int>? ProjectileSpeeds = null);
 
@@ -32,12 +33,15 @@ public sealed class StigmaTables
 
     readonly File file;
     readonly Dictionary<int, string> owner = [];
+    readonly Dictionary<int, int> variantBase = [];
 
     StigmaTables(File file)
     {
         this.file = file;
         foreach (var (cls, entry) in file.Classes)
             foreach (var skill in entry.Skills) owner[skill] = cls;
+        foreach (var (stigma, steps) in file.Variants ?? [])
+            foreach (var step in steps) variantBase[step[1]] = int.Parse(stigma, CultureInfo.InvariantCulture);
     }
 
     static readonly Lazy<StigmaTables> embedded = new(() =>
@@ -85,6 +89,16 @@ public sealed class StigmaTables
 
     /// <summary>Whether a stigma quick slot is open at a character level (slot N open once the slot maximum reaches N, CANDIDATE).</summary>
     public bool SlotOpen(int quickSlot, int characterLevel) => Array.IndexOf(file.Slots, quickSlot) is >= 0 and var index && index < OpenSlots(characterLevel);
+
+    /// <summary>
+    /// The skill the client casts for a stigma at a level: from level 5 a variant (id + 10 at 5-9, + 20 at 10-14, + 30 at 15-19,
+    /// + 40 at 20; OBSERVED rule, community recordings 2026-11-05/06), else 0 (the stigma itself).
+    /// </summary>
+    public int Variant(int stigma, int level) =>
+        file.Variants?.GetValueOrDefault(Key(stigma)) is { } steps ? steps.Where(s => s[0] <= level).Select(s => s[1]).LastOrDefault() : 0;
+
+    /// <summary>The stigma a variant belongs to, or null for any other skill.</summary>
+    public int? StigmaOfVariant(int skillId) => variantBase.TryGetValue(skillId, out var stigma) ? stigma : null;
 
     /// <summary>Cast data of a stigma skill (or a chain step it offers), as class-skills.json has it for the class skills.</summary>
     public SkillDefinition? Skill(int skillId) => file.Skills.GetValueOrDefault(Key(skillId));
