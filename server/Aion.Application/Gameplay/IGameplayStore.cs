@@ -55,6 +55,8 @@ public sealed record BossChallengeRecord(int GroupId, int ClearLevel, long BestP
 public sealed record ContentTicketRecord(int TicketId, int Remaining, DateTimeOffset UpdatedAt);
 /// <summary>A stigma skill learned with shards and the level it reached (migration 072).</summary>
 public sealed record StigmaRecord(int SkillId, int Level);
+/// <summary>One manastone slot of an item (upgrades.magicstones): the stone, its EStat id and grade (1-3).</summary>
+public sealed record MagicStoneSlot(int StoneId, int Stat, int Grade);
 /// <summary>A part equipped on a mastery skill's specialisation slot (migration 078).</summary>
 public sealed record SkillPartRecord(int SkillId, int Slot, int PartId);
 /// <summary>A character's stigmas and the shards its GetStigmaShard items gave (on top of Exp.dat's total for its level).</summary>
@@ -279,6 +281,12 @@ public interface IGameplayStore
     /// </summary>
     Task<bool> EnchantItemAsync(VerifiedAccount account, Guid character, Guid item, long revision,
         IReadOnlyList<(Guid Item, long Revision, int Count)> costs, int level, int bonus, CancellationToken ct = default);
+    /// <summary>
+    /// A manastone imprint, all or nothing: the costs (stone, Kinah) are consumed and the item (at its revision) gets
+    /// upgrades.magicstones = the rolled slots.
+    /// </summary>
+    Task<bool> ImprintItemAsync(VerifiedAccount account, Guid character, Guid item, long revision,
+        IReadOnlyList<(Guid Item, long Revision, int Count)> costs, IReadOnlyList<MagicStoneSlot> slots, CancellationToken ct = default) => Task.FromResult(false);
     Task<JsonElement> AdminAsync(VerifiedAccount actor, AdminCommand command, CancellationToken ct = default);
     /// <summary>The account's own character ascends by play (the HQ1101020 turn-in): the grade rises to <paramref name="grade"/>, never falls.</summary>
     Task<bool> AscendAsync(VerifiedAccount account, Guid character, int grade, CancellationToken ct = default) => Task.FromResult(false);

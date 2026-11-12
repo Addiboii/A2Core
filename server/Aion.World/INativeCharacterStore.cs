@@ -141,6 +141,8 @@ public interface INativeCharacterStore : IAsyncDisposable
     Task<bool> SoulBindItemAsync(Guid character, Guid item, byte count, CancellationToken ct);
     Task<bool> EnchantItemAsync(Guid character, Guid item, long revision, IReadOnlyList<(Guid Item, long Revision, int Count)> costs, int level, int bonus,
         CancellationToken ct) => Task.FromResult(false);
+    Task<bool> ImprintItemAsync(Guid character, Guid item, long revision, IReadOnlyList<(Guid Item, long Revision, int Count)> costs,
+        IReadOnlyList<MagicStoneSlot> slots, CancellationToken ct) => Task.FromResult(false);
     Task<IReadOnlyList<QuestRecord>> QuestsAsync(Guid character, CancellationToken ct);
     Task<QuestRecord> SaveQuestAsync(Guid character, QuestRecord quest, CancellationToken ct);
     Task<bool> RemoveQuestAsync(Guid character, string code, CancellationToken ct);

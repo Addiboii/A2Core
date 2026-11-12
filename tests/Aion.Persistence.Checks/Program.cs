@@ -259,6 +259,14 @@ await using(var source=NpgsqlDataSource.Create(connectionString))
     Check(await game.SoulBindItemAsync(first,id,bagItem.InstanceId,1) && (await game.InventoryAsync(first,id))!.Items.Single(x=>x.InstanceId==bagItem.InstanceId).Upgrades.GetProperty("soul_bind").GetInt32()==1,"a soul bind is stored on the item");
     Check(!await game.ExchangeAsync(first,id,[(bagItem.InstanceId,bagItem.Quantity)],second,staffChar,[]),"soul-bound items are not traded");
     Check(!await game.SoulBindItemAsync(second,id,bagItem.InstanceId,1),"another account cannot bind the item");
+    // Manastones: upgrades.magicstones written at the item's revision, beside the soul bind; stale or foreign refused.
+    var bound=(await game.InventoryAsync(first,id))!.Items.Single(x=>x.InstanceId==bagItem.InstanceId);
+    MagicStoneSlot[] rolled=[new(531360001,199,2),new(531360001,307,1)];
+    Check(!await game.ImprintItemAsync(second,id,bound.InstanceId,bound.Revision,[],rolled) && !await game.ImprintItemAsync(first,id,bound.InstanceId,bound.Revision+1,[],rolled),
+          "imprint: another account or a stale revision is refused");
+    Check(await game.ImprintItemAsync(first,id,bound.InstanceId,bound.Revision,[],rolled) && (await game.InventoryAsync(first,id))!.Items.Single(x=>x.InstanceId==bagItem.InstanceId) is var stoned
+          && stoned.Upgrades.GetProperty("magicstones").EnumerateArray().SelectMany(s=>s.EnumerateArray()).Select(v=>v.GetInt32()).SequenceEqual([531360001,199,2,531360001,307,1]) && stoned.Upgrades.GetProperty("soul_bind").GetInt32()==1,
+          "imprint: the slots stored on the item, its soul bind kept");
     Check(await game.EngraveTeleportArtifactAsync(first,id,1051035) && !await game.EngraveTeleportArtifactAsync(first,id,1051035)
           && (await game.TeleportArtifactsAsync(first,id))!.SequenceEqual([1051035]) && await game.TeleportArtifactsAsync(second,id) is null,"a Kibelisk is engraved once, readable by its owner only");
     // World-map fog: groups stored once each, new ones reported.

@@ -3323,6 +3323,18 @@ sealed partial class FakeStore : INativeCharacterStore
         Items[index] = Items[index] with { Upgrades = System.Text.Json.JsonSerializer.SerializeToElement(new { enchant = level, enchant_bonus = bonus }), Revision = revision + 1 };
         return Task.FromResult(true);
     }
+    public Task<bool> ImprintItemAsync(Guid character, Guid item, long revision, IReadOnlyList<(Guid Item, long Revision, int Count)> costs,
+        IReadOnlyList<MagicStoneSlot> slots, CancellationToken ct)
+    {
+        var index = Items.FindIndex(i => i.InstanceId == item && i.Revision == revision);
+        if (index < 0 || costs.Any(c => !Items.Any(i => i.InstanceId == c.Item && i.Revision == c.Revision && i.Quantity >= c.Count))) return Task.FromResult(false);
+        foreach (var (cost, costRevision, count) in costs) Consume(cost, costRevision, count);
+        index = Items.FindIndex(i => i.InstanceId == item);
+        var upgrades = System.Text.Json.Nodes.JsonNode.Parse(Items[index].Upgrades.ValueKind == System.Text.Json.JsonValueKind.Object ? Items[index].Upgrades.GetRawText() : "{}")!.AsObject();
+        upgrades["magicstones"] = System.Text.Json.JsonSerializer.SerializeToNode(slots.Select(s => new[] { s.StoneId, s.Stat, s.Grade }));
+        Items[index] = Items[index] with { Upgrades = System.Text.Json.JsonSerializer.SerializeToElement(upgrades), Revision = revision + 1 };
+        return Task.FromResult(true);
+    }
     bool Consume(Guid item, long revision, int count)
     {
         var index = Items.FindIndex(i => i.InstanceId == item && i.Revision == revision && i.Location == "bag" && i.Quantity >= count);

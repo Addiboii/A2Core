@@ -176,6 +176,13 @@ public sealed partial class ServiceNativeCharacterStore(string token, WorldIdent
         return await game.EnchantItemAsync(identity.Account, character, item, revision, costs, level, bonus, ct);
     }
 
+    public async Task<bool> ImprintItemAsync(Guid character, Guid item, long revision, IReadOnlyList<(Guid Item, long Revision, int Count)> costs,
+        IReadOnlyList<MagicStoneSlot> slots, CancellationToken ct)
+    {
+        await ValidateAsync(ct);
+        return await game.ImprintItemAsync(identity.Account, character, item, revision, costs, slots, ct);
+    }
+
     public async Task<GuildView?> GuildOfAsync(Guid character, CancellationToken ct)
     {
         await ValidateAsync(ct);
