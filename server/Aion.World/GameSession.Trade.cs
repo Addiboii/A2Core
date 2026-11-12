@@ -125,7 +125,7 @@ public sealed partial class GameSession
         var open = list.Where(p => !p.Taken).ToList();
         var w = PacketWriter.Opcode(PushRewardInfoRs).U16(0).I64(now + 3_600_000).Varint(open.Count);
         foreach (var p in open)
-            w.U8(p.Type).I32(p.Id).U8(0).String(p.Sender).String(p.Title).String(p.Body).I64(p.Sent.ToUnixTimeMilliseconds()).I64(p.Expire.ToUnixTimeMilliseconds())
+            w.U8(p.Type).I32(p.Id).U8(1).String(p.Sender)   // sequence 1 in every official entry (9 lists, 2026-11-04 to 06).String(p.Title).String(p.Body).I64(p.Sent.ToUnixTimeMilliseconds()).I64(p.Expire.ToUnixTimeMilliseconds())
                 .I32(p.TemplateId).I64(p.Count);
         return [w.ToArray()];
     }
@@ -137,7 +137,8 @@ public sealed partial class GameSession
         if (Economy is { } economy)
             await Stored(async () => { reward = await economy.TakePushRewardAsync(Me, id, DateTimeOffset.FromUnixTimeMilliseconds(now), ct); return []; });
         var rs = PacketWriter.Opcode(PushRewardTakeRs).U16(reward is null ? 1 : 0).U8(type).I32(id).U8(sequence).I32(reward?.TemplateId ?? 0).I64(reward?.Count ?? 0).ToArray();
-        // Increase reason 22 (OBSERVED 2026-11-06 234912 #124322; 24 before).
-        return reward is null ? [rs] : [rs, .. await InventoryChangesAsync(ct, 22, 0), PacketWriter.Opcode(PushRewardChangedNt).ToArray()];
+        // The bag change first with increase reason 22, then the reply; no 0xe34a follows (OBSERVED 2026-11-06 234912 i124322-124323,
+        // 8 takes).
+        return reward is null ? [rs] : [.. await InventoryChangesAsync(ct, 22, 0), rs];
     }
 }

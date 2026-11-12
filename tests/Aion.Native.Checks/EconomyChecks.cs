@@ -166,6 +166,15 @@ static class EconomyChecks
         var summary = await session.HandleAsync(new PacketWriter().U16(GameSession.TradeSummaryRq).I32(83).ToArray(), now);
         Check(Is(summary[0], GameSession.TradeSummaryRs) && BitConverter.ToInt32(summary[0], 4) == 1, "TradeGetSummary: one active listing");
         store.GuildRow = null;
+        // Gift box: listed with sequence 1; taking it sends the bag change (increase 22) before 0xe347 and no 0xe34a (official 234912 i124322-124323).
+        var giftAt = DateTimeOffset.FromUnixTimeMilliseconds(now);
+        store.PushRewards.Add(new PushRewardRecord(4401, 1, "s", "t", "b", 530126003, 3, giftAt.AddHours(-1), giftAt.AddDays(1), false));
+        var gifts = await session.HandleAsync(new PacketWriter().U16(GameSession.PushRewardInfoRq).ToArray(), now);
+        Check(Is(gifts[0], GameSession.PushRewardInfoRs) && gifts[0][12] == 1 && gifts[0][13] == 1 && BitConverter.ToInt32(gifts[0], 14) == 4401 && gifts[0][18] == 1,
+              "RetrievePushRewardInfo lists the gift with sequence 1");
+        var gift = await session.HandleAsync(new PacketWriter().U16(GameSession.PushRewardTakeRq).U8(1).I32(4401).U8(1).ToArray(), now);
+        Check(gift.Count == 2 && Is(gift[0], 0x561b) && gift[0][^3] == 22 && Is(gift[1], GameSession.PushRewardTakeRs) && Result(gift[1]) == 0
+              && store.Items.Any(i => i.TemplateId == 530126003 && i.Quantity == 3), "TakePushReward: 0x561b (increase 22), then 0xe347; no 0xe34a");
         return checks;
     }
 }
@@ -440,6 +449,18 @@ sealed partial class FakeStore : INativeEconomyStore
             return Task.FromResult<long?>(kina);
         }
     }
-    public Task<IReadOnlyList<PushRewardRecord>> PushRewardsAsync(Guid character, DateTimeOffset now, CancellationToken ct) => Task.FromResult<IReadOnlyList<PushRewardRecord>>([]);
-    public Task<PushRewardRecord?> TakePushRewardAsync(Guid character, int id, DateTimeOffset now, CancellationToken ct) => Task.FromResult<PushRewardRecord?>(null);
+    public List<PushRewardRecord> PushRewards { get; } = [];
+    public Task<IReadOnlyList<PushRewardRecord>> PushRewardsAsync(Guid character, DateTimeOffset now, CancellationToken ct) =>
+        Task.FromResult<IReadOnlyList<PushRewardRecord>>(PushRewards.Where(p => !p.Taken && p.Expire > now).ToList());
+    public Task<PushRewardRecord?> TakePushRewardAsync(Guid character, int id, DateTimeOffset now, CancellationToken ct)
+    {
+        lock (economyLock)
+        {
+            var i = PushRewards.FindIndex(p => p.Id == id && !p.Taken && p.Expire > now);
+            if (i < 0) return Task.FromResult<PushRewardRecord?>(null);
+            PushRewards[i] = PushRewards[i] with { Taken = true };
+            Items.Add(new ItemState(Guid.NewGuid(), "b", PushRewards[i].TemplateId, PushRewards[i].Count, "bag", null, 1, NoUpgrades, NoUpgrades, NextWire()));
+            return Task.FromResult<PushRewardRecord?>(PushRewards[i]);
+        }
+    }
 }
