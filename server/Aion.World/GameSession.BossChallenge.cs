@@ -107,7 +107,7 @@ public sealed partial class GameSession
         var hp = Combat.HpFor(spawn);
         targets[BossChallengeKey] = new Target
         {
-            Key = BossChallengeKey, Name = spawn.Name, Hp = hp, HpMax = hp, Position = new Vector3d(at[0], at[1], at[2]), NpcId = spawn.NpcId, Level = spawn.Level,
+            Key = BossChallengeKey, Name = spawn.Name, Hp = hp, HpMax = hp, Position = new Vector3d(at[0], at[1], at[2]), NpcId = spawn.NpcId, Level = spawn.Level, Grade = spawn.Grade,
             Direction = at[3], Relationship = 6, Aggressive = true, WalkSpeed = spawn.WalkSpeed, RunSpeed = spawn.RunSpeed, Radius = spawn.Radius, Function = spawn.Function,
             Aggro = spawn.Aggro, Skills = spawn.Skills ?? [], NoRotation = spawn.NoRotation, Air = spawn.Air, AirMonster = spawn.Air && spawn.SubType.EndsWith("Monster", StringComparison.Ordinal), DamageScale = Combat.DamageScale(spawn.SubType, spawn.Grade),
         };

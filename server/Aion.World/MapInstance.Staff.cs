@@ -73,7 +73,7 @@ public sealed partial class MapInstance
             var target = new Target
             {
                 Key = key, Name = template.Name, Hp = hp, HpMax = hp, Position = at with { X = at.X + Math.Cos(angle) * offset, Y = at.Y + Math.Sin(angle) * offset },
-                NpcId = template.NpcId, Level = template.Level, Direction = 0, Relationship = template.Relationship, Aggressive = template.Aggressive,
+                NpcId = template.NpcId, Level = template.Level, Grade = template.Grade, Direction = 0, Relationship = template.Relationship, Aggressive = template.Aggressive,
                 WalkSpeed = template.WalkSpeed, RunSpeed = template.RunSpeed, Radius = template.Radius, Function = template.Function,
                 Aggro = template.Aggro, Skills = template.Skills ?? [], NoRotation = template.NoRotation, Air = template.Air, AirMonster = template.Air && template.SubType.EndsWith("Monster", StringComparison.Ordinal), DamageScale = Combat.DamageScale(template.SubType, template.Grade),
             };

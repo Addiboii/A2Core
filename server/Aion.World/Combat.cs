@@ -13,6 +13,8 @@ public sealed class Target
     public Vector3d Position { get; set; }
     public int NpcId { get; init; }
     public int Level { get; init; } = 1;
+    /// <summary>NpcData Grade (1-5; 3 the common one): kill experience follows it.</summary>
+    public int Grade { get; init; } = 3;
     public double Direction { get; set; }
     public int Relationship { get; set; } = 6;   // ERelationshipEntity (6 Monster); map events change it
     /// <summary>Held by a scripted abnormal (stun, hold, stone): it neither moves nor attacks until released.</summary>
@@ -186,7 +188,7 @@ public static class Combat
             targets[key] = new Target
             {
                 Key = key, Name = spawn.Name, Hp = hp, HpMax = hp, Position = new Vector3d(spawn.Position[0], spawn.Position[1], spawn.Position[2]),
-                NpcId = spawn.NpcId, Level = spawn.Level, Direction = spawn.Yaw, Relationship = spawn.Relationship,
+                NpcId = spawn.NpcId, Level = spawn.Level, Grade = spawn.Grade, Direction = spawn.Yaw, Relationship = spawn.Relationship,
                 Aggressive = spawn.Aggressive, WalkSpeed = spawn.WalkSpeed, RunSpeed = spawn.RunSpeed, Radius = spawn.Radius,
                 Function = spawn.Function, Aggro = spawn.Aggro, Skills = spawn.Skills ?? [], NoRotation = spawn.NoRotation,
                 UniqueKey = spawn.UniqueKey, SocialAction = spawn.SocialAction, SocialStart = spawn.SocialAction != 0 ? StartedAt : 0, Route = spawn.Route,

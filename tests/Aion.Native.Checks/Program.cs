@@ -554,20 +554,40 @@ dummy.Hp = 1;
 game.SetResource('H', 100);
 var kill = await game.HandleAsync(Cast(basic, Combat.TrainingDummyKey, pos), Now + 100000);
 Check(dummy.Dead && kill.Any(b => b.SequenceEqual(GamePackets.NpcHp(Combat.TrainingDummyKey, 0))), "HP 0 is the kill");
-// Kill experience: the level-10 dummy gives NeedExp(10) / 25 x 1.5 (5 levels above or more) to a level-1
-// character: enough for level 2 (NeedExp(1) 1133), the rest stays (held per level).
-var killExp = (long)Math.Round(data.NeedExp(10) / 25.0 * 1.5);
-var expLeft = killExp - data.NeedExp(1);
-Check(game.Level == 2 && game.Experience == expLeft && kill.Any(b => b.SequenceEqual(GamePackets.ExpUpdate(expLeft, killExp, 1)))
-      && kill.Any(b => b.SequenceEqual(GamePackets.LevelUpdate(2, 2, expLeft))) && !kill.Any(b => Op(b) == 0x8d91)
-      && kill.FindIndex(b => b[0] == 0x07 && b[1] == 0x8d) < kill.FindIndex(b => b[0] == 0x08 && b[1] == 0x8d)
-      && game.Resource.Hp == 100 && game.Resource.HpMax > 100,
-      "a kill gives experience (0x8d07 reason 1) and levels up: 0x8d08 and stats; no own 0x8d91, HP not refilled (as recorded 2026-10-13/19)");
-Check(game.KillExperience(1) == (long)Math.Round(data.NeedExp(1) / 25.0 * 0.9) && game.KillExperience(-5) >= 0 && new GameSession(data, new GameSessionOptions { CharacterLevel = 30 }, new Random(1)).KillExperience(10) == 0,
-      "weaker mobs give less, none 10+ levels below");
+Check(game.Level == 1 && game.Experience == 0 && !kill.Any(b => Op(b) == 0x8d07), "a level-1 character gets no kill experience (none below level 10, as recorded)");
+// Kill experience (GameSession.Experience.cs): grade 3 pays 390.8 x 1.085^level, grades 1/2/4 5/13, 8/13, 18/13 of it, less by
+// the level gap from +6, nothing below own level 10 or inside an instance.
+Check(GameSession.KillReward(10, 10, 3, false) == 884 && GameSession.KillReward(36, 25, 3, false) == 300
+      && Near(GameSession.KillReward(30, 25, 3, false), 2998) && Near(GameSession.KillReward(30, 25, 2, false), 1845) && Near(GameSession.KillReward(39, 34, 4, false), 8650)
+      && GameSession.KillReward(9, 9, 3, false) == 0 && GameSession.KillReward(45, 40, 3, true) == 0 && GameSession.KillReward(10, 30, 3, false) == GameSession.KillReward(30, 30, 3, false),
+      "kill rewards: 300 for a level-25 grade 3 monster 11 levels below (OBSERVED 2026-11-05 190433), within 0.25 % of the fork's recorded level 25 grade 2/3 and level 34 grade 4 values, none below 10 or in an instance, full for stronger monsters");
+static bool Near(long value, long recorded) => Math.Abs(value - recorded) <= recorded * 0.0025;
+Check(GameSession.GapFactor(5) == 1 && GameSession.GapFactor(7) == 0.6 && GameSession.GapFactor(9) == 0.2 && GameSession.GapFactor(24) == 0.1 && GameSession.GapFactor(-6) == 1,
+      "the level gap: full to +5, 0.6/0.4/0.2 at +7/+8/+9, 0.1 from +10, full for stronger monsters");
+// A level-10 character with experience x60 (OURS rates) kills the level-10 dummy: 884 x 60 = 53040 is past NeedExp(10), so
+// it reaches level 11 with the rest (held per level): 0x8d07 reason 1, then 0x8d08 and stats; no own 0x8d91 and HP not refilled
+// (as recorded 2026-10-13/19).
+{
+    var veteran = new GameSession(data, new GameSessionOptions { TrainingDummy = true, CharacterLevel = 10, World = new SharedWorld(data) { Rates = new WorldRates { Experience = 60 } } }, new Random(7));
+    await veteran.HandleAsync(Strings(0x3613, Session, "", "t", "").Concat(new byte[9]).ToArray(), Now);
+    await veteran.HandleAsync(create, Now);
+    await veteran.HandleAsync(select, Now);
+    await veteran.HandleAsync(new PacketWriter().U16(0x3622).I32(1).ToArray(), Now);
+    veteran.Targets[Combat.TrainingDummyKey].Hp = 1;
+    veteran.SetResource('H', 100);
+    var gainedExp = 884L * 60;
+    var expLeft = gainedExp - data.NeedExp(10);
+    var levelKill = await veteran.HandleAsync(Cast(basic, Combat.TrainingDummyKey, veteran.Targets[Combat.TrainingDummyKey].Position), Now + 100000);
+    Check(veteran.Level == 11 && veteran.Experience == expLeft && levelKill.Any(b => b.SequenceEqual(GamePackets.ExpUpdate(expLeft, gainedExp, 1)))
+          && levelKill.Any(b => b.SequenceEqual(GamePackets.LevelUpdate(11, 11, expLeft))) && !levelKill.Any(b => Op(b) == 0x8d91)
+          && levelKill.FindIndex(b => Op(b) == 0x8d07) < levelKill.FindIndex(b => Op(b) == 0x8d08)
+          && veteran.Resource.Hp == 100 && veteran.Resource.HpMax > 100,
+          "a kill at level 10 levels up: 0x8d07 reason 1, 0x8d08, stats; no own 0x8d91, HP not refilled");
+}
 // Base rates (Aion:Rates, OURS): experience x2 doubles the same kill's experience; drops x0 rolls no loot.
 {
-    var rated = new GameSession(data, new GameSessionOptions { TrainingDummy = true, World = new SharedWorld(data) { Rates = new WorldRates { Experience = 2, Drops = 0 } } }, new Random(7));
+    var killExp = 884L;
+    var rated = new GameSession(data, new GameSessionOptions { TrainingDummy = true, CharacterLevel = 10, World = new SharedWorld(data) { Rates = new WorldRates { Experience = 2, Drops = 0 } } }, new Random(7));
     await rated.HandleAsync(Strings(0x3613, Session, "", "t", "").Concat(new byte[9]).ToArray(), Now);
     await rated.HandleAsync(create, Now);
     await rated.HandleAsync(select, Now);

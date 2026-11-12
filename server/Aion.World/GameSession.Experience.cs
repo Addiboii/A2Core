@@ -9,36 +9,56 @@ namespace Aion.World;
 // nearby only; stats follow the new level (PcStatLevel). OBSERVED (our recordings 2026-10-13 144836 and 2026-10-19
 // 231752, 9 level-ups): no 0x8d91 for the own character, and HP is not refilled (it keeps regenerating from where it
 // was, e.g. 837 then 867 of 935 after level 5). The community fork found the same.
-// Kill experience (OURS: no table gives it and the official kills sent none, the recorded character being
-// above those mobs): NeedExp at the mob's level / KillsPerLevel, scaled by the level gap.
+// Kill experience (ported from the community fork, which measured 1425 kill rewards, ExpUpdate reason 1, in its
+// recordings 2026-10-30 to 11-07, own levels 1-45):
+// - none below level 10. OBSERVED in ours: 137 deaths at own levels 4-8 (2026-10-13 and 10-19) and no kill reward; the
+//   fork's: none at 3-7, the first at 10. Level 9 is unrecorded (CANDIDATE: 10 is the first paying level).
+// - none inside an instance (dungeons, quest layers; the fork's ~520 kills). Ours agrees: 63 kills by the recorded
+//   character in the dungeon map 900001 (DungeonWave_0001, 2026-11-06 084658), no kill reward.
+// - grade 3 pays 390.8 x 1.085^monster level (CANDIDATE: the fork's fit within 0.25 % on 21 levels); grades 1/2/4 pay
+//   5/13, 8/13 and 18/13 of it (the fork's OBSERVED ratios). By the gap (own level minus the monster's): full up to +5 and
+//   for higher monsters, 0.6 at +7, 0.4 at +8, 0.2 at +9, 0.1 from +10 (the fork's OBSERVED); 0.8 at +6 CANDIDATE.
+//   OBSERVED in ours: 300 for each of 4 kills of level-25 monsters (2400252/2400253, grade 3) by a character far above
+//   them (2026-11-05 190433): 390.8 x 1.085^25 x 0.1 = 299.8.
+// - nearby party members share evenly (the fork's OBSERVED for two; more: CANDIDATE).
 public sealed partial class GameSession
 {
     long experience;
     public long Experience => experience;
-    /// <summary>OURS: a mob of the player's level gives 1/KillsPerLevel of that level's NeedExp.</summary>
-    public const int KillsPerLevel = 25;
-    /// <summary>NPC levels killed since the last experience update (cast replies collect them).</summary>
-    readonly List<int> killedLevels = [];
+    /// <summary>The first level at which kills pay (CANDIDATE, see above).</summary>
+    public const int KillExperienceLevel = 10;
+    /// <summary>The grade-3 reward at monster level L: KillExperienceBase x KillExperienceGrowth^L (CANDIDATE fit).</summary>
+    public const double KillExperienceBase = 390.8, KillExperienceGrowth = 1.085;
+    /// <summary>The monsters killed since the last experience update (cast replies collect them): level, grade, in an instance.</summary>
+    readonly List<(int Level, int Grade, bool Instance)> killedLevels = [];
     const byte ExpReasonNpc = 1, ExpReasonQuest = 2;   // EExpModifyReason kNpcReward, kQuestReward
 
-    /// <summary>Experience for killing a mob: its level's share, less for weaker mobs (none 10+ levels below), more for stronger ones.</summary>
-    public long KillExperience(int npcLevel)
+    /// <summary>A grade's share of the grade-3 reward (5 : 8 : 13 : 18 for grades 1-4; grade 5 and up as 4, CANDIDATE).</summary>
+    static double GradeFactor(int grade) => grade switch { <= 1 => 5 / 13.0, 2 => 8 / 13.0, 3 => 1, _ => 18 / 13.0 };
+
+    /// <summary>The share by the level gap, own level minus the monster's (+6 CANDIDATE).</summary>
+    public static double GapFactor(int gap) => gap switch { <= 5 => 1, 6 => 0.8, 7 => 0.6, 8 => 0.4, 9 => 0.2, _ => 0.1 };
+
+    /// <summary>The experience a kill pays before rates and sharing (the rules above).</summary>
+    public static long KillReward(int ownLevel, int npcLevel, int grade, bool instance)
     {
-        var mob = data.ClampLevel(Math.Max(1, npcLevel));
-        var gap = mob - level;
-        var factor = gap >= 0 ? 1 + Math.Min(gap, 5) * 0.1 : Math.Max(0, 1 + gap * 0.1);
-        return (long)Math.Round(data.NeedExp(mob) / (double)KillsPerLevel * factor);
+        if (instance || ownLevel < KillExperienceLevel) return 0;
+        var mob = Math.Max(1, npcLevel);
+        return (long)Math.Round(KillExperienceBase * Math.Pow(KillExperienceGrowth, mob) * GradeFactor(grade) * GapFactor(ownLevel - mob));
     }
+
+    /// <summary>This character's experience for an open-field kill of a monster of this level and grade.</summary>
+    public long KillExperience(int npcLevel, int grade = 3) => KillReward(level, npcLevel, grade, false);
 
     /// <summary>The experience of the kills from the last cast.</summary>
     async Task<List<byte[]>> KillExperienceAsync(CancellationToken ct)
     {
         if (killedLevels.Count == 0) return [];
         // The base rate (Aion:Rates:Experience) and scheduled experience events (SharedWorld.ExpRate) multiply kill experience.
-        var gained = WorldRates.Scale(killedLevels.Sum(KillExperience), (options.World?.Rates.Experience ?? 1) * (options.World?.ExpRate ?? 1));
+        var gained = WorldRates.Scale(killedLevels.Sum(k => KillReward(level, k.Level, k.Grade, k.Instance)), (options.World?.Rates.Experience ?? 1) * (options.World?.ExpRate ?? 1));
         killedLevels.Clear();
         if (gained <= 0) return [];
-        // Party members nearby share it evenly (OURS: no party bonus); each applies its share on its own loop.
+        // Party members nearby share it evenly (no party bonus); each applies its share on its own loop.
         var members = NearbyPartyMembers();
         var share = Math.Max(1, gained / (members.Count + 1));
         foreach (var member in members) member.Session.ShareExperience(share, ct);

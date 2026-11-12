@@ -105,7 +105,7 @@ partial class GameSession
             replies.AddRange(BossChallengeKilled(target, now));
             InstanceKill(target, now);
             replies.AddRange(MapEventKilled(target, now));
-            killedLevels.Add(target.Level);
+            killedLevels.Add((target.Level, target.Grade, instanceKey != 0));
             replies.AddRange(DropLoot(target, now));
             // Official order after HP 0: the mob's target cleared, the kill, its 0x8d21 off.
             replies.Add(GamePackets.TargetUpdate(target.Key));
