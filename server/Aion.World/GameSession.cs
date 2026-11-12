@@ -2227,7 +2227,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
     /// An NPC hit lands on the player: combat starts, HP drops (official 0x8d00 for the player's key).
     /// At HP 0 the player dies (see Die); invincible HP holds.
     /// </summary>
-    internal List<byte[]> NpcHitsPlayer(int damage, long now, int killerKey = 0)
+    internal List<byte[]> NpcHitsPlayer(int damage, long now, int killerKey = 0, int killerSkill = 0)
     {
         if (resources is null || dead) return [];
         var replies = new List<byte[]>();
@@ -2239,7 +2239,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         combatUntil = now + CombatTimeoutMs;
         if (!invincible.Hp) resources.Hp = Math.Max(0, resources.Hp - damage);
         replies.Add(GamePackets.NpcHp(playerKey, resources.Hp));
-        if (resources.Hp == 0) replies.AddRange(Die(killerKey, now));
+        if (resources.Hp == 0) replies.AddRange(Die(killerKey, now, killerSkill));
         return replies;
     }
 
@@ -2258,7 +2258,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
     /// fields) goes to the player and those nearby. The client's respawn request is not known yet
     /// (it is logged as an unanswered opcode), so the server revives the player itself.
     /// </summary>
-    List<byte[]> Die(int killerKey, long now)
+    List<byte[]> Die(int killerKey, long now, int killerSkill = 0)
     {
         dead = true;
         diving = false;
@@ -2267,8 +2267,13 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         diedAt = position;
         inCombat = false;
         // Reason 00 when nothing killed the player (suffocation), as the 68 recorded deaths without a killer (CANDIDATE for a player).
-        var kill = GamePackets.Kill(playerKey, 0, killerKey, ServerId, "", dieType: 2,
-            reason: killerKey == 0 ? GamePackets.DieNoKiller : GamePackets.DieByKiller);
+        // Killed by an NPC: its skill, server id 0 and its NpcData id (OBSERVED 2026-11-06 090856, four deaths); by a player
+        // (Abyss) our server id as before (CANDIDATE).
+        var npcKiller = killerKey != 0 ? targets?.GetValueOrDefault(killerKey) : null;
+        var kill = npcKiller is not null
+            ? GamePackets.Kill(playerKey, killerSkill, killerKey, 0, "", dieType: 2, reason: GamePackets.DieByKiller, killerNpcId: npcKiller.NpcId)
+            : GamePackets.Kill(playerKey, 0, killerKey, killerKey == 0 ? 0 : ServerId, "", dieType: 2,
+                reason: killerKey == 0 ? GamePackets.DieNoKiller : GamePackets.DieByKiller);
         worldPlayer?.Map?.Broadcast(worldPlayer, [kill]);
         return [.. ForceDismount(), .. ClearBuffs(), kill, GamePackets.CombatState(playerKey, false)];
     }
@@ -3000,7 +3005,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
                 aiMap.Ai.DefenseOf ??= key => aiMap.Players.TryGetValue(key, out var p) ? p.Session.Defense : 0;
                 aiMap.BroadcastAll(aiMap.Ai.Tick(aiMap.Targets, aiMap.NpcVictims(), now, (key, damage) =>
                 {
-                    if (aiMap.Players.TryGetValue(key, out var victim)) victim.Send(victim.Session.NpcHitsPlayer(damage, now, aiMap.Ai.LastAttacker));
+                    if (aiMap.Players.TryGetValue(key, out var victim)) victim.Send(victim.Session.NpcHitsPlayer(damage, now, aiMap.Ai.LastAttacker, aiMap.Ai.LastAttackSkill));
                     return [];
                 }));
                 var npcKills = NpcKillsByNpcs(aiMap.Ai, now);
@@ -3010,7 +3015,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         }
         else if (targets is not null && (ai.DefenseOf ??= _ => Defense) is not null)
         {
-            replies.AddRange(Visible(ai.Tick(targets, invisible || dead || FriendlyToAll ? null : position, now, damage => NpcHitsPlayer(damage, now, ai.LastAttacker))));
+            replies.AddRange(Visible(ai.Tick(targets, invisible || dead || FriendlyToAll ? null : position, now, damage => NpcHitsPlayer(damage, now, ai.LastAttacker, ai.LastAttackSkill))));
             replies.AddRange(NpcKillsByNpcs(ai, now));
         }
         PartyTick(now);

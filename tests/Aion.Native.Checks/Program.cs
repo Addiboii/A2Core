@@ -1958,6 +1958,8 @@ Check(kraoEntered.Any(b => Op(b) == GameSession.DungeonStateNt && b[6] == GameSe
       "the expedition's state says running with its 60-minute limit (0x6100)");
 Check(kraoEntered.Where(b => Op(b) == GameSession.DungeonStateNt).All(b => b.Length == 23),
       "0x6100 is 23 bytes: dungeon, state, start, end (official recordings, no trailing byte)");
+Check(staffSession.Copy is not null && staffSession.NpcKilled(4242, 18060030).SequenceEqual(GamePackets.Kill(4242, 18060030, 0, 0, "", dieType: 2)),
+      "a kill inside a dungeon copy is anonymous with die type 02 (0x8d04; official 2026-11-06 084658 #46704 and 64 more)");
 // A sealed dungeon (type Seal, solo): its field portal (EnvObjData usage EnterDungeon, value = dungeon id) enters its copy.
 var sealIndex = nodes.Select((o, i) => (o, i)).First(x => x.o.Portal is [var sid] && MapEventTables.Embedded.Dungeon(sid) is { Type: "Seal" }).i;
 var sealRoom = MapEventTables.Embedded.Dungeon(nodes[sealIndex].Portal![0])!;
@@ -2873,8 +2875,10 @@ Check(unlockAt > reload.FindIndex(b => b[0] == 0x57 && b[1] == 0xe2) && reload.A
 Check((await game.HandleAsync(new PacketWriter().U16(0x3622).I32(1).ToArray(), clock)).All(b => !(b[0] == 0x58 && b[1] == 0xe2)), "only once per teleport");
 Check(game.Resource.Hp < game.Resource.HpMax, "a teleport keeps HP (it used to be a full heal)");
 // Death: HP 0 kills (0x8d04 with the player as victim), casts are refused, a revive follows by itself.
-var death = game.NpcHitsPlayer(game.Resource.HpMax * 10, clock, killerKey: 2001);
-Check(game.Dead && game.Resource.Hp == 0 && death.Any(b => b.SequenceEqual(GamePackets.Kill(1, 0, 2001, 1204, "", dieType: 2))), "a fatal NPC hit kills the player (0x8d04)");
+var deathKiller = game.Targets!.Values.First();
+var death = game.NpcHitsPlayer(game.Resource.HpMax * 10, clock, killerKey: deathKiller.Key, killerSkill: 1800160);
+Check(game.Dead && game.Resource.Hp == 0 && death.Any(b => b.SequenceEqual(GamePackets.Kill(1, 1800160, deathKiller.Key, 0, "", dieType: 2, killerNpcId: deathKiller.NpcId))),
+      "a fatal NPC hit kills the player (0x8d04 with the NPC's skill, server id 0 and its NpcData id, as official 2026-11-06 #96371)");
 Check(game.NpcHitsPlayer(10, clock).Count == 0, "the dead take no more hits");
 var revived = await game.TickAsync(clock += GameSession.ReviveDelayMs);
 Check(!game.Dead && game.Resource.Hp == game.Resource.HpMax && revived.Any(b => b[0] == 0x21 && b[1] == 0x36), "revived after the delay: full HP and a map load at the respawn point");

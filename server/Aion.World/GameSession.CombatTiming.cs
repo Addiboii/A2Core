@@ -108,7 +108,7 @@ partial class GameSession
             replies.AddRange(DropLoot(target, now));
             // Official order after HP 0: the mob's target cleared, the kill, its 0x8d21 off.
             replies.Add(GamePackets.TargetUpdate(target.Key));
-            replies.Add(GamePackets.Kill(target.Key, skill, playerKey, ServerId, StoredName));
+            replies.Add(NpcKilled(target.Key, skill));
             replies.AddRange(ai.Killed(target));
         }
         else replies.AddRange(ai.Engage(targets!, target, now, playerKey, hits.Sum(h => h.Amount)));    // a hit monster chases its attacker
@@ -159,4 +159,12 @@ partial class GameSession
         pendingHits.Clear();
         activeChains.Clear();
     }
+
+    /// <summary>
+    /// The kill of an NPC by this player (0x8d04). In an instance copy the official kill names no killer and has die type 02
+    /// (OBSERVED: 65 kills in eight dungeon runs, community recordings 2026-11-04 to 06, no exception); in the open world it
+    /// names the player.
+    /// </summary>
+    internal byte[] NpcKilled(int victimKey, int skill) =>
+        copy is not null ? GamePackets.Kill(victimKey, skill, 0, 0, "", dieType: 2) : GamePackets.Kill(victimKey, skill, playerKey, ServerId, StoredName);
 }

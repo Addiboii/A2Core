@@ -433,6 +433,9 @@ public sealed class NpcAi(Random rng, GameData? data = null)
     /// <summary>The NPC whose hit was applied last (the killer when that hit was fatal).</summary>
     public int LastAttacker { get; private set; }
 
+    /// <summary>The skill of the NPC hit applied last on a player (CharDie_NT names it).</summary>
+    public int LastAttackSkill { get; private set; }
+
     public List<byte[]> Killed(Target target)
     {
         if (!brains.TryGetValue(target.Key, out var brain)) return [];
@@ -685,6 +688,7 @@ public sealed class NpcAi(Random rng, GameData? data = null)
         var defense = brain.VictimIsNpc && current?.GetValueOrDefault(victim) is { } prey ? prey.Defense : DefenseOf?.Invoke(victim) ?? 0;
         var damage = Math.Max(1, (int)Math.Round(Damage(target, hit.Skill) * 1000.0 / (1000 + Math.Max(0, defense))));
         LastAttacker = target.Key;
+        LastAttackSkill = hit.SkillId;
         return [GamePackets.NpcSkillHit(victim, target.Key, hit.SkillId, hit.ActionSeq, hit.Skill.Effect, damage), .. hitPlayer(damage)];
     }
 
