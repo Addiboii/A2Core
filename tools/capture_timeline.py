@@ -19,7 +19,8 @@ envelopes and writes, next to the capture (``timeline-<port>/``):
 
 Names come from tools/data/opcode-names.json (the names the server sources use, from the usmap
 by catalogue position or observed) and tools/protocol_knowledge.py; unnamed opcodes stay bare.
-Wi-Fi link frames (multi-layer captures, linktype 105) are decapsulated when unprotected. The
+Wi-Fi link frames (linktype 105, or 802.11 frames written under the Ethernet linktype) are decapsulated when
+unprotected. The
 raw bodies belong under ignored research/local; this tool prints hex only with --grep.
 """
 import argparse
@@ -51,16 +52,27 @@ def load_names(path=NAMES_FILE):
 
 
 def tcp_segment(frame, linktype):
-    """inspect_capture.tcp_packet plus unprotected 802.11 data frames (linktype 105)."""
+    """inspect_capture.tcp_packet plus unprotected 802.11 data frames.
+
+    Linktype 105, and linktype 1 when the frame is not IP over Ethernet: pktmon on some Wi-Fi adapters writes the
+    802.11 frame under the Ethernet linktype (OBSERVED: three community recordings of 2026-11-04 and 2026-11-06).
+    """
     if linktype != 105:
-        return capture.tcp_packet(frame, linktype)
+        segment, reason = capture.tcp_packet(frame, linktype)
+        if linktype != 1 or reason != 'non_ip_ethernet':
+            return segment, reason
+        segment, wifi_reason = wifi_segment(frame)
+        return (segment, None) if segment else (None, reason)
+    return wifi_segment(frame)
+
+
+def wifi_segment(frame):
     if len(frame) < 24:
         return None, 'short_wifi'
     fc = int.from_bytes(frame[:2], 'little')
     if fc & 3 or (fc >> 2) & 3 != 2:
         return None, 'non_data_wifi'
-    if fc & 0x4000:
-        return None, 'protected_wifi'
+    protected = bool(fc & 0x4000)   # still set on frames the adapter already decrypted: the LLC header below decides
     if fc & 0x400 or int.from_bytes(frame[22:24], 'little') & 15:
         return None, 'fragmented_wifi'
     size = 24 + (6 if fc & 0x300 == 0x300 else 0)
@@ -73,7 +85,7 @@ def tcp_segment(frame, linktype):
         if fc & 0x8000:
             size += 4
     if frame[size:size + 6] not in (b'\xaa\xaa\x03\x00\x00\x00', b'\xaa\xaa\x03\x00\x00\xf8'):
-        return None, 'unsupported_wifi_llc'
+        return None, 'protected_wifi' if protected else 'unsupported_wifi_llc'
     if frame[size + 6:size + 8] not in (b'\x08\x00', b'\x86\xdd'):
         return None, 'non_ip_wifi'
     return capture.tcp_packet(frame[size + 8:], 101)

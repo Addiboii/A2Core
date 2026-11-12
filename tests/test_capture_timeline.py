@@ -99,6 +99,24 @@ class TimelineTests(unittest.TestCase):
         self.assertEqual(summary['messages'], 1)
         self.assertEqual(summary['skipped_packets'], {})
 
+    def test_wifi_frames_under_the_ethernet_linktype_are_decapsulated(self):
+        # OBSERVED (community recordings 2026-11-04/06, pktmon on Wi-Fi): 802.11 frames under linktype 1; frames from
+        # the access point keep the Protected flag although the adapter already decrypted them.
+        llc = b'\xaa\xaa\x03\x00\x00\x00\x08\x00'
+        down = struct.pack('<H', 0x4208) + bytes(22) + llc + tcp(5000, frame(b'\x00\x8d' + bytes(4)), server_to_client=True)[14:]
+        up = struct.pack('<H', 0x0108) + bytes(22) + llc + tcp(7000, frame(b'\x01\x38' + bytes(4)), server_to_client=False)[14:]
+        encrypted = struct.pack('<H', 0x4208) + bytes(22) + bytes(40)
+        arp = bytes(12) + b'\x08\x06' + bytes(28)
+        data = section() + block(1, struct.pack('<HHI', 1, 0, 65535))
+        for index, packet in enumerate((down, up, encrypted, arp)):
+            data += enhanced(packet, timestamp=1_000_000 + index)
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / 'capture.pcapng'
+            path.write_bytes(data)
+            summary, _ = capture_timeline.decode(path)
+        self.assertEqual(summary['messages'], 2)
+        self.assertEqual(summary['skipped_packets'], {'non_ip_ethernet': 2})
+
 
 if __name__ == '__main__':
     unittest.main()
