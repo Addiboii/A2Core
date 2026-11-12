@@ -2256,6 +2256,13 @@ Check(titled.Count > 0 && titled[0].SequenceEqual(Convert.FromHexString("7D56" +
       && staffStore.Titles.Contains(11010002), "AcquireTitle 11010002: TitleAcquire_NT 0x567d, owned (saved), its StatList (Critical 5) applies");
 Check((await staffSession.AcquireTitleAsync(11010002, default)).Count == 0 && (await staffSession.AcquireTitleAsync(21010001, default)).Count == 0,
       "a title twice, or one of the other race, is refused");
+// SP regeneration is the stat sheet's 244 (rest) / 277 (battle): base 20000 / 5000, plus titles, gear, buffs (2026-11 recordings).
+bool SheetHas(List<byte[]> sheet, int stat, int value) => sheet[0].AsSpan().IndexOf([.. BitConverter.GetBytes((ushort)stat), .. BitConverter.GetBytes(value)]) > 0;
+var restSheet = await staffSession.HandleAsync(new PacketWriter().U16(0x3648).ToArray(), Now);
+await staffSession.AcquireTitleAsync(11020011, default);   // StatList RestSPRegen 500
+var restTitled = await staffSession.HandleAsync(new PacketWriter().U16(0x3648).ToArray(), Now);
+Check(SheetHas(restSheet, 244, 20000) && SheetHas(restSheet, 277, 5000) && SheetHas(restTitled, 244, 20500) && SheetHas(restTitled, 277, 5000),
+      "SP regen: stat 244 20000 / 277 5000, a title's RestSPRegen 500 makes 244 20500 (the tick uses it)");
 var titleEquip = await staffSession.HandleAsync(new PacketWriter().U16(0x567f).U8(3).I32(11010002).ToArray(), Now);
 Check(titleEquip[0].SequenceEqual(Convert.FromHexString("8156" + "03" + "D2FFA700")) && titleEquip[1].SequenceEqual(Convert.FromHexString("94E2" + "01" + "01" + "03" + "D2FFA700"))
       && titleEquip[2].SequenceEqual(Convert.FromHexString("8056" + "0000" + "03" + "D2FFA700")) && staffSession.TitleStat("HPMax") == 300 && staffStore.TitleEquips[3] == 11010002,

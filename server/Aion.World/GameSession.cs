@@ -2477,9 +2477,25 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
                 + MagicStoneStat("Critical")),
             318 => (s.Type, weapon.Accuracy), 193 => (s.Type, hpMax), 199 => (s.Type, MpMax), 242 => (s.Type, GamePackets.SpawnSp + BuffStat("SPMax")),
             307 => (s.Type, Defense),
+            RestSpRegenStat => (s.Type, SpRegen(battle: false)), BattleSpRegenStat => (s.Type, SpRegen(battle: true)),
             _ => s,
         }).Concat(SealStoneSheet()).ToList();
         return (stats, hpMax);
+    }
+
+    /// <summary>The stat sheet's RestSPRegen (244) and BattleSPRegen (277).</summary>
+    const int RestSpRegenStat = 244, BattleSpRegenStat = 277;
+
+    /// <summary>
+    /// SP regained a second: stat 244 out of combat, 277 in combat (OBSERVED, community recordings 2026-11-04 to 06,
+    /// reports/movement.md 5: every tick equals the character's 244, 21000/22000 with gear, +24800 under a buff; 277 base 5000,
+    /// 6600/7800 under buffs), the base (SpRegenOutOfCombat / SpRegenInCombat) plus gear, buffs, boards, titles and the wing.
+    /// CANDIDATE: a plain SPRegen (buffs) counts for both.
+    /// </summary>
+    int SpRegen(bool battle)
+    {
+        int Bonus(string stat) => EquippedItems().Sum(i => i.Stat(stat)) + BuffStat(stat) + BoardStat(stat) + TitleStat(stat) + WingStat(stat);
+        return Math.Max(0, (battle ? SpRegenInCombat : SpRegenOutOfCombat) + Bonus(battle ? "BattleSPRegen" : "RestSPRegen") + Bonus("SPRegen"));
     }
 
     /// <summary>Applies the stat sheet to the pools (HP/MP clamped) and returns the updates for the client.</summary>
@@ -3025,7 +3041,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
                     resources.Hp = (int)Math.Max(0, resources.Hp - seconds * Math.Max(1L, (long)resources.HpMax * SuffocationRatio / 10000));
                 resources.Mp = (int)Math.Min(resources.MpMax, resources.Mp + seconds * rest * (25 + BuffStat("MPRegen")));
                 if (!sprinting)
-                    resources.Sp = (int)Math.Min(resources.SpMax, resources.Sp + seconds * (inCombat ? SpRegenInCombat : SpRegenOutOfCombat));
+                    resources.Sp = (int)Math.Min(resources.SpMax, resources.Sp + seconds * SpRegen(battle: inCombat));
                 Pin(resources);
                 // Invincible SP is resent each second: flight spends it on the client side.
                 if (invincible.Sp || before != (resources.Hp, resources.Mp, resources.Sp)) replies.Add(resources.Update());
