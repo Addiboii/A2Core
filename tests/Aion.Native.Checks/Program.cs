@@ -2330,6 +2330,19 @@ async Task<GameSession> ChargeRanger()
     return session;
 }
 Console.WriteLine($"{await ChargeChecks.RunAsync(ChargeRanger, Now)} charged-skill checks passed (Dead Shot: start, release step, cooldown, refusals).");
+// A session logged in on the store; a Gladiator created when the store has none yet (not selected: the checks enter it).
+async Task<GameSession> GladiatorOn(FakeStore store)
+{
+    var session = new GameSession(data, new GameSessionOptions(), new Random(9)) { Store = store };
+    await session.HandleAsync(Strings(0x3613, Session, "", "t", "").Concat(new byte[9]).ToArray(), Now);
+    if (store.States.Count == 0)
+    {
+        var creation = (uint)Enumerable.Range(1, 64).First(id => data.Profile(id, 1) is { Race: 1, Class: "Gladiator" });
+        await session.HandleAsync(new PacketWriter().U16(0x361b).String("Brakk").U8(1).U32(creation).Bytes([0x0c, 0x64]).U8(2).U8(1).U8(0).ToArray(), Now);
+    }
+    return session;
+}
+Console.WriteLine($"{await SpecializationChecks.RunAsync(GladiatorOn, Now)} specialisation checks passed (0x3900, equip, unequip, swap, child casts, relog).");
 
 // ---------- Multiplayer: the shared world (players see each other, shared NPCs) ----------
 checks = 0;

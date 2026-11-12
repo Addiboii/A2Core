@@ -97,6 +97,10 @@ public sealed class StigmaTables
     public int Variant(int stigma, int level) =>
         file.Variants?.GetValueOrDefault(Key(stigma)) is { } steps ? steps.Where(s => s[0] <= level).Select(s => s[1]).LastOrDefault() : 0;
 
+    /// <summary>A stigma's variant steps: from which stigma level which skill is cast (its parts, SpecializedSkillParts.dat Slot_1..4).</summary>
+    public IReadOnlyList<(int From, int Skill)> VariantSteps(int stigma) =>
+        file.Variants?.GetValueOrDefault(Key(stigma)) is { } steps ? steps.Select(s => (s[0], s[1])).ToList() : [];
+
     /// <summary>The stigma a variant belongs to, or null for any other skill.</summary>
     public int? StigmaOfVariant(int skillId) => variantBase.TryGetValue(skillId, out var stigma) ? stigma : null;
 

@@ -76,8 +76,24 @@ public sealed partial class GameSession
             var saved = await Stored(async () => await store.SetSkillLevelAsync(character, skillId, next, next, ct) ? [[]] : []);
             if (saved.Count == 0) return [Reply(1)];
         }
+        var childBefore = SpecializedChild(skillId);
         skillLevels[skillId] = next;
-        return [Reply(0), SkillLevelUpdate(skillId, next, SkillPointLevelUp), SkillPointUpdate()];
+        return [.. SpecializedLevelChange(skillId, childBefore, next), Reply(0), SkillLevelUpdate(skillId, next, SkillPointLevelUp), SkillPointUpdate()];
+    }
+
+    /// <summary>
+    /// A mastery skill's level changed: its child (and its chain steps' children) follow. A child that stays is updated to the new
+    /// level (0x3813 reason 6, OBSERVED before each parent level-up); one that changes because a slot or part opened or closed is
+    /// deleted and added (GameSession.Specialization.cs).
+    /// </summary>
+    List<byte[]> SpecializedLevelChange(int skillId, int childBefore, int newLevel)
+    {
+        if (!Specialized.HasParts(skillId)) return [];
+        var after = SpecializedChild(skillId);
+        if (after != childBefore) return ChildChange(skillId, childBefore, after);
+        if (after == 0) return [];
+        return [.. ChainStepsAfter(skillId).Prepend(skillId).Select(s => s + (after - skillId)).Where(c => Specialized.ParentOf(c) is not null)
+            .Select(c => SkillLevelUpdate(c, newLevel, SpecializedChange))];
     }
 
     static byte[] SkillLevelUpdate(int skillId, int newLevel, byte reason) =>
@@ -97,8 +113,9 @@ public sealed partial class GameSession
         if (current <= kit || !skillLevels.ContainsKey(skillId)) return [Reply(1)];
         var next = current - 1;
         if (!await SaveSkillLevelAsync(skillId, next, next > kit ? next : 0, ct)) return [Reply(1)];
+        var childBefore = SpecializedChild(skillId);
         if (next <= kit) skillLevels.Remove(skillId); else skillLevels[skillId] = next;
-        return [Reply(0), SkillLevelUpdate(skillId, next, SkillPointLevelDown), SkillPointUpdate()];
+        return [.. SpecializedLevelChange(skillId, childBefore, next), Reply(0), SkillLevelUpdate(skillId, next, SkillPointLevelDown), SkillPointUpdate()];
     }
 
     /// <summary>

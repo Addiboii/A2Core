@@ -368,6 +368,9 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             case GatherStartRq when plain.Length >= 3: return await GatherStartAsync(plain, now, ct);
             case TitleChangeRq when plain.Length >= 6: return await TitleChangeAsync(plain, ct);
             case SkillLevelUpRq when plain.Length >= 6: return await SkillLevelUpAsync(plain, ct);
+            case SpecializedEquipRq when plain.Length >= 7: return await EquipSkillPartAsync(plain, ct);   // GameSession.Specialization.cs
+            case SpecializedUnequipRq when plain.Length >= 6: return await UnequipSkillPartAsync(plain, ct);
+            case SpecializedChangeRq when plain.Length >= 10: return await ChangeSkillPartSlotAsync(plain, ct);
             case TitleEquipRq when plain.Length >= 7: return await TitleEquipAsync(plain, ct);
             case SkinEquipRq when plain.Length >= 3: return await SkinEquipAsync(plain, ct);
             case GatherStopRq when plain.Length >= 3: return GatherStop(plain);
@@ -1661,6 +1664,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
                 var extras = await store.ExtrasAsync(state.Summary.CharacterId, ct);
                 LoadSkillLevels(await store.SkillsAsync(state.Summary.CharacterId, ct));
                 LoadStigmas(await store.StigmasAsync(state.Summary.CharacterId, ct));   // GameSession.Stigmas.cs
+                LoadSkillParts(await store.SkillPartsAsync(state.Summary.CharacterId, ct));   // GameSession.Specialization.cs
                 LoadAchievements(await store.AchievementsAsync(state.Summary.CharacterId, ct), await store.GroupRewardsTakenAsync(state.Summary.CharacterId, ct), now);
                 LoadCollections(await store.CollectionsAsync(state.Summary.CharacterId, ct));
                 LoadBossChallenges(await store.BossChallengesAsync(state.Summary.CharacterId, ct));
@@ -1884,8 +1888,10 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
                 // Owned skills before the hotbar (0x5100 then 0x5600; not the usmap ordinals).
                 // The learned stigmas follow the kit in the same list (CANDIDATE: no recording has one), with the shards left when
                 // they differ from Exp.dat's level total (items, spent shards).
-                replies.Add(GamePackets.SkillList([.. WithLevels(kit), .. StigmaSkillList()]));
-                replies.Add(GamePackets.SkillOptionSlots(learned.Where(id => id >= 11_000_000 && !IsDodgeId(id) && data.Skill(id)?.Type == "Active").Order().ToList()));
+                // The specialisation children in effect follow at their parent's level (OBSERVED 0x5100 #643: 11030340, 11040340).
+                replies.Add(GamePackets.SkillList([.. WithLevels(kit), .. StigmaSkillList(),
+                    .. SpecializedChildren().Select(c => (c.Child, Math.Clamp(SkillLevel(ChainRoot(c.Parent)), 1, 255)))]));
+                replies.Add(SpecializedSkillLoad());   // GameSession.Specialization.cs
                 if (stigmas.Count > 0 || stigmaItemShards > 0) replies.Add(StigmaShardUpdate());
                 replies.AddRange(GamePackets.EmptyEntryLists());
                 replies.AddRange(SettingsAtEntry(now));
@@ -2036,7 +2042,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         var normalDodge = dodging && started == combatDodge + 1 && learned.Contains(combatDodge);
         var definition = normalDodge ? data.Skill(combatDodge) is { } dodge ? dodge with { Cost = dodge.Cost with { Sp = NormalDodgeSp } } : null
             : data.Skill(skill);
-        var cooldownKey = normalDodge ? combatDodge : skill;
+        var cooldownKey = normalDodge ? combatDodge : SpecializedCooldownKey(skill);
         var cost = definition?.Cost ?? new SkillCost(0, 0, 0);
         if (BuffStat("MPUseDecrease") is > 0 and var cheaper) cost = cost with { Mp = cost.Mp * Math.Max(0, 10_000 - cheaper) / 10_000 };
         var weapons = (definition?.Weapons ?? []).Where(w => w != "None").ToList();
@@ -2044,7 +2050,8 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             && resources.Mp >= cost.Mp && resources.Sp >= cost.Sp && resources.Hp > cost.Hp
             && (learned.Contains(skill) || normalDodge || ChainStepReady(skill, now)   // a chain step on offer (GameSession.SkillChains.cs)
                 || StigmaReady(skill)    // a learned stigma in an open stigma slot (GameSession.Stigmas.cs)
-                || ChargeReleaseReady(skill))   // the selected step of a charge being released (GameSession.Charging.cs)
+                || ChargeReleaseReady(skill)    // the selected step of a charge being released (GameSession.Charging.cs)
+                || SpecializedReady(skill, now))   // the specialisation child of a learned skill (GameSession.Specialization.cs)
             && (weapons.Count == 0 || weapons.Contains(data.WeaponType(equippedWeapon) ?? ""))
             && (noCool || now >= cooldowns.GetValueOrDefault(cooldownKey))
             && (dodging || InCastRange(definition, request.TargetKey));

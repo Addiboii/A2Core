@@ -301,9 +301,10 @@ public sealed class GameData
         return known.Select(k => (k.Key, k.Value)).ToList();
     }
 
-    /// <summary>Cast data of a class skill (class-skills.json), else of a stigma skill (stigmas.json, the same Skill.dat reading).</summary>
+    /// <summary>Cast data of a class skill (class-skills.json), else of a stigma skill (stigmas.json), else of a specialisation child
+    /// (specialized-skills.json); all the same Skill.dat reading.</summary>
     public SkillDefinition? Skill(int skillId) => classes.Skills.GetValueOrDefault(skillId.ToString(System.Globalization.CultureInfo.InvariantCulture))
-        ?? StigmaTables.Embedded.Skill(skillId);
+        ?? StigmaTables.Embedded.Skill(skillId) ?? SpecializedSkillTables.Embedded.Skill(skillId);
     /// <summary>The SkillCharge.dat row of a charge id (Skill.dat ChargeId), else null.</summary>
     public ChargeRow? Charge(int chargeId) => classes.Charges?.GetValueOrDefault(chargeId.ToString(System.Globalization.CultureInfo.InvariantCulture));
     /// <summary>SkillProjectile.dat Speed of a projectile a class or stigma skill fires (0: unknown).</summary>
