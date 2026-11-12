@@ -60,7 +60,15 @@ public sealed record SkillDefinition(
     // CANDIDATE: melee 400, Snipe 2000). 0: the skill names no range (every Self skill) and is not range-checked.
     [property: JsonPropertyName("use_range")] double UseRange = 0,
     [property: JsonPropertyName("use_height_range")] double UseHeightRange = 0,
-    [property: JsonPropertyName("follow_range")] double FollowRange = 0);
+    [property: JsonPropertyName("follow_range")] double FollowRange = 0,
+    // Skill.dat ChargeId: the SkillCharge.dat row of a charged skill (GameSession.Charging.cs), 0 for an ordinary cast.
+    [property: JsonPropertyName("charge")] int Charge = 0);
+
+/// <summary>A SkillCharge.dat row (build 26262663): ChargeMinTime, bMovableInCharge, steps [ChargeTime ms, ChargeSkillId].</summary>
+public sealed record ChargeRow(
+    [property: JsonPropertyName("min_ms")] int MinMs,
+    [property: JsonPropertyName("movable")] bool Movable,
+    [property: JsonPropertyName("steps")] int[][] Steps);
 
 public sealed record WeaponStats(
     [property: JsonPropertyName("min")] int Min,
@@ -147,7 +155,8 @@ public sealed class GameData
         [property: JsonPropertyName("classes")] Dictionary<string, ClassRules> Classes,
         [property: JsonPropertyName("common_unlocks")] int[][] CommonUnlocks,
         [property: JsonPropertyName("skills")] Dictionary<string, SkillDefinition> Skills,
-        [property: JsonPropertyName("projectile_speeds")] Dictionary<string, int>? ProjectileSpeeds = null);
+        [property: JsonPropertyName("projectile_speeds")] Dictionary<string, int>? ProjectileSpeeds = null,
+        [property: JsonPropertyName("charges")] Dictionary<string, ChargeRow>? Charges = null);
 
     /// <summary>An NpcData template of the compact world-npcs.json (every field of a spawn but where it stands).</summary>
     sealed record NpcTemplate(
@@ -295,6 +304,8 @@ public sealed class GameData
     /// <summary>Cast data of a class skill (class-skills.json), else of a stigma skill (stigmas.json, the same Skill.dat reading).</summary>
     public SkillDefinition? Skill(int skillId) => classes.Skills.GetValueOrDefault(skillId.ToString(System.Globalization.CultureInfo.InvariantCulture))
         ?? StigmaTables.Embedded.Skill(skillId);
+    /// <summary>The SkillCharge.dat row of a charge id (Skill.dat ChargeId), else null.</summary>
+    public ChargeRow? Charge(int chargeId) => classes.Charges?.GetValueOrDefault(chargeId.ToString(System.Globalization.CultureInfo.InvariantCulture));
     /// <summary>SkillProjectile.dat Speed of a projectile a class or stigma skill fires (0: unknown).</summary>
     public int ProjectileSpeed(int projectileId) =>
         classes.ProjectileSpeeds?.GetValueOrDefault(projectileId.ToString(System.Globalization.CultureInfo.InvariantCulture)) is > 0 and var speed

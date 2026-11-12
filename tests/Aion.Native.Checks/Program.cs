@@ -2317,6 +2317,19 @@ async Task<GameSession> StigmaGladiator(FakeStore stigmaStore)
     return session;
 }
 Console.WriteLine($"{await StigmaChecks.RunAsync(StigmaGladiator, Now)} stigma checks passed (learn, raise, refusals, slots, shard item, login keeps saved stigmas).");
+async Task<GameSession> ChargeRanger()
+{
+    var rangerCreation = (uint)Enumerable.Range(1, 64).First(id => data.Profile(id, 1) is { Race: 1, Class: "Ranger" });
+    var chargeStore = new FakeStore();
+    var session = new GameSession(data, new GameSessionOptions(), new Random(9)) { Store = chargeStore };
+    await session.HandleAsync(Strings(0x3613, Session, "", "t", "").Concat(new byte[9]).ToArray(), Now);
+    await session.HandleAsync(new PacketWriter().U16(0x361b).String("Rhea").U8(1).U32(rangerCreation).Bytes([0x0c, 0x64]).U8(2).U8(1).U8(0).ToArray(), Now);
+    chargeStore.States[0] = chargeStore.States[0] with { Progress = chargeStore.States[0].Progress with { Level = 20 } };
+    await session.HandleAsync(new PacketWriter().U16(0x361f).Varint((uint)chargeStore.States[0].WireId << 16).I32(0).Vec3(Vector3d.Zero).ToArray(), Now);
+    await session.HandleAsync(new PacketWriter().U16(0x3622).I32(1).ToArray(), Now);
+    return session;
+}
+Console.WriteLine($"{await ChargeChecks.RunAsync(ChargeRanger, Now)} charged-skill checks passed (Dead Shot: start, release step, cooldown, refusals).");
 
 // ---------- Multiplayer: the shared world (players see each other, shared NPCs) ----------
 checks = 0;

@@ -342,6 +342,16 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
                 cast.AddRange(await KillExperienceAsync(ct));
                 return cast;
             }
+            case SkillChargingStartRq: return ChargeStart(plain, now);
+            case SkillChargingEndRq:
+            {
+                var release = ChargeEnd(plain, now);
+                if (worldPlayer?.Map is { } releaseMap) releaseMap.Broadcast(worldPlayer, release.Where(SharedCastPacket));
+                release.AddRange(await QuestKillsAsync(ct));
+                release.AddRange(await KillExperienceAsync(ct));
+                return release;
+            }
+            case SkillChargingStopRq: return ChargeStop();
             case 0x5610: return await InventoryListAsync(ct);
             // WingChange_RQ: packed is_wing_skin, i32 wing (OBSERVED live 2026-10-15, 7 bytes); GameSession.Wings.cs.
             case 0x5674 when plain.Length == 7 && resources is not null: return await WingChangeAsync(plain, ct);
@@ -1995,9 +2005,11 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
     List<byte[]> RefusedDodge(byte[] refusal, int skill, CastRequest request) =>
         [refusal, GamePackets.SkillEnd(playerKey, skill, request.ClientActionUid)];
 
-    List<byte[]> CastReplies(byte[] body, long now)
+    List<byte[]> CastReplies(byte[] body, long now) =>
+        ParseCast(body) is { } request ? CastRequestReplies(request, now) : [UnreadableCastRefusal(body)];
+
+    List<byte[]> CastRequestReplies(CastRequest request, long now)
     {
-        if (ParseCast(body) is not { } request) return [UnreadableCastRefusal(body)];
         var skill = request.SkillId;
         // OBSERVED (official 2026-10-19: 36 dodges, 64 sprint starts; live trace 2026-10-20: the client sends 0x3704 then its
         // CombatDodge request): a dodge requested while the sprint is on starts NormalDodge 11000101 (the running dash, SP 10,000)
@@ -2031,7 +2043,8 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         var accepted = definition is not null && resources is not null && !dead
             && resources.Mp >= cost.Mp && resources.Sp >= cost.Sp && resources.Hp > cost.Hp
             && (learned.Contains(skill) || normalDodge || ChainStepReady(skill, now)   // a chain step on offer (GameSession.SkillChains.cs)
-                || StigmaReady(skill))   // a learned stigma in an open stigma slot (GameSession.Stigmas.cs)
+                || StigmaReady(skill)    // a learned stigma in an open stigma slot (GameSession.Stigmas.cs)
+                || ChargeReleaseReady(skill))   // the selected step of a charge being released (GameSession.Charging.cs)
             && (weapons.Count == 0 || weapons.Contains(data.WeaponType(equippedWeapon) ?? ""))
             && (noCool || now >= cooldowns.GetValueOrDefault(cooldownKey))
             && (dodging || InCastRange(definition, request.TargetKey));
