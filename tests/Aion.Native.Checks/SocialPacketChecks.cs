@@ -121,7 +121,7 @@ public static class SocialPacketChecks
         var bytes = SocialPackets.PartyInfo(info, PartyUpdateReason.AddMember);
         // Decode it back field by field (usmap order) to pin the layout and the shared bool byte.
         var r = new PacketReader(bytes);
-        Check(r.U16() == 0x9200 && r.I64() == 77 && r.I64() == 11 && r.I32() == 4, "PartyInfo head");
+        Check(r.U16() == 0x9200 && r.I64() == 77 && r.I64() == 11 && r.I32() == 5, "PartyInfo head (limit 5, official 2026-11-05 204306 #1336)");
         Check(r.U8() == 3 && r.U8() == 1 && r.U8() == 2 && r.U8() == 1, "PartyInfo options");
         Check(r.I32() == 0 && r.I32() == 0 && r.I32() == 0, "PartyInfo focus target");
         Check(r.Varint() == 0 && r.Varint() == 0 && r.Varint() == 0 && r.Varint() == 2, "PartyInfo lists, member count");

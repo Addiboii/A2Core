@@ -183,8 +183,8 @@ public sealed record PartyInfo
 {
     public long Key { get; init; }
     public long LeaderDbId { get; init; }
-    /// <summary>_limit_member (AION2 party size; 4 is our CANDIDATE default).</summary>
-    public int LimitMember { get; init; } = 4;
+    /// <summary>_limit_member (party size 5, OBSERVED 2026-11-05 204306 #1336).</summary>
+    public int LimitMember { get; init; } = 5;
     public byte Distribution { get; init; } = PartyOptions.DistributionSequence;
     public byte SpecialDistribution { get; init; } = PartyOptions.SpecialNormal;
     /// <summary>EItemGrade threshold for the special distribution (2 Rare).</summary>

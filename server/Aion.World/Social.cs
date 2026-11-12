@@ -5,7 +5,7 @@ namespace Aion.World;
 /// <summary>A party on this host (in memory; lost on restart). Members in join order; the leader leads.</summary>
 public sealed class Party(long key, WorldPlayer leader)
 {
-    public const int Limit = 4;   // _limit_member: our CANDIDATE AION2 party size
+    public const int Limit = 5;   // _limit_member: OBSERVED 5 in PartyInfo_NT and every room (2026-11-05 204306 #1336)
     public long Key { get; } = key;
     public WorldPlayer Leader { get; set; } = leader;
     public List<WorldPlayer> Members { get; } = [leader];
