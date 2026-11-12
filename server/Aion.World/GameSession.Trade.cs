@@ -125,8 +125,9 @@ public sealed partial class GameSession
         var open = list.Where(p => !p.Taken).ToList();
         var w = PacketWriter.Opcode(PushRewardInfoRs).U16(0).I64(now + 3_600_000).Varint(open.Count);
         foreach (var p in open)
-            w.U8(p.Type).I32(p.Id).U8(1).String(p.Sender)   // sequence 1 in every official entry (9 lists, 2026-11-04 to 06).String(p.Title).String(p.Body).I64(p.Sent.ToUnixTimeMilliseconds()).I64(p.Expire.ToUnixTimeMilliseconds())
-                .I32(p.TemplateId).I64(p.Count);
+            // Sequence 1 in every official entry (9 lists, 2026-11-04 to 06; 183516: sender, title, body, sent, expire, item, count).
+            w.U8(p.Type).I32(p.Id).U8(1).String(p.Sender).String(p.Title).String(p.Body)
+                .I64(p.Sent.ToUnixTimeMilliseconds()).I64(p.Expire.ToUnixTimeMilliseconds()).I32(p.TemplateId).I64(p.Count);
         return [w.ToArray()];
     }
 

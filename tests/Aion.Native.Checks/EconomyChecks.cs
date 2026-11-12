@@ -172,6 +172,10 @@ static class EconomyChecks
         var gifts = await session.HandleAsync(new PacketWriter().U16(GameSession.PushRewardInfoRq).ToArray(), now);
         Check(Is(gifts[0], GameSession.PushRewardInfoRs) && gifts[0][12] == 1 && gifts[0][13] == 1 && BitConverter.ToInt32(gifts[0], 14) == 4401 && gifts[0][18] == 1,
               "RetrievePushRewardInfo lists the gift with sequence 1");
+        Check(gifts[0].SequenceEqual(new PacketWriter().U16(GameSession.PushRewardInfoRs).U16(0).I64(now + 3_600_000).Varint(1)
+                  .U8(1).I32(4401).U8(1).String("s").String("t").String("b").I64(giftAt.AddHours(-1).ToUnixTimeMilliseconds())
+                  .I64(giftAt.AddDays(1).ToUnixTimeMilliseconds()).I32(530126003).I64(3).ToArray()),
+              "the gift entry carries sender, title, body, sent, expire, item and count (the order of the official list, 183516)");
         var gift = await session.HandleAsync(new PacketWriter().U16(GameSession.PushRewardTakeRq).U8(1).I32(4401).U8(1).ToArray(), now);
         Check(gift.Count == 2 && Is(gift[0], 0x561b) && gift[0][^3] == 22 && Is(gift[1], GameSession.PushRewardTakeRs) && Result(gift[1]) == 0
               && store.Items.Any(i => i.TemplateId == 530126003 && i.Quantity == 3), "TakePushReward: 0x561b (increase 22), then 0xe347; no 0xe34a");
