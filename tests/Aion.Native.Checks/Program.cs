@@ -2008,7 +2008,19 @@ Check(gatherStart.Any(b => b[0] == 0x38 && b[1] == 0x36), "using a gather node s
 staffSession.GatherBonusRoll = () => 0;
 var gatherDone = await staffSession.TickAsync(Now + node.InteractTime + 10);
 Check(gatherDone.Any(b => b[0] == 0x33 && b[1] == 0x8d && b[2] == 0) && staffStore.Items.Any(i => i.TemplateId == node.Gather![0])
-      && gatherDone.Any(b => b.SequenceEqual(GamePackets.EnvObjDespawn(nodeKey))), $"gathered material {node.Gather![0]} (0x8d33), the node despawns (0x3635)");
+      && !gatherDone.Any(b => Op(b) is 0x3635 or 0x8d05), $"gathered material {node.Gather![0]} (0x8d33); the node is not removed at once");
+// The node's way out (OBSERVED, our recordings: EnvObjDie 0x8d05 about 50 ms after the use, FinishDuration + 150 ms with one,
+// then 0x3635 state 4 reason 3 50 ms later).
+var (nodeDie, nodeGone) = GameSession.RemovalDelays(node.FinishMs);
+var gatheredAt = Now + node.InteractTime + 10;
+var nodeDying = await staffSession.TickAsync(gatheredAt + nodeDie);
+var nodeLeaving = await staffSession.TickAsync(gatheredAt + nodeGone);
+Check(nodeDying.Any(b => b.SequenceEqual(GamePackets.EnvObjDie(nodeKey))) && !nodeDying.Any(b => Op(b) == 0x3635)
+      && nodeLeaving.Any(b => b.SequenceEqual(GamePackets.EnvObjDespawn(nodeKey, 4, 3))) && !nodeLeaving.Any(b => Op(b) == 0x8d05),
+      "the gathered node dies (0x8d05) on its timing, then despawns with state 4 reason 3 (as recorded)");
+Check(GameSession.RemovalDelays(0) == (50, 100) && GameSession.RemovalDelays(500) == (650, 700) && GameSession.RemovalDelays(1000) == (1150, 1200),
+      "removal delays: 50 ms with no FinishDuration, FinishDuration + 150 ms (the recorded 650 and 1150 ms)");
+Check(GamePackets.EnvObjDie(0xc049).SequenceEqual(Convert.FromHexString("058dc98003")), "EnvObjDie byte-exact to a recorded one (058d c98003)");
 Check((await staffSession.HandleAsync(new PacketWriter().U16(0x3636).Varint((uint)nodeKey).ToArray(), Now + 5000))[0][2] == 1, "a used-up node refuses another gather");
 // The mini-game on GatherSourceStart_RQ 0x8d30: the attempt's turns go in 0x8d31; a lost attempt costs one of the node's tries.
 var node2Index = nodes.Select((o, i) => (o, i)).Where(x => x.o.Gather is not null).Skip(1).First().i;

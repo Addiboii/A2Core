@@ -67,11 +67,11 @@ public sealed partial class GameSession
     /// player and despawns (EnvObjData bDespawn is set on every such box, OBSERVED; once per run inside a copy, else per map
     /// until relog: OURS). Nothing the client sends decides the items or counts.
     /// </summary>
-    async Task<List<byte[]>> OpenChestAsync(int index, string table, CancellationToken ct)
+    async Task<List<byte[]>> OpenChestAsync(int index, string table, long now, CancellationToken ct)
     {
         var replies = new List<byte[]>();
         var first = copy is { } c ? c.ChestsOpened.Add((ReviveKey, index)) : openedChests.Add((worldMap, index));
-        if (usedObjects.Add(index) && shownObjects.Remove(index)) replies.Add(GamePackets.EnvObjDespawn(WorldObjects.FirstKey + index, 4, 3));
+        if (usedObjects.Add(index)) ScheduleRemoval(index, now);
         if (!first) return replies;
         var items = LootTables.Embedded.RollTables([table], profileRace, rng);
         if (items.Count == 0) return replies;

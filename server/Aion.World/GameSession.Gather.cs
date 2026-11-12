@@ -143,7 +143,7 @@ public sealed partial class GameSession
         {
             gatherAttempts.Remove(index);
             gathered[index] = now + GatherRespawnMs;
-            if (shownObjects.Remove(index)) lost.Add(GamePackets.EnvObjDespawn((int)key));
+            ScheduleRemoval(index, now);   // EnvObjDie and the despawn 4/3 on the object's timing (OBSERVED, see RemovalDelays)
         }
         else
         {
@@ -181,7 +181,7 @@ public sealed partial class GameSession
         replies.Insert(0, PacketWriter.Opcode(GatherCompletedNt).U16(0).Varint(key).I32(item).I32(count).I32(0).I32(bonus.Item1).I32(bonus.Item2).ToArray());
         gathered[index] = now + GatherRespawnMs;
         gatherAttempts.Remove(index);
-        if (shownObjects.Remove(index)) replies.Add(GamePackets.EnvObjDespawn(key));
+        ScheduleRemoval(index, now);   // EnvObjDie and the despawn 4/3 on the object's timing (OBSERVED, see RemovalDelays)
         replies.AddRange(await GatherMasteryExpAsync(ct));
         replies.AddRange(AchieveGather(gatherLevel));
         return replies;

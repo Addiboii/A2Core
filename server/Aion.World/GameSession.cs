@@ -734,6 +734,46 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
     /// HQ002 despawned 100 ms after its use, 0x3635 state 4 reason 3, and never came back; before this they could be used without end).
     /// </summary>
     readonly HashSet<int> usedObjects = [];
+
+    /// <summary>Used-up objects on their way out: EnvObjDie at DieAt, the despawn (state 4, reason 3) at GoneAt.</summary>
+    readonly List<(int Index, long DieAt, long GoneAt)> objectRemovals = [];
+
+    /// <summary>
+    /// When a used-up object dies and despawns, after its use. OBSERVED (our recordings, 40 files): EnvObjDie 0x8d05 about 50 ms
+    /// after the use's 0x8d6d (176 of 185), about 650 or 1150 ms for objects with an EnvObjData FinishDuration of 500 or 1000
+    /// (9), then the despawn 0x3635 state 4 reason 3 about 50 ms later (188 of the despawns after a use; state 1 reason 1: 6).
+    /// The community fork measured the same (FinishDuration + 150 ms, 50 ms with none).
+    /// </summary>
+    public static (long Die, long Gone) RemovalDelays(int finishMs) => finishMs > 0 ? (finishMs + 150, finishMs + 200) : (50, 100);
+
+    /// <summary>The object dies and despawns for this player on its timing (it stays shown until then).</summary>
+    void ScheduleRemoval(int index, long now)
+    {
+        var objects = WorldObjects.ObjectsOn(worldMap);
+        var (die, gone) = RemovalDelays(index < objects.Count ? objects[index].FinishMs : 0);
+        objectRemovals.RemoveAll(r => r.Index == index);
+        objectRemovals.Add((index, now + die, now + gone));
+    }
+
+    /// <summary>The due EnvObjDie and despawns of used-up objects (only those this player still has shown).</summary>
+    List<byte[]> ObjectRemovalTick(long now)
+    {
+        if (objectRemovals.Count == 0) return [];
+        var replies = new List<byte[]>();
+        for (var i = 0; i < objectRemovals.Count; i++)
+        {
+            var (index, dieAt, goneAt) = objectRemovals[i];
+            var key = WorldObjects.FirstKey + index;
+            if (dieAt != long.MinValue && now >= dieAt)
+            {
+                if (shownObjects.Contains(index)) replies.Add(GamePackets.EnvObjDie(key));
+                objectRemovals[i] = (index, long.MinValue, goneAt);
+            }
+            if (now >= goneAt && shownObjects.Remove(index)) replies.Add(GamePackets.EnvObjDespawn(key, 4, 3));
+        }
+        objectRemovals.RemoveAll(r => now >= r.GoneAt);
+        return replies;
+    }
     /// <summary>A timed interaction in progress: object index, key, when it completes.</summary>
     (int Index, int Key, long DueMs)? pendingUse;
 
@@ -870,11 +910,10 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         if (consumed)
         {
             usedObjects.Add(index);
-            shownObjects.Remove(index);
-            replies.Add(GamePackets.EnvObjDespawn(key, 4, 3));
+            ScheduleRemoval(index, now);
         }
         // A field-event treasure box (GameSession.EnvObjects.cs): its reward table, once.
-        if (objects[index].Loot is { } chestTable) replies.AddRange(await OpenChestAsync(index, chestTable, ct));
+        if (objects[index].Loot is { } chestTable) replies.AddRange(await OpenChestAsync(index, chestTable, now, ct));
         // A party dungeon's portal (EnvObjData Usage PartyDungeon): into the expedition.
         if (objects[index].Portal is { Length: > 0 } portal) replies.AddRange(EnterPartyDungeon(portal, now));
         // The expedition's reward cube (Usage OdEnergyCube): the final boss's reward, once per player per run.
@@ -3004,6 +3043,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         lastNow = now;
         var replies = new List<byte[]>();
         while (posted.TryDequeue(out var item)) replies.AddRange(await item.Run(now));
+        replies.AddRange(ObjectRemovalTick(now));   // used-up objects die and despawn on their timing
         if (arrivalCheckDue && !reloading && position is { } arrivedAt)
         {
             // The arrival is a position too: event triggers, the area objectives (an EnterSubZone at the map's start: live

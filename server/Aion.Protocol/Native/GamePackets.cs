@@ -1001,6 +1001,8 @@ public static class GamePackets
         PacketWriter.Opcode(0x3634).Varint(key).U8(1).U8(0).I32(envObjId).F32(position.X).F32(position.Y).F32(position.Z)
             .I32(0).F32(direction).U8(1).U8(1).U8(1).I64(createTime).I32(0).I64(triggerId).I32(0).U8(7).U8(0).U8(0).ToArray();
 
+    /// <summary>0x8d05 EnvObjDie_NT: the object's key (OBSERVED: 191 in 40 of our recordings, e.g. `058d c98003`).</summary>
+    public static byte[] EnvObjDie(int key) => PacketWriter.Opcode(0x8d05).Varint(key).ToArray();
     /// <summary>0x3635 EnvObjDespawn_NT: key, state, reason, despawn act (official sample e4ec03 01 01 00; widths CANDIDATE).</summary>
     public static byte[] EnvObjDespawn(int key, byte state = 1, byte reason = 1) => PacketWriter.Opcode(0x3635).Varint(key).U8(state).U8(reason).Varint(0).ToArray();
     /// <summary>0x363e InteractEnvObjStop_RS: result u16, object key (OBSERVED 185000 #6764 `0000 bcef01`; nothing in progress 162208 #5193 `1338 00`).</summary>
