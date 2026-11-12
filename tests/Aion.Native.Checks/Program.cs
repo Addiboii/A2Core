@@ -2345,6 +2345,7 @@ async Task<GameSession> GladiatorOn(FakeStore store)
 Console.WriteLine($"{await SpecializationChecks.RunAsync(GladiatorOn, Now)} specialisation checks passed (0x3900, equip, unequip, swap, child casts, relog).");
 Console.WriteLine($"{await ImprintChecks.RunAsync(GladiatorOn, Now)} manastone checks passed (0x562a as recorded, costs, refusals, worn item).");
 Console.WriteLine($"{await SealStoneChecks.RunAsync(GladiatorOn, Now)} seal stone checks passed (register, toggle refusal, shards per hit, entry).");
+Console.WriteLine($"{await ItemPointChecks.RunAsync(GladiatorOn, Now)} item point checks passed (Wisdom Stone, Daevanion Crystal, relog).");
 
 // ---------- Multiplayer: the shared world (players see each other, shared NPCs) ----------
 checks = 0;

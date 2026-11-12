@@ -1671,6 +1671,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
                 LoadSkillLevels(await store.SkillsAsync(state.Summary.CharacterId, ct));
                 LoadStigmas(await store.StigmasAsync(state.Summary.CharacterId, ct));   // GameSession.Stigmas.cs
                 LoadSkillParts(await store.SkillPartsAsync(state.Summary.CharacterId, ct));   // GameSession.Specialization.cs
+                LoadItemPoints(await store.ItemPointsAsync(state.Summary.CharacterId, ct));   // GameSession.ItemPoints.cs
                 LoadAchievements(await store.AchievementsAsync(state.Summary.CharacterId, ct), await store.GroupRewardsTakenAsync(state.Summary.CharacterId, ct), now);
                 LoadCollections(await store.CollectionsAsync(state.Summary.CharacterId, ct));
                 LoadBossChallenges(await store.BossChallengesAsync(state.Summary.CharacterId, ct));
@@ -1838,6 +1839,9 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
                 Equips = VisualEquips(all: false),
                 CustomizingData = character?.CustomizingData ?? [], VoiceType = character?.VoiceType ?? 0,
                 Ascension = selected?.Ascension ?? 1, DbId = selected?.WireId ?? 0,
+                // Points spent {skill points, stigma shards} and given by items {Wisdom Stones, shard items} (OBSERVED, community
+                // recordings 2026-11-04/05: Exp.dat's total + the item points = the spent points of every fully spent character).
+                SpentPoints = [SpentSkillPoints(), StigmaShardsSpent, 0], ItemPoints = [itemSkillPoints, stigmaItemShards, 0],
                 WingId = wingId, Fp = resources.Fp, FpMax = resources.FpMax,
                 EquipItemLevel = armed, HighestTotalItemLevel = armed,
             }));
@@ -1899,6 +1903,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
                     .. SpecializedChildren().Select(c => (c.Child, Math.Clamp(SkillLevel(ChainRoot(c.Parent)), 1, 255)))]));
                 replies.Add(SpecializedSkillLoad());   // GameSession.Specialization.cs
                 if (stigmas.Count > 0 || stigmaItemShards > 0) replies.Add(StigmaShardUpdate());
+                if (daevanionPoints.Any(p => p > 0)) replies.Add(ItemDaevanionPointUpdate());   // OURS: no recording shows it at entry
                 replies.AddRange(GamePackets.EmptyEntryLists());
                 replies.AddRange(SettingsAtEntry(now));
                 // The player's saved hotbar, else the class's default bar for its level.

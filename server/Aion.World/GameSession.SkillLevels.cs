@@ -53,7 +53,7 @@ public sealed partial class GameSession
         return Enumerable.Range(kit + 1, Math.Max(0, p.Value - kit)).Sum(lvl => data.SkillLevelCost(p.Key, lvl)?.Cost ?? 0);
     });
 
-    public int SkillPointsLeft => Math.Max(0, data.SkillPoints(level) - SpentSkillPoints());
+    public int SkillPointsLeft => Math.Max(0, data.SkillPoints(level) + itemSkillPoints - SpentSkillPoints());   // + Wisdom Stones (GameSession.ItemPoints.cs)
 
     byte[] SkillPointUpdate() => SkillPointUpdate(SkillPointTypePoint, SpentSkillPoints());
 
