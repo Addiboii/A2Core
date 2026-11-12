@@ -85,6 +85,7 @@ partial class GameSession
         var replies = new List<byte[]>();
         var projectile = data.Skill(skill)?.Damage.Any(d => d.Projectile > 0) == true;
         var seq = 0;
+        SealStoneLanded(hits);   // GameSession.Settings.cs
         foreach (var hit in hits)
         {
             target.Hp = Math.Max(0, target.Hp - hit.Amount);

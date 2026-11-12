@@ -75,6 +75,7 @@ public sealed partial class GameSession
         ItemAutoUseList(),
         PresetInfo(),
         ItemRestoreStatus(now),
+        .. sealStoneItem != 0 ? [PacketWriter.Opcode(SealStoneRegisterRs).U16(0).I64(sealStoneItem).ToArray()] : Array.Empty<byte[]>(),   // OBSERVED i1146
     ];
 
     // ---------- Emotes ----------
@@ -101,12 +102,66 @@ public sealed partial class GameSession
 
     // ---------- Seal stone ----------
 
+    // OBSERVED in the community recording 2026-11-06 234912 (SealStones.cs, tools/data/sealstones.json from build 26262663):
+    // - registering a stack: 0x8d4e {key, item id}, 0x8d4d {0, uid}, then 0x364a with the stone's stats (69 SealStoneAddDamage,
+    //   534 SealStoneAmplifyDamage) (i24886-24888); 0x8d4d with the registered uid in every world entry (i1146);
+    // - a toggle to the state it already has: refused 0x1960 kToggle_SetAlready (i27405);
+    // - while on, one shard per landed attack: 0x561b count -1, decrease reason 22 kItemModifiedInCombat (224 in 234912).
+    // CANDIDATE: the stats count while a stack is registered (they were sent on registering, before the toggle); the damage
+    // model (+AddDamage, x(1 + AmplifyDamage / 10000), PvE hits while on); one shard per hit with damage, spent after the
+    // cast's replies (OURS: the store call waits for the cast to finish).
+    const int ToggleSetAlready = 0x1960;
+    const byte DecreaseInCombat = 22;
+    static SealStoneTables SealStones => SealStoneTables.Embedded;
+    int sealStoneHits;
+
+    /// <summary>The registered stack while it holds shards.</summary>
+    ItemState? SealStoneStack => sealStoneItem != 0 && storedItems.TryGetValue(sealStoneItem, out var row) && row.Location == "bag" && row.Quantity > 0
+        && SealStones.IsStone(row.TemplateId) ? row : null;
+
+    /// <summary>A stat the registered seal stone adds (by EStat name).</summary>
+    int SealStoneStat(string stat) => SealStoneStack is { } stack ? SealStones.Stat(stack.TemplateId, stat) : 0;
+
+    /// <summary>The seal stone stats for the stat sheet: gear, titles and the registered stone (only the non-zero ones).</summary>
+    IEnumerable<(int Type, int Value)> SealStoneSheet() =>
+        new[] { (69, "SealStoneAddDamage"), (534, "SealStoneAmplifyDamage"), (559, "SealStonePvPIgnoreDefense") }
+            .Select(s => (s.Item1, EnchantStat(s.Item2) + TitleStat(s.Item2) + SealStoneStat(s.Item2))).Where(s => s.Item2 != 0);
+
+    /// <summary>A PvE hit with the seal stone on: +AddDamage, then x(1 + AmplifyDamage / 10000) (CANDIDATE); counts one shard.</summary>
+    IReadOnlyList<Hit> WithSealStone(IReadOnlyList<Hit> hits)
+    {
+        if (!sealStoneOn || SealStoneStack is not { } stack) return hits;
+        var add = SealStones.Stat(stack.TemplateId, "SealStoneAddDamage");
+        var amplify = SealStones.Stat(stack.TemplateId, "SealStoneAmplifyDamage");
+        return hits.Select(h => h.Amount <= 0 ? h : h with { Amount = (int)Math.Round((h.Amount + add) * (10_000.0 + amplify) / 10_000) }).ToList();
+    }
+
+    /// <summary>Counts the shards the landed hits used (one per damaging hit while on).</summary>
+    void SealStoneLanded(IReadOnlyList<Hit> hits)
+    {
+        if (sealStoneOn && SealStoneStack is not null) sealStoneHits += hits.Count(h => h.Amount > 0);
+    }
+
+    /// <summary>Spends the shards counted since the last call from the registered stack (0x561b reason 22).</summary>
+    async Task<List<byte[]>> SpendSealStonesAsync(CancellationToken ct)
+    {
+        var count = sealStoneHits;
+        sealStoneHits = 0;
+        if (count <= 0 || Store is not { } store || CharacterId is not { } character || SealStoneStack is not { } stack) return [];
+        var used = await Stored(async () => await store.ConsumeItemAsync(character, stack.InstanceId, stack.Revision, (int)Math.Min(count, stack.Quantity), ct) ? [[]] : []);
+        if (used.Count == 0) return [];
+        var replies = await InventoryChangesAsync(ct, 0, DecreaseInCombat);
+        if (SealStoneStack is null) replies.AddRange(RefreshStats());   // the stack ran out: its stats go
+        return replies;
+    }
+
     /// <summary>
     /// Activate/DeactivateSealStone_RQ (no body): the toggle (EToggleType SealStone = toggle flag 1, which the official
     /// appearance carries) -> RS {u16 0}, SealStoneStatusChange_NT {key, on} to the player and those around.
     /// </summary>
     async Task<List<byte[]>> SealStoneToggleAsync(bool on, CancellationToken ct)
     {
+        if (on == sealStoneOn) return [PacketWriter.Opcode(on ? SealStoneActivateRs : SealStoneDeactivateRs).U16(ToggleSetAlready).ToArray()];
         sealStoneOn = on;
         await SaveSettingAsync("seal_stone", new SealStoneSetting(on, sealStoneItem), ct);
         var status = PacketWriter.Opcode(SealStoneStatusNt).Varint(playerKey).Bool(on).ToArray();
@@ -114,20 +169,21 @@ public sealed partial class GameSession
         return [PacketWriter.Opcode(on ? SealStoneActivateRs : SealStoneDeactivateRs).U16(0).ToArray(), status];
     }
 
-    /// <summary>RegisterSealStoneAutoUse_RQ {item uid i64}: a bag item (0 clears) -> RS {u16, uid}, BroadcastSealStoneChange_NT {key, item id}.</summary>
+    /// <summary>RegisterSealStoneAutoUse_RQ {item uid i64}: a bag seal stone (0 clears) -> BroadcastSealStoneChange_NT {key, item id}, RS {u16, uid}, the stats.</summary>
     async Task<List<byte[]>> RegisterSealStoneAsync(long uid, CancellationToken ct)
     {
         var itemId = 0;
         if (uid != 0)
         {
-            if (!storedItems.TryGetValue(uid, out var row) || row.Location != "bag") return [PacketWriter.Opcode(SealStoneRegisterRs).U16(1).I64(uid).ToArray()];
+            if (!storedItems.TryGetValue(uid, out var row) || row.Location != "bag" || !SealStones.IsStone(row.TemplateId))
+                return [PacketWriter.Opcode(SealStoneRegisterRs).U16(1).I64(uid).ToArray()];
             itemId = row.TemplateId;
         }
         sealStoneItem = uid;
         await SaveSettingAsync("seal_stone", new SealStoneSetting(sealStoneOn, uid), ct);
         var change = PacketWriter.Opcode(SealStoneBroadcastNt).Varint(playerKey).I32(itemId).ToArray();
         worldPlayer?.Map?.Broadcast(worldPlayer, [change]);
-        return [PacketWriter.Opcode(SealStoneRegisterRs).U16(0).I64(uid).ToArray(), change];
+        return [change, PacketWriter.Opcode(SealStoneRegisterRs).U16(0).I64(uid).ToArray(), .. RefreshStats()];
     }
 
     int SealStoneItemId => sealStoneItem != 0 && storedItems.TryGetValue(sealStoneItem, out var row) ? row.TemplateId : 0;

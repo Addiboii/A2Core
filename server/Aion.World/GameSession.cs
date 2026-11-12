@@ -340,6 +340,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
                 if (worldPlayer?.Map is { } castMap) castMap.Broadcast(worldPlayer, cast.Where(SharedCastPacket));
                 cast.AddRange(await QuestKillsAsync(ct));
                 cast.AddRange(await KillExperienceAsync(ct));
+                cast.AddRange(await SpendSealStonesAsync(ct));
                 return cast;
             }
             case SkillChargingStartRq: return ChargeStart(plain, now);
@@ -349,6 +350,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
                 if (worldPlayer?.Map is { } releaseMap) releaseMap.Broadcast(worldPlayer, release.Where(SharedCastPacket));
                 release.AddRange(await QuestKillsAsync(ct));
                 release.AddRange(await KillExperienceAsync(ct));
+                release.AddRange(await SpendSealStonesAsync(ct));
                 return release;
             }
             case SkillChargingStopRq: return ChargeStop();
@@ -2178,7 +2180,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         {
             if (target.Dead) continue;
             // An immune NPC (a scripted abnormal) takes the hits for nothing; it still turns on its attacker.
-            var hits = Combat.SkillHits(data, skill, className, level, equippedWeapon, target.Defense, rng);
+            var hits = WithSealStone(Combat.SkillHits(data, skill, className, level, equippedWeapon, target.Defense, rng));   // GameSession.Settings.cs
             if (target.Immune) hits = hits.Select(h => h with { Amount = 0 }).ToList();
             // GameSession.CombatTiming.cs: projectiles (0x3803) and their hits after the flight, the action uid, the kill.
             replies.AddRange(HitOrFire(skill, target, hits, actionUid, now));
@@ -2423,7 +2425,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             318 => (s.Type, weapon.Accuracy), 193 => (s.Type, hpMax), 199 => (s.Type, MpMax), 242 => (s.Type, GamePackets.SpawnSp + BuffStat("SPMax")),
             307 => (s.Type, Defense),
             _ => s,
-        }).ToList();
+        }).Concat(SealStoneSheet()).ToList();
         return (stats, hpMax);
     }
 
