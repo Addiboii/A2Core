@@ -1772,7 +1772,15 @@ var respawned = await staffSession.HandleAsync(new PacketWriter().U16(0x8d22).U8
 Check(respawned[0].SequenceEqual(RidePackets.RespawnReply(0)) && !staffSession.Dead && respawned.FindIndex(b => b[0] == 0x21 && b[1] == 0x36) is var loadAt and > 0
       && respawned.FindIndex(b => b[0] == 0x2a && b[1] == 0x38 && b.AsSpan().IndexOf(Convert.FromHexString("13270000b80b0000")) > 0) > loadAt,
       "CharRespawn type 2: back at the respawn point (a map load, then abnormal 10003 as 090856 #104115-#104165)");
-await staffSession.HandleAsync(new PacketWriter().U16(0x3622).I32(1).ToArray(), Now + 414_100);
+var respawnLoad = respawned.FindIndex(b => Op(b) == 0x3621);
+Check(respawned[1].SequenceEqual(PlayerPackets.CharDisappear(staffSession.PlayerKey, 4, 0x4f)) && respawnLoad == 2
+      && respawned[respawnLoad][34] == 4 && respawned[respawnLoad][45] == 0x4f,
+      "the respawn: own 0x3647 reason 4 effect 0x4f, then 0x3621 with reason 4 and effect 0x4f (OBSERVED 090856 #104116-#104118)");
+var revivedEntry = await staffSession.HandleAsync(new PacketWriter().U16(0x3622).I32(1).ToArray(), Now + 414_100);
+var revivedAppear = revivedEntry.FindIndex(b => Op(b) == 0x3646);
+var revivedProtection = revivedEntry.FindIndex(b => Op(b) == 0x382a && b.AsSpan().IndexOf(Convert.FromHexString("1227000088130000")) > 0);
+Check(revivedAppear >= 0 && revivedProtection > revivedAppear && revivedProtection < revivedEntry.FindIndex(b => Op(b) == 0x364a),
+      "the load after the respawn: abnormal 10002 for 5000 ms after the own appearance, before 0x364a (OBSERVED 090856 #104154-#104156)");
 staffSession.NpcHitsPlayer(staffSession.Resource.HpMax * 10, Now + 415_000, killerKey: 2001);
 var fellAgain = staffSession.Position!.Value;
 var stone = await staffSession.HandleAsync(new PacketWriter().U16(0x8d22).U8(3).I64(25).ToArray(), Now + 416_000);
