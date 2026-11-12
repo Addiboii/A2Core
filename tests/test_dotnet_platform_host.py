@@ -134,6 +134,24 @@ class DotnetPlatformHostTests(unittest.TestCase):
         self.assertEqual(log[0]['query'], '?x=1')
         self.assertIn({'path': '<other>', 'response_status': 503}, [{k: e[k] for k in ('path', 'response_status')} for e in log])
 
+    def test_premium_shop_routes(self):
+        # The goods list from tools/data/platform-goods.json, paged; quotas for listed goods only; zero balances without a
+        # character in the world; the empty warehouse echoes the server; no mission events.
+        listed = json.loads((ROOT / 'tools/data/platform-goods.json').read_text(encoding='utf-8'))
+        status, body = self.request('GET', '/local-api-gate/goods/v2.0/goods?page_index=2&page_size=5')
+        page = json.loads(body)
+        self.assertEqual(status, 200)
+        self.assertEqual((page['total_count'], page['page_index'], page['revision_id']), (str(len(listed['goods'])), '2', listed['revision']))
+        self.assertEqual([g['goods_id'] for g in page['page']], [g['goods_id'] for g in listed['goods'][5:10]])
+        first = listed['goods'][0]
+        quotas = json.loads(self.request('GET', f"/local-api-gate/goods/v2.0/me/goods/policy?goods_ids={first['goods_id']},999999999")[1])['quotas']
+        self.assertEqual([(q['goods_id'], q['currency_group_id']) for q in quotas],
+                         [(first['goods_id'], first['goods_basic_price_policies'][0]['currency_group_id'])])
+        balances = json.loads(self.request('GET', '/c/' + CODE + '/local-api-gate/virtual_currency/v2.0/me/balances?currency_group_id=158')[1])
+        self.assertEqual((balances['total_balance'], balances['balance_info_list'][0]['currency_id']), ('0', '110'))
+        self.assertEqual(json.loads(self.request('POST', '/local-api-gate/mobile_warehouse/v1.0/my/items')[1])['warehouse_items'], [])
+        self.assertEqual(self.request('GET', '/local-api-gate/mission/v1.0/me/events'), (200, b'{"events":[]}'))
+
 
 class PublicHostTests(DotnetPlatformHostTests):
     """Bound to every interface, advertising a public address (TLS proxy declared for the account port)."""

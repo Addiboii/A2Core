@@ -347,6 +347,8 @@ public static partial class PlatformBootstrapEndpoints
         // A launch authorization becomes a game ticket (12 h within the account session, like the launch itself). Repeated
         // authn_token requests of the same launch get the same ticket for 15 minutes; later ones mint another, which is fine.
         var redeemed = new ConcurrentDictionary<string, (Lazy<Task<byte[]?>> Ticket, DateTimeOffset At)>();
+        // The account of each redeemed launch code: the shop's balance request names the launch, not the character.
+        var launchAccounts = new ConcurrentDictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
         Task<byte[]?> Redeem(string authorization)
         {
             var now = DateTimeOffset.UtcNow;
@@ -358,6 +360,11 @@ public static partial class PlatformBootstrapEndpoints
                 var ticket = await handoff.RedeemLaunchAsync(a, CancellationToken.None);
                 // Rejected codes are not remembered (anyone can send them).
                 if (ticket is null) redeemed.TryRemove(a, out _);
+                else if (await handoff.ResolveTicketAsync(ticket.Token, ticket.WorldId, CancellationToken.None) is { } account)
+                {
+                    if (launchAccounts.Count > 4096) launchAccounts.Clear();
+                    launchAccounts[a] = account;
+                }
                 return ticket is null ? null : PlatformResponses.PythonJson([("authn_token", ticket.Token)]);
             }), now)).Ticket.Value;
         }
@@ -376,6 +383,7 @@ public static partial class PlatformBootstrapEndpoints
             }
             var method = request.Method;
             (int Status, byte[] Body) reply = (503, NotReady);
+            var gatePath = path.StartsWith("/local-api-gate/", StringComparison.Ordinal) ? path["/local-api-gate".Length..] : null;
             if (method == "GET" && path == Known[0] && responses.Key is { } key) reply = (200, key);
             else if (method == "GET" && path == Known[1] && responses.PolicyFor(code) is { } policy) reply = (200, policy);
             else if (method == "POST" && path == "/MobileAppConfigSdk/app/policy/maintenance" && responses.Maintenance is { } maintenance) reply = (200, maintenance);
@@ -393,6 +401,26 @@ public static partial class PlatformBootstrapEndpoints
             else if (method == "POST" && path == "/local-api-gate/secondary_auth/v1.0/my/auth;start" && responses.SecondaryStart is { } start) reply = (200, start);
             else if (method == "POST" && path == "/local-api-gate/secondary_auth/v1.0/my/auth;finish" && responses.SecondaryFinish is { } finish) reply = (200, finish);
             else if (method == "GET" && path == "/local-api-gate/geolocations/v1.0/me" && responses.Geolocation is { } geo) reply = (200, geo);
+            // The premium shop (PlatformShop, ported from the community fork): goods, the purchase limits of a page, the
+            // empty warehouse, the character's Quna and Mileage, no mission events.
+            else if (method == "GET" && gatePath == "/goods/v2.0/goods")
+                reply = (200, PlatformShop.Embedded.GoodsPage(int.TryParse(request.Query["page_index"], out var pageIndex) ? pageIndex : 1,
+                    int.TryParse(request.Query["page_size"], out var pageSize) ? pageSize : 400));
+            else if (method == "GET" && gatePath == "/goods/v2.0/me/goods/policy") reply = (200, PlatformShop.Embedded.Quotas(request.Query["goods_ids"]));
+            else if (method == "POST" && gatePath == "/mobile_warehouse/v1.0/my/items")
+            {
+                using var reader = new StreamReader(request.Body, Encoding.UTF8);
+                var text = new char[4096];
+                var read = await reader.ReadBlockAsync(text, 0, text.Length);
+                reply = (200, PlatformShop.Warehouse(new string(text, 0, read)));
+            }
+            else if (method == "GET" && gatePath == "/mission/v1.0/me/events") reply = (200, PlatformShop.NoEvents);
+            else if (method == "GET" && gatePath == "/virtual_currency/v2.0/me/balances")
+            {
+                var launch = code ?? responses.LaunchAuthorization;
+                var wallet = launch is not null && launchAccounts.TryGetValue(launch, out var owner) ? Aion.World.PremiumWallets.Of(owner) : (0, 0);
+                reply = (200, PlatformShop.Balances(request.Query["currency_group_id"], wallet.Item1, wallet.Item2));
+            }
             else if (method == "GET" && responses.Session is { } session && (path == issuedSession || SessionPath().IsMatch(path))) reply = (200, session);
             if (requestLog is not null)
             {
