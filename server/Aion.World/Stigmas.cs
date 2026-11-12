@@ -8,7 +8,7 @@ namespace Aion.World;
 /// Stigma rules from tools/data/stigmas.json (tools/stigmas.py, client build 26262663). OBSERVED, read from the tables:
 /// SkillAcquireData Stigma rows (per class 13 skills, levels 1-20 at 1/2/4/8 shards, NeedCharacterLevel 22, learning needs
 /// AscensionGrade_3), Exp.dat BonusStigmaPoint and StigmaSkillContextSlotMax by level, QuickSlotData's QuickSlot_Stigma_1..4
-/// (slots 21-24), and each skill's Skill.dat cast data and SkillEffect Damage rows. CANDIDATE readings (see the builder):
+/// (wire slots 20-23: SlotId - 1, OBSERVED 2026-11-05), and each skill's Skill.dat cast data and SkillEffect Damage rows. CANDIDATE readings (see the builder):
 /// a row's cost buys that level, BonusStigmaPoint is the running total of a level, slot N opens where the slot maximum reaches N.
 /// </summary>
 public sealed class StigmaTables

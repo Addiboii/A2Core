@@ -35,10 +35,16 @@ class StigmaDataTests(unittest.TestCase):
                 # Learning (level 1) needs AscensionGrade_3; the other levels name no grade.
                 self.assertEqual([row[3] for row in cls['ladder']], [3] + [0] * 19)
 
+    def test_every_stigma_has_its_four_variants(self):
+        self.assertEqual(DATA['variants']['14310000'], [[5, 14310010], [10, 14310020], [15, 14310030], [20, 14310040]])
+        bases = [s for cls in DATA['classes'].values() for s in cls['skills']]
+        self.assertTrue(all(len(DATA['variants'][str(b)]) == 4 for b in bases))
+        self.assertTrue(all(str(v) in DATA['skills'] for steps in DATA['variants'].values() for _, v in steps))
+
     def test_shards_slots_and_levels_from_exp_dat(self):
         self.assertEqual([DATA['shards'][str(level)] for level in (22, 23, 40, 45)], [0, 1, 19, 29])
         self.assertEqual(DATA['slot_levels'], [22, 27, 32, 37])
-        self.assertEqual(DATA['slots'], [21, 22, 23, 24])
+        self.assertEqual(DATA['slots'], [20, 21, 22, 23])   # wire slots: QuickSlotData SlotId - 1 (OBSERVED 2026-11-05)
         self.assertEqual(max(DATA['slot_max'].values()), 4)
         totals = [DATA['shards'][str(level)] for level in range(1, 101)]
         self.assertEqual(totals, sorted(totals))
@@ -72,7 +78,8 @@ class StigmaBuilderTests(unittest.TestCase):
             skill = {'kind': 'skills', 'id': 11240000, 'name': 'Test', 'facts': {'SkillType': 'ESkillType::Active', 'NeedCoolTime': 30000.0},
                      'raw': {}, 'relationships': {'effects': [{'rows': [{'ID': {'Value': 7}, 'EffectType': 'ESkillEffectType::Damage',
                                                                           'EffectValueList': ['10', '20', '3000', '4000', '0']}]}]}}
-            (root / 'catalog.jsonl').write_text(json.dumps(skill) + '\n', encoding='utf-8')
+            variant = dict(skill, id=11240010)
+            (root / 'catalog.jsonl').write_text(json.dumps(skill) + '\n' + json.dumps(variant) + '\n', encoding='utf-8')
             return stigmas.build(root / 'tables', root / 'exp', root / 'catalog.jsonl')
 
     @staticmethod
@@ -93,10 +100,12 @@ class StigmaBuilderTests(unittest.TestCase):
         data = self.build(acquire, exp, quick)
         self.assertEqual(data['classes']['Gladiator']['ladder'], [[1, 1, 22, 3], [2, 2, 22, 0]])
         self.assertEqual(data['classes']['Gladiator']['skills'], [11240000])
-        self.assertEqual(data['slots'], [21, 22])
+        self.assertEqual(data['slots'], [20, 21])
         self.assertEqual(data['slot_levels'], [22, 23])
         self.assertEqual(data['shards'], {'21': 0, '22': 0, '23': 1})
         self.assertEqual(data['skills']['11240000']['cooldown_ms'], 30000)
+        self.assertEqual(data['variants'], {'11240000': [[5, 11240010]]})   # only the variants Skill.dat has
+        self.assertEqual(data['skills']['11240010']['class'], 'Gladiator')
         self.assertEqual(data['skills']['11240000']['damage'][0]['ratio'], [3000, 4000])
 
     def test_build_refuses_disagreeing_ladders_and_missing_slots(self):

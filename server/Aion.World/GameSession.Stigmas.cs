@@ -11,7 +11,7 @@ namespace Aion.World;
 //   0x5101 (OBSERVED layout, reason SkillPointLevelUp 3: CANDIDATE), a higher level with SkillLevelUpdate_NT 0x3813 reason 3,
 //   then SkillPointUpdate_NT 0x5105 {count 1, mask 01, type u8 2 StigmaShard (usmap ESkillPointType), shards left varint}.
 //   Result 1: not a stigma of the class, or no further level; result 2: character level, ascension grade or shards short.
-// - Slotting: QuickSlotSet_RQ 0x5601 on a stigma quick slot (QuickSlotData QuickSlot_Stigma_1..4 = slots 21-24, OBSERVED),
+// - Slotting: QuickSlotSet_RQ 0x5601 on a stigma quick slot (QuickSlotData QuickSlot_Stigma_1..4 = wire slots 20-23, SlotId - 1, OBSERVED 2026-11-05),
 //   stored in game.quick_slots as any slot. Checked: the slot is open at the character level (Exp.dat
 //   StigmaSkillContextSlotMax, CANDIDATE: slot N opens where it reaches N), the skill is a learned stigma of the class and sits
 //   in no other stigma slot. OURS: stigmas go only into stigma slots and stigma slots hold only stigmas; a stigma is cast only

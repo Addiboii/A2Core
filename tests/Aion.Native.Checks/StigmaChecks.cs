@@ -6,7 +6,7 @@ using Aion.World;
 /// <summary>
 /// Stigmas (GameSession.Stigmas.cs, tools/data/stigmas.json from build 26262663) against the in-memory store: learning and
 /// raising for shards, the refusals (another class's stigma, character level, ascension grade, shards), slotting into the
-/// stigma quick slots 21-24 by level, the shard item, and a login that keeps saved stigmas the shards no longer cover.
+/// stigma quick slots 20-23 (wire numbers, OBSERVED 2026-11-05) by level, the shard item, and a login that keeps saved stigmas the shards no longer cover.
 /// Wire forms are CANDIDATE (no recording has a stigma); they reuse the recorded skill-point purchase layout.
 /// </summary>
 static class StigmaChecks
@@ -50,7 +50,7 @@ static class StigmaChecks
               && tables.StepOf("Gladiator", WrathWave, 21) is null && tables.StepOf("Templar", WrathWave, 1) is null,
               "stigmas.json: 13 per class (Fighter too), level 1 needs level 22 and AscensionGrade_3, 8 shards from level 16, max 20");
         Check(tables.Shards(23) == 1 && tables.Shards(30) == 8 && tables.Shards(45) == 29 && tables.OpenSlots(21) == 0 && tables.OpenSlots(30) == 2
-              && tables.OpenSlots(45) == 4 && tables.Slots.SequenceEqual([21, 22, 23, 24]) && tables.Spent(WrathWave, 7) == 9,
+              && tables.OpenSlots(45) == 4 && tables.Slots.SequenceEqual([20, 21, 22, 23]) && tables.Spent(WrathWave, 7) == 9,
               "Exp.dat shards (1 at 23, 8 at 30, 29 at 45) and stigma slots (2 open at 30, 4 at 37+); levels 1-7 cost 9 shards");
         Check(GameData.Embedded.Skill(WrathWave) is { CooldownMs: 60000, Damage.Length: > 0 } && GameData.Embedded.Skill(13310000)?.CooldownMs == 60000,
               "stigma cast data from Skill.dat of 26262663 (Wrath Wave 60 s with its Damage row; Assassin 13310000 60 s, 90 s on 2.0.6)");
@@ -81,17 +81,17 @@ static class StigmaChecks
               && (await glad.HandleAsync(new PacketWriter().U16(GameSession.SkillLevelDownRq).I32(WrathWave).ToArray(), now))[0][2] == 1
               && glad.StigmaLevel(WrathWave) == 6, "lowering or resetting stigmas is refused (no price in the tables); nothing changes");
 
-        // Slots: 21 and 22 open at level 30, 23 not; only learned stigmas of the class, one slot each.
-        var slotted = await glad.HandleAsync(SlotSet(21, 4, WrathWave), now);
-        Check(slotted.Single()[2] == 0 && gladStore.QuickSlotRows[21].SkillId == WrathWave && glad.StigmaReady(WrathWave),
-              "QuickSlotSet puts Wrath Wave on stigma slot 21 (0x5602 result 0); it is castable from there");
-        Check((await glad.HandleAsync(SlotSet(23, 4, BladeToss), now)).Single()[2] == 1 && !gladStore.QuickSlotRows.ContainsKey(23),
-              "slot 23 opens at level 32: refused at 30");
-        Check((await glad.HandleAsync(SlotSet(22, 4, FocusedBlock), now)).Single()[2] == 1, "an unlearned stigma: refused");
-        Check((await glad.HandleAsync(SlotSet(22, 4, WrathWave), now)).Single()[2] == 1, "a stigma already in slot 21 cannot take slot 22 too");
-        Check((await glad.HandleAsync(SlotSet(3, 0, BladeToss), now)).Single()[2] == 1 && (await glad.HandleAsync(SlotSet(22, 0, 11010000), now)).Single()[2] == 1,
+        // Slots: 20 and 21 open at level 30, 22 not; only learned stigmas of the class, one slot each.
+        var slotted = await glad.HandleAsync(SlotSet(20, 4, WrathWave), now);
+        Check(slotted.Single()[2] == 0 && gladStore.QuickSlotRows[20].SkillId == WrathWave && glad.StigmaReady(WrathWave),
+              "QuickSlotSet puts Wrath Wave on stigma slot 20 (0x5602 result 0); it is castable from there");
+        Check((await glad.HandleAsync(SlotSet(22, 4, BladeToss), now)).Single()[2] == 1 && !gladStore.QuickSlotRows.ContainsKey(22),
+              "slot 22 (the third) opens at level 32: refused at 30");
+        Check((await glad.HandleAsync(SlotSet(21, 4, FocusedBlock), now)).Single()[2] == 1, "an unlearned stigma: refused");
+        Check((await glad.HandleAsync(SlotSet(21, 4, WrathWave), now)).Single()[2] == 1, "a stigma already in slot 20 cannot take slot 21 too");
+        Check((await glad.HandleAsync(SlotSet(3, 0, BladeToss), now)).Single()[2] == 1 && (await glad.HandleAsync(SlotSet(21, 0, 11010000), now)).Single()[2] == 1,
               "stigmas only in stigma slots; stigma slots hold only stigmas");
-        Check(!glad.StigmaReady(BladeToss) && (await glad.HandleAsync(SlotSet(22, 0, BladeToss), now)).Single()[2] == 0 && glad.StigmaReady(BladeToss),
+        Check(!glad.StigmaReady(BladeToss) && (await glad.HandleAsync(SlotSet(21, 0, BladeToss), now)).Single()[2] == 0 && glad.StigmaReady(BladeToss),
               "a learned but unslotted stigma is not castable until it sits in an open stigma slot");
 
         // Ascension grade and character level gates (SkillAcquireData NeedAscensionGrade / NeedCharacterLevel).

@@ -14,6 +14,11 @@ Labels: every number in the file is OBSERVED (read from the named table). The re
 - CostStigmaPoint is the price of reaching that SkillLevel (level 1 = learning the skill).
 - BonusStigmaPoint is the running total of shards a character of that level has (it only grows: 1 at 23 ... 29 at 45).
 - StigmaSkillContextSlotMax is how many stigma quick slots are open; slot N opens at the first level where it reaches N.
+OBSERVED in the community recordings of 2026-11-05/06 (official server):
+- the wire quick slot is QuickSlotData SlotId - 1 (stigmas 20-23; skills 0-7 and items 10-17 likewise);
+- from stigma level 5 the client casts a variant: skill id + 10 at levels 5-9, + 20 at 10-14, + 30 at 15-19, + 40 at
+  20, added with SkillAdd_NT and removed with SkillDelete_NT at each threshold (five stigmas, two classes). The rule is
+  read from the recordings; the client table behind it is not found yet. The variants' cast rows are Skill.dat's.
 What no table says is listed under "unknown" in the output instead of guessed.
 Rebuild with `python tools/stigmas.py`.
 """
@@ -39,7 +44,7 @@ else:
 UNKNOWN = [
     'the shard price of lowering or resetting a stigma (no table names one)',
     'whether a stigma must sit in an open stigma quick slot to be cast (no table says)',
-    'the wire form of learning a stigma (no recording; the server reads SkillLevelUp_RQ on an unlearned stigma as learning it)',
+    'which client table holds the stigma variants (the +10..+40 rule is read from recordings)',
     'what BonusStigmaSuperiorPoint (superior shards, from level 46) buys: every Stigma row has CostStigmaSuperiorPoint 0',
     'what bSkillListUI false means for the two stigma skills that carry it (kept as list_ui, unused by the server)',
 ]
@@ -104,8 +109,16 @@ def stigma_slots(quick_slots):
     for row in quick_slots:
         action = _short(row.get('InputAction', ''))
         if action.startswith('QuickSlot_Stigma_'):
-            found.append((int(action.rsplit('_', 1)[1]), int(_value(row['SlotId']))))
+            found.append((int(action.rsplit('_', 1)[1]), int(_value(row['SlotId'])) - 1))   # the wire slot (OBSERVED)
     return [slot for _, slot in sorted(found)]
+
+
+VARIANT_STEPS = [(5, 10), (10, 20), (15, 30), (20, 40)]   # (from stigma level, id offset), OBSERVED 2026-11-05/06
+
+
+def variants(bases, known):
+    """{base: [[from level, variant skill id], ...]} for the variants Skill.dat has."""
+    return {str(b): [[level, b + offset] for level, offset in VARIANT_STEPS if b + offset in known] for b in sorted(bases)}
 
 
 def exp_columns(exp):
@@ -133,9 +146,12 @@ def build(tables=TABLES, exp_tables=EXP, catalog=CATALOG):
             if entry.get('kind') == 'skills':
                 entries[entry['id']] = entry
     missing = sorted(wanted - set(entries))
-    cast = {str(s): class_skills.cast_row(entries[s]) for s in sorted(wanted) if s in entries}
-    class_skills.merge_chain_skills(cast, entries, sorted(wanted & set(entries)))
+    variant = variants(wanted & set(entries), set(entries))
+    variant_ids = {v for steps in variant.values() for _, v in steps}
+    cast = {str(s): class_skills.cast_row(entries[s]) for s in sorted(wanted | variant_ids) if s in entries}
+    class_skills.merge_chain_skills(cast, entries, sorted((wanted | variant_ids) & set(entries)))
     owner = {s: cls for cls, skills in by_class.items() for s in skills}
+    owner.update({v: owner[int(b)] for b, steps in variant.items() for _, v in steps})
     for key, row in cast.items():
         if int(key) in owner:
             row['class'] = owner[int(key)]
@@ -149,6 +165,7 @@ def build(tables=TABLES, exp_tables=EXP, catalog=CATALOG):
         'slot_max': slot_max,
         'slot_levels': opens,
         'slots': slots,
+        'variants': variant,
         'skills': cast,
         'projectile_speeds': speeds,
         'missing_skills': missing,
@@ -160,7 +177,8 @@ def build(tables=TABLES, exp_tables=EXP, catalog=CATALOG):
             'superior_shards': 'Exp.dat BonusStigmaSuperiorPoint by level (OBSERVED); unused',
             'slot_max': 'Exp.dat StigmaSkillContextSlotMax by level (OBSERVED)',
             'slot_levels': 'first level where StigmaSkillContextSlotMax reaches 1, 2, ... (CANDIDATE: slot N opens there)',
-            'slots': 'QuickSlotData SlotId of InputAction QuickSlot_Stigma_1..N (OBSERVED)',
+            'slots': 'QuickSlotData SlotId - 1 of InputAction QuickSlot_Stigma_1..N: the wire slot (OBSERVED, recordings 2026-11-05/06)',
+            'variants': 'per stigma: [from stigma level, the skill id the client casts from there] (OBSERVED rule, recordings 2026-11-05/06)',
             'skills': 'Skill.dat cast data and SkillEffect Damage rows (catalogue, tools/class_skills.cast_row), chain steps added',
             'hidden': 'skills whose Stigma rows have bSkillListUI false (OBSERVED; meaning unknown)',
         },
