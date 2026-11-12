@@ -55,6 +55,14 @@ class ClassSkillTests(unittest.TestCase):
         self.assertEqual(starter_weapon(starter_profile(2, 1)), 110260001)   # Light Templar sword
         self.assertEqual(starter_weapon(starter_profile(10, 2)), 110260008)  # Dark Templar sword
 
+    def test_charged_skills_name_their_steps(self):
+        # SkillCharge.dat 26262663: Dead Shot's steps at 500/1000/1500 ms select 14010001-3, each a cast row of its own.
+        data = class_skills.data()
+        self.assertEqual(data['skills']['14010000']['charge'], 14010000)
+        self.assertEqual(data['charges']['14010000'], {'min_ms': 300, 'movable': False,
+                                                        'steps': [[500, 14010001], [1000, 14010002], [1500, 14010003]]})
+        self.assertTrue(all(str(s) in data['skills'] for _, s in data['charges']['14010000']['steps']))
+
     def test_levels_clamp_to_recovered_cap(self):
         self.assertEqual((class_skills.clamp_level(0), class_skills.clamp_level(500)), (1, class_skills.data()['max_level']))
 

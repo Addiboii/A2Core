@@ -173,6 +173,40 @@ def merge_chain_skills(cast, skills, seeds):
             row['chain_next'] = sorted(nexts[int(key)])
 
 
+def charge_rows(table):
+    """{charge id: {min_ms, movable, steps: [[ChargeTime ms, ChargeSkillId], ...]}} from SkillCharge.dat (player skills only).
+
+    Skill.dat ChargeId names the row of a charged skill (Ranger Dead Shot 14010000 -> 14010000). Step n (1-based) is reached
+    after steps[n-1][0] ms of charging at speed factor 1; step 0 is the charge skill itself. OBSERVED in the community
+    recordings 2026-11-06: a release names ChargeSkillId as its selected skill.
+    """
+    if not table:
+        return {}
+    rows = json.loads(Path(table).read_text(encoding='utf-8'))['Properties']['Data']
+    charges = {}
+    for r in rows:
+        charge = _value(r['ID'])
+        if not PC_SKILL_MIN <= charge < PC_SKILL_MAX:
+            continue
+        charges[str(charge)] = {'min_ms': int(r.get('ChargeMinTime') or 0), 'movable': bool(r.get('bMovableInCharge')),
+                                'steps': [[int(s.get('ChargeTime') or 0), int(_value(s.get('ChargeSkillId')) or 0)]
+                                          for s in r.get('SkillChargeDataList', [])]}
+    return charges
+
+
+def merge_charge_skills(cast, skills, charges):
+    """Set `charge` on every cast row whose Skill.dat ChargeId names a SkillCharge row, and add each step's skill (cast with its
+    own damage at release, not learned) as a cast row."""
+    for key, row in cast.items():
+        charge = int(_value(skills.get(int(key), {}).get('raw', {}).get('ChargeId')) or 0)
+        if str(charge) in charges:
+            row['charge'] = charge
+    for entry in charges.values():
+        for _, step in entry['steps']:
+            if step in skills and str(step) not in cast:
+                cast[str(step)] = cast_row(skills[step])
+
+
 def build(tables=TABLES, catalog=CATALOG):
     def rows(index):
         return json.loads((tables / f'table-{index:03}.json').read_text(encoding='utf-8'))['Properties']['Data']
@@ -226,6 +260,8 @@ def build(tables=TABLES, catalog=CATALOG):
     auto = sorted({s for entries in unlocks.values() for s, _, _ in entries})
     cast = {str(skill): cast_row(skills.get(skill, {})) for skill in auto}
     merge_chain_skills(cast, skills, auto)
+    charges = charge_rows(find_table('SkillCharge.dat'))
+    merge_charge_skills(cast, skills, charges)
     projectile_table = find_table('SkillProjectile.dat')
     speeds = projectile_speeds(cast, projectile_table)
     # Per-class base stats by level (PcStatLevel): FixingDamage, Defense, HPMax, ...
@@ -235,7 +271,7 @@ def build(tables=TABLES, catalog=CATALOG):
     return {'max_level': max(r['Level'] for r in stat_levels), 'common': COMMON,
             'stats': stats, 'weapon_stats': weapon_stats,
             'classes': {k: v for k, v in classes.items()}, 'common_unlocks': unlocks.get(COMMON, []),
-            'skills': cast, 'levels': levels, 'projectile_speeds': speeds,
+            'skills': cast, 'levels': levels, 'projectile_speeds': speeds, 'charges': charges,
             'evidence': {'acquire': 'SkillAcquireData bAutoLearn rows without costs/prerequisites/ascension',
                          'levels': 'SkillAcquireData Mastery rows of SkillLevel 2+: level, CostSkillPoint, NeedCharacterLevel',
                          'max_level': 'PcStatLevel highest Level',
@@ -246,6 +282,7 @@ def build(tables=TABLES, catalog=CATALOG):
                          'chains': 'Skill.dat ChainSkillPrevSkillId/AvailableTime/ActivateRate/DeactivateType; chain-only player skills reachable from the auto-learned ones added (A2Core PR #4)',
                          'projectile': 'Skill.dat SkillEffectTimeDataList ProjectileId of the time row a Damage row belongs to',
                          'projectile_speeds': 'SkillProjectile.dat Speed (newest research/local export naming the table)',
+                         'charges': 'SkillCharge.dat ChargeMinTime, bMovableInCharge, SkillChargeDataList {ChargeTime, ChargeSkillId}; a cast row has charge = its Skill.dat ChargeId; the step skills are added as cast rows',
                          'ranges': 'Skill.dat NeedSkillUseRange/NeedSkillUseHeightRange/NeedSkillFollowRange (cm, CANDIDATE unit; 0 no range)'}}
 
 
