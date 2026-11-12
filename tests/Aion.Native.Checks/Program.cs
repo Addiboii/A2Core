@@ -1467,6 +1467,13 @@ Check(staffStore.Rewards.Single() is ("HQ1101010", 1133, 2) && rewardOps.IndexOf
       "taking the reward pays 1133 exp, Kina and potions, answers 0x8d0f and adds the next quest HQ1101011 (0x8d11)");
 Check(staffSession.Level == 2 && staffSession.Experience == 0 && staffStore.Progress == (2, 0) && rewardOps.IndexOf(0x8d07) < rewardOps.IndexOf(0x8d08),
       "1133 quest exp is level 1's NeedExp: level 2 with 0 left, stored, ExpUpdate then LevelUpdate (as the official level-up)");
+{
+    var open = staffSession.Quests!.Book.ById.First(q => staffSession.Quests.Get(q.Value) is null && staffSession.Quests.CanAccept(q.Value, staffSession.Level));
+    var questAccepted = await staffSession.HandleAsync(new PacketWriter().U16(0x8d0a).I32(open.Key).I32(0).ToArray(), Now);
+    var acceptedUid = (int)staffSession.Quests.Get(open.Value)!.Uid;
+    Check(questAccepted.Count == 2 && Op(questAccepted[0]) == 0x8d11 && questAccepted[1].SequenceEqual(GamePackets.QuestAcceptReply(open.Key, acceptedUid)),
+          "QuestAccept_RQ: QuestAdd_NT, then QuestAccept_RS {0, quest, uid} (official 2026-11-04 192703 #35324-35325)");
+}
 Check((await staffSession.HandleAsync(new PacketWriter().U16(0x8d0e).I32((int)staffSession.Quests!.Get("HQ1101010")!.Uid).I32(0).ToArray(), Now)).Single()
       .SequenceEqual(GamePackets.QuestTakeRewardReply((int)staffSession.Quests!.Get("HQ1101010")!.Uid, 1)), "a second reward is refused");
 Check(staffEntry.Any(b => b[0] == 0x57 && b[1] == 0xe2 && b.Skip(3).Contains((byte)12)), "the wing menu (12) is unlocked for a winged character");

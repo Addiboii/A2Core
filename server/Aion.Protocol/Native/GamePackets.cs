@@ -814,7 +814,7 @@ public static class GamePackets
         return w.ToArray();
     }
 
-    /// <summary>0x8d11 QuestAdd_NT: a newly accepted quest (the official answer to an accept; no 0x8d0b was seen).</summary>
+    /// <summary>0x8d11 QuestAdd_NT: a newly accepted quest, followed by QuestAccept_RS 0x8d0b on an accept (OBSERVED 2026-11-04/06).</summary>
     public static byte[] QuestAdd(QuestWire q) => WriteQuest(PacketWriter.Opcode(0x8d11), q).ToArray();
 
     /// <summary>0x8d10 QuestUpdateProgress_NT: uid, status, step, objective counters.</summary>

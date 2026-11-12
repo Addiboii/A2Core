@@ -991,7 +991,12 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
     {
         if (questLog is null || !questLog.Book.ById.TryGetValue(questId, out var code) || !questLog.CanAccept(code, level))
             return [GamePackets.QuestAcceptReply(questId, 0, 1)];
-        return await Stored(async () => [GamePackets.QuestAdd(Wire(await SaveQuestAsync(QuestLog.New(code, questLog.Book.Find(code)!), ct)))]);
+        // QuestAdd_NT then QuestAccept_RS {result 0, quest, uid} (OBSERVED 2026-11-04 192703 #35324-35325, 2026-11-06 234912 #38133-38134).
+        return await Stored(async () =>
+        {
+            var added = Wire(await SaveQuestAsync(QuestLog.New(code, questLog.Book.Find(code)!), ct));
+            return [GamePackets.QuestAdd(added), GamePackets.QuestAcceptReply(questId, added.Uid)];
+        });
     }
 
     async Task<List<byte[]>> QuestGiveUpAsync(int uid, CancellationToken ct)
