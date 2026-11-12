@@ -132,6 +132,7 @@ public sealed partial class GameSession
         if (Economy is { } economy)
             await Stored(async () => { reward = await economy.TakePushRewardAsync(Me, id, DateTimeOffset.FromUnixTimeMilliseconds(now), ct); return []; });
         var rs = PacketWriter.Opcode(PushRewardTakeRs).U16(reward is null ? 1 : 0).U8(type).I32(id).U8(sequence).I32(reward?.TemplateId ?? 0).I64(reward?.Count ?? 0).ToArray();
-        return reward is null ? [rs] : [rs, .. await InventoryChangesAsync(ct, 24, 0), PacketWriter.Opcode(PushRewardChangedNt).ToArray()];
+        // Increase reason 22 (OBSERVED 2026-11-06 234912 #124322; 24 before).
+        return reward is null ? [rs] : [rs, .. await InventoryChangesAsync(ct, 22, 0), PacketWriter.Opcode(PushRewardChangedNt).ToArray()];
     }
 }
