@@ -31,6 +31,14 @@ class SpecializedSkillTests(unittest.TestCase):
         self.assertEqual(DATA['stigma_slots'], 5)
         self.assertEqual(DATA['parts']['11020000'], [[11020010, 8], [11020020, 8], [11020030, 8], [11020040, 12], [11020050, 16]])
 
+    def test_chain_steps_children_follow_the_childs_chain(self):
+        # Recorded in 0x5100 #643 with 11020000 parts 30+40: 11030340 and 11040340 (Skill.dat links them to 11020340).
+        self.assertIn(11030340, DATA['chain_children']['11030000'])
+        self.assertIn(11040340, DATA['chain_children']['11040000'])
+        self.assertEqual(DATA['skills']['11030340']['chain_prev'], 11020340)
+        self.assertEqual(DATA['skills']['11020340']['chain_next'], [11030340])
+        self.assertEqual(DATA['skills']['11030340']['parent'], 11030000)
+
     def test_stigmas_are_not_mastery_parents(self):
         # A stigma's parts (InitEquipSlotType Slot_1..4) are the variants of stigmas.json, not written here.
         self.assertFalse(set(DATA['parts']) & set(STIGMAS['variants']))

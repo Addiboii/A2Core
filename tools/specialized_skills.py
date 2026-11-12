@@ -86,10 +86,17 @@ def build(tables=TABLES, catalog=CATALOG):
                 entries[entry['id']] = entry
     wanted = sorted({c for kids in children.values() for c in kids})
     cast = {str(c): class_skills.cast_row(entries[c]) for c in wanted if c in entries}
-    for parent, kids in children.items():
+    # A chain step's children follow the child's own chain (Skill.dat ChainSkillPrevSkillId: 11030340 after 11020340), not
+    # SpecializedSkill.dat: added with their chain links, each under its step (the id with the parts digits cleared).
+    class_skills.merge_chain_skills(cast, entries, wanted)
+    chain_children = {}
+    for key in cast:
+        kid = int(key)
+        if kid not in set(wanted):
+            chain_children.setdefault(str(kid // 10000 * 10000), []).append(kid)
+    for parent, kids in list(children.items()) + list(chain_children.items()):
         for kid in kids:
-            if str(kid) in cast:
-                cast[str(kid)]['parent'] = int(parent)
+            cast[str(kid)]['parent'] = int(parent)
     return {
         'source': f'SpecializedSkill/Parts/Slot.dat and Skill.dat (catalogue) of client build {BUILD} (tools/specialized_skills.py)',
         'build': BUILD,
@@ -97,6 +104,7 @@ def build(tables=TABLES, catalog=CATALOG):
         'stigma_slots': len(slot_levels(slots, 'Stigma')),
         'parts': dict(sorted(mastery.items())),
         'children': {p: sorted(k) for p, k in sorted(children.items())},
+        'chain_children': {p: sorted(k) for p, k in sorted(chain_children.items())},
         'skills': cast,
         'missing_skills': sorted(set(wanted) - set(entries)),
         'evidence': {
@@ -104,6 +112,8 @@ def build(tables=TABLES, catalog=CATALOG):
             'stigma_slots': 'SpecializedSkillSlot.dat Stigma rows (OBSERVED; the stigma lists of 0x3900 carry five)',
             'parts': 'SpecializedSkillParts.dat rows with InitEquipSlotType None: [part id, ParentSkillLv] per parent (OBSERVED)',
             'children': 'SpecializedSkill.dat ChildSkillId per mastery parent (OBSERVED)',
+            'chain_children': 'Skill.dat chain steps of the children (ChainSkillPrevSkillId), per step id; OBSERVED in 0x5100 #643 '
+                              '(11030340, 11040340 with 11020000 parts 30+40)',
             'skills': 'Skill.dat cast data of every child (catalogue, tools/class_skills.cast_row), with its parent',
         },
     }
