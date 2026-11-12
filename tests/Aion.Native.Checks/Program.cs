@@ -1953,6 +1953,8 @@ Check(staffSession.MapId == 600002 && staffSession.MapEventRuns.Any(r => r.Name 
       && kraoEntered.Any(b => Op(b) == 0x922e), "inside: the Easy script runs (0x922e), the cave's monsters appear");
 Check(kraoEntered.Any(b => Op(b) == GameSession.DungeonStateNt && b[6] == GameSession.DungeonStateProcess && BitConverter.ToInt64(b, 15) - BitConverter.ToInt64(b, 7) == 3_600_000),
       "the expedition's state says running with its 60-minute limit (0x6100)");
+Check(kraoEntered.Where(b => Op(b) == GameSession.DungeonStateNt).All(b => b.Length == 23),
+      "0x6100 is 23 bytes: dungeon, state, start, end (official recordings, no trailing byte)");
 // A sealed dungeon (type Seal, solo): its field portal (EnvObjData usage EnterDungeon, value = dungeon id) enters its copy.
 var sealIndex = nodes.Select((o, i) => (o, i)).First(x => x.o.Portal is [var sid] && MapEventTables.Embedded.Dungeon(sid) is { Type: "Seal" }).i;
 var sealRoom = MapEventTables.Embedded.Dungeon(nodes[sealIndex].Portal![0])!;
@@ -2510,7 +2512,7 @@ Check(GameSession.AscensionQuests.Select(c => book.Find(c)!).ToList() is [var li
 jo.ExitSharedWorld();
 Check(layer.TakeWhile(b => Op(b) != 0x3623).Any(b => Op(b) == 0x3642 && b[^1] == 1) && !layer.Any(b => b.SequenceEqual(GamePackets.Death(guide.Key, 1))) && layerOps.IndexOf(0x3623) >= 0,
       "the layer shares Poeta's level: the base map's other NPCs are removed before the load reply (0x3642 flag 1, as observed; Robin not twice)");
-Check(layer.Any(b => Op(b) == GameSession.DungeonStateNt && BitConverter.ToInt32(b, 2) == 96 && b[6] == GameSession.DungeonStateProcess && b.Length == 24)
+Check(layer.Any(b => Op(b) == GameSession.DungeonStateNt && BitConverter.ToInt32(b, 2) == 96 && b[6] == GameSession.DungeonStateProcess && b.Length == 23)
       && layerOps.IndexOf(GameSession.DungeonStateNt) < layerOps.IndexOf(GameSession.DungeonDeathLimitNt)
       && layerOps.IndexOf(GameSession.DungeonDeathLimitNt) < layerOps.IndexOf(GameSession.DungeonClearKillNpcNt) && layerOps.IndexOf(GameSession.DungeonClearKillNpcNt) < layerOps.IndexOf(0x922e),
       "the layer's state: 0x6100 dungeon 96 running, 0x6109, 0x6108, then the event join (the observed order)");

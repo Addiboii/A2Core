@@ -105,9 +105,10 @@ public sealed partial class GameSession
     /// <summary>The copy a party member would join is full (MapEntrance MaxMember).</summary>
     static bool CopyFull(MapInstance inside, DungeonInfo room) => room.MaxMember > 0 && inside.Players.Count >= room.MaxMember;
 
-    /// <summary>DungeonState_NT 0x6100 {dungeon, EDungeonState u8, start, end, u8 0} (OBSERVED: `60000000 02 [now] 0 00` at the layer entry).</summary>
+    /// <summary>DungeonState_NT 0x6100 {dungeon i32, EDungeonState u8, start i64, end i64}: 23 bytes with the opcode (OBSERVED:
+    /// all 33 instances in the community recordings of 2026-11-04 to 06 and the 4 in ours; no trailing byte).</summary>
     static byte[] DungeonState(int dungeonId, byte state, long startMs, long endMs) =>
-        PacketWriter.Opcode(DungeonStateNt).I32(dungeonId).U8(state).I64(startMs).I64(endMs).U8(0).ToArray();
+        PacketWriter.Opcode(DungeonStateNt).I32(dungeonId).U8(state).I64(startMs).I64(endMs).ToArray();
 
     /// <summary>DungeonCompleteResult_NT 0x6101 (OBSERVED `00 60000000 01 00`: u8 0, dungeon, succeeded, no rewards).</summary>
     static byte[] DungeonCompleteResult(int dungeonId, bool succeeded) =>
