@@ -1802,6 +1802,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         flySprint = false;
         // A winged character has the flight gauge (OBSERVED 250,000 at the ascension; drained and refilled on the ticks).
         resources.FpMax = resources.Fp = wingId != 0 ? FpMax : 0;
+        if (fresh) RestoreLogoutState(now);   // the buffs' time left and the FP stored at the logout (GameSession.LogoutState.cs)
         // An instance-layer move in or out (the level stays loaded): the official load is the short list, not the world-entry
         // set (OBSERVED entry #9676-9702: 0x3623, 0x3633, 0x3646, 0x382a, 0x364a, 0x8d00, 0x4001, 0x4002, 0x6100.., 0x922e, spawns;
         // exit #14305-14345: the same with 0x3722 and 0x3742 after 0x4002 and no dungeon state). Live 2026-10-19: with the
@@ -1856,6 +1857,9 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         }
         // The class passives (weapon equip permission) right after the appearance, as the official world entry has them.
         replies.InsertRange(replies.FindIndex(b => b[0] == 0x46 && b[1] == 0x36) + 1, PassiveAbnormals(resend: true));
+        // The entry protection after the appearance and the passives, before the stats (OBSERVED 10002, 5000 ms: 234912 #56805-56811
+        // 0x3633, 0x3646, 0x382a, .., 0x382a 10002, 0x364a; GameSession.LogoutState.cs).
+        if (fresh && !shortLoad && EntryProtection(now) is { } protection) replies.Insert(replies.FindIndex(b => b[0] == 0x4a && b[1] == 0x36), protection);
         replies.InsertRange(0, sameLevelRemovals);   // the same level's old entities go before the load reply (OBSERVED)
         sameLevelRemovals = [];
         if (shortLoad)
@@ -3076,6 +3080,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
     /// <summary>Saves a selected stored character's position every 30 s when it moved, or now (force).</summary>
     public async Task CheckpointAsync(long now, bool force, CancellationToken ct = default)
     {
+        if (force) await SaveLogoutStateAsync(now, ct);   // logout, lobby, disconnect: buffs and FP (GameSession.LogoutState.cs)
         if (Store is null || selected is null || position is not { } at || at == savedPosition) return;
         if (!force && now < checkpointAt) return;
         checkpointAt = now + CheckpointMs;

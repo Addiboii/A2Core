@@ -207,9 +207,10 @@ class DotnetNativeHostTests(unittest.TestCase):
             selected = client.frames(3)
             self.assertEqual([b[:2] for b in selected], [b'\x20\x36', b'\x44\x8d', b'\x21\x36'])
             client.send(b'\x22\x36' + struct.pack('<i', 1))
-            burst = client.frames(8)
-            # The class passives (0x382a, weapon equip permission) follow the appearance, as at the official world entry.
-            self.assertEqual([b[:2] for b in burst[:7]], [b'\x23\x36', b'\x46\x37', b'\x00\x8d', b'\x33\x36', b'\x46\x36', b'\x2a\x38', b'\x4a\x36'])
+            burst = client.frames(9)
+            # The class passives (0x382a, weapon equip permission) follow the appearance, then the entry protection (0x382a
+            # 10002) before the stats, as at the official world entry (2026-11-06 234912 #56805-56811).
+            self.assertEqual([b[:2] for b in burst[:8]], [b'\x23\x36', b'\x46\x37', b'\x00\x8d', b'\x33\x36', b'\x46\x36', b'\x2a\x38', b'\x2a\x38', b'\x4a\x36'])
             self.assertIn(b'Tester', burst[3])
             client.send(b'\x1c\x8a')
             seen = []

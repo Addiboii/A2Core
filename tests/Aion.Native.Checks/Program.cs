@@ -267,10 +267,12 @@ Check(Convert.ToHexStringLower(GamePackets.ClientEnvSetting()) == "448d01fffffff
 }
 var entered = await game.HandleAsync(new PacketWriter().U16(0x3622).I32(1).ToArray(), Now);
 var opcodes = entered.Select(b => b[0] | b[1] << 8).ToList();
-Check(opcodes.Take(8).SequenceEqual(new[] { 0x3623, 0x3746, 0x8d00, 0x3633, 0x3646, 0x382a, 0x364a, 0x3657 }) && opcodes.Contains(0x5100) && opcodes.Contains(0xe257), "world entry burst");
+Check(opcodes.Take(9).SequenceEqual(new[] { 0x3623, 0x3746, 0x8d00, 0x3633, 0x3646, 0x382a, 0x382a, 0x364a, 0x3657 }) && opcodes.Contains(0x5100) && opcodes.Contains(0xe257)
+      && entered[6].AsSpan().IndexOf(Convert.FromHexString("12270000")) > 0 && entered[6].AsSpan().IndexOf(Convert.FromHexString("88130000")) > 0,
+      "world entry burst (the passives, then the entry protection 10002 for 5000 ms before the stats, as 234912 #56805-56811)");
 // The class passives as permanent abnormals (official world entry: 110000001, duration -1, expire 2100): the Gladiator's
 // WeaponEquipable Greatsword/Guarder is what lets the client equip greatswords.
-var passives = entered.Single(b => b[0] == 0x2a && b[1] == 0x38);
+var passives = entered.First(b => b[0] == 0x2a && b[1] == 0x38);   // the first 0x382a (the entry protection follows)
 Check(Convert.ToHexStringLower(passives).Contains(Convert.ToHexStringLower(BitConverter.GetBytes(110000001)) + "ffffffffffffffff" + Convert.ToHexStringLower(BitConverter.GetBytes(4_102_412_400_000L))),
       "world entry announces the class passives (0x382a: Equip Gladiator Weapon 110000001, permanent)");
 Check(opcodes.Count(o => o == 0x3641) == 1 + data.Spawns(1000).Count && data.Spawns(1000).Count > 200, "training dummy and every Poeta NPC appear");
@@ -2346,6 +2348,7 @@ Console.WriteLine($"{await SpecializationChecks.RunAsync(GladiatorOn, Now)} spec
 Console.WriteLine($"{await ImprintChecks.RunAsync(GladiatorOn, Now)} manastone checks passed (0x562a as recorded, costs, refusals, worn item).");
 Console.WriteLine($"{await SealStoneChecks.RunAsync(GladiatorOn, Now)} seal stone checks passed (register, toggle refusal, shards per hit, entry).");
 Console.WriteLine($"{await ItemPointChecks.RunAsync(GladiatorOn, Now)} item point checks passed (Wisdom Stone, Daevanion Crystal, relog).");
+Console.WriteLine($"{await LogoutStateChecks.RunAsync(GladiatorOn, Now)} logout state checks passed (a timed buff paused while offline).");
 
 // ---------- Multiplayer: the shared world (players see each other, shared NPCs) ----------
 checks = 0;

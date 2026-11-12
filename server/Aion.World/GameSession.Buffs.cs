@@ -75,7 +75,7 @@ public sealed partial class GameSession
     /// 0x3805 per heal row, the polymorph and relationship updates. A duration below 0 lasts (the official passive's expire time);
     /// an abnormal the tables do not know only shows its icon. The caller refreshes the stats.
     /// </summary>
-    Buff? AddBuff(int abnormalId, int durationMs, int skillId, long now, List<byte[]> replies, bool scripted = false)
+    Buff? AddBuff(int abnormalId, int durationMs, int skillId, long now, List<byte[]> replies, bool scripted = false, int? remainingMs = null)
     {
         if (resources is null) return null;
         var info = Boxes.Abnormal(abnormalId);
@@ -102,11 +102,12 @@ public sealed partial class GameSession
         }
         var separate = rule.OverlapTime == "Separate";
         replies.AddRange(RemoveBuffs(buffs.Where(b => b.Group == group && !(separate && b.AbnormalId == abnormalId)).ToList(), ExpireReplaced));
-        var duration = permanent ? 0 : durationMs;
+        // A buff restored after a logout keeps its duration and ends after the time it had left (GameSession.LogoutState.cs).
+        var duration = permanent ? 0 : remainingMs ?? durationMs;
         var buff = new Buff
         {
             Uid = ++buffUid, AbnormalId = abnormalId, SkillId = skillId, Group = group, DurationMs = permanent ? -1 : durationMs,
-            ExpireAt = permanent ? PassiveExpireTime : now + durationMs, Scripted = scripted,
+            ExpireAt = permanent ? PassiveExpireTime : now + duration, Scripted = scripted,
         };
         foreach (var (id, type, values) in info?.Effects ?? [])
         {

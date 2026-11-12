@@ -58,6 +58,7 @@ public sealed partial class GameSession
         autoUseSlots.Clear();
         autoUseSlots.UnionWith(Read<int[]>("quick_slot_auto_use") ?? []);
         presets = Read<PresetSetting>("presets") ?? new([], []);
+        LoadLogoutState(settings);   // GameSession.LogoutState.cs
         restoreCounts = Read<Dictionary<int, RestoreCount>>("item_restores") ?? [];
     }
 
