@@ -1996,6 +1996,17 @@ Check(kraoEntered.Any(b => Op(b) == GameSession.DungeonStateNt && b[6] == GameSe
       "the expedition's state says running with its 60-minute limit (0x6100)");
 Check(kraoEntered.Where(b => Op(b) == GameSession.DungeonStateNt).All(b => b.Length == 23),
       "0x6100 is 23 bytes: dungeon, state, start, end (official recordings, no trailing byte)");
+{
+    // The clear of sealed dungeon 310027 (2026-11-06 234912 #44952-#45201): 0x6101 with its reward_light by item id, Complete (3)
+    // for the 10 s hold, End (4) from there for 600 s; 0x6109 carries the copy's deaths (090856 #104160 `05000000`).
+    var seal = MapEventTables.Embedded.Dungeon(310027)!;
+    var sealReward = seal.RewardLight!.Select(r => ((int)r[0], r[1])).ToList();
+    Check(Convert.ToHexStringLower(GameSession.DungeonCompleteResult(310027, true, sealReward)) == "0161000bbb040001076126b41f02000000000000006326b41f02000000000000009b38be1f0100000000000000977db32502000000000000006bcbb325020000000000000021337037983a00000000000037337037e204000000000000",
+          "0x6101 lists the clear reward by item id (byte-exact to 234912 #44952)");
+    Check(Convert.ToHexStringLower(GameSession.DungeonState(310027, GameSession.DungeonStateComplete, 0x1a1b2de8a3b, 0x1a1b2deb14b)) == "00610bbb0400033b8adeb2a10100004bb1deb2a1010000"
+          && 0x1a1b2deb14b - 0x1a1b2de8a3b == seal.Hold * 1000L, "Complete (3) runs the table's hold from the clear (byte-exact to #44953, 10 s)");
+    Check(Convert.ToHexStringLower(GameSession.DungeonLimitsAtEntry(5).First()) == "096105000000", "0x6109 carries the copy's deaths (090856 #104160)");
+}
 Check(staffSession.Copy is not null && staffSession.NpcKilled(4242, 18060030).SequenceEqual(GamePackets.Kill(4242, 18060030, 0, 0, "", dieType: 2)),
       "a kill inside a dungeon copy is anonymous with die type 02 (0x8d04; official 2026-11-06 084658 #46704 and 64 more)");
 // A sealed dungeon (type Seal, solo): its field portal (EnvObjData usage EnterDungeon, value = dungeon id) enters its copy.

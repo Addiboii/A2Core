@@ -413,6 +413,7 @@ public sealed partial class GameSession : IMapEventHost
         if (mapEventRuns.Count == 0 && pendingSpawns.Count == 0 && pendingAggro.Count == 0 && pendingExit is null && npcBuffs.Count == 0 && copy is null) return [];
         mapEventNow = now;
         DungeonTimeLimit(now);
+        DungeonEndTick(now);   // GameSession.PartyDungeons.cs
         var phase = DungeonPhaseTick(now);
         if (phase.Count > 0) mapEventOut.InsertRange(0, phase);
         NpcBuffTick(now);
@@ -860,10 +861,23 @@ public sealed partial class GameSession : IMapEventHost
         if (copy is { } c && room is not null && !c.Cleared)
         {
             c.Cleared = true;
-            // OBSERVED (HQ001 clear #14161-14167): DungeonCompleteResult_NT, the state Complete (3) at the clear time, then End (4) until the hold's end.
-            mapEventOut.Add(DungeonCompleteResult(c.DungeonId, true));
-            mapEventOut.Add(DungeonState(c.DungeonId, DungeonStateComplete, mapEventNow, mapEventNow));
-            mapEventOut.Add(DungeonState(c.DungeonId, DungeonStateEnd, mapEventNow, mapEventNow + hold));
+            // OBSERVED (community recordings 2026-11-04 to 06, reports/dungeons.md 2 and 7): an expedition sends 0x6108 `00` first;
+            // DungeonCompleteResult_NT with the clear reward (sealed 310027 #44952); Complete (3) from the clear for Dungeon.dat's
+            // hold (sealed [t, t + 10 s] #44953; the layer's hold 0 [t, t] #16201); End (4) when it ends, for 600 s (#45201,
+            // the layer's 50 ms later #16209). The way out keeps its own timing (instanceExitAt: the hold, else 60 s, OURS).
+            var tableHold = room.Hold > 0 ? room.Hold * 1000L : 0;
+            c.ClearedMs = mapEventNow;
+            c.CompleteEndsMs = mapEventNow + tableHold;
+            if (room.Type == "Party") mapEventOut.Add(PacketWriter.Opcode(DungeonClearKillNpcNt).U8(0).ToArray());
+            var shown = (profileRace == 2 ? room.RewardDark : room.RewardLight) is { Length: > 0 } won
+                ? won.Where(r => r.Length >= 2).Select(r => ((int)r[0], r[1])).ToList() : null;
+            mapEventOut.Add(DungeonCompleteResult(c.DungeonId, true, shown));
+            mapEventOut.Add(DungeonState(c.DungeonId, DungeonStateComplete, c.ClearedMs, c.CompleteEndsMs));
+            if (tableHold == 0)
+            {
+                c.EndSent = true;
+                mapEventOut.Add(DungeonState(c.DungeonId, DungeonStateEnd, c.ClearedMs, c.ClearedMs + DungeonEndStateMs));
+            }
         }
     }
 
