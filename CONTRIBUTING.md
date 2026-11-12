@@ -42,6 +42,7 @@ These rules keep guesses from piling up as if they were facts. The maintainers f
 2. **Label what you add.** OBSERVED says where it was seen: a recording (date, situation and client build) or a
    client table (name the table). CANDIDATE is inferred. OURS is your own choice, including anything tuned by feel.
    "live" or "official" without a date and build is not enough.
+   [docs/RECORDINGS.md](docs/RECORDINGS.md) explains the recordings the code already cites.
 3. **Do not replace an OBSERVED value**, or change a check built from an official recording, unless you have a newer
    recording that shows the change.
 4. **`tools/data/*.json` comes only from the builders**, all from one named client build, so anyone can produce the

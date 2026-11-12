@@ -88,6 +88,25 @@ your inventory, the names and positions of players near you, and chat.
 
 Grouped by priority, with what to do in game. The code marks the current guess as OURS or CANDIDATE at each place.
 
+**Covered by the community recordings of November 2026** ([RECORDINGS.md](RECORDINGS.md)). These settled:
+
+- death and revive (1);
+- loot and gathering (3), but not the bonus-material rate;
+- a shop purchase (part of 4);
+- party dungeon clears, the hold and mid-boss rewards (12);
+- one letter arriving (part of 14);
+- battle-pass claims (17);
+- skill points per level (21).
+
+**Most wanted now.** These are what those recordings left open:
+
+- a healing potion placed on the X quick slot (the open bug in [TODO.md](TODO.md));
+- selling to a merchant and buying it back (4);
+- reading mail and taking an attachment (14);
+- putting items into a full warehouse;
+- kill experience below level 45, solo and in a party (6);
+- dying in a dungeon until its revive limit.
+
 **High**
 
 1. **Death and revive**: die to a monster, wait on the death screen, revive at the respawn point (also with a

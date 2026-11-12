@@ -14,15 +14,16 @@ Good places to start:
 - a full day of ordinary play: shops, crafting, gathering, mail, the party and legion windows.
 
 **Record the official server.** Most values still marked as guesses can only be settled by seeing what the official
-server sends. [CAPTURE.md](CAPTURE.md) explains how to record your own session (Windows) and lists 24 wanted
-recordings, the first six of which fit in one half-hour session:
+server sends. [CAPTURE.md](CAPTURE.md) explains how to record your own session (Windows) and lists the wanted
+recordings. Community recordings from November 2026 settled several of them ([RECORDINGS.md](RECORDINGS.md)). Most
+wanted now:
 
-1. death and revive;
-2. monsters hitting you;
-3. picking up loot and gathering;
-4. buying, selling and buying back in a shop;
-5. logging out in the middle of a quest dungeon;
-6. kill experience, solo and in a party.
+1. placing a healing potion on the X quick slot;
+2. selling to a merchant and buying it back;
+3. reading mail and taking an attachment;
+4. putting items into a full warehouse;
+5. kill experience below level 45, solo and in a party;
+6. dying in a dungeon until its revive limit.
 
 **Improve the documentation.** If a step in the README or the troubleshooting page was unclear to you, fix the
 wording. You know better than we do where a newcomer gets lost.
