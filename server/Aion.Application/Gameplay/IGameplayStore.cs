@@ -55,6 +55,8 @@ public sealed record BossChallengeRecord(int GroupId, int ClearLevel, long BestP
 public sealed record ContentTicketRecord(int TicketId, int Remaining, DateTimeOffset UpdatedAt);
 /// <summary>A stigma skill learned with shards and the level it reached (migration 072).</summary>
 public sealed record StigmaRecord(int SkillId, int Level);
+/// <summary>A part equipped on a mastery skill's specialisation slot (migration 078).</summary>
+public sealed record SkillPartRecord(int SkillId, int Slot, int PartId);
 /// <summary>A character's stigmas and the shards its GetStigmaShard items gave (on top of Exp.dat's total for its level).</summary>
 public sealed record StigmaState(IReadOnlyList<StigmaRecord> Stigmas, int ItemShards)
 {
@@ -206,6 +208,10 @@ public interface IGameplayStore
     Task<bool> SetStigmaLevelAsync(VerifiedAccount account, Guid character, int skillId, int level, int expected, CancellationToken ct = default) => Task.FromResult(false);
     /// <summary>Consumes one GetStigmaShard item and adds its shards, in one transaction.</summary>
     Task<bool> UseStigmaShardItemAsync(VerifiedAccount account, Guid character, Guid item, long revision, int shards, CancellationToken ct = default) => Task.FromResult(false);
+    Task<IReadOnlyList<SkillPartRecord>> SkillPartsAsync(VerifiedAccount account, Guid character, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<SkillPartRecord>>([]);
+    /// <summary>Replaces one skill's equipped parts when they still equal <paramref name="expected"/>; false otherwise.</summary>
+    Task<bool> ReplaceSkillPartsAsync(VerifiedAccount account, Guid character, int skillId, IReadOnlyList<SkillPartRecord> expected, IReadOnlyList<SkillPartRecord> parts,
+        CancellationToken ct = default) => Task.FromResult(false);
     /// <summary>A character id by name (any account), for mail to offline players.</summary>
     Task<Guid?> CharacterByNameAsync(VerifiedAccount account, string name, CancellationToken ct = default) => Task.FromResult<Guid?>(null);
     /// <summary>Sorts the bag: items ordered by template, then age, on slots 0, 1, 2, ...</summary>

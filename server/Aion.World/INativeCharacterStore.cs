@@ -56,6 +56,9 @@ public interface INativeCharacterStore : IAsyncDisposable
     Task<StigmaState> StigmasAsync(Guid character, CancellationToken ct) => Task.FromResult(StigmaState.Empty);
     Task<bool> SetStigmaLevelAsync(Guid character, int skillId, int level, int expected, CancellationToken ct) => Task.FromResult(false);
     Task<bool> UseStigmaShardItemAsync(Guid character, Guid item, long revision, int shards, CancellationToken ct) => Task.FromResult(false);
+    Task<IReadOnlyList<SkillPartRecord>> SkillPartsAsync(Guid character, CancellationToken ct) => Task.FromResult<IReadOnlyList<SkillPartRecord>>([]);
+    Task<bool> ReplaceSkillPartsAsync(Guid character, int skillId, IReadOnlyList<SkillPartRecord> expected, IReadOnlyList<SkillPartRecord> parts, CancellationToken ct) =>
+        Task.FromResult(false);
     Task<bool> SaveCollectionAsync(Guid character, int collectionId, int listId, int registered, bool rewarded, CancellationToken ct) => Task.FromResult(false);
     Task<IReadOnlyList<AchievementRecord>> AchievementsAsync(Guid character, CancellationToken ct) => Task.FromResult<IReadOnlyList<AchievementRecord>>([]);
     Task<IReadOnlyList<(int Group, int Step)>> GroupRewardsTakenAsync(Guid character, CancellationToken ct) => Task.FromResult<IReadOnlyList<(int, int)>>([]);

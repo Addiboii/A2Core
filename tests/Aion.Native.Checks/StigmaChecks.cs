@@ -170,6 +170,17 @@ sealed partial class FakeStore
         else StigmaRows[skillId] = level;
         return Task.FromResult(true);
     }
+    // Skill parts (migration 078) in memory, with the Postgres store's compare-and-set on a skill's whole set.
+    public List<SkillPartRecord> SkillPartRows { get; } = [];
+    public Task<IReadOnlyList<SkillPartRecord>> SkillPartsAsync(Guid character, CancellationToken ct) =>
+        Task.FromResult<IReadOnlyList<SkillPartRecord>>(SkillPartRows.OrderBy(p => p.SkillId).ThenBy(p => p.Slot).ToList());
+    public Task<bool> ReplaceSkillPartsAsync(Guid character, int skillId, IReadOnlyList<SkillPartRecord> expected, IReadOnlyList<SkillPartRecord> parts, CancellationToken ct)
+    {
+        if (!SkillPartRows.Where(p => p.SkillId == skillId).OrderBy(p => p.Slot).SequenceEqual(expected.OrderBy(p => p.Slot))) return Task.FromResult(false);
+        SkillPartRows.RemoveAll(p => p.SkillId == skillId);
+        SkillPartRows.AddRange(parts);
+        return Task.FromResult(true);
+    }
     public Task<bool> UseStigmaShardItemAsync(Guid character, Guid item, long revision, int shards, CancellationToken ct)
     {
         if (shards < 1 || !Consume(item, revision, 1)) return Task.FromResult(false);

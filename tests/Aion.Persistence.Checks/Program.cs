@@ -132,6 +132,16 @@ await using(var source=NpgsqlDataSource.Create(connectionString))
     Check(stigmaState.Stigmas.Single()==new StigmaRecord(11240000,2) && stigmaState.ItemShards==0 && (await game.StigmasAsync(second,id)).Stigmas.Count==0,"stigma round trip");
     Check(await game.SetStigmaLevelAsync(first,id,11080000,1,0) && !await game.SetStigmaLevelAsync(first,id,11080000,0,2) && await game.SetStigmaLevelAsync(first,id,11080000,0,1)
           && (await game.StigmasAsync(first,id)).Stigmas.Single().SkillId==11240000,"a stigma reset to level 0 removes its row (compare-and-set on the level)");
+    // Skill parts (migration 078): a skill's set replaced by compare-and-set, owner-scoped, a part in one slot only.
+    SkillPartRecord Part(int slot,int part)=>new(11020000,slot,part);
+    Check(await game.ReplaceSkillPartsAsync(first,id,11020000,[],[Part(1,11020030)]) && !await game.ReplaceSkillPartsAsync(first,id,11020000,[],[Part(1,11020010)]),
+          "skill parts: equipped once from the empty set, a stale set refused");
+    var partSwaps=await Task.WhenAll(game.ReplaceSkillPartsAsync(first,id,11020000,[Part(1,11020030)],[Part(1,11020030),Part(2,11020040)]),
+        game.ReplaceSkillPartsAsync(first,id,11020000,[Part(1,11020030)],[Part(1,11020020)]));
+    Check(partSwaps.Count(x=>x)==1 && !await game.ReplaceSkillPartsAsync(second,id,11020000,[],[Part(1,11020010)]) && (await game.SkillPartsAsync(second,id)).Count==0,
+          "one concurrent parts change wins; ownership");
+    Check(await game.ReplaceSkillPartsAsync(first,id,11020000,(await game.SkillPartsAsync(first,id)).ToList(),[]) && (await game.SkillPartsAsync(first,id)).Count==0,
+          "unequipping every part removes the rows");
     var item=bag.Items[0];
     Check(item.WireId>0,"starter item receives durable wire ID");
     Check(!await game.MoveItemAsync(second,id,item.InstanceId,item.Revision,null),"foreign item move denied");
