@@ -114,6 +114,9 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         public byte[] SpUpdate() => GamePackets.CharPoints(key, [(CharPoint.Sp, Sp)]);
         public byte[] OpUpdate() => GamePackets.CharPoints(key, [(CharPoint.Op, Op)]);
         public byte[] FpUpdate() => GamePackets.CharPoints(key, [(CharPoint.Fp, Fp)]);
+        /// <summary>Every bar in one message, as the official in-place revive (OBSERVED 2026-11-06 090856 #96734: i32 types 1-6, i64 HP).</summary>
+        public byte[] FullUpdate() => GamePackets.CharPoints(key, [(CharPoint.Mp, Mp), (CharPoint.Ap, 0), (CharPoint.Sp, Sp), (CharPoint.Dp, 0), (CharPoint.Op, Op), (CharPoint.Fp, Fp)],
+            [(CharPoint.Hp, Hp)]);
         /// <summary>The world-entry maxima, as the official burst before 0x3633 (OP max 100000 observed).</summary>
         public int Fp, FpMax;
         public byte[] Maxima() => GamePackets.CharPoints(key, [(CharPoint.Mp, Mp), (CharPoint.MaxMp, MpMax), (CharPoint.MaxSp, SpMax), (CharPoint.MaxOp, OpMax), (CharPoint.Fp, Fp), (CharPoint.MaxFp, FpMax)],
@@ -2340,7 +2343,12 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
                 return [RidePackets.RespawnReply(1)];
             var used = await Stored(async () => await store.ConsumeItemAsync(character, row.InstanceId, row.Revision, 1, ct) ? [[]] : []);
             if (used.Count == 0) return [RidePackets.RespawnReply(1)];
-            return [RidePackets.RespawnReply(0), .. await InventoryChangesAsync(ct, 0, DecreaseUseRebirthItem), .. Revive(now, inPlace: true)];
+            // OBSERVED order (090856 #96729-#96741, three times): 0x8d23, abnormal 10003, 0x8d26 (self and nearby), 0x8d00, then the
+            // item change. Not sent: the system skill 8047 (0x3802/0x3806/0x3804) between the bars and the item.
+            var revived = Revive(now, inPlace: true);
+            var reborn = RidePackets.Reborn(playerKey);
+            if (diedAt is not null) worldPlayer?.Map?.Broadcast(worldPlayer, [reborn]);
+            return [RidePackets.RespawnReply(0), .. revived.Take(1), reborn, .. revived.Skip(1), .. await InventoryChangesAsync(ct, 0, DecreaseUseRebirthItem)];
         }
         return [RidePackets.RespawnReply(0), .. Revive(now)];
     }
@@ -2352,7 +2360,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         if (!dead || !CanRebirth || RevivesLeft() == 0) return [RidePackets.UseRebirthReply(1, false)];
         var reborn = RidePackets.Reborn(playerKey);
         worldPlayer?.Map?.Broadcast(worldPlayer, [reborn]);
-        return [RidePackets.UseRebirthReply(0, true), .. UseRebirthBuff(), reborn, .. Revive(now, inPlace: true)];
+        return [RidePackets.UseRebirthReply(0, true), .. UseRebirthBuff(), reborn, .. Revive(now, inPlace: true)];   // CANDIDATE: as the item (0x8d25 path unrecorded)
     }
 
     const byte DecreaseUseRebirthItem = 85;   // EDecreaseReason kUseRebirthItem
@@ -2371,8 +2379,11 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             : null;
 
     /// <summary>
-    /// Revive: full HP/MP and a map load where the player fell (in place) or at the map's respawn point (else its start, else
-    /// here). In a dungeon whose revives are used up the player revives outside instead (the dungeon's way out, as leaving).
+    /// Revive: full HP/MP, where the player fell without a map load (in place: abnormal 10003, then every bar in one 0x8d00) or
+    /// with a map load at the map's respawn point (else its start, else here; abnormal 10003 after the load request). In a dungeon
+    /// whose revives are used up the player revives outside instead (the dungeon's way out, as leaving). OBSERVED 2026-11-06
+    /// 090856 (reports/combat.md 7): 10003 for 3000 ms both ways (#96732, #104115-#104165); CANDIDATE: what 10003 does
+    /// (not in our tables: icon only).
     /// </summary>
     List<byte[]> Revive(long now, bool inPlace = false, bool counted = true)
     {
@@ -2384,15 +2395,26 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             if (left == 0 && instanceKey != 0) return [resources.Update(), .. LeaveInstance(now)];
             run.Revives[ReviveKey] = run.Revives.GetValueOrDefault(ReviveKey) + 1;
         }
-        if (inPlace && diedAt is { } fell) return [resources.Update(), .. Teleport(worldMap, fell, now)];
+        var revival = new List<byte[]>();
+        if (inPlace && diedAt is { } fell)
+        {
+            position = fell;
+            AddBuff(ReviveAbnormal, ReviveAbnormalMs, 0, now, revival);
+            return [.. revival.Where(b => b[0] == 0x2a && b[1] == 0x38).Take(1), resources.FullUpdate()];
+        }
         // Inside a dungeon: the running stage's revival point, else the dungeon's start (the reload keeps the events).
         var raceWord = profileRace == 2 ? "Dark" : "Light";
         var respawn = DungeonRevivalPoint() ?? data.MapPoints(worldMap).Where(p => p.Key.Contains("respawn", StringComparison.OrdinalIgnoreCase))
             .OrderByDescending(p => p.Key.Contains(raceWord, StringComparison.OrdinalIgnoreCase)).ThenBy(p => p.Key, StringComparer.Ordinal)
             .Select(p => (Vector3d?)new Vector3d(p.Value[0], p.Value[1], p.Value[2])).FirstOrDefault()
             ?? data.MapStart(worldMap)?.Position ?? position ?? spawn?.Position ?? GamePackets.SpawnPosition;
-        return [resources.Update(), .. Teleport(worldMap, respawn, now)];
+        var load = Teleport(worldMap, respawn, now);
+        AddBuff(ReviveAbnormal, ReviveAbnormalMs, 0, now, revival);
+        return [.. load, .. revival.Where(b => b[0] == 0x2a && b[1] == 0x38).Take(1), resources.Update()];
     }
+
+    /// <summary>The revive's abnormal (OBSERVED 10003 for 3000 ms, caster the player, at the place of the revive).</summary>
+    const int ReviveAbnormal = 10003, ReviveAbnormalMs = 3000;
 
     // ---------- Stats ----------
 
