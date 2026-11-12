@@ -70,6 +70,14 @@ class DotnetChatHostTests(unittest.TestCase):
     def test_native_websocket_host_without_port_round_trips_a_message(self):
         self.round_trip(include_host_port=False)
 
+    def test_chat_port_answers_only_chat_routes(self):
+        # The chat port is plain HTTP on the public address: the account API must not answer there.
+        for port, expected in ((self.port, 404), (self.account_port, 200)):
+            connection = http.client.HTTPConnection('127.0.0.1', port, timeout=5)
+            connection.request('GET', '/api/status')
+            self.assertEqual(connection.getresponse().status, expected, port)
+            connection.close()
+
     def test_spoofed_host_cannot_enable_chat_on_account_port(self):
         connection = http.client.HTTPConnection('127.0.0.1', self.account_port, timeout=5)
         connection.request('POST', '/gameLogin/loginWithToken', '{}',

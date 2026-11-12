@@ -300,6 +300,21 @@ app.Use(async (context, next) =>
     if (context.Request.Path.StartsWithSegments("/api") || context.Request.Path.StartsWithSegments("/internal")) context.Response.Headers.CacheControl = "no-store";
     await next();
 });
+// The chat port is plain HTTP on the public address and has no rate limiter: it answers the chat's own routes only, never
+// the account site, sign-in or staff API (those stay on the account port, behind TLS and the limiter). OURS.
+if (chatPort is { } chatOnly && chatOnly != port && chatOnly != platform.Port)
+{
+    string[] chatRoutes = ["/gameLogin", "/gameClient", "/stomp", "/internal/online", "/internal/world", "/internal/announce"];
+    app.Use(async (context, next) =>
+    {
+        if (context.Connection.LocalPort == chatOnly && !chatRoutes.Any(r => context.Request.Path.StartsWithSegments(r)))
+        {
+            context.Response.StatusCode = StatusCodes.Status404NotFound;
+            return;
+        }
+        await next();
+    });
+}
 if (platform.Port is { } platformPort) app.UsePlatformBootstrap(platformPort, platformResponses!, platform.RequestLog);
 app.UseRateLimiter();
 // /api/admin/* takes staff sessions only (migration 075): a player session's token is refused before any handler.
