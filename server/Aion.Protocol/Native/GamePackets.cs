@@ -649,18 +649,19 @@ public static class GamePackets
     }
 
     /// <summary>
-    /// 0x3804 with presence byte 0x14 (bit 0x10 adds one u8 before the trailing 00): target | 14 00 | caster | skill | action uid |
-    /// hit type | effect id u32 | effect seq u32 | attack speed | damage | seq u8 | 01 | 00. OBSERVED in the 2.0.6 recording
-    /// 20261019-231752 (#73349; 112 hits, a Gladiator's melee skills, so not projectile-only there). A2Core PR #4 (Artezianec)
-    /// reports the same bytes for a Ranger's arrows on the current client. CANDIDATE: what bit 0x10 means (its byte was 01 in
-    /// every sample); used for the hits of projectile skills, as the PR does.
+    /// 0x3804 with presence byte 0x14 (bit 0x10 adds one u8 before the process uid): target | 14 00 | caster | skill | action uid |
+    /// hit type | effect id u32 | effect seq u32 | attack speed | damage | 01 | process uid u16 (the seq). OBSERVED in the 2.0.6
+    /// recording 20261019-231752 (#73349; 112 hits, a Gladiator's melee skills, so not projectile-only there); the order flag
+    /// then process uid is OBSERVED in the community recordings 2026-11-04 to 06 (391 hits with mask 0016; with seq 1 both
+    /// orders give the same bytes, so Rapid Fire's second and third arrows were wrong). CANDIDATE: what bit 0x10 means
+    /// (_sealstone_used by usmap position; its byte was 01 in every sample); used for the hits of projectile skills.
     /// </summary>
     public static byte[] ProjectileHit(int targetKey, int actorKey, int skillId, int effectId, int damage, bool critical,
         byte actionUid, int seq, int attackSpeed = 10000)
     {
         if (seq is < 0 or > 255) throw new ArgumentException("Hit sequence must fit one byte");
         return PacketWriter.Opcode(0x3804).Varint(targetKey).U8(0x14).U8(0).Varint(actorKey).U32((uint)skillId).U8(actionUid)
-            .Varint(critical ? 3 : 2).U32((uint)effectId).U32((uint)seq).Varint(attackSpeed).Varint(damage).U8(seq).U8(1).U8(0).ToArray();
+            .Varint(critical ? 3 : 2).U32((uint)effectId).U32((uint)seq).Varint(attackSpeed).Varint(damage).U8(1).U8(seq).U8(0).ToArray();
     }
 
     /// <summary>

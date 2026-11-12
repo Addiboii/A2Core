@@ -50,6 +50,10 @@ public static class CombatPacketChecks
         Same("ProjectileHit form (20261019-231752 #73349)",
             GamePackets.ProjectileHit(20037, 9655, 11030000, 1103000011, 40, false, 0x54, 1),
             "0438c59c011400b74bf04da8005402cb71be4101000000904e28010100");
+        // A second arrow: the flag byte, then the process uid u16 (community recordings 2026-11-04 to 06, 391 hits).
+        Same("ProjectileHit seq 2: 01 then process uid 0002",
+            GamePackets.ProjectileHit(20037, 9655, 11030000, 1103000011, 40, false, 0x54, 2),
+            "0438c59c011400b74bf04da8005402cb71be4102000000904e28010200");
         // 0x3804 switch 04 with the cast's action uid (the official #14400 sample of PlayerPacketChecks, through SkillHit).
         Same("SkillHit with action uid (144836 combat-audit #14400)",
             GamePackets.SkillHit(37476, 5861, 13030000, 1303000011, 21, seq: 1, actionUid: 1),
