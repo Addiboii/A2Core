@@ -2227,6 +2227,29 @@ Check(passPaid.Count == 2 && Op(passPaid[0]) == 0x561b && ReadModifications(pass
       "TakeBattlePassReward level 2: both levels' items in one 0x561b (reason 72), then 0xe323 0000 (OBSERVED order 163412 #893-894)");
 Check(BitConverter.ToUInt16((await passSession.HandleAsync(new PacketWriter().U16(GameSession.TakeBattlePassRewardRq).I32(20047).I32(820439000).U8(2).Varint(0).ToArray(), Now + 7499))[0], 2) == 1
       && staffStore.Items.Where(i => i.TemplateId == 503700032).Sum(i => i.Quantity) == passItemBefore + 2, "a claimed level is not paid twice");
+// The pass list as recorded (2026-11-04 to 06): only held passes (the free one), rewarded levels above 0 only, an empty
+// per-pass map, then the packed bools (false, true) in one byte for the whole message (02 for one group, 0a for two: the
+// recorded two-group body has `0a 01000000` after the first group and `01000000` after the second) and i32 1 per group.
+static (int Groups, int MaxHeld, bool Shape) PassListShape(byte[] list)
+{
+    var r = new PacketReader(list) { Offset = 2 };
+    var groups = (int)r.Varint();
+    var maxHeld = 0;
+    for (var g = 0; g < groups; g++)
+    {
+        r.I32(); r.I32(); r.I32(); r.I64(); r.I64();
+        var held = (int)r.Varint(); maxHeld = Math.Max(maxHeld, held); r.Take(4 * held);
+        var rewarded = (int)r.Varint(); r.Take(5 * rewarded);
+        if (r.Varint() != 0) return (groups, maxHeld, false);
+        if (g == 0 && r.U8() != (groups == 1 ? 0x02 : 0x0a)) return (groups, maxHeld, false);
+        if (r.I32() != 1) return (groups, maxHeld, false);
+    }
+    return (groups, maxHeld, r.Offset == list.Length);
+}
+var liveList = (await passSession.HandleAsync(new PacketWriter().U16(0x3622).I32(1).ToArray(), liveNow)).First(b => Op(b) == GameSession.BattlePassInfoListNt);
+Check(PassListShape(liveList) is { Groups: 2, MaxHeld: 1, Shape: true }, "BattlePassInfoList_NT with two groups: one held pass each, the shared flag byte 0a, i32 1 each (as recorded)");
+var oneGroup = Convert.FromHexString("24e3014c4e00009a7b03008a20000015b084a7a101000080afd60ba4feffff01d60d030001d60d03006502d60d0300906c0300d70d0300e80a03000201000000");
+Check(PassListShape(oneGroup[..^22].Concat(new byte[] { 0, 2, 1, 0, 0, 0 }).ToArray()) is { Groups: 1, Shape: true }, "the shape reader accepts a recorded one-group list (its per-pass map emptied)");
 // Period collections: the official day (2026-10-13 15:00 UTC) opens the Light daily 5401317 (week 13, day 7), the weekly 5401321,
 // Craft and Boss; registering a list's target items pays its reward when the count is reached.
 var officialDay = 1791900000000L;

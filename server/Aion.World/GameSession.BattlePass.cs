@@ -11,8 +11,7 @@ namespace Aion.World;
 // BattlePassInfoList_NT 0xe324 at entry, TakeBattlePassReward 0xe322/0xe323 (pays the level), BattlePassPurchase
 // 0xe32d/0xe32e (refused). OBSERVED 0xe324 and 0xe323 in the community recordings 2026-11-04 to 06 (161 lists; claims
 // 163412 #893-894, 162114, 234912; reports/progression.md 4): the catalogue's 0xe3 run (base 0xdd6e), not 0xdd07; the
-// others by position (CANDIDATE). Bodies from the usmap; the list's third map, i32 and second bool are not decoded
-// (recorded: per-pass values, 1, true; we send none, 0, false). The weekly exp limit is not applied.
+// others by position (CANDIDATE). Bodies from the usmap. The weekly exp limit is not applied.
 public sealed partial class GameSession
 {
     public const ushort BattlePassInfoListNt = 0xe324, TakeBattlePassRewardRq = 0xe322, TakeBattlePassRewardRs = 0xe323, BattlePassPurchaseRq = 0xe32d, BattlePassPurchaseRs = 0xe32e;
@@ -37,6 +36,15 @@ public sealed partial class GameSession
         return Progress("BattlePassExp", e => ids.Contains(e.Id), s => s.Count + exp, now, 1);
     }
 
+    /// <summary>
+    /// BattlePassInfoList_NT 0xe324: per active group id, total exp, period exp, exp reset time, repeat reward time, the passes
+    /// held, the rewarded level by held pass, a per-pass map, two packed bools and an i32. OBSERVED (the community recordings
+    /// 2026-11-04 to 06; e.g. `...01 d60d0300 01 d60d0300 65 02 ... 02 01000000` for group 20044): only the passes the character
+    /// holds are listed (the free one; a paid one once bought, none are sold here), a rewarded level only when above 0, and the
+    /// tail is bools false/true (byte 02) then i32 1 in every recorded list. CANDIDATE: the per-pass map (recorded with a
+    /// value per pass, e.g. 40000; not understood) is sent empty. The exp values are our own pass exp (OURS).
+    /// The community fork found the same tail and lists.
+    /// </summary>
     byte[] BattlePassInfoList(long now)
     {
         var groups = ActivePasses(now);
@@ -45,11 +53,13 @@ public sealed partial class GameSession
         {
             var free = group.Passes.FirstOrDefault(p => p.Length >= 3 && p[2] == 0) ?? group.Passes.FirstOrDefault();
             var total = free is null ? 0 : AchievementCount((int)free[1]);
-            w.I32(group.Id).I32(total).I32(total).I64(CycleStart(2, now) + 7 * 86_400_000L).I64(0).Varint((uint)group.Passes.Length);
-            foreach (var pass in group.Passes) w.I32((int)pass[0]);
-            w.Varint((uint)group.Passes.Length);
-            foreach (var pass in group.Passes) w.I32((int)pass[0]).U8((byte)(achievements.GetValueOrDefault((int)pass[1])?.RewardedStep ?? 0));
-            w.Varint(0).Bool(false).I32(0).Bool(false);
+            var held = free is null ? [] : new List<long[]> { free };
+            w.I32(group.Id).I32(total).I32(total).I64(CycleStart(2, now) + 7 * 86_400_000L).I64(0).Varint((uint)held.Count);
+            foreach (var pass in held) w.I32((int)pass[0]);
+            var rewarded = held.Select(p => (Pass: (int)p[0], Level: achievements.GetValueOrDefault((int)p[1])?.RewardedStep ?? 0)).Where(r => r.Level > 0).ToList();
+            w.Varint((uint)rewarded.Count);
+            foreach (var (pass, level) in rewarded) w.I32(pass).U8((byte)level);
+            w.Varint(0).Bool(false).Bool(true).I32(1);
         }
         return w.ToArray();
     }
