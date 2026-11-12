@@ -3024,7 +3024,10 @@ presence.Enter("Player1", game, null);
 presence.Enter("Visitor", stored, null);
 Check((await gm.HandleAsync(chatter, "player1", "//help", default)).StartsWith("Builder commands"), "configured development GM");
 Check((await gm.HandleAsync(chatter, "[GM] Player1", "//help", default)).StartsWith("Builder commands"), "chat under the displayed name finds the character");
-Check(await gm.HandleAsync(chatter, "Visitor", "//help", default) == "Commands: //report <text> sends a report to the staff.", "players get the report command as help");
+Check(await gm.HandleAsync(chatter, "Visitor", "//help", default) == "Commands: //report <text> sends a report to the staff; //quna <amount> buys Quna for 150 Kina each.",
+      "players get the report and Quna commands as help");
+Check((await gm.HandleAsync(chatter, "Visitor", "//quna lots", default)).StartsWith("Use //quna <amount>") && await gm.HandleAsync(chatter, "Nobody", "//quna 5", default) == "Enter the world first.",
+      "//quna: a bad amount gets the usage, a character not in the world is refused");
 Check(await gm.HandleAsync(chatter, "Visitor", "//report the bridge is broken", default) == "Reports are not available on this server.", "no reports without staff tools");
 var reports = new List<string>();
 var reporting = new GmCommands(presence, builder) { Report = (_, name, text, _) => { reports.Add(name + ":" + text); return Task.FromResult("sent"); } };
