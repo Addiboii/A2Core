@@ -121,7 +121,7 @@ public sealed partial class GameSession
     public const ushort AchievementListNt = 0x5683, AchievementCountUpdateNt = 0x5684, TakeAchievementRewardRq = 0x5685, TakeAchievementRewardRs = 0x5686,
         TakeAchievementGroupRewardRq = 0x5687, TakeAchievementGroupRewardRs = 0x5688, TakeAchievementRewardBatchRq = 0x5689, TakeAchievementRewardBatchRs = 0x568a,
         AttendanceRq = 0xe2e6, AttendanceRs = 0xe2e7, CloseNpcAchievementRq = 0xe2c8, CloseNpcAchievementRs = 0xe2c9, CloseEnvObjAchievementRq = 0xe2ca, CloseEnvObjAchievementRs = 0xe2cb;
-    const byte IncreaseAchievementReward = 26;   // EIncreaseReason (CANDIDATE value)
+    const byte IncreaseAchievementReward = 2;   // EIncreaseReason (OBSERVED 2026-11-04 162844 #1508, next to 0x568a)
     static AchievementTables Achievements => AchievementTables.Embedded;
     static readonly HashSet<string> ListedCategories = new(StringComparer.OrdinalIgnoreCase) { "Achievement", "Unlock", "SeasonMissionUnlock" };
 
@@ -386,15 +386,26 @@ public sealed partial class GameSession
                 if (await TakeGroupStepAsync(gid, step, ct) is { } taken) { replies.AddRange(taken); groupSteps.Add((byte)step); }
             if (steps.Count > 0 || groupSteps.Count > 0) results.Add((gid, groupSteps, steps));
         }
+        return [RewardBatchReply(category, groupId, only, results.Select(r => (r.Group, (IReadOnlyList<byte>)r.GroupSteps, (IReadOnlyList<(int, int)>)r.Steps.Select(s => (s.Key, s.Value)).ToList())).ToList()),
+            .. replies];
+    }
+
+    /// <summary>
+    /// 0x568a TakeAchievementRewardBatch_RS: result u16, category u8, group i32, one byte (the two bools packed), count, per
+    /// result {group i32, count + group step u8, count + {achievement i32, step u8}} (OBSERVED 2026-11-04: 162844 #1509,
+    /// 162208 #402, 163050 #8767 parse exactly; the step was an i32 here).
+    /// </summary>
+    internal static byte[] RewardBatchReply(byte category, int groupId, bool only, IReadOnlyList<(int Group, IReadOnlyList<byte> GroupSteps, IReadOnlyList<(int Id, int Step)> Steps)> results)
+    {
         var w = PacketWriter.Opcode(TakeAchievementRewardBatchRs).U16(0).U8(category).I32(groupId).Bool(only).Bool(false).Varint((uint)results.Count);
         foreach (var (gid, groupSteps, steps) in results)
         {
             w.I32(gid).Varint((uint)groupSteps.Count);
             foreach (var s in groupSteps) w.U8(s);
             w.Varint((uint)steps.Count);
-            foreach (var (id, step) in steps) w.I32(id).I32(step);
+            foreach (var (id, step) in steps) w.I32(id).U8((byte)step);
         }
-        return [w.ToArray(), .. replies];
+        return w.ToArray();
     }
 
     static byte CategoryOrdinal(string category) => category switch

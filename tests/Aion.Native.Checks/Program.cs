@@ -2078,6 +2078,9 @@ Check(staffSession.AchievementCount(boardAch) == 3 && claimAll[0].SequenceEqual(
       "claiming step 3 with steps 2 and 3 unclaimed pays both, each once (0x5686 first, then 0x5684 step 2 and step 3)");
 Check(BitConverter.ToUInt16((await staffSession.HandleAsync(new PacketWriter().U16(GameSession.TakeAchievementRewardRq).I32(boardAch).U8(3).ToArray(), lateDays[1] + 20))[0], 2) == 1
       && stepRewards.All(r => staffStore.Items.Where(i => i.TemplateId == r.Key).Sum(i => i.Quantity) == heldBefore[r.Key] + r.Value), "claiming again pays nothing");
+Check(GameSession.RewardBatchReply(1, 0, false, [(400000404, [], [(433100100, 4)]), (400000501, [3], [])])
+          .SequenceEqual(Convert.FromHexString("8a56" + "0000" + "01" + "00000000" + "00" + "02" + "9485d717" + "00" + "01" + "4495d019" + "04" + "f585d717" + "01" + "03" + "00")),
+      "0x568a batch claim reply byte for byte as the official 2026-11-04 162844 #1509 (step u8)");
 // Artifact dungeons (type AbyssArtifact, no scripts): served for their points and monsters; the builder's EnterDungeon enters one.
 var artifactIn = staffSession.EnterDungeonById(503001, Now + 7480);
 await staffSession.HandleAsync(new PacketWriter().U16(0x3622).I32(1).ToArray(), Now + 7480);
