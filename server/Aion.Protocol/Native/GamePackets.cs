@@ -682,8 +682,10 @@ public static class GamePackets
     /// 0xe005 UpdateGroggyInfo_NT (dev 0x3b04 + 0xa501): key | presence u8 (bit 0 max, bit 1 energy) | state u8 | [max i32] |
     /// [energy i32] | u8. OBSERVED (2.0.6 recording 20261019-231752, boss a2eb01, 9 messages): mask 03 state 01 max 50 with the
     /// energy falling 50 -> 7 under the player's hits, then mask 00 state 03 once it broke; the last byte was 02 in all nine.
-    /// CANDIDATE: the state names and the last byte's meaning (A2Core PR #4 wrote it as "activated ? 2 : 0", which the recording
-    /// contradicts: 02 while the guard still held). Sent by Aion.World.Stagger's drains (SkillEffect.dat GroggyGuardDecreaseEnergy).
+    /// The last byte is the packed _groggy_activated (bit 1) / _groggy_pause (usmap): OBSERVED 02 on 756 of 762 messages of the
+    /// community recording 2026-11-06 090856 while the guard could be drained, 00 on a final boss outside its windows (as A2Core
+    /// PR #4's "activated ? 2 : 0"). We send 02 always (no deactivated guards yet). CANDIDATE: the state names.
+    /// Sent by Aion.World.Stagger (SkillEffect.dat GroggyGuardDecreaseEnergy drains, the refill after GroggyTime).
     /// </summary>
     public static byte[] UpdateGroggyInfo(int key, byte state, int? maxEnergy, int? energy, byte tail = 2)
     {

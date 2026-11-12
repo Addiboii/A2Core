@@ -3036,6 +3036,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             replies.AddRange(Achieve("ElapsedTime", 1, e => e.Values.Length == 0, now: now));
         }
         var respawned = RespawnTargets(now);
+        respawned.AddRange(GuardRefills(now));   // broken groggy guards refill after GroggyTime (Stagger.cs)
         worldPlayer?.Map?.BroadcastAll(respawned, worldPlayer);
         replies.AddRange(Visible(respawned));
         replies.AddRange(NpcVisibilityTick(now));

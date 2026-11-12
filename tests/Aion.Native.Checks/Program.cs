@@ -668,20 +668,30 @@ Check((await game.HandleAsync([0x30, 0x36], Now)).Single().SequenceEqual(GamePac
     string Hex(List<byte[]> packets) => string.Concat(packets.Select(Convert.ToHexStringLower));
     var guarded = new Target { Key = 30114, Name = "boss", Hp = 100000, HpMax = 100000, NpcId = 2701034 };
     Check(Stagger.HasGuard(2701034) && Stagger.GroggyTimeMs(2701034) == 5000 && !Stagger.HasGuard(2400032), "NpcData GroggyGuard: the guarded has a guard, the sandbag none");
-    Check(Hex(Stagger.Drain(guarded, 11190000, 9655, 0xe1)) == "0438a2eb010000b74bf0beaa00e102d695b24203000000904e0300" + "05e0a2eb010301320000002800000002",
+    Check(Hex(Stagger.Drain(guarded, 11190000, 9655, 0xe1, Now)) == "0438a2eb010000b74bf0beaa00e102d695b24203000000904e0300" + "05e0a2eb010301320000002800000002",
           "11190000 drains 10 on its hit 3 (#31014 effect 1119000022, #31015 energy 40)");
-    Check(Hex(Stagger.Drain(guarded, 11290001, 9655, 0xe2)) == "0438a2eb010000b74b9145ac00e202b02c4b4301000000904e0100" + "05e0a2eb010301320000001900000002",
+    Check(Hex(Stagger.Drain(guarded, 11290001, 9655, 0xe2, Now)) == "0438a2eb010000b74b9145ac00e202b02c4b4301000000904e0100" + "05e0a2eb010301320000001900000002",
           "11290001 drains 15 (#31066, #31067 energy 25)");
-    Check(Hex(Stagger.Drain(guarded, 11010000, 9655, 0xf3)) == "0438a2eb010000b74bd0ffa700f3024ced9f4101000000904e0100" + "05e0a2eb010301320000001700000002",
+    Check(Hex(Stagger.Drain(guarded, 11010000, 9655, 0xf3, Now)) == "0438a2eb010000b74bd0ffa700f3024ced9f4101000000904e0100" + "05e0a2eb010301320000001700000002",
           "11010000 drains 2 once per cast (#31745, #31746 energy 23)");
     var energies = new[] { (11190000, 13), (11010000, 11), (11420000, 9), (11010000, 7) }
-        .Select(step => Stagger.Drain(guarded, step.Item1, 9655, 1).Last().SequenceEqual(GamePackets.UpdateGroggyInfo(30114, 1, 50, step.Item2))).ToList();
+        .Select(step => Stagger.Drain(guarded, step.Item1, 9655, 1, Now).Last().SequenceEqual(GamePackets.UpdateGroggyInfo(30114, 1, 50, step.Item2))).ToList();
     Check(energies.All(ok => ok), "the next drops as recorded (#32179 13, #32911 11, #32963 9, #33421 7)");
-    Check(Hex(Stagger.Drain(guarded, 11190000, 9655, 0x19)) == "0438a2eb010000b74bf0beaa001902d695b24203000000904e0300" + "05e0a2eb01000302" && guarded.GroggyEnergy == 0,
-          "the last 10 breaks the guard (#33474, #33475 mask 00 state 03)");
-    Check(Stagger.Drain(guarded, 11190000, 9655, 1).Count == 0 && Stagger.Drain(new Target { Key = 5, Name = "m", HpMax = 1, NpcId = 2400032 }, 11190000, 1, 1).Count == 0
-          && Stagger.Drain(new Target { Key = 6, Name = "b", HpMax = 1, NpcId = 2701034 }, 11020000, 1, 1).Count == 0,
+    var broke = Stagger.Drain(guarded, 11190000, 9655, 0x19, Now);
+    Check(Hex(broke.Take(2).ToList()) == "0438a2eb010000b74bf0beaa001902d695b24203000000904e0300" + "05e0a2eb01000302" && guarded.GroggyEnergy == 0
+          && broke.Count == 3 && Hex([broke[2]]).StartsWith("2a38a2eb010111") && broke[2].AsSpan().IndexOf(Convert.FromHexString("8296980088130000")) > 0,
+          "the last 10 breaks the guard (#33474, #33475 mask 00 state 03), then abnormal 10000002 for 5000 ms on the NPC (090856 #60737)");
+    Check(Stagger.Drain(guarded, 11190000, 9655, 1, Now).Count == 0 && Stagger.Drain(new Target { Key = 5, Name = "m", HpMax = 1, NpcId = 2400032 }, 11190000, 1, 1, Now).Count == 0
+          && Stagger.Drain(new Target { Key = 6, Name = "b", HpMax = 1, NpcId = 2701034 }, 11020000, 1, 1, Now).Count == 0,
           "no drain on a broken guard, an NPC without a guard, or from a skill without a drain row");
+    // The refill GroggyTime after the break (OBSERVED 090856 #60729 -> #61540: mask 03 state 01 energy = max), then drains again.
+    Check(Stagger.Refill(guarded, Now + 4999) is null && Hex([Stagger.Refill(guarded, Now + 5000)!]) == "05e0a2eb010301320000003200000002" && guarded.GroggyEnergy is null
+          && Stagger.Drain(guarded, 11190000, 9655, 1, Now + 6000).Last().SequenceEqual(GamePackets.UpdateGroggyInfo(30114, 1, 50, 40)),
+          "GroggyTime after the break the guard refills to 50 (0xe005 03 01) and drains again");
+    var hero = new Target { Key = 0x2b3ab, Name = "hero", Hp = 1, HpMax = 1, NpcId = 2300104 };
+    Check(Stagger.MaxOf(2300104) == 1200 && Stagger.MaxOf(2300171) == 240 && Stagger.MaxOf(2701034) == 50
+          && Stagger.Drain(hero, 11190000, 9655, 1, Now).Last().SequenceEqual(GamePackets.UpdateGroggyInfo(hero.Key, 1, 1200, 1190)),
+          "the recorded maxima per NPC (2300104 1200, 2300171 240, 2701034 50)");
     // In a session: a level-1 Gladiator's 11190000 on a guarded NPC sends the drain between its hits and the NPC's HP.
     var staggerer = new GameSession(data, new GameSessionOptions { TrainingDummy = true }, new Random(5));
     await staggerer.HandleAsync(Strings(0x3613, Session, "", "t", "").Concat(new byte[9]).ToArray(), Now);
@@ -695,6 +705,11 @@ Check((await game.HandleAsync([0x30, 0x36], Now)).Single().SequenceEqual(GamePac
     Check(guardAt > 0 && Op(staggered[guardAt - 1]) == 0x3804 && staggered[guardAt - 1][4] == 0
           && staggered.FindIndex(b => b.SequenceEqual(GamePackets.NpcHp(1001, staggerer.Targets[1001].Hp))) == guardAt + 1,
           "a cast on a guarded NPC: its hit, the drain 0x3804, 0xe005 energy 40, then the NPC's HP");
+    staggerer.Targets[1001].GroggyEnergy = 5;
+    var breaking = await staggerer.HandleAsync(Cast(11190000, 1001, pos), Now + 30_000);
+    var refillTick = await staggerer.TickAsync(Now + 30_000 + 5_000);
+    Check(breaking.Any(b => b.SequenceEqual(GamePackets.UpdateGroggyInfo(1001, 3, null, null))) && refillTick.Any(b => b.SequenceEqual(GamePackets.UpdateGroggyInfo(1001, 1, 50, 50))),
+          "in a session the broken guard refills on the tick GroggyTime later (0xe005 03 01 50 50)");
 }
 // Skill-effect conditions (SkillEffectConditions.cs, SkillEffect.dat SkillEffectConditionList; loaded, not evaluated yet).
 Check(SkillEffectConditions.Count == 10003 && SkillEffectConditions.EffectsOf(15200058).SequenceEqual([1520005811])

@@ -52,6 +52,8 @@ public sealed class Target
     /// The groggy guard's energy (Stagger.cs) once a player's skill drained it; null while full or after a respawn (OURS). 0 = broken.
     /// </summary>
     public int? GroggyEnergy { get; set; }
+    /// <summary>When a broken guard refills (the break + NpcData GroggyTime; Stagger.Refill).</summary>
+    public long GroggyRefillAt { get; set; }
 
     public bool Dead => Hp <= 0;
     /// <summary>The corpse was removed (0x3642) and the NPC waits for its respawn.</summary>

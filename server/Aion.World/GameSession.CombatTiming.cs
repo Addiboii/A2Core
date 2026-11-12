@@ -94,7 +94,7 @@ partial class GameSession
                 ? GamePackets.ProjectileHit(target.Key, playerKey, skill, hit.EffectId, hit.Amount, hit.Critical, uid, seq)
                 : GamePackets.SkillHit(target.Key, playerKey, skill, hit.EffectId, hit.Amount, hit.Critical, seq: seq, actionUid: uid));
         }
-        if (!target.Dead) replies.AddRange(DrainGuard(skill, target, uid));
+        if (!target.Dead) replies.AddRange(DrainGuard(skill, target, uid, now));
         replies.Add(GamePackets.NpcHp(target.Key, target.Hp));
         replies.AddRange(MapEventHp(target, now));
         if (target.Dead)
@@ -119,9 +119,29 @@ partial class GameSession
     /// <summary>
     /// The cast's drain of a guarded NPC's groggy guard (Stagger.cs): per drain row the 0x3804 switch 00 with its effect id and hit
     /// seq, then 0xe005 with the energy left, or the broken state at 0 (order OBSERVED 20261019-231752 #31013-#31016, after the
-    /// damage hit and before the NPC's HP). A broken guard takes no more drains (OURS, until the respawn).
+    /// damage hit and before the NPC's HP). A broken guard refills GroggyTime later (GuardRefills on the tick).
     /// </summary>
-    List<byte[]> DrainGuard(int skill, Target target, byte uid) => Stagger.Drain(target, skill, playerKey, uid);
+    List<byte[]> DrainGuard(int skill, Target target, byte uid, long now)
+    {
+        var replies = Stagger.Drain(target, skill, playerKey, uid, now);
+        if (target.GroggyEnergy == 0 && !brokenGuards.Contains(target)) brokenGuards.Add(target);
+        return replies;
+    }
+
+    readonly List<Target> brokenGuards = [];
+
+    /// <summary>The guards this session broke that refill now (Stagger.Refill), for everyone nearby.</summary>
+    List<byte[]> GuardRefills(long now)
+    {
+        if (brokenGuards.Count == 0) return [];
+        var replies = new List<byte[]>();
+        foreach (var t in brokenGuards.ToList())
+        {
+            if (t.GroggyEnergy != 0 || t.Dead) { brokenGuards.Remove(t); continue; }
+            if (Stagger.Refill(t, now) is { } refilled) { replies.Add(refilled); brokenGuards.Remove(t); }
+        }
+        return replies;
+    }
 
     /// <summary>For the checks: put an NPC on the current map.</summary>
     public void AddTargetForChecks(Target target) { if (targets is not null) targets[target.Key] = target; }
