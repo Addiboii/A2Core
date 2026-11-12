@@ -100,7 +100,8 @@ public sealed partial class GameSession
 {
     public const ushort PeriodCollectionListNt = 0xe256, PeriodCollectionListRq = 0xe23b, PeriodCollectionListRs = 0xe23c,
         RegisterPeriodCollectionRq = 0xe23d, RegisterPeriodCollectionRs = 0xe23e, TakePeriodCollectionRewardNt = 0xe23f;
-    const byte DecreaseCollectionRegister = 40, IncreaseCollectionReward = 41;   // EDecreaseReason / EIncreaseReason (CANDIDATE values)
+    // EDecreaseReason kPeriodCollectionRegister / EIncreaseReason kPeriodCollectionReward (read from the usmap of client 2.0.6; no recording).
+    const byte DecreaseCollectionRegister = 75, IncreaseCollectionReward = 54;
     static CollectionTables Collections => CollectionTables.Embedded;
 
     /// <summary>(collection, list) → (registered, rewarded).</summary>

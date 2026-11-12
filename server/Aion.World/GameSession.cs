@@ -1309,6 +1309,8 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
     /// 0x562f ItemSoulBindComplete_RQ: the item is bound to this character (stored), answered
     /// 0x5630 with the new bind count and the item update (0x561b) carrying the bind.
     /// </summary>
+    const byte DecreaseSoulBind = 63, UpdateEnchant = 1, UpdateSoulBind = 3, UpdateEquip = 7;   // OBSERVED (see InventoryChangesAsync)
+
     async Task<List<byte[]>> SoulBindCompleteAsync(long key, CancellationToken ct)
     {
         if (Store is not { } store || CharacterId is not { } character || !storedItems.TryGetValue(key, out var row))
@@ -1316,7 +1318,8 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         var count = (byte)Math.Min(255, SoulBindCount(row) + 1);
         var bound = await Stored(async () => await store.SoulBindItemAsync(character, row.InstanceId, count, ct) ? [Array.Empty<byte>()] : []);
         if (bound.Count != 1) return [GamePackets.SoulBindComplete(key, 0, 1)];
-        return [GamePackets.SoulBindComplete(key, count), .. await InventoryChangesAsync(ct), .. Achieve("SoulbindTry")];
+        // Decrease 63 kItemSoulBind for the cost, update 3 on the item (OBSERVED, community recordings 2026-11-04 to 06).
+        return [GamePackets.SoulBindComplete(key, count), .. await InventoryChangesAsync(ct, 0, DecreaseSoulBind, UpdateSoulBind), .. Achieve("SoulbindTry")];
     }
 
     void Remember(IEnumerable<InventoryItem> items)
@@ -1369,7 +1372,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         if (moved.Count == 1)
         {
             var before = VisualItems();
-            replies.AddRange(await InventoryChangesAsync(ct));
+            replies.AddRange(await InventoryChangesAsync(ct, 0, 0, UpdateEquip));   // update 7 on both items (OBSERVED 2026-11-06 234912 i20766-20777)
             // The new weapon decides weapon skills and damage; gear changes the stats.
             equippedWeapon = WeaponFromInventory();
             replies.AddRange(RefreshStats());
@@ -1414,9 +1417,11 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
 
     /// <summary>
     /// The stored items against what the client has: adds, updates and removals (EItemModificationType
-    /// 0/1/2) with the given EIncreaseReason / EDecreaseReason (24 kQuestReward was the only one before).
+    /// 0/1/2) with the given EIncreaseReason / EDecreaseReason (24 kQuestReward was the only one before). A changed item whose
+    /// count stays carries the update reason (EItemUpdateReason; OBSERVED 1 enchant, 3 soul bind, 7 equip and unequip, community
+    /// recordings 2026-11-04 to 06).
     /// </summary>
-    async Task<List<byte[]>> InventoryChangesAsync(CancellationToken ct, byte increase, byte decrease)
+    async Task<List<byte[]>> InventoryChangesAsync(CancellationToken ct, byte increase, byte decrease, byte update = 0)
     {
         if (Store is not { } store || CharacterId is not { } character) return [];
         var items = await LoadInventoryAsync(store, character, ct);
@@ -1427,7 +1432,8 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             if (!inventory.TryGetValue(item.Key, out var before)) { changes.Add(new ItemModification(0, item, Increase: increase)); gained.Add((item.ItemId, item.Count)); }
             else if (before != item)
             {
-                changes.Add(new ItemModification(1, item, Increase: (byte)(item.Count > before.Count ? increase : 0), Decrease: (byte)(item.Count < before.Count ? decrease : 0)));
+                changes.Add(new ItemModification(1, item, Increase: (byte)(item.Count > before.Count ? increase : 0), Decrease: (byte)(item.Count < before.Count ? decrease : 0),
+                    Update: (byte)(item.Count == before.Count ? update : 0)));
                 if (item.Count > before.Count) gained.Add((item.ItemId, item.Count - before.Count));
             }
         }

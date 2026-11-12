@@ -10,6 +10,11 @@ namespace Aion.World;
 // listings come back through ExpireSale, bound and untradable items are refused, and earnings stay i64 Kina.
 public sealed partial class GameSession
 {
+    // Broker reasons, EIncreaseReason / EDecreaseReason read from the usmap of client 2.0.6 (no recording): increase 26
+    // kTradeCancelSale, 27 kTradeExpireSale, 28 kTradeEarnings, 29 kTradePurchase; decrease 26 kTradeSell, 27 kTradePurchase.
+    const byte IncreaseTradeCancelSale = 26, IncreaseTradeExpireSale = 27, IncreaseTradeEarnings = 28, IncreaseTradePurchase = 29,
+        DecreaseTradeSell = 26, DecreaseTradePurchase = 27;
+
     const byte CurrencyKina = 1;   // ECurrencyCategory (CANDIDATE: 1 = game money)
 
     static string SaleId(long id) => id.ToString(CultureInfo.InvariantCulture);
@@ -39,7 +44,7 @@ public sealed partial class GameSession
                 var expires = DateTimeOffset.FromUnixTimeMilliseconds(now).AddDays(TradeListingDays);
                 await Stored(async () => { listing = await economy.TradeSellAsync(Me, row.InstanceId, row.Revision, count, price, costs, expires, ct); return []; });
                 if (listing is null) return [Reply(1, null)];
-                return [Reply(0, listing), .. await InventoryChangesAsync(ct, 0, 0)];
+                return [Reply(0, listing), .. await InventoryChangesAsync(ct, 0, DecreaseTradeSell)];
             }
             // TradeCancelSale_RQ / TradeExpireSale_RQ {sale_id str, item_id, item_count, server}: the listed item comes back.
             case TradeCancelRq or TradeExpireRq:
@@ -57,7 +62,7 @@ public sealed partial class GameSession
                 TradeListing? listing = null;
                 await Stored(async () => { listing = await economy.TradeCancelAsync(Me, id, ct); return []; });
                 if (listing is null) return [Reply(1, null)];
-                var changes = await InventoryChangesAsync(ct, 0, 0);
+                var changes = await InventoryChangesAsync(ct, op == TradeCancelRq ? IncreaseTradeCancelSale : IncreaseTradeExpireSale, 0);
                 return [Reply(0, listing), .. changes];
             }
             // TradeRenewSale_RQ: not built (result 1); an expired listing is taken back and listed again.
@@ -84,7 +89,7 @@ public sealed partial class GameSession
                 if (outcome.Result != "ok") return [Reply(outcome.Result switch { "money" => 3, "count" => 4, _ => 1 })];
                 if (options.World?.FindOnline(listing.Seller) is { } seller)
                     seller.Send([PacketWriter.Opcode(TradeSoldNt).String(sale).I32(itemId).I64(count).I32(server).ToArray()]);
-                return [Reply(0), .. await InventoryChangesAsync(ct, 24, 0)];
+                return [Reply(0), .. await InventoryChangesAsync(ct, IncreaseTradePurchase, DecreaseTradePurchase)];
             }
             // TradeDeliveryComplete_RQ {delivery_id str, item_id, server}: the seller collects a sale's Kina.
             case TradeDeliveryRq:
@@ -94,7 +99,7 @@ public sealed partial class GameSession
                 if (economy is null || ParseSaleId(delivery) is not { } id) return [Reply(1)];
                 long? kina = null;
                 await Stored(async () => { kina = await economy.CompleteTradeDeliveryAsync(Me, id, ct); return []; });
-                return kina is null ? [Reply(1)] : [Reply(0), .. await InventoryChangesAsync(ct, 24, 0)];
+                return kina is null ? [Reply(1)] : [Reply(0), .. await InventoryChangesAsync(ct, IncreaseTradeEarnings, 0)];
             }
             // TradeGetSummary_RQ {server}: own active listings and uncollected sales (no group or world counts).
             case TradeSummaryRq:

@@ -105,7 +105,7 @@ public sealed partial class GameSession
         var done = await Stored(async () => await store.EnchantItemAsync(character, row.InstanceId, row.Revision, costs, after, nextBonus, ct) ? [[]] : []);
         if (done.Count == 0) return [Reply(1, level, row.TemplateId)];
         var replies = new List<byte[]> { Reply(success ? 0 : after < level ? 5 : 4, after, row.TemplateId) };
-        replies.AddRange(await InventoryChangesAsync(ct, 0, success ? DecreaseItemEnchant : DecreaseItemEnchantFail));
+        replies.AddRange(await InventoryChangesAsync(ct, 0, success ? DecreaseItemEnchant : DecreaseItemEnchantFail, UpdateEnchant));
         if (success) replies.AddRange(AchieveEnchant(after));
         if (row.Location == "equipment" && after != level)
         {

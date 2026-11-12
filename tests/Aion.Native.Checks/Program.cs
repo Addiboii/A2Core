@@ -1558,6 +1558,8 @@ var equipReply = await staffSession.HandleAsync(new PacketWriter().U16(0xe247).I
 Check(equipReply[0].SequenceEqual(new PacketWriter().U16(0xe248).U16(0x0430).I64(13).U8(5).ToArray()) && staffSession.EquipOpcode == 0xe247
       && equipReply.Any(b => b[0] == 0x1b && b[1] == 0x56) && staffStore.Items.Single(i => i.WireId == 13).Location == "equipment",
       "equip request: stored in slot 5, answered on the next opcode, item update sent");
+Check(equipReply.Single(b => Op(b) == 0x561b) is var equipChange && equipChange[^3] == 0 && equipChange[^2] == 0 && equipChange[^1] == 7,
+      "the equipped item's change carries update reason 7, no increase reason (official 2026-11-06 234912 i20766-20777)");
 // A non-starter weapon becomes the combat weapon at once; armour adds its Item.dat HPMax and the stats are resent.
 var hpUnarmoured = staffSession.Resource.HpMax;
 staffStore.Items.AddRange([Stored(110120003, 1, "bag", null, 14), Stored(210130001, 1, "bag", null, 15)]);
