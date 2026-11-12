@@ -204,8 +204,12 @@ public static class RidePackets
         return w.I32(skillId).ToArray();
     }
 
-    /// <summary>0x5613 ItemUse_RS: result | item uid i64 | item id i32.</summary>
-    public static byte[] ItemUseReply(int result, long uid, int itemId) => PacketWriter.Opcode(ItemUseRs).U16(result).I64(uid).I32(itemId).ToArray();
+    /// <summary>EResult kItem_Use_Success / kItem_Use_Fail (success OBSERVED 2026-11-06 234912 i46566, 11 samples; fail read from the usmap of client 2.0.6).</summary>
+    public const int ItemUseSuccess = 0x0304, ItemUseFail = 0x0305;
+
+    /// <summary>0x5613 ItemUse_RS: result | item uid i64 | item id i32. Result 0 is sent as ItemUseSuccess, 1 as ItemUseFail.</summary>
+    public static byte[] ItemUseReply(int result, long uid, int itemId) =>
+        PacketWriter.Opcode(ItemUseRs).U16(result switch { 0 => ItemUseSuccess, 1 => ItemUseFail, _ => result }).I64(uid).I32(itemId).ToArray();
 
     /// <summary>0x5616 ItemUse_NT: item uid i64 | item id i32 (OBSERVED: Life Potion 530126003).</summary>
     public static byte[] ItemUsed(long uid, int itemId) => PacketWriter.Opcode(ItemUseNt).I64(uid).I32(itemId).ToArray();

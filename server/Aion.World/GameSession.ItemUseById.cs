@@ -23,7 +23,9 @@ public sealed partial class GameSession
         var uid = BitConverter.ToInt64(plain, 2);
         var itemId = BitConverter.ToInt32(plain, 10);
         var requested = BitConverter.ToInt64(plain, 14);
-        byte[] Reply(int result, long used) => PacketWriter.Opcode(ItemUseByItemIdRs).U16(result).I64(uid).I32(itemId).I64(used).ToArray();
+        // Success 0x0304 as ItemUse_RS (OBSERVED 2026-11-06 234912 i46426, 3 samples); fail 0x0305 (usmap).
+        byte[] Reply(int result, long used) => PacketWriter.Opcode(ItemUseByItemIdRs).U16(result == 0 ? RidePackets.ItemUseSuccess : RidePackets.ItemUseFail)
+            .I64(uid).I32(itemId).I64(used).ToArray();
         var row = storedItems.TryGetValue(uid, out var named) && named.TemplateId == itemId && named.Location == "bag" ? named
             : storedItems.Values.Where(i => i.TemplateId == itemId && i.Location == "bag").OrderBy(i => i.Quantity).ThenBy(i => i.WireId).FirstOrDefault();
         if (requested < 1 || itemId == 0 || row is null || row.Quantity < 1) return [Reply(1, 0)];

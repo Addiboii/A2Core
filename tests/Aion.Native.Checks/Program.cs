@@ -1555,7 +1555,7 @@ Check((await staffSession.HandleAsync(new PacketWriter().U16(0x562b).I64(999).I6
 Check((await staffSession.HandleAsync(new PacketWriter().U16(0x5a0a).I64(13).U8(5).ToArray(), Now)).Count == 0
       && staffStore.Items.Single(i => i.WireId == 13).Location == "bag", "an 11-byte request on another opcode is not an equip");
 var equipReply = await staffSession.HandleAsync(new PacketWriter().U16(0xe247).I64(13).U8(5).ToArray(), Now);
-Check(equipReply[0].SequenceEqual(new PacketWriter().U16(0xe248).U16(0).I64(13).U8(5).ToArray()) && staffSession.EquipOpcode == 0xe247
+Check(equipReply[0].SequenceEqual(new PacketWriter().U16(0xe248).U16(0x0430).I64(13).U8(5).ToArray()) && staffSession.EquipOpcode == 0xe247
       && equipReply.Any(b => b[0] == 0x1b && b[1] == 0x56) && staffStore.Items.Single(i => i.WireId == 13).Location == "equipment",
       "equip request: stored in slot 5, answered on the next opcode, item update sent");
 // A non-starter weapon becomes the combat weapon at once; armour adds its Item.dat HPMax and the stats are resent.
@@ -1605,8 +1605,10 @@ var serum = await staffSession.HandleAsync(new PacketWriter().U16(0x5612).I64(17
 Check(serum[0].SequenceEqual(RidePackets.ItemUseReply(0, 17, 530116001)) && staffSession.Resource.Hp >= 10 + 15 + staffSession.Resource.HpMax * 5 / 100 - 1
       && staffStore.Items.Single(i => i.WireId == 17).Quantity == 2 && serum.Any(b => b[0] == 0x02 && b[1] == 0x38) && serum.Any(b => b[0] == 0x16 && b[1] == 0x56),
       "Life Serum: ItemUse_RS 0, skill start on the player, HP healed (15 + 5% max), one used (0x5616)");
-Check((await staffSession.HandleAsync(new PacketWriter().U16(0x5612).I64(17).ToArray(), Now + 1000)).Single()[2] == 1, "the potion cooldown group refuses a second use");
-Check((await staffSession.HandleAsync(new PacketWriter().U16(0x5612).I64(17).ToArray(), Now + 31_000))[0][2] == 0, "usable again after its 30 s cooldown");
+Check(BitConverter.ToUInt16((await staffSession.HandleAsync(new PacketWriter().U16(0x5612).I64(17).ToArray(), Now + 1000)).Single(), 2) == RidePackets.ItemUseFail,
+      "the potion cooldown group refuses a second use (kItem_Use_Fail 0x0305)");
+Check(BitConverter.ToUInt16((await staffSession.HandleAsync(new PacketWriter().U16(0x5612).I64(17).ToArray(), Now + 31_000))[0], 2) == RidePackets.ItemUseSuccess,
+      "usable again after its 30 s cooldown (kItem_Use_Success 0x0304, as official)");
 // Souls: a soul item adds soul points to a ride not acquired yet; NeedSoul (5) of them acquire it (0x9007), and
 // soul points level an acquired ride (VehicleLevel: 25 for level 2).
 var soulRide = new[] { 1002, 1003, 1004 }.First(r => r != pet);
@@ -1698,17 +1700,17 @@ await staffSession.InventoryChangesAsync(default);
 byte[] UseById(long uid, int item, long count) => new PacketWriter().U16(GameSession.ItemUseByItemIdRq).I64(uid).I32(item).I64(count).ToArray();
 var feralBefore = staffSession.Crystals.GetValueOrDefault(1);
 var byIdThree = await staffSession.HandleAsync(UseById(0, 531900005, 3), Now + 400_400);
-Check(byIdThree[0].SequenceEqual(new PacketWriter().U16(GameSession.ItemUseByItemIdRs).U16(0).I64(0).I32(531900005).I64(3).ToArray())
+Check(byIdThree[0].SequenceEqual(new PacketWriter().U16(GameSession.ItemUseByItemIdRs).U16(RidePackets.ItemUseSuccess).I64(0).I32(531900005).I64(3).ToArray())
       && staffSession.Crystals.GetValueOrDefault(1) == feralBefore + 3 && staffStore.Items.Single(i => i.WireId == 7101).Quantity == 2,
       "ItemUseByItemID for 3 of a stack of 5: three ordinary uses (0x5615 count 3), two left");
 var byIdHuge = await staffSession.HandleAsync(UseById(24, 531900005, long.MaxValue), Now + 400_500);
-Check(BitConverter.ToInt64(byIdHuge[0], 16) == 2 && BitConverter.ToUInt16(byIdHuge[0], 2) == 0 && staffSession.Crystals.GetValueOrDefault(1) == feralBefore + 5
+Check(BitConverter.ToInt64(byIdHuge[0], 16) == 2 && BitConverter.ToUInt16(byIdHuge[0], 2) == RidePackets.ItemUseSuccess && staffSession.Crystals.GetValueOrDefault(1) == feralBefore + 5
       && staffStore.Items.All(i => i.WireId != 7101) && staffStore.Items.Single(i => i.WireId == 24).Quantity == 1,
       "a count of long.MaxValue is capped by the stack (2 used, no overflow); a uid of another template is not used");
 Check((await staffSession.HandleAsync(UseById(0, 531900005, 1), Now + 400_600))[0].SequenceEqual(
-          new PacketWriter().U16(GameSession.ItemUseByItemIdRs).U16(1).I64(0).I32(531900005).I64(0).ToArray())
-      && (await staffSession.HandleAsync(UseById(0, 502760001, -4), Now + 400_600))[0][2] == 1,
-      "no stack left, or a count below 1: refused (result 1, count 0)");
+          new PacketWriter().U16(GameSession.ItemUseByItemIdRs).U16(RidePackets.ItemUseFail).I64(0).I32(531900005).I64(0).ToArray())
+      && BitConverter.ToUInt16((await staffSession.HandleAsync(UseById(0, 502760001, -4), Now + 400_600))[0], 2) == RidePackets.ItemUseFail,
+      "no stack left, or a count below 1: refused (kItem_Use_Fail, count 0)");
 // Death and respawn. The Resurrection Spiritstone gives a rebirth buff that survives death; UseRebirth_RQ (0x8d24)
 // revives in place. CharRespawn_RQ (0x8d22) type 2 goes to the respawn point; type 3 with a spiritstone revives
 // in place and uses one up.
@@ -1778,11 +1780,13 @@ var bagMove = await staffSession.HandleAsync(new PacketWriter().U16(0x563a).I32(
 Check(bagMove[0][0] == 0x3b && bagMove[0][1] == 0x56 && bagMove[0][2] == 0 && staffStore.Items.Single(i => i.WireId == 40).Slot == 30
       && bagMove.Any(b => b[0] == 0x1b && b[1] == 0x56), "ItemMove puts the item on bag slot 30 (0x563b result 0, 0x561b)");
 var discard = await staffSession.HandleAsync(new PacketWriter().U16(0x563c).Varint(1).I64(40).I64(3).Varint(0).ToArray(), Now);
-Check(discard[0][0] == 0x3d && discard[0][2] == 0 && staffStore.Items.Single(i => i.WireId == 40).Quantity == 7, "ItemRemove discards 3 of the 10 (0x563d)");
-Check((await staffSession.HandleAsync(new PacketWriter().U16(0x563c).Varint(1).I64(40).I64(99).Varint(0).ToArray(), Now))[0][2] == 1, "discarding more than the stack is refused");
+Check(discard[0][0] == 0x3d && BitConverter.ToUInt16(discard[0], 2) == 0x0300 && staffStore.Items.Single(i => i.WireId == 40).Quantity == 7,
+      "ItemRemove discards 3 of the 10 (0x563d kItem_Remove_Success 0x0300, as official)");
+Check(BitConverter.ToUInt16((await staffSession.HandleAsync(new PacketWriter().U16(0x563c).Varint(1).I64(40).I64(99).Varint(0).ToArray(), Now))[0], 2) == 0x0301,
+      "discarding more than the stack is refused (0x0301)");
 var sortReply = await staffSession.HandleAsync(new PacketWriter().U16(0x563e).I32(0).U8(1).ToArray(), Now);
 var sortedBag = staffStore.Items.Where(i => i.Location == "bag").OrderBy(i => i.Slot).ToList();
-Check(sortReply[0][0] == 0x3f && sortReply[0][2] == 0 && sortedBag.Select(i => i.TemplateId).SequenceEqual(sortedBag.Select(i => i.TemplateId).Order()),
+Check(sortReply[0][0] == 0x3f && BitConverter.ToUInt16(sortReply[0], 2) == 0x0240 && sortedBag.Select(i => i.TemplateId).SequenceEqual(sortedBag.Select(i => i.TemplateId).Order()),
       "ItemSort orders the bag by item (0x563f)");
 // Hotbar: QuickSlotSet (0x5601, the live 27-byte request) stores a slot and echoes it (0x5602); a stored bar replaces
 // the class's default at world entry; QuickSlotReset (0x5603) clears it.
@@ -1898,13 +1902,15 @@ staffStore.Items.AddRange([Stored(110260001, 1, "bag", null, 60), Stored(9301000
 await staffSession.InventoryChangesAsync(default);
 var enchantKina = KinaTotal();
 var enchanted = await staffSession.HandleAsync(new PacketWriter().U16(0x5622).I64(60).Varint(0).ToArray(), Now);
-Check(enchanted[0].SequenceEqual(new PacketWriter().U16(0x5623).U16(0).I64(60).U8(1).I32(110260001).ToArray())
+Check(enchanted[0].SequenceEqual(new PacketWriter().U16(0x5623).U16(0x033c).I64(60).U8(1).I32(110260001).ToArray())
       && KinaTotal() == enchantKina - 125 && staffStore.Items.Single(i => i.WireId == 61).Quantity == 95
       && enchanted.Any(b => b[0] == 0x1b && b[1] == 0x56), "enchant +0 -> +1: 125 Kina, 5 coins, 0x5623 then the item update (0x561b)");
 foreach (var _ in Enumerable.Range(0, 4)) await staffSession.HandleAsync(new PacketWriter().U16(0x5622).I64(60).Varint(0).ToArray(), Now);
 Check(staffStore.Items.Single(i => i.WireId == 60).Upgrades.GetProperty("enchant").GetInt32() == 5, "four more attempts reach +5 (always succeed below +10)");
-Check((await staffSession.HandleAsync(new PacketWriter().U16(0x5622).I64(60).Varint(0).ToArray(), Now))[0][2] == 2, "beyond the Common maximum (+5): result 2");
-Check((await staffSession.HandleAsync(new PacketWriter().U16(0x5622).I64(999_999).Varint(0).ToArray(), Now))[0][2] == 1, "an unknown item: result 1");
+Check(BitConverter.ToUInt16((await staffSession.HandleAsync(new PacketWriter().U16(0x5622).I64(60).Varint(0).ToArray(), Now))[0], 2) == 0x033e,
+      "beyond the Common maximum (+5): kItem_Enchant_NotEnchantableItem 0x033e");
+Check(BitConverter.ToUInt16((await staffSession.HandleAsync(new PacketWriter().U16(0x5622).I64(999_999).Varint(0).ToArray(), Now))[0], 2) == 0x033d,
+      "an unknown item: kItem_Enchant_InternalError 0x033d");
 // Legions (0x8a run): create for 100000 Kina (0x8a01, then the tag 0x8a33), info and members, the master cannot
 // leave (2) but disbands (0x8a35), and the tag clears.
 var guildKina = KinaTotal();
@@ -2185,11 +2191,11 @@ staffStore.Items.Add(Stored(930100001, 5000, "bag", 10, 941));
 await staffSession.HandleAsync(new PacketWriter().U16(0x5610).ToArray(), Now + 7560);
 var dismantleKinaBefore = staffStore.Items.Where(i => i.TemplateId == 930100001).Sum(i => i.Quantity);
 var dismantled = await staffSession.HandleAsync(new PacketWriter().U16(GameSession.ItemDecomposeRq).U8(0).Varint(1).I64(940).ToArray(), Now + 7570);
-Check(Op(dismantled[0]) == GameSession.ItemDecomposeRs && BitConverter.ToUInt16(dismantled[0], 2) == 0 && BitConverter.ToInt32(dismantled[0], 5) == 1
+Check(Op(dismantled[0]) == GameSession.ItemDecomposeRs && BitConverter.ToUInt16(dismantled[0], 2) == 0x0260 && BitConverter.ToInt32(dismantled[0], 5) == 1
       && staffStore.Items.All(i => i.WireId != 940) && staffStore.Items.Where(i => i.TemplateId == 930100001).Sum(i => i.Quantity) == dismantleKinaBefore - 1000
       && DecomposeTables.Embedded.Of(110160001) is { Cost: 1000, Groups.Length: 2 },
       "ItemDecompose_RQ: the sword is gone, 1000 kina paid, the reply counts one dismantled item");
-Check(BitConverter.ToUInt16((await staffSession.HandleAsync(new PacketWriter().U16(GameSession.ItemDecomposeRq).U8(0).Varint(1).I64(13).ToArray(), Now + 7580))[0], 2) == 1,
+Check(BitConverter.ToUInt16((await staffSession.HandleAsync(new PacketWriter().U16(GameSession.ItemDecomposeRq).U8(0).Varint(1).I64(13).ToArray(), Now + 7580))[0], 2) == 0x0261,
       "a potion cannot be dismantled (result 1)");
 // Crafting at map 1010's Blacksmith worktable (2910003): recipe 115016001 (2 ore + 1 additive -> an ingot). A success
 // grants the product (0x8d6f, 0x8d71); a failure uses up the components without a product. World entry lists recipes.
@@ -2245,7 +2251,7 @@ var wornWeapon = staffStore.Items.First(i => i.Location == "equipment" && i.Slot
 staffStore.Items.Add(Stored(930100023, 600, "bag", null, 62));
 await staffSession.InventoryChangesAsync(default);
 var wornEnchant = await staffSession.HandleAsync(new PacketWriter().U16(0x5622).I64(wornWeapon.WireId).Varint(0).ToArray(), Now);
-Check(wornEnchant[0][2] == 0 && wornEnchant.Any(b => b[0] == 0x26 && b[1] == 0x56) && wornEnchant.Any(b => b[0] == 0x1c && b[1] == 0x56),
+Check(BitConverter.ToUInt16(wornEnchant[0], 2) == 0x033c && wornEnchant.Any(b => b[0] == 0x26 && b[1] == 0x56) && wornEnchant.Any(b => b[0] == 0x1c && b[1] == 0x56),
       $"the equipped weapon ({wornWeapon.TemplateId}) enchants and is shown (0x561c, 0x5626)");
 // Kibelisk: binding the Poeta Kibelisk (key 900000) stores it, sends the official order and 0x9233 once.
 var bind = await staffSession.HandleAsync(new PacketWriter().U16(0x3636).Varint(Kibelisks.FirstKey).I64(0).I32(1200081).ToArray(), Now);

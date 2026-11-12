@@ -73,7 +73,13 @@ public sealed partial class GameSession
     {
         if (plain.Length < 10) return [];
         var key = BitConverter.ToInt64(plain, 2);
-        byte[] Reply(int result, int level, int itemId) => PacketWriter.Opcode(ItemEnchantRs).U16(result).I64(key).U8(level).I32(itemId).ToArray();
+        // EResult (success 0x033c OBSERVED 2026-11-06 234912 i48392, 13 samples; 0x0342 OBSERVED for a failed roll in 0x5626
+        // 2026-11-06 084658 i8648; the rest read from the usmap of client 2.0.6): 1 internal error, 2 not enchantable (no next
+        // step), 3 costs missing (CANDIDATE: NotEnoughCountMoney also for materials), 4 failed roll, 5 failed with a level lost (CANDIDATE).
+        byte[] Reply(int result, int level, int itemId) => PacketWriter.Opcode(ItemEnchantRs).U16(result switch
+        {
+            0 => 0x033c, 1 => 0x033d, 2 => 0x033e, 3 => 0x0107, 4 => 0x0342, 5 => 0x0343, _ => result,
+        }).I64(key).U8(level).I32(itemId).ToArray();
         if (Store is not { } store || CharacterId is not { } character || !storedItems.TryGetValue(key, out var row) || row.Location is not ("bag" or "equipment"))
             return [Reply(1, 0, 0)];
         var level = EnchantOf(row);
@@ -98,7 +104,7 @@ public sealed partial class GameSession
         var nextBonus = success ? 0 : bonus + step.FailCorrection;
         var done = await Stored(async () => await store.EnchantItemAsync(character, row.InstanceId, row.Revision, costs, after, nextBonus, ct) ? [[]] : []);
         if (done.Count == 0) return [Reply(1, level, row.TemplateId)];
-        var replies = new List<byte[]> { Reply(success ? 0 : 4, after, row.TemplateId) };
+        var replies = new List<byte[]> { Reply(success ? 0 : after < level ? 5 : 4, after, row.TemplateId) };
         replies.AddRange(await InventoryChangesAsync(ct, 0, success ? DecreaseItemEnchant : DecreaseItemEnchantFail));
         if (success) replies.AddRange(AchieveEnchant(after));
         if (row.Location == "equipment" && after != level)

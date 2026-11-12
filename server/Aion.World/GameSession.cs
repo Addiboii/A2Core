@@ -1361,7 +1361,9 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         EquipOpcode = opcode;
         var equip = plain.Length == 11;
         var moved = await Stored(async () => await store.MoveItemAsync(character, row.InstanceId, row.Revision, equip ? slot : null, ct) ? [Array.Empty<byte>()] : []);
-        var reply = PacketWriter.Opcode((ushort)(opcode + 1)).U16(moved.Count == 1 ? 0 : 1).I64(key).U8(slot);
+        // kItem_Equip_Success 0x0430 (OBSERVED 2026-11-06 234912 i20777) / kItem_UnEquip_Success 0x043f (OBSERVED 2026-11-05
+        // 204043 i1100); refusals kItem_Equip_Fail 0x0431 / kItem_UnEquip_NotExist 0x5008 (usmap; CANDIDATE choice).
+        var reply = PacketWriter.Opcode((ushort)(opcode + 1)).U16(moved.Count == 1 ? (equip ? 0x0430 : 0x043f) : (equip ? 0x0431 : 0x5008)).I64(key).U8(slot);
         if (!equip) reply.I32(BitConverter.ToInt32(plain, 11));
         var replies = new List<byte[]> { reply.ToArray() };
         if (moved.Count == 1)

@@ -79,7 +79,8 @@ public sealed partial class GameSession
         catch (ProtocolException) { return []; }
         byte[] Reply(int result, int done, IReadOnlyList<(int ItemId, long Count)> rewards)
         {
-            var w = PacketWriter.Opcode(ItemDecomposeRs).U16(result).Bool(auto).I32(done).I32(uids.Count).Varint((uint)rewards.Count);
+            // kItem_Decompose_Success 0x0260 (OBSERVED 2026-11-05 204306 i28312) / _Fail 0x0261 (usmap).
+            var w = PacketWriter.Opcode(ItemDecomposeRs).U16(result == 0 ? 0x0260 : 0x0261).Bool(auto).I32(done).I32(uids.Count).Varint((uint)rewards.Count);
             foreach (var (item, count) in rewards) w.I32(item).I32((int)Math.Min(count, int.MaxValue));
             return w.Varint(0).ToArray();
         }

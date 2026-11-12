@@ -147,7 +147,7 @@ static class StigmaChecks
         var (charged, chargedStore, _) = await Enter(23, 3, s => s.Items.Add(new ItemState(Guid.NewGuid(), "b", 531900010, 2, "bag", null, 1, Empty, Empty, 7001)));
         await charged.InventoryChangesAsync(default);   // the bag as the store has it (as the item-use checks do)
         var used = await charged.HandleAsync(new PacketWriter().U16(0x5612).I64(7001).ToArray(), now);
-        Check(used[0][2] == 0 && used.Any(b => b.SequenceEqual(Shards(0))) && chargedStore.StigmaItemShards == 1 && charged.StigmaShardsLeft == 2
+        Check(BitConverter.ToUInt16(used[0], 2) == RidePackets.ItemUseSuccess && used.Any(b => b.SequenceEqual(Shards(0))) && chargedStore.StigmaItemShards == 1 && charged.StigmaShardsLeft == 2
               && chargedStore.Items.Single(i => i.TemplateId == 531900010).Quantity == 1,
               "a stigma shard item: one used, +1 shard (0x5105 StigmaShard, none spent), stored with the item's consumption");
         return checks;
