@@ -40,7 +40,9 @@ public sealed class TitleTables
 public sealed partial class GameSession
 {
     public const ushort TitleListNt = 0x5679, TitleChangeRq = 0x567a, TitleChangeRs = 0x567b, TitleChangeNt = 0x567c, TitleAcquireNt = 0x567d,
-        TitleEquipRq = 0x567f, TitleEquipRs = 0x5680;
+        TitleEquipRq = 0x567f, TitleEquipRs = 0x5680,
+        // TitleEquipChange_NT (usmap 0x37c3 + 0x1ebe) and PresetTitleUpdate_NT (usmap 0x3b99 + 0xa6fb), OBSERVED 2026-11-06 183456.
+        TitleEquipChangeNt = 0x5681, PresetTitleUpdateNt = 0xe294;
     static TitleTables Titles => TitleTables.Embedded;
 
     readonly SortedSet<int> titles = [];
@@ -102,7 +104,11 @@ public sealed partial class GameSession
         byte[] Reply(int result) => PacketWriter.Opcode(TitleEquipRs).U16(result).U8((byte)category).I32(titleId).ToArray();
         if (category is < 1 or > 3 || titleId != 0 && (!titles.Contains(titleId) || Titles.Of(titleId)?.Category != category)) return [Reply(1)];
         if (!await SaveTitleAsync(category, titleId, ct)) return [Reply(1)];
-        return [Reply(0), .. RefreshStats()];
+        // OBSERVED order (2026-11-06 183456 #1128-1131, five equips and unequips): TitleEquipChange_NT 0x5681 {category, title},
+        // PresetTitleUpdate_NT 0xe294 {count, {preset u8 1, category, title}}, the reply, the stats. Preset 1 is the only one
+        // seen (CANDIDATE: presets are not stored).
+        return [PacketWriter.Opcode(TitleEquipChangeNt).U8((byte)category).I32(titleId).ToArray(),
+            PacketWriter.Opcode(PresetTitleUpdateNt).Varint(1).U8(1).U8((byte)category).I32(titleId).ToArray(), Reply(0), .. RefreshStats()];
     }
 
     /// <summary>0x567a TitleChange_RQ {title i32}: the shown title (0 none) -> 0x567b {result u16, title}; 0x567c {key, title} to those nearby.</summary>

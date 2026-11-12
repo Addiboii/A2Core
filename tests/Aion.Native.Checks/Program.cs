@@ -2222,8 +2222,9 @@ Check(titled.Count > 0 && titled[0].SequenceEqual(Convert.FromHexString("7D56" +
 Check((await staffSession.AcquireTitleAsync(11010002, default)).Count == 0 && (await staffSession.AcquireTitleAsync(21010001, default)).Count == 0,
       "a title twice, or one of the other race, is refused");
 var titleEquip = await staffSession.HandleAsync(new PacketWriter().U16(0x567f).U8(3).I32(11010002).ToArray(), Now);
-Check(titleEquip[0].SequenceEqual(Convert.FromHexString("8056" + "0000" + "03" + "D2FFA700")) && staffSession.TitleStat("HPMax") == 300 && staffStore.TitleEquips[3] == 11010002,
-      "TitleEquip_RQ in its category (Etc): 0x5680 result 0, its EquipStatList (HPMax 300) applies");
+Check(titleEquip[0].SequenceEqual(Convert.FromHexString("8156" + "03" + "D2FFA700")) && titleEquip[1].SequenceEqual(Convert.FromHexString("94E2" + "01" + "01" + "03" + "D2FFA700"))
+      && titleEquip[2].SequenceEqual(Convert.FromHexString("8056" + "0000" + "03" + "D2FFA700")) && staffSession.TitleStat("HPMax") == 300 && staffStore.TitleEquips[3] == 11010002,
+      "TitleEquip_RQ in its category (Etc): 0x5681, 0xe294 preset 1, then 0x5680 result 0 (official order 2026-11-06 183456 #1128-1131); HPMax 300 applies");
 Check((await staffSession.HandleAsync(new PacketWriter().U16(0x567f).U8(1).I32(11010002).ToArray(), Now))[0][2] == 1, "the wrong category is refused");
 var titleShown = await staffSession.HandleAsync(new PacketWriter().U16(0x567a).I32(11010002).ToArray(), Now);
 Check(titleShown.Count == 2 && titleShown[0].SequenceEqual(Convert.FromHexString("7B56" + "0000" + "D2FFA700")) && titleShown[1][0] == 0x7c && titleShown[1][1] == 0x56
