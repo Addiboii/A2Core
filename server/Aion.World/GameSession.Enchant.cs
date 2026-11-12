@@ -64,7 +64,7 @@ public sealed partial class GameSession
 
     /// <summary>Stats the equipped items' enchant levels add.</summary>
     int EnchantStat(string stat) => inventory.Values.Where(i => i.Container == InventoryItem.Equipped && i.Detail is { EnchantLevel: > 0 })
-        .Sum(i => Enchants.Effect(i.ItemId, i.Detail!.EnchantLevel).Stats.GetValueOrDefault(stat)) + ExceedStat(stat);
+        .Sum(i => Enchants.Effect(i.ItemId, i.Detail!.EnchantLevel).Stats.GetValueOrDefault(stat)) + ExceedStat(stat) + MagicStoneStat(stat);
 
     /// <summary>The roll for an attempt: 0..9999 (replaceable in checks).</summary>
     public Func<int> EnchantRoll { get; set; } = () => Random.Shared.Next(10_000);

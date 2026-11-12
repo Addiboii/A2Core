@@ -365,6 +365,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             case ShopOpenRq when plain.Length >= 3: return await OpenShopAsync(plain, now, ct);
             case ItemRestoreRq when plain.Length >= 3: return await RestoreItemsAsync(plain, ct);
             case ItemEnchantRq when plain.Length >= 10: return await EnchantAsync(plain, ct);
+            case ItemImprintRq when plain.Length >= 22: return await ImprintAsync(plain, ct);   // GameSession.Imprint.cs
             case GatherStartRq when plain.Length >= 3: return await GatherStartAsync(plain, now, ct);
             case TitleChangeRq when plain.Length >= 6: return await TitleChangeAsync(plain, ct);
             case SkillLevelUpRq when plain.Length >= 6: return await SkillLevelUpAsync(plain, ct);
@@ -1307,8 +1308,11 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             var equipment = equipped || item.TemplateId < 500_000_000;
             var container = equipped ? InventoryItem.Equipped : item.Location == "storage" ? InventoryItem.Storage : InventoryItem.Bag;
             result.Add(new InventoryItem(key, item.TemplateId, item.Quantity, container, slot,
-                equipment ? new EquipDetail((data?.ItemLevel(item.TemplateId) ?? 1) + Enchants.Effect(item.TemplateId, EnchantOf(item)).ItemLevel, equipped ? (byte)slot : (byte)0,
-                    (byte)EnchantOf(item), SoulBindCount(item) > 0 ? owner : 0, SoulBindCount(item), GodstonesOf(item), (byte)EnchantOf(item, "exceed")) : null));
+                // Item level: its own, the enchant's and the manastone grades' (OBSERVED 2026-11-06 234912: 23 + grades).
+                equipment ? new EquipDetail((data?.ItemLevel(item.TemplateId) ?? 1) + Enchants.Effect(item.TemplateId, EnchantOf(item)).ItemLevel
+                    + MagicStonesOf(item).Sum(s => s.Grade), equipped ? (byte)slot : (byte)0,
+                    (byte)EnchantOf(item), SoulBindCount(item) > 0 ? owner : 0, SoulBindCount(item), GodstonesOf(item), (byte)EnchantOf(item, "exceed"),
+                    MagicStonesOf(item)) : null));
         }
         return result;
     }
@@ -2398,7 +2402,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         + BoardStat("Defense") + TitleStat("Defense") + WingStat("Defense");
 
     /// <summary>The MP pool: MPMax 1500 plus buffs.</summary>
-    int MpMax => MpMaxBase + BuffStat("MPMax") + BoardStat("MPMax") + TitleStat("MPMax") + WingStat("MPMax");
+    int MpMax => MpMaxBase + BuffStat("MPMax") + BoardStat("MPMax") + TitleStat("MPMax") + WingStat("MPMax") + MagicStoneStat("MPMax");
 
     /// <summary>
     /// The stat sheet (0x3649 / 0x364a): the official sample's values, with HPMax from PcStatLevel
@@ -2414,7 +2418,8 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         var stats = GamePackets.DefaultStats.Select(s => s.Type switch
         {
             31 => (s.Type, weapon.Max + EnchantStat("WeaponDamage")), 33 => (s.Type, weapon.Min + EnchantStat("WeaponMinDamage")),
-            128 => (s.Type, weapon.Critical + RideStat("Critical") + BuffStat("Critical") + BoardStat("Critical") + TitleStat("Critical") + WingStat("Critical")),
+            128 => (s.Type, weapon.Critical + RideStat("Critical") + BuffStat("Critical") + BoardStat("Critical") + TitleStat("Critical") + WingStat("Critical")
+                + MagicStoneStat("Critical")),
             318 => (s.Type, weapon.Accuracy), 193 => (s.Type, hpMax), 199 => (s.Type, MpMax), 242 => (s.Type, GamePackets.SpawnSp + BuffStat("SPMax")),
             307 => (s.Type, Defense),
             _ => s,

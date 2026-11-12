@@ -45,6 +45,7 @@
     <EmbeddedResource Include="../../tools/data/skill-effect-conditions.json" LogicalName="skill-effect-conditions.json" />
     <EmbeddedResource Include="../../tools/data/stigmas.json" LogicalName="stigmas.json" />
     <EmbeddedResource Include="../../tools/data/specialized-skills.json" LogicalName="specialized-skills.json" />
+    <EmbeddedResource Include="../../tools/data/manastones.json" LogicalName="manastones.json" />
     <!-- tools/economy_data.py (build 26262663 tables): godstones, exceed enchanting, item trade/storage rules, legions. -->
     <EmbeddedResource Include="../../tools/data/godstones.json" LogicalName="godstones.json" />
     <EmbeddedResource Include="../../tools/data/exceed-enchant.json" LogicalName="exceed-enchant.json" />
