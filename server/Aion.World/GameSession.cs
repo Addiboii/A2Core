@@ -387,6 +387,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             case CraftStartRq when plain.Length >= 7: return await CraftAsync(plain, ct);
             case GatherStopRq when plain.Length >= 3: pendingUse = null; return [];
             case ShopBuyRq when plain.Length >= 4: return await BuyGoodsAsync(plain, now, ct);
+            case NpShopPurchaseRq when plain.Length >= 10: return await NpShopPurchaseAsync(plain, now, ct);   // GameSession.BmShop.cs
             case ShopSellRq when plain.Length >= 4: return await SellItemsAsync(plain, ct);
             case ItemRemoveRq when plain.Length >= 4: return await RemoveItemsAsync(plain, ct);
             case ItemSortRq when plain.Length == 7: return await SortBagAsync(plain, ct);
@@ -545,6 +546,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
     /// <summary>World state ends with the character; the next selection starts it again.</summary>
     void LeaveWorld()
     {
+        ForgetPremiumWallet();
         ExitSharedWorld();
         resources = null;
         targets = null;
@@ -1363,6 +1365,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
     {
         inventory.Clear();
         foreach (var item in items) inventory[item.Key] = item;
+        PublishPremiumWallet();
     }
 
     /// <summary>Stored rows by wire key (the item_key the client's equip requests carry).</summary>
@@ -1479,7 +1482,8 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         foreach (var gone in inventory.Values.Where(i => !kept.Contains(i.Key)))
             changes.Add(new ItemModification(2, gone, Decrease: decrease));
         Remember(items);
-        return changes.Count == 0 ? acquired : [GamePackets.ItemModificationList(changes), .. acquired];
+        var wallet = TakeWalletChanges();
+        return changes.Count == 0 ? [.. acquired, .. wallet] : [GamePackets.ItemModificationList(changes), .. acquired, .. wallet];
     }
 
     List<byte[]> UnlockUpdateOnce()

@@ -93,6 +93,22 @@ public sealed class GmCommands(WorldPresence presence, BuilderCommands builder) 
             if (report.Length < 3) return "Write what happened: //report <text> (a bug, a player, or being stuck).";
             return await Report(sender, Aion.Core.Characters.CharacterNames.Stored(userName), report, ct);
         }
+        // "//quna <amount>" for every player (OURS): Quna (GameCash) for Kina, the premium shop's currency without real money.
+        if (line.StartsWith("quna", StringComparison.OrdinalIgnoreCase) && (line.Length == 4 || char.IsWhiteSpace(line[4])))
+        {
+            if (!long.TryParse(line[4..].Trim(), out var amount))
+                return $"Use //quna <amount>: Quna for {GameSession.KinaPerGameCash} Kina each.";
+            var buyer = presence.Find(userName) ?? presence.Find(Aion.Core.Characters.CharacterNames.Stored(userName));
+            if (buyer is null) return "Enter the world first.";
+            try
+            {
+                return await buyer.Session.InvokeAsync(async now => await buyer.Session.ExchangeKinaForGameCashAsync(amount, ct)).WaitAsync(TimeSpan.FromSeconds(10), ct);
+            }
+            catch (Exception error) when (error is TimeoutException or TaskCanceledException)
+            {
+                return "The game connection did not respond.";
+            }
+        }
         // The client may send the displayed name ("[GM] Elyra"); the world knows the stored one.
         var actor = presence.Find(userName) ?? presence.Find(Aion.Core.Characters.CharacterNames.Stored(userName));
         if (actor is null) return "Enter the world first.";
@@ -101,7 +117,7 @@ public sealed class GmCommands(WorldPresence presence, BuilderCommands builder) 
             if (line.Length == 0 || line.Equals("help", StringComparison.OrdinalIgnoreCase))
                 return await builder.AllowedAsync(actor.Session, ct)
                     ? "Builder commands (in chat: //<command>; console: s <command>): " + string.Join(", ", BuilderCommands.Supported)
-                    : "Commands: //report <text> sends a report to the staff.";
+                    : $"Commands: //report <text> sends a report to the staff; //quna <amount> buys Quna for {GameSession.KinaPerGameCash} Kina each.";
             return await actor.Session.InvokeAsync(async now =>
             {
                 var outcome = await builder.RunAsync(actor.Session, line, now, ct);

@@ -1919,6 +1919,24 @@ Check(ShopResult((await staffSession.HandleAsync(new PacketWriter().U16(0x8c02).
       "buying past the limit is refused (0x0602 NotEnoughLimitedGoodsCount)");
 Check(ShopTables.Period(1, DateTimeOffset.Parse("2026-10-16T06:59:00Z")) == "2026-10-15" && ShopTables.Period(1, DateTimeOffset.Parse("2026-10-16T07:00:00Z")) == "2026-10-16"
       && ShopTables.Period(2, DateTimeOffset.Parse("2026-10-16T12:00:00Z")) == "w2026-10-14", "limits reset at 07:00 UTC, weekly from Wednesday");
+// The premium shop (GameSession.BmShop.cs): goods 1232 (item 632100001) costs 500 Quna; with 600 Quna it is bought
+// (0x568c 0000 + goods + quantity first, then the bag and RefreshCurrency_NT 0xe333 with the 100 left); again it is refused
+// for money (0x3cb1); an unknown goods is refused (0x3cac); //quna 10 takes 1500 Kina for 10 Quna.
+long QunaTotal() => staffStore.Items.Where(i => i.TemplateId == GameSession.GameCashItemId && i.Location == "bag").Sum(i => i.Quantity);
+staffStore.Items.Add(Stored(GameSession.GameCashItemId, 600, "bag", null, 4242));
+await staffSession.InventoryChangesAsync(default);
+var bmBought = await staffSession.HandleAsync(new PacketWriter().U16(0x568b).I32(1232).I32(1).ToArray(), Now);
+Check(bmBought[0].SequenceEqual(new PacketWriter().U16(0x568c).U16(0).I32(1232).I32(1).ToArray()) && QunaTotal() == 100
+      && staffStore.Items.Any(i => i.TemplateId == 632100001) && bmBought.Any(b => Op(b) == 0x561b)
+      && bmBought.Any(b => b.SequenceEqual(new PacketWriter().U16(0xe333).I32(145).Varint(1).I32(103).I64(100).ToArray())),
+      "premium goods 1232 for 500 Quna: 0x568c success, the item, RefreshCurrency_NT with 100 Quna left");
+Check(ShopResult((await staffSession.HandleAsync(new PacketWriter().U16(0x568b).I32(1232).I32(1).ToArray(), Now))[0]) == 0x3cb1
+      && ShopResult((await staffSession.HandleAsync(new PacketWriter().U16(0x568b).I32(424242).I32(1).ToArray(), Now))[0]) == 0x3cac && QunaTotal() == 100,
+      "premium goods without enough Quna (0x3cb1) or unknown (0x3cac) are refused, nothing paid");
+var qunaKina = KinaTotal();
+var exchanged = await staffSession.ExchangeKinaForGameCashAsync(10, default);
+Check(QunaTotal() == 110 && KinaTotal() == qunaKina - 1500 && exchanged.Packets.Any(b => Op(b) == 0x561b)
+      && (await staffSession.ExchangeKinaForGameCashAsync(0, default)).Packets.Count == 0, "//quna 10: 1500 Kina for 10 Quna; 0 is refused");
 // Enchanting (0x5622 -> 0x5623): the starter sword goes +0 -> +1 for 125 Kina and 5 enchant coins (Enchant_Common_1);
 // the item update carries the level; at +5 (the Common maximum) the attempt is refused.
 staffStore.Items.AddRange([Stored(110260001, 1, "bag", null, 60), Stored(930100023, 100, "bag", null, 61)]);

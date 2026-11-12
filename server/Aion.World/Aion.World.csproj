@@ -47,6 +47,7 @@
     <EmbeddedResource Include="../../tools/data/specialized-skills.json" LogicalName="specialized-skills.json" />
     <EmbeddedResource Include="../../tools/data/manastones.json" LogicalName="manastones.json" />
     <EmbeddedResource Include="../../tools/data/sealstones.json" LogicalName="sealstones.json" />
+    <EmbeddedResource Include="../../tools/data/bm-shop.json" LogicalName="bm-shop.json" />
     <!-- tools/economy_data.py (build 26262663 tables): godstones, exceed enchanting, item trade/storage rules, legions. -->
     <EmbeddedResource Include="../../tools/data/godstones.json" LogicalName="godstones.json" />
     <EmbeddedResource Include="../../tools/data/exceed-enchant.json" LogicalName="exceed-enchant.json" />
