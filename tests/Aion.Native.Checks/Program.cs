@@ -551,6 +551,7 @@ Check((await game.TickAsync(Now + 1000)).All(b => !b.SequenceEqual(GamePackets.C
 Check((await game.TickAsync(Now + 4000)).Any(b => b.SequenceEqual(GamePackets.CombatState(1, false))), "combat ends ~3.5 s after the last action");
 var dummy = game.Targets[Combat.TrainingDummyKey];
 dummy.Hp = 1;
+game.SetResource('H', 100);
 var kill = await game.HandleAsync(Cast(basic, Combat.TrainingDummyKey, pos), Now + 100000);
 Check(dummy.Dead && kill.Any(b => b.SequenceEqual(GamePackets.NpcHp(Combat.TrainingDummyKey, 0))), "HP 0 is the kill");
 // Kill experience: the level-10 dummy gives NeedExp(10) / 25 x 1.5 (5 levels above or more) to a level-1
@@ -558,9 +559,10 @@ Check(dummy.Dead && kill.Any(b => b.SequenceEqual(GamePackets.NpcHp(Combat.Train
 var killExp = (long)Math.Round(data.NeedExp(10) / 25.0 * 1.5);
 var expLeft = killExp - data.NeedExp(1);
 Check(game.Level == 2 && game.Experience == expLeft && kill.Any(b => b.SequenceEqual(GamePackets.ExpUpdate(expLeft, killExp, 1)))
-      && kill.Any(b => b.SequenceEqual(GamePackets.LevelUpdate(2, 2, expLeft))) && kill.Any(b => b.SequenceEqual(PlayerPackets.LevelBroadcast(1, 2)))
-      && kill.FindIndex(b => b[0] == 0x07 && b[1] == 0x8d) < kill.FindIndex(b => b[0] == 0x08 && b[1] == 0x8d),
-      "a kill gives experience (0x8d07 reason 1) and levels up: 0x8d08, 0x8d91, stats and full pools");
+      && kill.Any(b => b.SequenceEqual(GamePackets.LevelUpdate(2, 2, expLeft))) && !kill.Any(b => Op(b) == 0x8d91)
+      && kill.FindIndex(b => b[0] == 0x07 && b[1] == 0x8d) < kill.FindIndex(b => b[0] == 0x08 && b[1] == 0x8d)
+      && game.Resource.Hp == 100 && game.Resource.HpMax > 100,
+      "a kill gives experience (0x8d07 reason 1) and levels up: 0x8d08 and stats; no own 0x8d91, HP not refilled (as recorded 2026-10-13/19)");
 Check(game.KillExperience(1) == (long)Math.Round(data.NeedExp(1) / 25.0 * 0.9) && game.KillExperience(-5) >= 0 && new GameSession(data, new GameSessionOptions { CharacterLevel = 30 }, new Random(1)).KillExperience(10) == 0,
       "weaker mobs give less, none 10+ levels below");
 // Base rates (Aion:Rates, OURS): experience x2 doubles the same kill's experience; drops x0 rolls no loot.

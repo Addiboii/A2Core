@@ -6,7 +6,9 @@ namespace Aion.World;
 // level-ups show (capture 20261013-144836: ExpUpdate with exp 0 and the reward equal to NeedExp, then
 // LevelUpdate). A level-up sends, in the official order, the contents it unlocks (0xe258), 0x8d07 ExpUpdate,
 // 0x8d08 LevelUpdate, the skills the class learns (0x5101 AddSkillList, reason LevelUp), and 0x8d91 to those
-// nearby; stats follow the new level (PcStatLevel) and the pools refill.
+// nearby only; stats follow the new level (PcStatLevel). OBSERVED (our recordings 2026-10-13 144836 and 2026-10-19
+// 231752, 9 level-ups): no 0x8d91 for the own character, and HP is not refilled (it keeps regenerating from where it
+// was, e.g. 837 then 867 of 935 after level 5). The community fork found the same.
 // Kill experience (OURS: no table gives it and the official kills sent none, the recorded character being
 // above those mobs): NeedExp at the mob's level / KillsPerLevel, scaled by the level gap.
 public sealed partial class GameSession
@@ -85,15 +87,8 @@ public sealed partial class GameSession
             if (added.Count > 0) replies.Add(GamePackets.AddSkillList(playerKey, added));
             replies.AddRange(PassiveAbnormals());
         }
-        var broadcast = PlayerPackets.LevelBroadcast(playerKey, level);
-        worldPlayer?.Map?.Broadcast(worldPlayer, [broadcast]);
-        replies.Add(broadcast);
+        worldPlayer?.Map?.Broadcast(worldPlayer, [PlayerPackets.LevelBroadcast(playerKey, level)]);
         replies.AddRange(RefreshStats());
-        if (resources is { } r)
-        {
-            (r.Hp, r.Mp) = (r.HpMax, r.MpMax);
-            replies.Add(r.Update());
-        }
         return replies;
     }
 }
