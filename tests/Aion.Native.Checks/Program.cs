@@ -2365,7 +2365,7 @@ Check(ranking.Length == 2 + 66 && ranking[0] == 0x57 && ranking[1] == 0x8d && ra
 Check((await bob.HandleAsync(new PacketWriter().U16(0x8c06).I32(7).ToArray(), Now)).Single().SequenceEqual(new PacketWriter().U16(0x8c07).U16(1).I32(7).Varint(0).I64(0).ToArray()),
       "a coin shop does not open (0x8c07 result 1)");
 Check((await bob.HandleAsync(new PacketWriter().U16(0x5607).U8(3).U8(1).I32(11010000).ToArray(), Now)).Single()
-      .SequenceEqual(new PacketWriter().U16(0x5608).U16(0).U8(3).U8(1).I32(11010000).Bool(false).U8(0).U8(0).I32(0).ToArray()), "a hotbar context skill is accepted (0x5608)");
+      .SequenceEqual(new PacketWriter().U16(0x5608).U8(0).U16(0).U8(3).U8(1).I32(11010000).ToArray()), "a hotbar context skill is accepted (0x5608, the official masked layout)");
 Check(GameSession.SilentRequests.Contains(0x3601) && GameSession.SilentRequests.Contains(0xffa1) && (await bob.HandleAsync(new PacketWriter().U16(0x3601).I64(5).ToArray(), Now)).Count == 0,
       "client time and the 30 s 0xffa1 report are silent, not unanswered");
 // Instance layer: walking into Poeta's L_Starter_InstanceLayer_2 trigger moves the player into its own copy of map

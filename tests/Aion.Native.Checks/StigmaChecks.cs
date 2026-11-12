@@ -94,6 +94,25 @@ static class StigmaChecks
         Check(!glad.StigmaReady(BladeToss) && (await glad.HandleAsync(SlotSet(21, 0, BladeToss), now)).Single()[2] == 0 && glad.StigmaReady(BladeToss),
               "a learned but unslotted stigma is not castable until it sits in an open stigma slot");
 
+        // The official client's way (QuickSlotContextSkillUpdate 0x5607 -> 0x5608, recordings of 2026-11-05/06).
+        static byte[] ContextSkill(int slot, int position, int skill) => new PacketWriter().U16(0x5607).U8(slot).U8(position).I32(skill).ToArray();
+        await glad.HandleAsync(new PacketWriter().U16(0x5603).U8(20).ToArray(), now);
+        await glad.HandleAsync(new PacketWriter().U16(0x5603).U8(21).ToArray(), now);
+        var put = await glad.HandleAsync(ContextSkill(20, 0, WrathWave), now);
+        Check(put.Single().SequenceEqual(Convert.FromHexString("0856" + "00" + "0000" + "14" + "00" + Hex(WrathWave)))
+              && gladStore.QuickSlotRows[20].SkillId == WrathWave && glad.StigmaReady(WrathWave),
+              "0x5607 puts Wrath Wave on stigma slot 20: 0x5608 mask 0, result 0, slot 20, context 0, skill (observed layout); stored, castable");
+        await glad.HandleAsync(ContextSkill(21, 0, BladeToss), now);
+        var swap = await glad.HandleAsync(ContextSkill(21, 0, WrathWave), now);
+        Check(swap.Single().SequenceEqual(Convert.FromHexString("0856" + "03" + "0000" + "15" + "00" + Hex(WrathWave) + "01" + "14"))
+              && gladStore.QuickSlotRows[21].SkillId == WrathWave && gladStore.QuickSlotRows[20].SkillId == BladeToss,
+              "moving Wrath Wave onto slot 21 trades places with Blade Toss: 0x5608 mask 3, is_swap 1, swap slot 20 (as the official #84812)");
+        var cleared = await glad.HandleAsync(ContextSkill(20, 0, 0), now);
+        Check(cleared.Single()[4] == 0 && !gladStore.QuickSlotRows.ContainsKey(20) && !glad.StigmaReady(BladeToss),
+              "skill 0 clears the slot (official `00 0000 17 00 00000000`)");
+        Check((await glad.HandleAsync(ContextSkill(22, 0, BladeToss), now)).Single()[3] == 1 && (await glad.HandleAsync(ContextSkill(3, 0, BladeToss), now)).Single()[3] == 1,
+              "0x5607 keeps the stigma rules: the third slot is closed at level 30, a stigma goes only into a stigma slot");
+
         // Ascension grade and character level gates (SkillAcquireData NeedAscensionGrade / NeedCharacterLevel).
         var (grade2, grade2Store, _) = await Enter(30, 2);
         Check((await grade2.HandleAsync(LevelUp(WrathWave), now)).Single()[2] == 2 && grade2Store.StigmaRows.Count == 0,

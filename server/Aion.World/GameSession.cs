@@ -369,6 +369,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             case ItemSortRq when plain.Length == 7: return await SortBagAsync(plain, ct);
             case QuickSlotSetRq when plain.Length >= 27: return await SetQuickSlotAsync(plain, ct);
             case QuickSlotResetRq when plain.Length == 3: return await ResetQuickSlotAsync(plain[2], ct);
+            case QuickSlotContextSkillRq when plain.Length >= 8: return await SetQuickSlotSkillAsync(plain, ct);
             case RidePackets.OpenBoxRq when plain.Length == 15: return await OpenBoxRequestAsync(plain, now, ct);
             case RidePackets.ItemUseRq when plain.Length == 10: return await UseItemAsync(BitConverter.ToInt64(plain, 2), now, ct);
             case ItemUseByItemIdRq when plain.Length == 22: return await UseItemByIdAsync(plain, now, ct);

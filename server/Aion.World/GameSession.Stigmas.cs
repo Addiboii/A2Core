@@ -83,7 +83,7 @@ public sealed partial class GameSession
     /// <summary>
     /// QuickSlotSet_RQ checks for stigmas: null when neither the slot nor the skill is a stigma one, else the result (0 accepted).
     /// </summary>
-    int? StigmaSlotResult(int number, int type, int skillId)
+    int? StigmaSlotResult(int number, int type, int skillId, bool moving = false)
     {
         var stigmaSlot = StigmaData.IsStigmaSlot(number);
         var stigmaSkill = skillId != 0 && StigmaData.IsStigma(skillId);
@@ -91,7 +91,7 @@ public sealed partial class GameSession
         if (!stigmaSlot || !stigmaSkill || type is not (0 or 4)) return 1;   // EQuickSlotType Skill or Stigma only
         if (className is null || StigmaData.ClassOf(skillId) != className || !stigmas.ContainsKey(skillId)) return 1;
         if (!StigmaData.SlotOpen(number, level)) return 1;
-        if (quickSlots.Values.Any(s => s.Slot != number && s.SkillId == skillId && StigmaData.IsStigmaSlot(s.Slot))) return 1;
+        if (!moving && quickSlots.Values.Any(s => s.Slot != number && s.SkillId == skillId && StigmaData.IsStigmaSlot(s.Slot))) return 1;
         return 0;
     }
 

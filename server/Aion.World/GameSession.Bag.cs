@@ -140,6 +140,45 @@ public sealed partial class GameSession
         return [Reply(0)];
     }
 
+    /// <summary>
+    /// 0x5607 QuickSlotContextSkillUpdate_RQ {slot u8, context slot u8, skill i32}: how the client puts a skill or a stigma on
+    /// the bar, moves it, swaps two and clears one (skill 0). OBSERVED in the community recordings of 2026-11-05/06 (c2s of 8
+    /// bytes; 0x5601 never carries a skill there). Reply 0x5608 (OBSERVED, 6 instances): presence mask u8, result u16, slot,
+    /// context slot, skill i32, then the fields whose bit is set: bit 0 is_swap u8, bit 1 swap slot u8, bit 2 swap context
+    /// slot u8. Context slot 0 is the slot's own skill: stored, and a skill already on another slot of the same group (skill
+    /// slots or stigma slots 20-23) trades places with this slot's skill (mask 3, as #84812). Context slots 1-3 (the skills
+    /// shown with it) are accepted, not stored (CANDIDATE). The official PresetSkillUpdate_NT 0xe293 sent before the reply is
+    /// not sent (layout not decoded). Refusals answer result 1 (CANDIDATE: no refusal recorded).
+    /// </summary>
+    async Task<List<byte[]>> SetQuickSlotSkillAsync(byte[] plain, CancellationToken ct)
+    {
+        int number = plain[2], position = plain[3], skillId = BitConverter.ToInt32(plain, 4);
+        byte[] Reply(int result, int swapSlot = -1)
+        {
+            var w = PacketWriter.Opcode(QuickSlotContextSkillRs).U8(swapSlot >= 0 ? 3 : 0).U16(result).U8(number).U8(position).I32(skillId);
+            if (swapSlot >= 0) w.U8(1).U8(swapSlot);
+            return w.ToArray();
+        }
+        if (position != 0) return [Reply(0)];
+        if (Store is not { } store || CharacterId is not { } character || skillId < 0) return [Reply(1)];
+        var stigmaSlot = StigmaData.IsStigmaSlot(number);
+        var other = skillId == 0 ? null
+            : quickSlots.Values.FirstOrDefault(s => s.Slot != number && s.Type == 0 && s.SkillId == skillId && StigmaData.IsStigmaSlot(s.Slot) == stigmaSlot);
+        if (skillId != 0 && StigmaSlotResult(number, 0, skillId, moving: other is not null) is > 0) return [Reply(1)];
+        var previous = quickSlots.GetValueOrDefault(number) is { Type: 0, SkillId: > 0 } p ? p.SkillId : 0;
+        var changes = new List<(int Slot, int Skill)> { (number, skillId) };
+        if (other is not null) changes.Add((other.Slot, previous));
+        foreach (var (slot, skill) in changes)
+        {
+            var record = skill == 0 ? null : new QuickSlotRecord(slot, 0, 0, 0, skill);
+            var saved = await Stored(async () => await store.SaveQuickSlotAsync(character, slot, record, ct) ? [[]] : []);
+            if (saved.Count == 0) return [Reply(1)];
+            if (record is null) quickSlots.Remove(slot);
+            else quickSlots[slot] = record;
+        }
+        return [Reply(0, other?.Slot ?? -1)];
+    }
+
     /// <summary>0x5603 QuickSlotReset_RQ {slot u8}: cleared, answered 0x5604 {result, slot}.</summary>
     async Task<List<byte[]>> ResetQuickSlotAsync(byte number, CancellationToken ct)
     {

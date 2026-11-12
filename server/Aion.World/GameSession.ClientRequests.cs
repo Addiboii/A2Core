@@ -54,10 +54,6 @@ public sealed partial class GameSession
             // CoinShopOpen_RQ {coin shop id i32}: coin shops are not served (result 1; usmap fields: id, purchased map, open time). CANDIDATE.
             case CoinShopOpenRq when plain.Length >= 6:
                 return [PacketWriter.Opcode(CoinShopOpenRs).U16(1).I32(BitConverter.ToInt32(plain, 2)).Varint(0).I64(0).ToArray()];
-            // QuickSlotContextSkillUpdate_RQ {slot u8, context slot u8, skill i32}: accepted as sent (usmap reply fields; no swap).
-            // The context skills of a hotbar slot are not stored yet, so a relog forgets them. CANDIDATE.
-            case QuickSlotContextSkillRq when plain.Length >= 8:
-                return [PacketWriter.Opcode(QuickSlotContextSkillRs).U16(0).U8(plain[2]).U8(plain[3]).I32(BitConverter.ToInt32(plain, 4)).Bool(false).U8(0).U8(0).I32(0).ToArray()];
             // LockOnTarget_RQ: 00 | target varint (as SetMainTarget_RQ; no request sample, CANDIDATE). The reply is the
             // OBSERVED form 0000 | target varint | 0000 (target 0 = unlock); others see 0x3832 key | 00 | target varint.
             case LockOnTargetRq when plain.Length >= 3:
