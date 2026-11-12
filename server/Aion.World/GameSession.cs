@@ -324,7 +324,11 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             if (itemCast is not null && castFrom is { } from && from.DistanceSquared(reported) > CastMoveTolerance * CastMoveTolerance)
                 uncovered = [.. InterruptItemCast(), .. uncovered];
             uncovered = [.. uncovered, .. NpcVisibility(reported)];
-            TrackAir(plain);
+            // Glide (0x3706) and flight (0x370a) starts are position reports too: the takeoff's replies first (GameSession.Flight.cs;
+            // the switch's cases below only see a start too short to carry a position).
+            if (Opcode(plain) is 0x3706 or 0x370a && resources is not null && wingId != 0)
+                uncovered = [.. TakeOff(flight: Opcode(plain) == 0x370a, plain, now), .. uncovered];
+            uncovered = [.. uncovered, .. TrackAir(plain, now)];
             var entering = MapEventPosition(reported, now);
             entering.AddRange(InstanceTrigger(reported, now));
             if (worldPlayer?.Map is { } map)
@@ -406,8 +410,8 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
                 return await SoulBindCompleteAsync(BitConverter.ToInt64(plain, 2), ct);
             case 0x3704 when plain.Length == 10: return SprintOn(now);
             // Glide (0x3706) and flight (0x370a) starts, sent once a wing is equipped (live 2026-10-15).
-            case 0x3706 when resources is not null && wingId != 0: return [GamePackets.GlideStartReply(playerKey)];
-            case 0x370a when resources is not null && wingId != 0: return [GamePackets.FlyStartReply(playerKey)];
+            case 0x3706 when resources is not null && wingId != 0: return TakeOff(flight: false, plain, now);   // GameSession.Flight.cs
+            case 0x370a when resources is not null && wingId != 0: return TakeOff(flight: true, plain, now);
             case 0x3705 when plain.Length == 10: return SprintOff();
             // CharRestStart_RQ / CharRestStop_RQ {key varint, 0 OBSERVED "473700"}: sit down / stand up (dev 0x36A4-0x36A9,
             // usmap layouts; no official reply sample, CANDIDATE). Others see the NT.
@@ -1275,7 +1279,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         while (sprinting && now >= sprintTickAt)
         {
             sprintTickAt += SprintTickMs;
-            if (invincible.Sp) continue;
+            if (invincible.Sp || air is AirState.Fly or AirState.Glide) continue;   // OBSERVED: no SP drain in the air (192703 22:40:35-36)
             resources.Sp = Math.Max(0, resources.Sp - SprintDrain);
             drained = true;
             if (resources.Sp == 0) sprinting = false;
@@ -2789,8 +2793,9 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
     Vector3d? offsetFrom;
 
     /// <summary>The air state a movement request implies (the flight gauge drains in the air and refills on the ground).</summary>
-    void TrackAir(byte[] plain)
+    List<byte[]> TrackAir(byte[] plain, long now)
     {
+        var was = air;
         switch (Opcode(plain))
         {
             case 0x370a: air = AirState.Fly; flySprint = plain.Length > 2 && (plain[2] & 1) != 0; break;
@@ -2802,6 +2807,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
                 air = AirState.Ground; break;
         }
         Resting = false;   // any movement stands the player up
+        return AirChanged(was, now);   // GameSession.Flight.cs
     }
 
     List<byte[]> MovementRelay(byte[] plain, Vector3d at)
@@ -2982,6 +2988,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         ApplyGeometry();
         replies.AddRange(FlushHeldDash(now));
         replies.AddRange(SprintTick(now));
+        replies.AddRange(FlightTick(now));   // GameSession.Flight.cs
         replies.AddRange(DodgeAbnormalTick(now));
         replies.AddRange(await AutoPotionAsync(now, ct));
         if (resources is not null)
@@ -2997,9 +3004,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
                 var fp = resources.Fp;
                 if (resources.FpMax > 0 && !dead)
                 {
-                    if (air is AirState.Fly or AirState.Glide)
-                        resources.Fp = (int)Math.Max(0, fp - seconds * (air == AirState.Glide ? GlideDrain : flySprint ? FlySprintDrain : FlyDrain));
-                    else if (air == AirState.Ground)
+                    if (air == AirState.Ground)
                         resources.Fp = (int)Math.Min(resources.FpMax, fp + seconds * (inCombat ? FpRegenBattle : FpRegenRest));
                 }
                 // Minutes in a movement state for the ElapsedTime achievements naming it ("Glide for 10 minutes" = step 10;
@@ -3026,13 +3031,6 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
                 if (invincible.Sp || before != (resources.Hp, resources.Mp, resources.Sp)) replies.Add(resources.Update());
                 if (resources.Op != op) replies.Add(resources.OpUpdate());
                 if (resources.Fp != fp) replies.Add(resources.FpUpdate());
-                if (resources.Fp == 0 && fp > 0 && air is AirState.Fly or AirState.Glide && position is { } here)
-                {
-                    // The gauge ran out: the official server starts the flyer's fall itself (0x371e with gravity mode 2, no jump;
-                    // recording 2026-10-19 at FP 0, twice: after the flight and after the glide that followed).
-                    air = AirState.Fall;
-                    replies.Add(PlayerPackets.GravityStart(playerKey, here, worldPlayer?.Heading ?? 0, Vector3d.Zero, 2, jumpUp: false));
-                }
                 if (suffocating && resources.Hp == 0) replies.AddRange(Die(0, now));
             }
         }

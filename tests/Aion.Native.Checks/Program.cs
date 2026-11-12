@@ -2383,6 +2383,7 @@ Console.WriteLine($"{await ImprintChecks.RunAsync(GladiatorOn, Now)} manastone c
 Console.WriteLine($"{await SealStoneChecks.RunAsync(GladiatorOn, Now)} seal stone checks passed (register, toggle refusal, shards per hit, entry).");
 Console.WriteLine($"{await ItemPointChecks.RunAsync(GladiatorOn, Now)} item point checks passed (Wisdom Stone, Daevanion Crystal, relog).");
 Console.WriteLine($"{await LogoutStateChecks.RunAsync(GladiatorOn, Now)} logout state checks passed (a timed buff paused while offline).");
+Console.WriteLine($"{await FlightChecks.RunAsync(GladiatorOn, Now)} flight checks passed (takeoff, 100 ms gauge, landing).");
 
 // ---------- Multiplayer: the shared world (players see each other, shared NPCs) ----------
 checks = 0;
