@@ -2026,18 +2026,32 @@ staffSession.Teleport(1010, krao.At with { X = krao.At.X + 50 }, Now + 7240);
 await staffSession.HandleAsync(new PacketWriter().U16(0x3622).I32(1).ToArray(), Now + 7240);
 await staffSession.HandleAsync(new PacketWriter().U16(0x3636).Varint((uint)(WorldObjects.FirstKey + kraoIndex)).ToArray(), Now + 7245);
 await staffSession.HandleAsync(new PacketWriter().U16(0x3622).I32(1).ToArray(), Now + 7245);
+// A mid boss: 0x572e {npc id} and nothing paid yet (2026-11-05 204306 #11315); its table is paid at the cube.
+var kraoMid = staffSession.Targets.Values.First(t => t.NpcId == 2310104);
+staffSession.Teleport(600002, kraoMid.Position with { X = kraoMid.Position.X + 150 }, Now + 7246);
+await staffSession.HandleAsync(new PacketWriter().U16(0x3622).I32(1).ToArray(), Now + 7246);
+kraoMid.Hp = 1;
+var kinaBeforeMid = staffStore.Items.Where(i => i.TemplateId == 930100001).Sum(i => i.Quantity);
+staffSession.NoCool = true;   // two kills 13 ms apart in these checks' timeline
+var midFell = await staffSession.HandleAsync(Cast(basic, kraoMid.Key, kraoMid.Position), Now + 7247);
+await staffSession.TickAsync(Now + 7248);
+Check(kraoMid.Dead && midFell.Any(b => b.SequenceEqual(PacketWriter.Opcode(GameSession.MiddleBossKillNt).I32(2310104).ToArray()))
+      && staffStore.Items.Where(i => i.TemplateId == 930100001).Sum(i => i.Quantity) == kinaBeforeMid,
+      "a mid boss falls: 0x572e {2310104}, nothing paid yet");
 var kraoBoss = staffSession.Targets.Values.First(t => t.NpcId == 2310171);
 staffSession.Teleport(600002, kraoBoss.Position with { X = kraoBoss.Position.X + 150 }, Now + 7250);
 await staffSession.HandleAsync(new PacketWriter().U16(0x3622).I32(1).ToArray(), Now + 7250);
 kraoBoss.Hp = 1;
 var bossFell = await staffSession.HandleAsync(Cast(basic, kraoBoss.Key, kraoBoss.Position), Now + 7260);
-Check(kraoBoss.Dead && bossFell.Any(b => Op(b) == GameSession.CubeRewardStartNt), "the final boss falls: the reward cube is armed (0x56cc)");
+staffSession.NoCool = false;
+Check(kraoBoss.Dead && bossFell.Any(b => b.SequenceEqual(PacketWriter.Opcode(GameSession.CubeRewardStartNt).Varint(1).I32(2310104).ToArray())),
+      "the final boss falls: the reward cube is armed, 0x5713 lists the killed mid boss (084658 #61800)");
 var itemsBefore = staffStore.Items.Count;
 var cubeReward = await staffSession.HandleAsync(new PacketWriter().U16(GameSession.CubeRewardRq).U8(1).ToArray(), Now + 7270);
 var cubeReply = cubeReward.First(b => Op(b) == GameSession.CubeRewardRs);
 var cubeKina = staffStore.Items.Where(i => i.TemplateId == 930100001).Sum(i => i.Quantity);
-Check(BitConverter.ToUInt16(cubeReply, 2) == 0 && cubeReply[5] == 3 && staffStore.Items.Any(i => i.TemplateId == 630840002 && i.Quantity == 4) && cubeKina >= 25000,
-      "the cube pays the boss's RewardCommon (4 refunds, 25000 kina, 1000 enchant coins) once (0x56ce)");
+Check(BitConverter.ToUInt16(cubeReply, 2) == 0 && cubeReply[5] == 3 && cubeKina - kinaBeforeMid >= 50000,
+      "the cube pays the final boss's and the killed mid boss's tables in one (0x5715; 084658 #62929: 25000 kina each)");
 await staffSession.HandleAsync(new PacketWriter().U16(GameSession.CubeRewardRq).U8(1).ToArray(), Now + 7280);
 Check(staffStore.Items.Where(i => i.TemplateId == 930100001).Sum(i => i.Quantity) == cubeKina, "asking again pays nothing more");
 staffSession.Copy!.DeadlineMs = Now + 7290;

@@ -31,6 +31,6 @@ public sealed partial class GameSession
         Observed(0xe200, "00002392ffffffffff000000"),   // MessageCardInitData_NT
         PacketWriter.Opcode(0xe223).I64(now).I32(0).ToArray(),   // WorldChatFreeChance_NT (observed: a time then four zero bytes)
         Observed(0x6000, "00"),                    // ? (0x6000)
-        Observed(0x570f, "000000"),                // DungeonClearKillNpc_NT
+        Observed(0x570f, "000000"),                // MonsterCubeRewardList_RS (the usmap position, 0x47 above the old base; 0x6108 is DungeonClearKillNpc_NT)
     ];
 }

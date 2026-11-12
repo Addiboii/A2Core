@@ -46,7 +46,14 @@ public sealed class DungeonCopy(GameSession host, int dungeonId, long now)
 public sealed partial class GameSession
 {
     // OBSERVED (HQ001 layer, capture 20261013 #9687-9689, #14161-14167): catalogue 573-584 live at 0x5ec3 + index, not in the 0x54ca run.
-    public const ushort DungeonStateNt = 0x6100, DungeonCompleteResultNt = 0x6101, DungeonClearKillNpcNt = 0x6108, DungeonDeathLimitNt = 0x6109, CubeRewardStartNt = 0x56cc, CubeRewardRq = 0x56cd, CubeRewardRs = 0x56ce;
+    public const ushort DungeonStateNt = 0x6100, DungeonCompleteResultNt = 0x6101, DungeonClearKillNpcNt = 0x6108, DungeonDeathLimitNt = 0x6109;
+    /// <summary>
+    /// The reward cube: OdEnergyCubeRewardStart_NT 0x5713, OdEnergyCubeReward_RQ 0x5714, OdEnergyCubeReward_RS 0x5715,
+    /// PartyDungeonRewardMiddleBossKill_NT 0x572e. OBSERVED 0x5713/0x5715/0x572e in the community recordings 2026-11-04 to 06
+    /// (reports/dungeons.md 4: six clears, twelve mid-boss kills; none of the old 0x56cc-0x56ce, 0x47 lower); 0x5714 CANDIDATE
+    /// (between them by position).
+    /// </summary>
+    public const ushort CubeRewardStartNt = 0x5713, CubeRewardRq = 0x5714, CubeRewardRs = 0x5715, MiddleBossKillNt = 0x572e;
     public const byte DungeonStateProcess = 2, DungeonStateComplete = 3, DungeonStateEnd = 4;
     /// <summary>After the time limit the copy empties this long after the fail message (OURS).</summary>
     public const long DungeonFailExitMs = 5_000;
@@ -200,19 +207,30 @@ public sealed partial class GameSession
 
     // ---------- The reward cube ----------
 
-    /// <summary>A kill in the host's copy: the cube's final boss arms the cube (OdEnergyCubeRewardStart_NT), a mid boss pays its table to everyone now.</summary>
+    /// <summary>
+    /// A kill in the host's copy (OBSERVED, reports/dungeons.md 5): a mid boss sends 0x572e {npc id} and pays nothing then
+    /// (2026-11-05 204306 #11315, #20965); the final boss arms the cube with 0x5713 listing the killed mid bosses, never the
+    /// final one (084658 #61800 [2310104, 2310108]).
+    /// </summary>
     void CubeKilled(Target target, long now)
     {
         if (copy is not { } c || c.Host != this || MapEventData.DungeonOfMap(worldMap) is not { Cube: { } cube } room || !c.CubeBossesKilled.Add(target.NpcId)) return;
-        if (!cube.TryGetValue(target.NpcId.ToString(System.Globalization.CultureInfo.InvariantCulture), out var table)) return;
-        if (target.NpcId == room.CubeBoss)
+        if (!cube.ContainsKey(target.NpcId.ToString(System.Globalization.CultureInfo.InvariantCulture))) return;
+        if (target.NpcId != room.CubeBoss)
         {
-            mapEventOut.Add(PacketWriter.Opcode(CubeRewardStartNt).Varint(1).I32(target.NpcId).ToArray());
+            mapEventOut.Add(PacketWriter.Opcode(MiddleBossKillNt).I32(target.NpcId).ToArray());
             return;
         }
-        foreach (var session in CopyMembers().Prepend(this))
-            session.pendingRewards.Add(RollRewards(table, session.Rng));
+        var mids = KilledMidBosses(c, room);
+        var start = PacketWriter.Opcode(CubeRewardStartNt).Varint((uint)mids.Count);
+        foreach (var id in mids) start.I32(id);
+        mapEventOut.Add(start.ToArray());
     }
+
+    /// <summary>The mid bosses (cube tables other than the final boss's) killed in this copy, by id.</summary>
+    static List<int> KilledMidBosses(DungeonCopy c, DungeonInfo room) =>
+        (room.Cube ?? []).Keys.Select(k => int.Parse(k, System.Globalization.CultureInfo.InvariantCulture))
+            .Where(id => id != room.CubeBoss && c.CubeBossesKilled.Contains(id)).Order().ToList();
 
     /// <summary>Each table entry is an independent chance of 1e8 with a count range (as LootTables).</summary>
     static List<(int ItemId, long Count)> RollRewards(long[][] table, Random rng)
@@ -242,10 +260,11 @@ public sealed partial class GameSession
     }
 
     /// <summary>
-    /// The final boss's cube reward: on the cube object's use, or on OdEnergyCubeReward_RQ {reward count u8}; once per
-    /// player per run (RewardOdEnergyCube ConsumeMaxCount 1; the 20 common tickets it consumes are not modelled). The
-    /// request gets OdEnergyCubeReward_RS {result, count, [{item, count}]} with the items (the same ones again when the
-    /// object use already paid them); result 1 when the boss is still alive or there is no cube here.
+    /// The cube reward: on the cube object's use, or on OdEnergyCubeReward_RQ {reward count u8}; once per player per run
+    /// (RewardOdEnergyCube ConsumeMaxCount 1; the 20 common tickets it consumes are not modelled). It pays the final boss's
+    /// table and every killed mid boss's table in one, then OdEnergyCubeReward_RS {result, count, [{item, count}]}, after
+    /// the object use as well (OBSERVED 2026-11-06 084658 #62929: KraoCave_Easy 3 x 25000 kina; 090856 #142335-#142341). The
+    /// same items again when it already paid; result 1 when the boss is still alive or there is no cube here.
     /// </summary>
     async Task<List<byte[]>> CubeRewardAsync(byte[]? plain, long now, CancellationToken ct)
     {
@@ -258,11 +277,14 @@ public sealed partial class GameSession
         if (!c.CubeTaken.TryGetValue(playerKey, out var items))
         {
             items = RollRewards(table, rng);
+            foreach (var mid in KilledMidBosses(c, room!))
+                if (room!.Cube!.GetValueOrDefault(mid.ToString(System.Globalization.CultureInfo.InvariantCulture)) is { } midTable)
+                    items.AddRange(RollRewards(midTable, rng));
+            items = items.GroupBy(i => i.ItemId).Select(g => (g.Key, g.Sum(i => i.Count))).ToList();
             c.CubeTaken[playerKey] = items;
             pendingRewards.Add(items);
         }
         var replies = await GrantPendingRewardsAsync(ct);
-        if (plain is null) return replies;
         var writer = PacketWriter.Opcode(CubeRewardRs).U16(0).U8(1).Varint((uint)items.Count);
         foreach (var (item, count) in items) writer.I32(item).I32((int)Math.Min(count, int.MaxValue));
         return [.. replies, writer.ToArray()];
