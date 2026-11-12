@@ -2165,6 +2165,10 @@ Check(!await staffSession.SendMailAsync("Nobody Here", "x", "x", [], Cancellatio
 var mailbox = await staffSession.HandleAsync(new PacketWriter().U16(GameSession.PostLoadRq).U8(2).U8(0).I64(0).I64(0).ToArray(), Now + 7520);
 Check(mailbox.Count == 1 && Op(mailbox[0]) == GameSession.PostLoadRs && BitConverter.ToInt32(mailbox[0], 5) == 1 && BitConverter.ToInt32(mailbox[0], 9) == 1 && mailbox[0][13] == 1,
       "LoadPost_RQ for the reward tab: one post, one unread");
+Check(GameSession.PostParams("10045") == "{\"_params\":[{\"_index\":0,\"_value\":\"10045\"}]}"
+      && mailbox[0].AsSpan().IndexOf(System.Text.Encoding.UTF8.GetBytes(GameSession.PostParams("Welcome aboard|Welcome aboard"))) > 0
+      && mailbox[0].AsSpan(mailbox[0].Length - 2).SequenceEqual(new byte[2]),
+      "a letter's parameters are the client's JSON (official 2026-11-06 084658 i7000) and it ends with a u16 reason");
 var mailId = staffStore.Posts[0].Id;
 var mailPotionsBefore = staffStore.Items.Where(i => i.TemplateId == 530126003).Sum(i => i.Quantity);
 var took = await staffSession.HandleAsync(new PacketWriter().U16(GameSession.PostTakeRq).U8(1).I64(mailId).ToArray(), Now + 7530);

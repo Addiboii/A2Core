@@ -6,15 +6,16 @@ namespace Aion.World;
 // Mail (the client's Post system; migration 030 game.character_posts). The 0xe2 run (catalogue index + 0xdd07, anchored
 // by the OBSERVED LoadPost 0xe214/0xe215): RecvPost_NT 0xe216, ReadPost 0xe217/0xe218, DeletePost 0xe219/0xe21a,
 // TakePost 0xe21b/0xe21c. Common_Post = {EPostType u8, EPostSaveTab u8, Post.dat id i32, dbid i64, msg params string,
-// read, taken, sent i64, expire i64, attachments [{item i32, count i64, expire i64}], reason i32} (usmap order;
-// LoadPost_RS's head 0000 | tab | total | unread | posts is OBSERVED with no posts). Staff mail uses Post.dat 106
-// (title "{0}", body "{1}", sender the client's own name string) with the parameters joined by '|' (CANDIDATE).
+// read, taken, sent i64, expire i64, attachments [{item i32, count i64, expire i64}], reason u16} (usmap order; OBSERVED
+// with one letter 2026-11-06 084658 i7000: the reason is two bytes and the parameters are JSON
+// {"_params":[{"_index":0,"_value":"10045"}]}). Staff mail uses Post.dat 106 (title "{0}", body "{1}", sender the client's
+// own name string); its parameters are stored joined by '|' (OURS) and sent as that JSON.
 public sealed partial class GameSession
 {
     public const ushort PostLoadRq = 0xe214, PostLoadRs = 0xe215, PostRecvNt = 0xe216, PostReadRq = 0xe217, PostReadRs = 0xe218,
         PostDeleteRq = 0xe219, PostDeleteRs = 0xe21a, PostTakeRq = 0xe21b, PostTakeRs = 0xe21c;
     public const int StaffPostDataId = 106, PostTabSystem = 1, PostTabReward = 2, PostTypeGame = 1;
-    const byte IncreasePostTake = 29;   // EIncreaseReason (CANDIDATE value: kPostItemTake)
+    const byte IncreasePostTake = 21;   // EIncreaseReason kPostAttachment (read from the usmap of client 2.0.6; no recording)
 
     /// <summary>A storage-backed value; a database error yields the fallback (as Stored sends nothing).</summary>
     async Task<T> StoredValue<T>(Func<Task<T>> action, T fallback)
@@ -30,10 +31,33 @@ public sealed partial class GameSession
 
     static PacketWriter WritePost(PacketWriter w, PostRecord post)
     {
-        w.U8((byte)post.Type).U8((byte)post.Tab).I32(post.DataId).I64(post.Id).String(post.Params).Bool(post.Read).Bool(post.Taken)
+        w.U8((byte)post.Type).U8((byte)post.Tab).I32(post.DataId).I64(post.Id).String(PostParams(post.Params)).Bool(post.Read).Bool(post.Taken)
             .I64(post.Sent.ToUnixTimeMilliseconds()).I64(post.Expire.ToUnixTimeMilliseconds()).Varint((uint)post.Attachments.Count);
         foreach (var (item, count) in post.Attachments) w.I32(item).I64(count).I64(0);
-        return w.I32(post.Reason);
+        return w.U16(post.Reason);
+    }
+
+    /// <summary>The stored '|'-joined parameters as the client's JSON {"_params":[{"_index":i,"_value":"..."}]} (OBSERVED form).</summary>
+    internal static string PostParams(string stored)
+    {
+        if (stored.StartsWith('{')) return stored;
+        using var buffer = new MemoryStream();
+        using (var json = new System.Text.Json.Utf8JsonWriter(buffer, new System.Text.Json.JsonWriterOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }))
+        {
+            json.WriteStartObject();
+            json.WriteStartArray("_params");
+            var values = stored.Length == 0 ? [] : stored.Split('|');
+            for (var i = 0; i < values.Length; i++)
+            {
+                json.WriteStartObject();
+                json.WriteNumber("_index", i);
+                json.WriteString("_value", values[i]);
+                json.WriteEndObject();
+            }
+            json.WriteEndArray();
+            json.WriteEndObject();
+        }
+        return System.Text.Encoding.UTF8.GetString(buffer.ToArray());
     }
 
     /// <summary>0xe214 LoadPost_RQ {tab u8, unread filter, last account dbid, last game dbid}: the tab's mail (both tabs for tab 0).</summary>
