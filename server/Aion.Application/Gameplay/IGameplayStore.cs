@@ -55,6 +55,8 @@ public sealed record BossChallengeRecord(int GroupId, int ClearLevel, long BestP
 public sealed record ContentTicketRecord(int TicketId, int Remaining, DateTimeOffset UpdatedAt);
 /// <summary>A stigma skill learned with shards and the level it reached (migration 072).</summary>
 public sealed record StigmaRecord(int SkillId, int Level);
+/// <summary>Points items granted (migration 079): category 1 skill points (ESkillPointType), 2 Daevanion points (EDaevanionPointType).</summary>
+public sealed record ItemPointRecord(int Category, int Type, int Points);
 /// <summary>One manastone slot of an item (upgrades.magicstones): the stone, its EStat id and grade (1-3).</summary>
 public sealed record MagicStoneSlot(int StoneId, int Stat, int Grade);
 /// <summary>A part equipped on a mastery skill's specialisation slot (migration 078).</summary>
@@ -214,6 +216,10 @@ public interface IGameplayStore
     /// <summary>Replaces one skill's equipped parts when they still equal <paramref name="expected"/>; false otherwise.</summary>
     Task<bool> ReplaceSkillPartsAsync(VerifiedAccount account, Guid character, int skillId, IReadOnlyList<SkillPartRecord> expected, IReadOnlyList<SkillPartRecord> parts,
         CancellationToken ct = default) => Task.FromResult(false);
+    Task<IReadOnlyList<ItemPointRecord>> ItemPointsAsync(VerifiedAccount account, Guid character, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<ItemPointRecord>>([]);
+    /// <summary>Consumes one point item and adds its points, in one transaction.</summary>
+    Task<bool> UsePointItemAsync(VerifiedAccount account, Guid character, Guid item, long revision, int category, int type, int points, CancellationToken ct = default) =>
+        Task.FromResult(false);
     /// <summary>A character id by name (any account), for mail to offline players.</summary>
     Task<Guid?> CharacterByNameAsync(VerifiedAccount account, string name, CancellationToken ct = default) => Task.FromResult<Guid?>(null);
     /// <summary>Sorts the bag: items ordered by template, then age, on slots 0, 1, 2, ...</summary>

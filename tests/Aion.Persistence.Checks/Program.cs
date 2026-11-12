@@ -161,6 +161,14 @@ await using(var source=NpgsqlDataSource.Create(connectionString))
     Check(await game.MoveItemAsync(first,id,original.InstanceId,original.Revision,1),"equipment swap succeeds");
     inventory=(await game.InventoryAsync(first,id))!;
     Check(inventory.Items.Count(x=>x.Location=="equipment")==1 && inventory.Items.Single(x=>x.InstanceId==granted).Location=="bag","swap retains both instances");
+    // Item points (migration 079): one item consumed with its points; another account or a stale revision refused.
+    var pointItem=(await game.AdminAsync(second,new AdminCommand(Guid.NewGuid(),id,"grant","test",101))).GetProperty("instanceId").GetGuid();
+    var pointRow=(await game.InventoryAsync(first,id))!.Items.Single(x=>x.InstanceId==pointItem);
+    Check(!await game.UsePointItemAsync(second,id,pointItem,pointRow.Revision,1,1,1) && !await game.UsePointItemAsync(first,id,pointItem,pointRow.Revision+1,1,1,1),
+          "item points: another account or a stale revision is refused");
+    Check(await game.UsePointItemAsync(first,id,pointItem,pointRow.Revision,1,1,1) && !(await game.InventoryAsync(first,id))!.Items.Any(x=>x.InstanceId==pointItem)
+          && (await game.ItemPointsAsync(first,id)).Single()==new ItemPointRecord(1,1,1) && (await game.ItemPointsAsync(second,id)).Count==0,
+          "item points: one item used, one skill point stored, readable by the owner only");
     var unknown=await game.AdminAsync(second,grant with {RequestId=Guid.NewGuid(),TemplateId=102});
     Check(!await game.MoveItemAsync(first,id,unknown.GetProperty("instanceId").GetGuid(),0,1),"unknown equipment policy denied");
     var stack=await game.AdminAsync(second,grant with {RequestId=Guid.NewGuid(),Quantity=2});

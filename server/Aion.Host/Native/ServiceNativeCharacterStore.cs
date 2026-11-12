@@ -335,6 +335,18 @@ public sealed partial class ServiceNativeCharacterStore(string token, WorldIdent
         return await game.StigmasAsync(identity.Account, character, ct);
     }
 
+    public async Task<IReadOnlyList<ItemPointRecord>> ItemPointsAsync(Guid character, CancellationToken ct)
+    {
+        await ValidateAsync(ct);
+        return await game.ItemPointsAsync(identity.Account, character, ct);
+    }
+
+    public async Task<bool> UsePointItemAsync(Guid character, Guid item, long revision, int category, int type, int points, CancellationToken ct)
+    {
+        await ValidateAsync(ct);
+        return await game.UsePointItemAsync(identity.Account, character, item, revision, category, type, points, ct);
+    }
+
     public async Task<IReadOnlyList<SkillPartRecord>> SkillPartsAsync(Guid character, CancellationToken ct)
     {
         await ValidateAsync(ct);

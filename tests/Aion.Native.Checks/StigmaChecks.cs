@@ -170,6 +170,16 @@ sealed partial class FakeStore
         else StigmaRows[skillId] = level;
         return Task.FromResult(true);
     }
+    // Item points (migration 079) in memory: the item consumed with its points, at most 65535 per type.
+    public Dictionary<(int Category, int Type), int> ItemPointRows { get; } = [];
+    public Task<IReadOnlyList<ItemPointRecord>> ItemPointsAsync(Guid character, CancellationToken ct) =>
+        Task.FromResult<IReadOnlyList<ItemPointRecord>>(ItemPointRows.Select(kv => new ItemPointRecord(kv.Key.Category, kv.Key.Type, kv.Value)).ToList());
+    public Task<bool> UsePointItemAsync(Guid character, Guid item, long revision, int category, int type, int points, CancellationToken ct)
+    {
+        if (points < 1 || ItemPointRows.GetValueOrDefault((category, type)) + points > ushort.MaxValue || !Consume(item, revision, 1)) return Task.FromResult(false);
+        ItemPointRows[(category, type)] = ItemPointRows.GetValueOrDefault((category, type)) + points;
+        return Task.FromResult(true);
+    }
     // Skill parts (migration 078) in memory, with the Postgres store's compare-and-set on a skill's whole set.
     public List<SkillPartRecord> SkillPartRows { get; } = [];
     public Task<IReadOnlyList<SkillPartRecord>> SkillPartsAsync(Guid character, CancellationToken ct) =>
