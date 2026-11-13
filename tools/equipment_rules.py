@@ -11,9 +11,9 @@ replaced; others (the starter configuration) are kept.
 import argparse
 import json
 try:
-    from .postgres_dev import ROOT, sql, literal
+    from .postgres_dev import ROOT, catalogue_builds, sql, literal
 except ImportError:
-    from postgres_dev import ROOT, sql, literal
+    from postgres_dev import ROOT, catalogue_builds, sql, literal
 
 # EEquipCategory -> EEquipSlot (1 MainHand, 2 SubHand, 3 Helmet, 4 Shoulder, 5 Torso, 6 Pants,
 # 7 Gloves, 8 Boots, 9 Pendant, 10 Necklace, 11/12 Earring, 13/14 Ring, 15/16 Bracelet, 17 Belt,
@@ -70,8 +70,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--build-id')
     args = parser.parse_args()
-    builds = sql('SELECT build_id FROM catalog.builds ORDER BY build_id;').stdout.splitlines()
-    build = args.build_id or (builds[-1] if builds else None)
+    builds = catalogue_builds()   # newest first: the adopted build is the default
+    build = args.build_id or (builds[0] if builds else None)
     if build not in builds:
         raise ValueError('Choose an imported catalogue with --build-id')
     out = sql("SELECT template_id||chr(9)||(definition->'raw')::text FROM catalog.items "

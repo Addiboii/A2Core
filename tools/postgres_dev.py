@@ -158,6 +158,12 @@ def setup():
     migrate()
 
 
+def catalogue_builds():
+    """The imported catalogue builds, newest first: the first is the adopted one (catalog.adopt_build takes only the newest,
+    migration 070), which the database tools default to."""
+    return sql('SELECT build_id FROM catalog.builds ORDER BY imported_at DESC, build_id;').stdout.split()
+
+
 def configured_port(config_path=None):
     """The port line of the cluster's postgresql.conf moved to PORT; True when it changed (an older cluster)."""
     config_path = Path(config_path) if config_path else HOME / 'data/postgresql.conf'

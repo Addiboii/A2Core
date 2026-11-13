@@ -355,7 +355,7 @@ def main(argv=None):
     import argparse
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('command', nargs='?', choices=['build', 'install'], default='build')
-    parser.add_argument('--build-id', help='catalogue build for install (default: the only imported one)')
+    parser.add_argument('--build-id', help='catalogue build for install (default: the adopted, newest imported one)')
     args = parser.parse_args(argv)
     if args.command == 'build':
         result = build()
@@ -365,11 +365,11 @@ def main(argv=None):
         print(f"{len(result['common_unlocks'])} common unlocks, {len(result['skills'])} skills, max level {result['max_level']}")
         return
     try:
-        from .postgres_dev import sql, literal
+        from .postgres_dev import catalogue_builds, sql, literal
     except ImportError:
-        from postgres_dev import sql, literal
-    builds = sql('SELECT build_id FROM catalog.builds ORDER BY build_id;').stdout.split()
-    build_id = args.build_id or (builds[0] if len(builds) == 1 else None)
+        from postgres_dev import catalogue_builds, sql, literal
+    builds = catalogue_builds()
+    build_id = args.build_id or (builds[0] if builds else None)
     if build_id not in builds:
         raise SystemExit('Choose an imported catalogue with --build-id')
     rows = unlock_rows()

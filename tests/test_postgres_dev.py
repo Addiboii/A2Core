@@ -51,6 +51,14 @@ class MigrationTests(unittest.TestCase):
         self.assertEqual(kwargs['env']['LC_MESSAGES'], 'C')
         self.assertEqual(kwargs['errors'], 'replace')
 
+    def test_catalogue_builds_are_newest_first(self):
+        from unittest import mock
+        from tools import postgres_dev
+        done = postgres_dev.subprocess.CompletedProcess([], 0, '26262663\n2.0.6\n', '')
+        with mock.patch.object(postgres_dev, 'sql', return_value=done) as sql:
+            self.assertEqual(postgres_dev.catalogue_builds(), ['26262663', '2.0.6'])
+        self.assertIn('ORDER BY imported_at DESC', sql.call_args.args[0])
+
     def test_line_endings_do_not_count_as_a_change(self):
         # A Windows checkout (autocrlf) has CRLF where the migration may have been applied from LF, and the other way round.
         import hashlib

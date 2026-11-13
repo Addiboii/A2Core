@@ -7,10 +7,10 @@ Region 03 home point (CANDIDATE first spawn, from the client's own map data).
 import argparse
 import json
 try:
-    from .postgres_dev import ROOT, sql, literal
+    from .postgres_dev import ROOT, catalogue_builds, sql, literal
     from .class_skills import starter_weapon
 except ImportError:
-    from postgres_dev import ROOT, sql, literal
+    from postgres_dev import ROOT, catalogue_builds, sql, literal
     from class_skills import starter_weapon
 
 
@@ -61,8 +61,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--build-id')
     args = parser.parse_args()
-    builds = sql('SELECT build_id FROM catalog.builds ORDER BY build_id;').stdout.splitlines()
-    build = args.build_id or (builds[0] if len(builds) == 1 else None)
+    builds = catalogue_builds()   # newest first: the adopted build is the default
+    build = args.build_id or (builds[0] if builds else None)
     if build not in builds:
         raise ValueError('Choose an imported catalogue with --build-id')
     profiles = json.loads((ROOT / 'tools/data/starter-skills.json').read_text())
