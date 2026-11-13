@@ -3062,17 +3062,18 @@ Check(finnReady.Any(b => Op(b) == GameSession.ArenaDungeonReadyNt) && arena.Stat
 erin.Teleport(arena.MapId, finn.Position!.Value with { X = finn.Position!.Value.X + 100 }, Now + 20_110);
 await erin.HandleAsync(new PacketWriter().U16(0x3622).I32(1).ToArray(), Now + 20_110);
 var deaths = 0;
+var finnSeen = new List<byte[]>();
 for (var round = 0; round < 3; round++)
 {
     finn.SetHpForChecks(2);
     var arenaHit = await erin.HandleAsync(Cast(basic, finn.PlayerKey, finn.Position!.Value), Now + 20_200 + round * 20_000);   // past the skill's cooldown
     if (arenaHit.Any(b => Op(b) == 0x3804 && KeyOf(b) == finn.PlayerKey)) deaths++;
     await erin.TickAsync(Now + 20_200 + round * 20_000 + GameSession.ArenaRespawnMs + 10);   // the owner's tick posts the respawn
-    await finn.TickAsync(Now + 20_200 + round * 20_000 + GameSession.ArenaRespawnMs + 20);
+    finnSeen.AddRange(await finn.TickAsync(Now + 20_200 + round * 20_000 + GameSession.ArenaRespawnMs + 20));
     if (round < 2) await finn.HandleAsync(new PacketWriter().U16(0x3622).I32(1).ToArray(), Now + 20_200 + round * 20_000 + GameSession.ArenaRespawnMs + 30);
 }
-var finnResult = await finn.TickAsync(Now + 70_000);
-Check(deaths == 3 && shared.Social.Arenas.Count == 0 && finnResult.Any(b => Op(b) == GameSession.ArenaDungeonResultNt && b[2] == ArenaMatch.Blue || true)
+finnSeen.AddRange(await finn.TickAsync(Now + 70_000));
+Check(deaths == 3 && shared.Social.Arenas.Count == 0 && finnSeen.Any(b => Op(b) == GameSession.ArenaDungeonResultNt)
       && arena.State == 4 && arena.Scores[erin.PlayerKey].Kills == 3 && arena.Scores[finn.PlayerKey].Life == 0,
       "three deaths end the match: kills and lives are scored, the result goes out");
 var erinOut = await erin.TickAsync(Now + 70_000 + GameSession.ArenaExitMs);
@@ -3204,8 +3205,13 @@ Check((await Gm(game, "Player1", "//setinvisible false")).Packets.Any(b => b.Seq
 Check((await Gm(game, "Player1", "//SetInvisible maybe")).Reply == "Usage: SetInvisible [true|false]", "bad arguments answer the usage");
 Check((await Gm(game, "Player1", "//SpawnNpcs 1 1")).Reply == "SpawnNpcs: not available on this server.", "official commands not backed here say so");
 var hp = await Gm(game, "Player1", "//Hp 10");
-var regen = game.Resource.HpMax / 50;  // out-of-combat HP regen runs in the same tick
+var regen = GameSession.RestHpRegenBase * GameSession.RestRegenFactor;  // out-of-combat HP regen (stat 195, sitting x3) runs in the same tick
 Check(game.Resource.Hp >= 10 && game.Resource.Hp <= 10 + regen && hp.Packets.Any(b => b[0] == 0x00 && b[1] == 0x8d), "Hp sets HP and sends resources (0x8d00)");
+// Out of combat HP comes back by stat 195 a second (OBSERVED: steps of the character's own 195, 10 without gear).
+var regenFrom = game.Resource.Hp;
+await game.TickAsync(clock += 1000);
+Check(game.Resource.Hp - regenFrom == GameSession.RestHpRegenBase * (game.Resting ? GameSession.RestRegenFactor : 1),
+      "out-of-combat HP regeneration: stat 195 (10) a second, as recorded");
 Check((await Gm(game, "Player1", "//FixHpPercent 50")).Reply == "HP set to 50%." && game.Resource.Hp >= game.Resource.HpMax / 2 && game.Resource.Hp <= game.Resource.HpMax / 2 + regen, "FixHpPercent");
 var invincible = await Gm(game, "Player1", "//SetInvincible SP:true");
 Check(invincible.Reply == "Invincible: HP off, MP off, SP on." && game.Invincible == (false, false, true), "SetInvincible SP:true");

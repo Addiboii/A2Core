@@ -2567,6 +2567,8 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             318 => (s.Type, weapon.Accuracy), 193 => (s.Type, hpMax), 199 => (s.Type, MpMax), 242 => (s.Type, GamePackets.SpawnSp + BuffStat("SPMax")),
             307 => (s.Type, Defense),
             RestSpRegenStat => (s.Type, SpRegen(battle: false)), BattleSpRegenStat => (s.Type, SpRegen(battle: true)),
+            RestHpRegenStat => (s.Type, HpRegen(battle: false)), BattleHpRegenStat => (s.Type, HpRegen(battle: true)),
+            RestMpRegenStat => (s.Type, MpRegen(battle: false)), BattleMpRegenStat => (s.Type, MpRegen(battle: true)),
             _ => s,
         }).Concat(SealStoneSheet()).ToList();
         return (stats, hpMax);
@@ -2574,6 +2576,26 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
 
     /// <summary>The stat sheet's RestSPRegen (244) and BattleSPRegen (277).</summary>
     const int RestSpRegenStat = 244, BattleSpRegenStat = 277;
+    /// <summary>The stat sheet's HP and MP regeneration out of combat (195, 201) and in combat (275, 276).</summary>
+    const int RestHpRegenStat = 195, RestMpRegenStat = 201, BattleHpRegenStat = 275, BattleMpRegenStat = 276;
+    /// <summary>
+    /// The base of those four (OBSERVED: every official 0x3649 of a character without regeneration gear has 10, 250, 5, 25;
+    /// 25 recordings of 2026-10-13 to 11-06; with gear e.g. 60, 255, 35, 35).
+    /// </summary>
+    public const int RestHpRegenBase = 10, RestMpRegenBase = 250, BattleHpRegenBase = 5, BattleMpRegenBase = 25;
+
+    int RegenBonus(string stat) => EquippedItems().Sum(i => i.Stat(stat)) + BuffStat(stat) + BoardStat(stat) + TitleStat(stat) + WingStat(stat);
+
+    /// <summary>
+    /// HP regained a second: stat 195 out of combat, 275 in combat. OBSERVED (our recordings 2026-10-13 to 11-06): out of combat
+    /// the HP update steps by the character's own 195 every second (10 for 195 = 10, 60 for 60; 30 sitting, OURS factor 3).
+    /// CANDIDATE: in combat by 275 (sent in the sheet; the tick regenerates none in combat), the Rest/Battle and plain HPRegen
+    /// bonuses as SP's.
+    /// </summary>
+    int HpRegen(bool battle) => Math.Max(0, (battle ? BattleHpRegenBase : RestHpRegenBase) + RegenBonus(battle ? "BattleHPRegen" : "RestHPRegen") + RegenBonus("HPRegen"));
+
+    /// <summary>MP regained a second: stat 201 out of combat (OBSERVED steps of 250 and 255 for 201 = 250 and 255), 276 in combat.</summary>
+    int MpRegen(bool battle) => Math.Max(0, (battle ? BattleMpRegenBase : RestMpRegenBase) + RegenBonus(battle ? "BattleMPRegen" : "RestMPRegen") + RegenBonus("MPRegen"));
 
     /// <summary>
     /// SP regained a second: stat 244 out of combat, 277 in combat (OBSERVED, community recordings 2026-11-04 to 06,
@@ -3123,13 +3145,14 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
                     elapsedStateSeconds[moveState] = accrued;
                 }
                 var suffocating = underwater && op == 0;   // from the second after the gauge ran out
-                // OURS: HP recovers 2%/s out of combat (no official rate recovered); not while out of breath. Sitting
-                // (CharRestStart) triples HP and MP recovery (OURS too).
+                // HP recovers by stat 195 a second out of combat (OBSERVED, HpRegen); in combat and while out of breath none (OURS:
+                // stat 275 in combat is not settled by our recordings). MP by 201 / 276 (MpRegen). Sitting (CharRestStart)
+                // triples both (the recorded +30 steps for 195 = 10).
                 var rest = Resting && !inCombat ? RestRegenFactor : 1;
-                if (!inCombat && !suffocating) resources.Hp = (int)Math.Min(resources.HpMax, resources.Hp + seconds * rest * (Math.Max(1, resources.HpMax / 50) + BuffStat("HPRegen")));
+                if (!inCombat && !suffocating) resources.Hp = (int)Math.Min(resources.HpMax, resources.Hp + seconds * rest * HpRegen(battle: false));
                 if (suffocating && !invincible.Hp)
                     resources.Hp = (int)Math.Max(0, resources.Hp - seconds * Math.Max(1L, (long)resources.HpMax * SuffocationRatio / 10000));
-                resources.Mp = (int)Math.Min(resources.MpMax, resources.Mp + seconds * rest * (25 + BuffStat("MPRegen")));
+                resources.Mp = (int)Math.Min(resources.MpMax, resources.Mp + seconds * rest * MpRegen(battle: inCombat));
                 if (!sprinting)
                     resources.Sp = (int)Math.Min(resources.SpMax, resources.Sp + seconds * SpRegen(battle: inCombat));
                 Pin(resources);
