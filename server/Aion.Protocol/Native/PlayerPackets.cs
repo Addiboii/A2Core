@@ -363,14 +363,17 @@ public static class PlayerPackets
         return w.ToArray();
     }
 
-    /// <summary>0x3737 CharSwimmingUpdateSnapshot_NT: key | mask (1 is_running, 2 dead reckoning) | [running bool] | pos | rotate u16 | velocity | [bool].</summary>
+    /// <summary>
+    /// 0x3737 CharSwimmingUpdateSnapshot_NT: key | mask (1 is_running) | [running bool] | pos | rotate u16 | velocity | dead reckoning
+    /// bool, always written (unlike the flight snapshot's mask bit). OBSERVED: 65 snapshots in our recordings (2026-11-04 to 06),
+    /// all mask 0 and ending in the bool 01. With running both bools share the byte after the mask (the community fork's
+    /// recordings: `3737 d913 01 03 ...`; not in ours).
+    /// </summary>
     public static byte[] SwimSnapshot(int key, Vector3d position, double rotateDir, Vector3d velocity, bool running = false, bool deadReckoning = true)
     {
-        var w = PacketWriter.Opcode(0x3737).Varint(key).U8((running ? 1 : 0) | (deadReckoning ? 2 : 0));
+        var w = PacketWriter.Opcode(0x3737).Varint(key).U8(running ? 1 : 0);
         if (running) w.Bool(true);
-        w.Vec3(position).U16(U16Dir(rotateDir)).Vec3(velocity);
-        if (deadReckoning) w.Bool(true);
-        return w.ToArray();
+        return w.Vec3(position).U16(U16Dir(rotateDir)).Vec3(velocity).Bool(deadReckoning).ToArray();
     }
 
     /// <summary>0x3739 CharSwimmingDiveStart_NT: key | mask (1 swimming_mode, 2 dead reckoning) | pos | rotate u16 | velocity | [mode u8] | [bool] (the glide start's shape).</summary>

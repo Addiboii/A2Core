@@ -1419,11 +1419,17 @@ foreach (var (rankRole, rankCommand, rankArgs, rankAllowed) in new (string?, str
     // Swim relays (CANDIDATE shapes from the usmap, the glide convention): start 0x3736 with the mode and dead reckoning, snapshot 0x3737.
     var swimAt = GamePackets.SpawnPosition;
     Check(PlayerPackets.SwimStart(7, swimAt, 90, new Vector3d(1, 2, 3), 2).SequenceEqual(new PacketWriter().U16(0x3736).Varint(7).U8(6).Vec3(swimAt).U16(16384).Vec3(new Vector3d(1, 2, 3)).U8(2).Bool(true).ToArray())
-          && PlayerPackets.SwimSnapshot(7, swimAt, 90, new Vector3d(1, 2, 3)).SequenceEqual(new PacketWriter().U16(0x3737).Varint(7).U8(2).Vec3(swimAt).U16(16384).Vec3(new Vector3d(1, 2, 3)).Bool(true).ToArray())
-          && PlayerPackets.SwimSnapshot(7, swimAt, 90, new Vector3d(1, 2, 3), running: true) is { } runningSwim && runningSwim[3] == 3 && runningSwim[4] == 3   // the two bools pack into one byte after the mask
+          && PlayerPackets.SwimSnapshot(7, swimAt, 90, new Vector3d(1, 2, 3)).SequenceEqual(new PacketWriter().U16(0x3737).Varint(7).U8(0).Vec3(swimAt).U16(16384).Vec3(new Vector3d(1, 2, 3)).Bool(true).ToArray())
+          && PlayerPackets.SwimSnapshot(7, swimAt, 90, new Vector3d(1, 2, 3), running: true) is { } runningSwim && runningSwim[3] == 1 && runningSwim[4] == 3   // mask 1; the two bools pack into one byte after it (the fork's recorded 01 03)
           && runningSwim.Length == PlayerPackets.SwimSnapshot(7, swimAt, 90, new Vector3d(1, 2, 3)).Length
           && PlayerPackets.DiveSnapshot(7, swimAt, 90, new Vector3d(1, 2, 3))[0] == 0x3a,
           "swim start/snapshot and dive snapshot relays follow the glide layout under the usmap opcodes");
+    // A recorded snapshot, rebuilt from its own fields (OBSERVED 2026-11-04 to 06: all 65 in our recordings have mask 0 and the bool).
+    var swimRecorded = Convert.FromHexString("373785b802009e72bcc7229171c7e2cc7645f165ab8fc0c2a83f8f420000000001");
+    float SwimF(int at) => BitConverter.ToSingle(swimRecorded, at);
+    Check(PlayerPackets.SwimSnapshot(39941, new Vector3d(SwimF(6), SwimF(10), SwimF(14)), BitConverter.ToUInt16(swimRecorded, 18) * 360.0 / 65536,
+              new Vector3d(SwimF(20), SwimF(24), SwimF(28))).SequenceEqual(swimRecorded),
+          "the swim snapshot byte-exact to a recorded one: mask 0, the dead-reckoning bool always written");
     Check(plainSession.AchievementCount(301100300) == 1 && plainSession.AchievementCount(320101300) == 1
           && plainSession.AchievementCount(320101400) == 0 && plainSession.AchievementCount(320101200) == 0,
           "a minute online counts 1 for Citizen of Atreia and, swimming, 1 for Here to Swim; Ride the Wind and Sovereign of the Sky stay");
