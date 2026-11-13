@@ -2520,6 +2520,19 @@ Check(craftEntry.Single(b => Op(b) == GameSession.ContentsTicketsNt) is var tick
       "world entry lists the 73 content tickets (0x610b; tickets 1-10 byte-exact to 2026-11-06 084658 #1129: counts, full Time tickets, 6 empty)");
 Check(craftEntry.FindIndex(b => Op(b) == GameSession.BookmarkListNt) is >= 0 and var bookmarkAt && Convert.ToHexStringLower(craftEntry[bookmarkAt]) == "309300"
       && Op(craftEntry[bookmarkAt + 1]) == GameSession.ContentsTicketsNt, "world entry: BookmarkedContentList 0x9330 (empty: 309300) right before 0x610b, as recorded");
+// The entry lists in the official order (our 34 recorded entries; GameSession.EntryConstants.cs): the level-gated 0xe30b from level 10.
+ushort[] entryOrder = [0x8d53, 0x8d58, 0x8aaf, 0x9330, 0x610b, 0x8d7e, 0x8d37, 0x8d8c, 0x9331, 0xffae, 0xe30b, 0xffa5, 0xffa7, 0xe262, 0x572d,
+    0xe251, 0x400a, 0xe200, 0xffab, 0xe223, 0x6000, 0x570f];
+var entrySeen = craftEntry.Select(Op).Where(op => entryOrder.Contains(op)).ToList();
+var entryWanted = entryOrder.Where(op => op != 0xe30b || staffSession.Level >= GameSession.MonolithListLevel).ToList();
+Check(entrySeen.SequenceEqual(entryWanted), $"world entry lists in the official order (0x8d53 .. 0x572d, 0xe251 .. 0x570f); got {string.Join(' ', entrySeen.Select(o => o.ToString("x4")))}");
+Check(craftEntry.Single(b => Op(b) == 0x8d53).Length == 1828 && craftEntry.Single(b => Op(b) == 0x400a).SequenceEqual(Convert.FromHexString("0a40010102230501290502")),
+      "SeasonSchedule_NT replayed as recorded (1828 bytes); a Light character's ArenaMatchingInfo_NT as recorded");
+// TrustLimitInfo_NT rebuilt byte for byte (2026-11-06 084658; its update time set to the entry time, both the server's clock).
+var trustAt = BitConverter.ToInt64(Convert.FromHexString("872fb3b0a1010000"));
+Check(Convert.ToHexStringLower(GameSession.TrustLimitInfo(trustAt)) == "62e2" + "0704020200000000000000000065cd1d00000000872fb3b0a101000003030000000000000000ffffffffffffffff872fb3b0a1010000"
+          + "04040000000000000000ffffffffffffffff872fb3b0a101000005050000000000000000ffffffffffffffff872fb3b0a1010000872fb3b0a101000005000000",
+      "TrustLimitInfo_NT as recorded (flags 07, type 2 at 500,000,000, types 3-5 unlimited, step 5)");
 var marked = await staffSession.HandleAsync(new PacketWriter().U16(GameSession.BookmarkRq).U8(4).I32(132).Bool(true).ToArray(), Now);
 Check(marked.Single().SequenceEqual(new PacketWriter().U16(GameSession.BookmarkRs).U16(0).U8(4).I32(132).Bool(true).I64(Now).ToArray())
       && staffSession.Bookmarks.Single() == new GameSession.BookmarkEntry(4, 132, Now), "Bookmark_RQ quest 132: 0x932f {0, 04, 84000000, 01, time} (the fork's recorded form), kept");
@@ -2721,7 +2734,10 @@ await spiritMaster.HandleAsync(Strings(0x3613, Session, "", "t", "").Concat(new 
 await spiritMaster.HandleAsync(new PacketWriter().U16(0x361b).String("Ione").U8(1).U32(spiritCreation).Bytes([0x0c, 0x64]).U8(2).U8(1).U8(0).ToArray(), Now);
 spiritStore.States[0] = spiritStore.States[0] with { Progress = spiritStore.States[0].Progress with { Level = 20 } };
 await spiritMaster.HandleAsync(new PacketWriter().U16(0x361f).Varint((uint)spiritStore.States[0].WireId << 16).I32(0).Vec3(Vector3d.Zero).ToArray(), Now);
-await spiritMaster.HandleAsync(new PacketWriter().U16(0x3622).I32(1).ToArray(), Now);
+var spiritEntry = await spiritMaster.HandleAsync(new PacketWriter().U16(0x3622).I32(1).ToArray(), Now);
+Check(spiritEntry.Single(b => Op(b) == 0xe30b).SequenceEqual(Convert.FromHexString("0be303e903000000000000ea03000000000000b90b000000000000"))
+      && spiritEntry.FindIndex(b => Op(b) == 0xe30b) is var monolithAt && Op(spiritEntry[monolithAt - 1]) == 0x6103 && Op(spiritEntry[monolithAt + 1]) == 0x56b6,
+      "a level-20 Light character's entry has MonolithList_NT (1001, 1002, 3001 as recorded for Light) between 0x6103 and 0x56b6");
 var spiritAt = spiritMaster.Position ?? new Vector3d(100, 200, 300);
 var fire = await spiritMaster.HandleAsync(Cast(16100000, spiritMaster.PlayerKey, spiritAt), Now + 1000);
 var fireKey = spiritMaster.SpiritKey ?? 0;

@@ -1991,13 +1991,9 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             replies.Add(BattlePassInfoList(now));
             replies.Add(PeriodCollectionList(now));
             replies.Add(BossChallengeList());
-            replies.AddRange(EntryConstants(now));
-            replies.AddRange(EconomyAtEntry());
-            replies.Add(BookmarkList());   // 0x9330 right before 0x610b (OBSERVED 34 of 34; GameSession.Bookmarks.cs)
-            if (Store is not null) replies.Add(ContentTicketList(now));   // 0x610b (GameSession.ContentTickets.cs)
+            replies.AddRange(EntryLists(now));   // the lists in the official order (GameSession.EntryConstants.cs)
             replies.AddRange(AchieveSet("EquipItemLevel", EquipItemLevel(), now: now));
             if (fresh) { replies.AddRange(Achieve("LoginCharacter", now: now)); elapsedAchieveAt = now + 60_000; }
-            replies.AddRange(CraftListsAtEntry());
         }
         if (!instanceMove && !shortLoad) replies.AddRange(MapEnvironment(mapId));   // every full map load (OBSERVED at the official world entry, map 1000 state 0)
         if (instanceMove && TestPiece(LayerPieceEnvironment))
@@ -2022,7 +2018,6 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
                 replies.Add(SpecializedSkillLoad());   // GameSession.Specialization.cs
                 if (stigmas.Count > 0 || stigmaItemShards > 0) replies.Add(StigmaShardUpdate());
                 if (daevanionPoints.Any(p => p > 0)) replies.Add(ItemDaevanionPointUpdate());   // OURS: no recording shows it at entry
-                replies.AddRange(GamePackets.EmptyEntryLists());
                 replies.AddRange(SettingsAtEntry(now));
                 // The player's saved hotbar, else the class's default bar for its level.
                 replies.Add(Hotbar(profile.DefaultBar()));

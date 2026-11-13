@@ -514,12 +514,6 @@ public static class GamePackets
         return w.ToArray();
     }
 
-    /// <summary>
-    /// Empty lists of the official world entry (each "opcode 00", OBSERVED 2026-10-20 for a character with none):
-    /// 0x8d58 MyPrevSeasonRanking_NT, 0x8aaf AgitDecoList_NT. The potion and auto-use lists come from the character's settings.
-    /// </summary>
-    public static IReadOnlyList<byte[]> EmptyEntryLists() => [[0x58, 0x8d, 0x00], [0xaf, 0x8a, 0x00]];
-
     /// <summary>CharRestStart_RS 0x3748 / CharRestStop_RS 0x374b: key, u16 result (usmap; result width as the sibling 0x3743 OBSERVED).</summary>
     public static byte[] RestReply(bool start, int key, int result = 0) => PacketWriter.Opcode((ushort)(start ? 0x3748 : 0x374b)).Varint(key).U16(result).ToArray();
     /// <summary>CharRestStart_NT 0x3749 / CharRestStop_NT 0x374c: key (usmap), for the players around.</summary>
