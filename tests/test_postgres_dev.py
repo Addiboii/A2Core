@@ -26,6 +26,17 @@ class MigrationTests(unittest.TestCase):
         self.assertIn('\\if :apply', script)
         self.assertTrue(script.endswith('COMMIT;'))
 
+    def test_line_endings_do_not_count_as_a_change(self):
+        # A Windows checkout (autocrlf) has CRLF where the migration may have been applied from LF, and the other way round.
+        import hashlib
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / '001.sql'
+            path.write_bytes(b'SELECT 1;\r\nSELECT 2;\r\n')
+            script = migration_script([path])
+        for form in (b'SELECT 1;\nSELECT 2;\n', b'SELECT 1;\r\nSELECT 2;\r\n'):
+            self.assertIn(literal(hashlib.sha256(form).hexdigest()), script)
+        self.assertNotIn(literal(hashlib.sha256(b'SELECT 1;\nSELECT 3;\n').hexdigest()), script)
+
 
 class TimeoutTests(unittest.TestCase):
     def calls(self, action):

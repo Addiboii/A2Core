@@ -169,8 +169,12 @@ def migration_script(files):
            'CREATE TABLE IF NOT EXISTS public.schema_migrations(version text PRIMARY KEY, sha256 text NOT NULL, applied_at timestamptz NOT NULL DEFAULT now());']
     for path in files:
         body = path.read_text(encoding='utf-8')
-        version, digest = literal(path.name), literal(hashlib.sha256(path.read_bytes()).hexdigest())
-        out.extend([f"DO $check$ BEGIN IF EXISTS(SELECT FROM public.schema_migrations WHERE version={version} AND sha256<>{digest}) THEN RAISE EXCEPTION 'Applied migration changed'; END IF; END $check$;",
+        raw = path.read_bytes()
+        version, digest = literal(path.name), literal(hashlib.sha256(raw).hexdigest())
+        # A checkout's line endings (git autocrlf on Windows) are not a change: the same text with LF or CRLF counts as applied.
+        lf = raw.replace(b'\r\n', b'\n')
+        known = ', '.join(literal(hashlib.sha256(form).hexdigest()) for form in dict.fromkeys((raw, lf, lf.replace(b'\n', b'\r\n'))))
+        out.extend([f"DO $check$ BEGIN IF EXISTS(SELECT FROM public.schema_migrations WHERE version={version} AND sha256 NOT IN ({known})) THEN RAISE EXCEPTION 'Applied migration changed'; END IF; END $check$;",
                     f'SELECT NOT EXISTS(SELECT FROM public.schema_migrations WHERE version={version}) AS apply \\gset',
                     '\\if :apply', body,
                     f'INSERT INTO public.schema_migrations(version,sha256) VALUES({version},{digest});', '\\endif'])
