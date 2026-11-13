@@ -2450,6 +2450,10 @@ Check(titleShown.Count == 2 && titleShown[0].SequenceEqual(Convert.FromHexString
 // Skins: the collection (0x8d5c), equipping an owned skin on a slot (0x8d5f), an unknown one refused.
 var skinned = await staffSession.AcquireSkinsAsync([30067101], default);
 Check(skinned.Count == 1 && skinned[0][0] == 0x5c && skinned[0][1] == 0x8d && staffSession.OwnedSkins[30067101] == 1 && staffStore.Skins[30067101] == 1, "AcquireSkin: SkinUpdate_NT 0x8d5c, in the collection (saved)");
+Check(staffSession.SkinInfo().SequenceEqual(new PacketWriter().U16(0x8d5b).Varint((uint)staffSession.OwnedSkins.Count)
+          .Raw(staffSession.OwnedSkins.OrderBy(p => p.Key).SelectMany(p => BitConverter.GetBytes(p.Key).Concat(BitConverter.GetBytes(p.Value))).ToArray())
+          .Raw(Convert.FromHexString("0000010000")).ToArray()),
+      "SkinInfo_NT: 8 bytes a skin {id i32, count i32} as recorded (34 in ours), then the empty tail");
 var skinEquip = await staffSession.HandleAsync(new PacketWriter().U16(0x8d5e).Varint(1).U8(3).U8(3).I64(0).I32(30067101).ToArray(), Now);
 Check(skinEquip[0][0] == 0x5f && skinEquip[0][1] == 0x8d && skinEquip[0][2] == 0 && staffSession.SkinEquips[3] == 30067101, "SkinEquip_RQ torso: 0x8d5f result 0, equipped");
 Check((await staffSession.HandleAsync(new PacketWriter().U16(0x8d5e).Varint(1).U8(4).U8(4).I64(0).I32(30067102).ToArray(), Now))[0][2] == 1, "a skin not in the collection is refused");

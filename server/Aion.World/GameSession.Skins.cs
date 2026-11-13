@@ -66,11 +66,16 @@ public sealed partial class GameSession
         foreach (var (slot, id) in extras.SkinEquips) skinEquips[slot] = id;
     }
 
-    /// <summary>0x8d5b SkinInfo_NT: the collection {skin i32, {count i32, instances i32}}, no points, no pure-skin equips, preset 1, no preset or visual slot infos.</summary>
-    byte[] SkinInfo()
+    /// <summary>
+    /// 0x8d5b SkinInfo_NT: the collection {skin i32, count i32}, no points, no pure-skin equips, preset 1, no preset or visual
+    /// slot infos. OBSERVED (34 in our recordings): 8 bytes a skin (we wrote 12; the community fork found the client
+    /// misread the collection), counts from 1 to 12 and more; an empty collection is `5b8d 00 00 00 01 00 00` (7 times).
+    /// Not sent yet: the points, pure-skin equips, the presets' equipped skins and the visual slot options of the recorded tails.
+    /// </summary>
+    public byte[] SkinInfo()
     {
         var w = PacketWriter.Opcode(SkinInfoNt).Varint(skins.Count);
-        foreach (var (id, count) in skins.OrderBy(p => p.Key)) w.I32(id).I32(count).I32(0);
+        foreach (var (id, count) in skins.OrderBy(p => p.Key)) w.I32(id).I32(count);
         return w.Varint(0).Varint(0).U8(1).Varint(0).Varint(0).ToArray();
     }
 
