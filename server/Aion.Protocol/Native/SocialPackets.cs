@@ -63,6 +63,7 @@ public static class SocialOpcodes
         PartyDisbandRq = PartyBase + 1066, PartyDisbandRs = PartyBase + 1067, PartyDisbandNt = PartyBase + 1068,
         PartySetTargetByBossNt = PartyBase + 1069, PartyDisconnectMemberNt = PartyBase + 1070, PartyReconnectMemberNt = PartyBase + 1071,
         PartyMemberItemLootingNt = PartyBase + 1072, PartyMemberItemLootingFailNt = PartyBase + 1073,
+        PartyLeaderScanTargetsRq = PartyBase + 1074, PartyLeaderScanTargetsRs = PartyBase + 1075, PartyLeaderScanTargetsNt = PartyBase + 1076,
         PartyRecommendRq = PartyBase + 1077, PartyRecommendRs = PartyBase + 1078,
         PartyInviteCancelRq = PartyBase + 1079, PartyInviteCancelRs = PartyBase + 1080, PartyInviteCancelNt = PartyBase + 1081;
 
@@ -88,7 +89,7 @@ public static class SocialOpcodes
         ExchangeRequestRq, ExchangeAcceptRq, ExchangeRefuseRq, ExchangeCancelRq, ExchangeItemListModifyRq, ExchangeItemListLockRq, ExchangeConfirmRq,
         FriendRequestRq, FriendRequestCancelRq, FriendRequestRejectRq, FriendRequestAcceptRq, FriendDeleteRq, FriendBlockRq, FriendBlockCancelRq, FriendMemoUpdateRq,
         PartyInfoUpdateRq, PartyCreateRq, PartyInviteRq, PartyInviteResponseRq, PartySetLeaderRq, PartyLeaveRq, SetPartyFocusTargetRq,
-        PartyKickoutRq, PartyDisbandRq, PartyRecommendRq, PartyInviteCancelRq, PartyRecentMemberRq,
+        PartyKickoutRq, PartyDisbandRq, PartyRecommendRq, PartyInviteCancelRq, PartyRecentMemberRq, PartyLeaderScanTargetsRq,
         DuelCallOutRq, DuelCallOutAcceptRq, DuelCallOutRejectRq,
     };
 }
@@ -684,6 +685,59 @@ public static class SocialRequests
             for (var n = 0; n < count; n++) list.Add(new PartyInviteReply(id(r), (PartyInviteAnswer)r.U8()));
             return list;
         })));
+
+    /// <summary>
+    /// The focused target's key of a SetPartyFocusTarget_RQ: the usmap's form (below), else the first non-zero of one to six
+    /// i32 (CANDIDATE: the client's direction is ciphered in the recordings; the recorded notice is three i32). Null when malformed.
+    /// </summary>
+    public static int? FocusTargetKey(ReadOnlyMemory<byte> message)
+    {
+        if (ParseSetPartyFocusTarget(message) is { } parsed) return parsed.TargetKey;
+        var body = message.Span;
+        if (body.Length < 6 || body.Length > 26 || (body.Length - 2) % 4 != 0) return null;
+        for (var at = 2; at + 4 <= body.Length; at += 4)
+            if (BitConverter.ToInt32(body[at..]) is not 0 and var key) return key;
+        return 0;
+    }
+
+    /// <summary>SetPartyFocusTarget_RS 0x9215 {result u16} (OBSERVED `1592 0000`, 229 in our recordings).</summary>
+    public static byte[] FocusTargetReply(int result) => PacketWriter.Opcode(SocialOpcodes.SetPartyFocusTargetRs).U16(result).ToArray();
+
+    /// <summary>
+    /// PartyFocusTarget_NT 0x9216: three i32, only the middle one ever set, to the focused target's key (OBSERVED: 263 in 8 of our
+    /// recordings 2026-11-04 to 06, e.g. `1692 00000000 cc5c0000 00000000`, or all zero). CANDIDATE: the outer two are 0.
+    /// </summary>
+    public static byte[] PartyFocusTarget(int targetKey) => PacketWriter.Opcode(SocialOpcodes.PartyFocusTargetNt).I32(0).I32(targetKey).I32(0).ToArray();
+
+    /// <summary>The scan-target slots of PartyLeaderScanTargets (OBSERVED: 5 in each of the 6 recorded notices).</summary>
+    public const int ScanTargetSlots = 5, ScanTargetSlotBytes = 24;
+
+    /// <summary>
+    /// PartyLeaderScanTargets_RQ {count varint, count x 24-byte slot} (CANDIDATE: the notice's form; the request is ciphered in the
+    /// recordings), at most 5 slots, nothing after them. Null when malformed.
+    /// </summary>
+    public static byte[][]? ParseScanTargets(ReadOnlyMemory<byte> message)
+    {
+        try
+        {
+            var r = new PacketReader(message.ToArray()) { Offset = 2 };
+            var count = r.Varint();
+            if (count > ScanTargetSlots || message.Length - r.Offset != (int)count * ScanTargetSlotBytes) return null;
+            return Enumerable.Range(0, (int)count).Select(i => message.Slice(r.Offset + i * ScanTargetSlotBytes, ScanTargetSlotBytes).ToArray()).ToArray();
+        }
+        catch (Exception e) when (e is ProtocolException or ArgumentOutOfRangeException or IndexOutOfRangeException) { return null; }
+    }
+
+    /// <summary>PartyLeaderScanTargets_RS 0x9226 {result u16} (OBSERVED `2692 0000`, 6 in our recordings).</summary>
+    public static byte[] ScanTargetsReply(int result) => PacketWriter.Opcode(SocialOpcodes.PartyLeaderScanTargetsRs).U16(result).ToArray();
+
+    /// <summary>PartyLeaderScanTargets_NT 0x9227 {count varint, 24-byte slots} (OBSERVED: 6, all `2792 05` and five empty slots).</summary>
+    public static byte[] ScanTargets(IReadOnlyList<byte[]> slots)
+    {
+        var w = PacketWriter.Opcode(SocialOpcodes.PartyLeaderScanTargetsNt).Varint((uint)slots.Count);
+        foreach (var slot in slots) w.Raw(slot);
+        return w.ToArray();
+    }
 
     /// <summary>SetPartyFocusTarget_RQ {target_key, parts_id, target_type, {target_key, parts_id, target_type}}.</summary>
     public static FocusTargetRequest? ParseSetPartyFocusTarget(ReadOnlyMemory<byte> message) =>

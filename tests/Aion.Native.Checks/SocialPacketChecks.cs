@@ -70,7 +70,9 @@ public static class SocialPacketChecks
         Op((ushort)(SocialOpcodes.LateBase + 1114), 0x9330, "BookmarkedContentList_NT");
         Op((ushort)(SocialOpcodes.FriendBase + 1413), 0xe28c, "PresetInfo_NT");
         Op((ushort)(SocialOpcodes.E3Base + 1499), 0xe349, "RetrievePushRewardInfo_RS");
-        Check(SocialOpcodes.ClientRequests.Count == 30 && SocialOpcodes.ClientRequests.Contains(SocialOpcodes.DuelCallOutAcceptRq), "client request set");
+        Op(SocialOpcodes.PartyLeaderScanTargetsRq, 0x9225, "PartyLeaderScanTargets_RQ");
+        Check(SocialOpcodes.ClientRequests.Count == 31 && SocialOpcodes.ClientRequests.Contains(SocialOpcodes.DuelCallOutAcceptRq)
+              && SocialOpcodes.ClientRequests.Contains(SocialOpcodes.PartyLeaderScanTargetsRq), "client request set");
         Same("WithOpcode", SocialPackets.WithOpcode(SocialPackets.DuelRingIn(1, 2), SocialOpcodes.Alternative(SocialOpcodes.DuelRingInNt)), "6692 01000000 02000000");
     }
 
@@ -141,6 +143,11 @@ public static class SocialPacketChecks
         Same("PartyInfoUpdate_RS", SocialPackets.PartyInfoUpdateReply(0), "0292 0000");
         Same("PartyInfoUpdate_NT", SocialPackets.PartyInfoUpdateNotice(4, 3, 1, 2), "0392 04000000 03 01 02");
         Same("PartyCreate_RS", SocialPackets.PartyCreateReply(0), "0592 0000");
+        // Our recordings 2026-11-04 to 06: 229 focus replies and 263 notices, 6 scan-target replies and notices.
+        Same("SetPartyFocusTarget_RS", SocialRequests.FocusTargetReply(0), "1592 0000");
+        Same("PartyFocusTarget_NT", SocialRequests.PartyFocusTarget(0x5ccc), "1692 00000000 cc5c0000 00000000");
+        Same("PartyLeaderScanTargets_RS", SocialRequests.ScanTargetsReply(0), "2692 0000");
+        Same("PartyLeaderScanTargets_NT", SocialRequests.ScanTargets([.. Enumerable.Range(0, 5).Select(_ => new byte[24])]), "2792 05" + new string('0', 240));
         Same("PartyInvite_RS", SocialPackets.PartyInviteReply(0, 1204, "Bo"), "0792 0000 b404 02426f");
         var inviter = new InvitationInfo(29, 5, 1, "Al", 1204);
         Same("PartyInvite_NT", SocialPackets.PartyInviteNotice(77, 11, inviter, 1000),

@@ -2942,6 +2942,22 @@ Check(joined.Any(b => (b[0] | b[1] << 8) == SocialOpcodes.PartyInfoNt) && shared
 var carolHears = await carol.TickAsync(Now + 240);
 Check(carolHears.Any(b => (b[0] | b[1] << 8) == SocialOpcodes.PartyAddMemberNt) && carolHears.Any(b => (b[0] | b[1] << 8) == SocialOpcodes.PartyInviteResponseNt),
       "the leader hears the answer and the new member");
+// Party focus and the leader's scan targets: the reply, then the notice, which the other member gets too (OBSERVED reply then
+// notice, 229 and 6 times in our recordings).
+var focused = await carol.HandleAsync(new PacketWriter().U16(SocialOpcodes.SetPartyFocusTargetRq).I32(23756).I32(0).I32(0).I32(0).I32(0).I32(0).ToArray(), Now + 241);
+var daveFocus = await dave.TickAsync(Now + 242);
+Check(focused.Count == 2 && focused[0].SequenceEqual(SocialRequests.FocusTargetReply(0)) && focused[1].SequenceEqual(SocialRequests.PartyFocusTarget(23756))
+      && daveFocus.Any(b => b.SequenceEqual(SocialRequests.PartyFocusTarget(23756))), "SetPartyFocusTarget: 0x9215 0, then 0x9216 to the party");
+var scanSlot = Enumerable.Range(1, 24).Select(i => (byte)i).ToArray();
+var scanned = await carol.HandleAsync(new PacketWriter().U16(SocialOpcodes.PartyLeaderScanTargetsRq).Varint(1).Raw(scanSlot).ToArray(), Now + 243);
+Check(scanned.Count == 2 && scanned[0].SequenceEqual(SocialRequests.ScanTargetsReply(0)) && scanned[1].SequenceEqual(SocialRequests.ScanTargets([scanSlot]))
+      && (await dave.TickAsync(Now + 244)).Any(b => b.SequenceEqual(SocialRequests.ScanTargets([scanSlot]))),
+      "PartyLeaderScanTargets: 0x9226 0, then 0x9227 rebuilt from the slots, to the party");
+Check((await carol.HandleAsync(new PacketWriter().U16(SocialOpcodes.PartyLeaderScanTargetsRq).Varint(6).Raw(new byte[6 * 24]).ToArray(), Now + 244)).Single()
+          .SequenceEqual(SocialRequests.ScanTargetsReply(1))
+      && (await carol.HandleAsync(new PacketWriter().U16(SocialOpcodes.PartyLeaderScanTargetsRq).Varint(1).Raw(new byte[30]).ToArray(), Now + 244)).Single()
+          .SequenceEqual(SocialRequests.ScanTargetsReply(1)),
+      "scan targets over 5 slots or with trailing bytes are refused (result 1), nothing relayed");
 // Party exp: a member's share of a kill is applied on that member's own loop at its next tick (0x8d07 reason 1).
 var daveExpBefore = dave.Experience;
 dave.ShareExperience(50);

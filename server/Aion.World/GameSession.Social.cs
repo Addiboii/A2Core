@@ -53,6 +53,8 @@ public sealed partial class GameSession
             SocialOpcodes.PartySetLeaderRq => PartySetLeader(plain),
             SocialOpcodes.PartyDisbandRq => PartyDisband(),
             SocialOpcodes.PartyRecentMemberRq => [SocialPackets.PartyRecentMembers(0, [])],
+            SocialOpcodes.SetPartyFocusTargetRq => SetPartyFocusTarget(plain),
+            SocialOpcodes.PartyLeaderScanTargetsRq => PartyLeaderScanTargets(plain),
             SocialOpcodes.ExchangeRequestRq => ExchangeRequest(plain, now),
             SocialOpcodes.ExchangeAcceptRq => ExchangeAccept(plain),
             SocialOpcodes.ExchangeRefuseRq or SocialOpcodes.ExchangeCancelRq => ExchangeEnd(plain, header == SocialOpcodes.ExchangeRefuseRq),
@@ -320,6 +322,36 @@ public sealed partial class GameSession
         party.Leader = leader;
         foreach (var m in party.Others(worldPlayer)) m.Send(SocialPackets.PartyNewLeader(dbId));
         return [SocialPackets.PartySetLeaderReply(0), SocialPackets.PartyNewLeader(dbId)];
+    }
+
+    /// <summary>
+    /// SetPartyFocusTarget_RQ: the party's focus target. OBSERVED (our recordings, 229 times): 0x9215 result 0, then 0x9216. The
+    /// notice also goes to the other members (CANDIDATE: only the requester's side was recorded). Found by the community fork.
+    /// </summary>
+    List<byte[]> SetPartyFocusTarget(byte[] plain)
+    {
+        if (SocialRequests.FocusTargetKey(plain) is not { } key) return [SocialRequests.FocusTargetReply(1)];
+        var notice = SocialRequests.PartyFocusTarget(key);
+        SendToOtherMembers(notice);
+        return [SocialRequests.FocusTargetReply(0), notice];
+    }
+
+    /// <summary>
+    /// PartyLeaderScanTargets_RQ: the leader's marked targets. OBSERVED (6 times): 0x9226 result 0, then 0x9227 with the list. OURS:
+    /// the notice is rebuilt from the parsed slots (at most 5), not relayed as sent; the other members get it too (CANDIDATE).
+    /// </summary>
+    List<byte[]> PartyLeaderScanTargets(byte[] plain)
+    {
+        if (SocialRequests.ParseScanTargets(plain) is not { } slots) return [SocialRequests.ScanTargetsReply(1)];
+        var notice = SocialRequests.ScanTargets(slots);
+        SendToOtherMembers(notice);
+        return [SocialRequests.ScanTargetsReply(0), notice];
+    }
+
+    void SendToOtherMembers(byte[] notice)
+    {
+        if (Social is { } s && worldPlayer is not null && s.PartyOf(worldPlayer) is { } party)
+            foreach (var other in party.Others(worldPlayer)) other.Send(notice);
     }
 
     List<byte[]> PartyDisband()
