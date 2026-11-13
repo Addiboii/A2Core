@@ -72,13 +72,15 @@ public sealed class NpcAi(Random rng, GameData? data = null)
         /// <summary>The hits done (landed or missed) so far.</summary>
         public int Done { get; set; }
         public long DueMs { get; set; } = dueMs;
+        /// <summary>Projectiles in flight: when each lands, its hit's seq, and where it was fired at.</summary>
+        public List<(long At, int Seq, Vector3d To)> Flying { get; } = [];
     }
 
     /// <summary>The spacing of a multi-hit skill's hits (CANDIDATE: our recordings' consecutive NPC hits, 718: median 173 ms, 80 % 0-299).</summary>
     public const int HitSpacingMs = 175;
     /// <summary>The skill end (0x3806) after the last hit (CANDIDATE: our recordings, 840 ends: median 484 ms).</summary>
     public const int EndAfterHitMs = 500;
-    /// <summary>The remaining flight announced in 0x3803 (CANDIDATE: our recordings' median, 250 ms); the fire is sent with the hit.</summary>
+    /// <summary>The flight of a projectile missing from projectiles.json (OURS: our recordings' median 0x3803 flight, 250 ms).</summary>
     public const int ProjectileFlightMs = 250;
 
     public sealed class Brain(Vector3d home, double homeHeading)
@@ -720,8 +722,17 @@ public sealed class NpcAi(Random rng, GameData? data = null)
     List<byte[]> Resolve(Target target, Brain brain, Vector3d? player, long now, Func<int, List<byte[]>>? hitPlayer)
     {
         var replies = new List<byte[]>();
-        while (brain.Pending is { } pending && now >= pending.DueMs)
+        while (brain.Pending is { } pending)
         {
+            // A projectile due to land before the next step lands first (its collision and hit).
+            if (pending.Flying.Count > 0 && pending.Flying.MinBy(f => f.At) is var landing && landing.At <= pending.DueMs)
+            {
+                if (now < landing.At) break;
+                pending.Flying.Remove(landing);
+                replies.AddRange(Hit(target, brain, pending, landing.Seq, landing.To, player, hitPlayer));
+                continue;
+            }
+            if (now < pending.DueMs) break;
             if (!pending.Started)
             {
                 replies.AddRange(StartSkill(target, pending, pending.DueMs));
@@ -729,9 +740,18 @@ public sealed class NpcAi(Random rng, GameData? data = null)
             }
             if (pending.Done < pending.Hits.Count)
             {
-                pending.Done++;
-                pending.DueMs += pending.Done < pending.Hits.Count ? HitSpacingMs : EndAfterHitMs;
-                replies.AddRange(Hit(target, brain, pending, player, hitPlayer));
+                var seq = ++pending.Done;
+                var due = pending.DueMs;
+                pending.DueMs += seq < pending.Hits.Count ? HitSpacingMs : EndAfterHitMs;
+                if (pending.Hits[seq - 1].Projectile is > 0 and var projectile && player is { } to)
+                {
+                    // The fire now, the collision and the hit when it lands; the skill ends EndAfterHitMs after the last landing.
+                    var flight = Projectiles.Flight(projectile, Distance(target.Position, Flat(to)), rng) ?? (ProjectileFlightMs, ProjectileFlightMs + Projectiles.TickMs);
+                    pending.Flying.Add((due + flight.Arrival, seq, to));
+                    if (seq == pending.Hits.Count) pending.DueMs = Math.Max(pending.DueMs, due + flight.Arrival + EndAfterHitMs);
+                    replies.Add(GamePackets.FireProjectile(target.Key, pending.TargetKey, pending.SkillId, pending.ActionSeq, projectile, to, flight.Announced, seq));
+                }
+                else replies.AddRange(Hit(target, brain, pending, seq, null, player, hitPlayer));
                 continue;
             }
             brain.Pending = null;
@@ -741,27 +761,25 @@ public sealed class NpcAi(Random rng, GameData? data = null)
     }
 
     /// <summary>
-    /// One hit of the skill in use, numbered in its effect seq. A projectile hit sends the fire (0x3803) and the collision
-    /// (0x380e, destroyed at the victim) first (OBSERVED order: 616 of 664 projectile-skill hits follow the caster's 0x3803;
-    /// the collision ~50 ms before the hit). CANDIDATE: both with the hit, as the server does not fly projectiles.
+    /// One hit of the skill in use, numbered in its effect seq. A projectile's hit comes when it lands (Projectiles.Flight), its
+    /// collision (0x380e, destroyed at the victim) first (OBSERVED: 616 of 664 projectile-skill hits follow the caster's 0x3803,
+    /// the collision ~50 ms before the hit; the hit 0-99 ms after the announced flight). <paramref name="landedAt"/> is where a
+    /// projectile was fired at (null for a melee hit).
     /// </summary>
-    List<byte[]> Hit(Target target, Brain brain, PendingHit hit, Vector3d? player, Func<int, List<byte[]>>? hitPlayer)
+    List<byte[]> Hit(Target target, Brain brain, PendingHit hit, int seq, Vector3d? landedAt, Vector3d? player, Func<int, List<byte[]>>? hitPlayer)
     {
-        if (player is not { } p || hitPlayer is null) return [];
-        if (Distance(target.Position, Flat(p)) > AttackRange(target, hit.Skill) + hit.Skill.Follow) return [];
+        var (effect, projectile) = hit.Hits[seq - 1];
+        List<byte[]> collision = projectile > 0 && landedAt is { } at
+            ? [GamePackets.ProjectileCollision(target.Key, hit.TargetKey, hit.SkillId, hit.ActionSeq, projectile, at, seq, destroyed: true, at)] : [];
+        if (player is not { } p || hitPlayer is null) return collision;
+        if (Distance(target.Position, Flat(p)) > AttackRange(target, hit.Skill) + hit.Skill.Follow) return collision;
         var victim = Victim(brain);
         // The victim's defense reduces the hit (the CANDIDATE 1000/(1000+defense) used for players' hits).
         var defense = brain.VictimIsNpc && current?.GetValueOrDefault(victim) is { } prey ? prey.Defense : DefenseOf?.Invoke(victim) ?? 0;
         var damage = Math.Max(1, (int)Math.Round(Damage(target, hit.Skill) * 1000.0 / (1000 + Math.Max(0, defense))));
         LastAttacker = target.Key;
         LastAttackSkill = hit.SkillId;
-        var (effect, projectile) = hit.Hits[hit.Done - 1];
-        List<byte[]> flight = projectile == 0 ? [] :
-        [
-            GamePackets.FireProjectile(target.Key, victim, hit.SkillId, hit.ActionSeq, projectile, p, ProjectileFlightMs, hit.Done),
-            GamePackets.ProjectileCollision(target.Key, victim, hit.SkillId, hit.ActionSeq, projectile, p, hit.Done, destroyed: true, p),
-        ];
-        return [.. flight, GamePackets.NpcSkillHit(victim, target.Key, hit.SkillId, hit.ActionSeq, effect, damage, effectSeq: hit.Done), .. hitPlayer(damage)];
+        return [.. collision, GamePackets.NpcSkillHit(victim, target.Key, hit.SkillId, hit.ActionSeq, effect, damage, effectSeq: seq), .. hitPlayer(damage)];
     }
 
     static int Victim(Brain brain) => brain.VictimKey != 0 ? brain.VictimKey : PlayerKey;

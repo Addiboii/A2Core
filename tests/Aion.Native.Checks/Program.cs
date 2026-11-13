@@ -844,10 +844,17 @@ var archer = new Target { Key = 2006, Name = "archer", Hp = 665, HpMax = 665, Le
 var archerAi = new NpcAi(new Random(8), data);
 var archerMap = new Dictionary<int, Target> { [archer.Key] = archer };
 archerAi.Tick(archerMap, near, 0, _ => []);
+// 10002001 is Collide (SkillProjectile.dat: travel 2500, Speed 4000): 600 ms announced, the hit 50 ms after.
+Check(Projectiles.Flight(10002001, 123, new Random(1)) == (600, 650) && Projectiles.Of(170800001) is { Type: "Splash_FixTime_Target" }
+      && Projectiles.Flight(170800001, 99999, new Random(1)) == (550, 600) && Projectiles.Flight(143400001, 750, new Random(1)) == (150, 200),
+      "projectile flights by type: Collide travel / Speed, fixed time, Target distance / Speed in 50 ms steps");
 var arrow = archerAi.Tick(archerMap, near, NpcAi.HitDelayMs, _ => []);
-Check(arrow.Count >= 3 && arrow[0].SequenceEqual(GamePackets.FireProjectile(2006, 1, 1000200, 1, 10002001, near, NpcAi.ProjectileFlightMs, 1))
-      && arrow[1].SequenceEqual(GamePackets.ProjectileCollision(2006, 1, 1000200, 1, 10002001, near, 1, destroyed: true, near)) && Op(arrow[2]) == 0x3804,
-      "a projectile skill's hit: 0x3803 fire, 0x380e collision, then 0x3804 (our recordings' order)");
+Check(arrow.Count == 1 && arrow[0].SequenceEqual(GamePackets.FireProjectile(2006, 1, 1000200, 1, 10002001, near, 600, 1)), "a projectile skill fires (0x3803) at its hit time");
+Check(archerAi.Tick(archerMap, near, NpcAi.HitDelayMs + 600, _ => []).Count == 0, "the hit waits for the projectile");
+var arrowLands = archerAi.Tick(archerMap, near, NpcAi.HitDelayMs + 650, _ => []);
+Check(arrowLands.Count >= 2 && arrowLands[0].SequenceEqual(GamePackets.ProjectileCollision(2006, 1, 1000200, 1, 10002001, near, 1, destroyed: true, near))
+      && Op(arrowLands[1]) == 0x3804, "50 ms after the announced flight: 0x380e collision, then the hit (our recordings' order)");
+Check(archerAi.Tick(archerMap, near, NpcAi.HitDelayMs + 650 + NpcAi.EndAfterHitMs, _ => []).Any(b => Op(b) == 0x3806), "the skill ends 500 ms after the landing");
 // Official NPC skill messages rebuild byte for byte (capture 20261013-144836: #5246 the cast of 1220590, #15131 / #15144 a
 // projectile 10002101 of skill 1000210 fired and destroyed).
 Check(Convert.ToHexStringLower(GamePackets.SkillCastingStart(47494, 1220590, 5646, -112.99501037597656,

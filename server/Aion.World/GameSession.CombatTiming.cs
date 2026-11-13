@@ -53,17 +53,19 @@ partial class GameSession
     }
 
     /// <summary>
-    /// The flight of a skill's projectile to <paramref name="target"/> in ms, 0 when the skill fires none: distance / Speed
-    /// (SkillProjectile.dat, cm per second; CANDIDATE reading), capped at <see cref="MaxProjectileFlightMs"/>.
+    /// The flight of a skill's projectile to <paramref name="target"/>: the announced time (0x3803) and the hit's arrival, or
+    /// null when the skill fires none. By its SkillProjectile.dat type (Projectiles.Flight; OBSERVED for the fixed-time and
+    /// Collide types); a projectile missing there flies distance / Speed (CANDIDATE), capped at <see cref="MaxProjectileFlightMs"/>.
     /// </summary>
-    int ProjectileFlightMs(SkillDefinition definition, Target target)
+    (int Announced, int Arrival)? ProjectileFlight(SkillDefinition definition, Target target)
     {
         var projectile = definition.Damage.FirstOrDefault(d => d.Projectile > 0)?.Projectile ?? 0;
-        if (projectile == 0) return 0;
+        if (projectile == 0) return null;
+        var distance = position is { } from ? Math.Sqrt(from.DistanceSquared(target.Position)) : 0;
+        if (Projectiles.Flight(projectile, distance, rng) is { } flight) return flight;
         var speed = data.ProjectileSpeed(projectile);
-        if (speed <= 0 || position is not { } from) return DefaultProjectileFlightMs;
-        var ms = Math.Sqrt(from.DistanceSquared(target.Position)) * 1000 / speed;
-        return (int)Math.Clamp(Math.Round(ms), 1, MaxProjectileFlightMs);
+        var ms = speed <= 0 || position is null ? DefaultProjectileFlightMs : (int)Math.Clamp(Math.Round(distance * 1000 / speed), 1, MaxProjectileFlightMs);
+        return (ms, ms);
     }
 
     /// <summary>One 0x3803 per projectile row (Rapid Fire: three arrows, ids 140300001-3), each with its hit's sequence number.</summary>
@@ -149,10 +151,10 @@ partial class GameSession
     /// <summary>A projectile skill's 0x3803s now and its hits after the flight; any other skill's hits at once.</summary>
     List<byte[]> HitOrFire(int skill, Target target, IReadOnlyList<Hit> hits, byte uid, long now)
     {
-        if (data.Skill(skill) is { } definition && ProjectileFlightMs(definition, target) is > 0 and var flight)
+        if (data.Skill(skill) is { } definition && ProjectileFlight(definition, target) is { } flight)
         {
-            pendingHits.Add(new(now + flight, skill, target.Key, hits, uid));
-            return FireProjectiles(definition, skill, target, uid, flight);
+            pendingHits.Add(new(now + flight.Arrival, skill, target.Key, hits, uid));
+            return FireProjectiles(definition, skill, target, uid, flight.Announced);
         }
         return ApplyHits(skill, target, hits, uid, now);
     }
