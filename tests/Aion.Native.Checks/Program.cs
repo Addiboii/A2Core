@@ -1658,6 +1658,13 @@ var gloveBind = await staffSession.HandleAsync(new PacketWriter().U16(0x562f).I6
 var gloveRow = staffStore.Items.Single(i => i.WireId == 9501);
 Check(gloveBind[0][13] == 2 && gloveBind[0].Length == 14 + 2 * 6 + 1 && gloveRow.Upgrades.GetProperty("soul_stats").GetArrayLength() == 2
       && gloveRow.Upgrades.GetProperty("soul_bind").GetInt32() == 1, "a bound item's stats are sent in 0x5630 and stored on it");
+// The item detail's tail after the godstones (same recording, 0x561b #49975 of the gloves at bind count 3).
+Check(Convert.ToHexString(GamePackets.DetailTail(new PacketWriter(), [(41, 106), (194, 20), (2, 14)]).ToArray())
+      == "00" + "0329006A000000C2001400000002000E000000" + "03290000000000C20000000000020000000000" + "0000000000",
+      "item detail: soul stats as _sub_stats, their types at 0 as _add_sub_stats (recorded)");
+var gloveTail = Convert.ToHexString(GamePackets.DetailTail(new PacketWriter(), gloveRow.Upgrades.GetProperty("soul_stats").EnumerateArray()
+    .Select(s => (s[0].GetInt32(), s[1].GetInt32())).ToList()).ToArray());
+Check(gloveBind.Any(b => Op(b) == 0x561b && Convert.ToHexString(b).Contains(gloveTail)), "the bound item's update (0x561b) carries its soul stats");
 // Equip (live ItemEquip_RQ 0xe247): key 13 into the torso slot; the reply is the next opcode. Another
 // opcode of the same length is not an equip.
 Check((await staffSession.HandleAsync(new PacketWriter().U16(0x5a0a).I64(13).U8(5).ToArray(), Now)).Count == 0

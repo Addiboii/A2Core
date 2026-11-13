@@ -1410,7 +1410,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
                 equipment ? new EquipDetail((data?.ItemLevel(item.TemplateId) ?? 1) + Enchants.Effect(item.TemplateId, EnchantOf(item)).ItemLevel
                     + MagicStonesOf(item).Sum(s => s.Grade), equipped ? (byte)slot : (byte)0,
                     (byte)EnchantOf(item), SoulBindCount(item) > 0 ? owner : 0, SoulBindCount(item), GodstonesOf(item), (byte)EnchantOf(item, "exceed"),
-                    MagicStonesOf(item)) : null));
+                    MagicStonesOf(item), SoulStatsOf(item)) : null));
         }
         return result;
     }

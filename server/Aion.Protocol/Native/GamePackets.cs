@@ -62,12 +62,16 @@ public sealed record InventoryItem(long Key, int ItemId, long Count, byte Contai
 // _surpass_enchant_level (CANDIDATE: the usmap detail has no separate exceed field).
 // MagicStones: the imprinted manastone slots {stone item id, EStat, grade} (OBSERVED in the item detail of 0x561b, 2026-11-06 234912
 // i49416: count 02, then 01e9ab1f c700 02 | 01e9ab1f 3301 01).
+// SubStats: the soul-bind stats {u16 EStat, i32}, sent as _sub_stats and again as _add_sub_stats with the same types at 0 (OBSERVED,
+// every 0x561b of a soul-bound item in the community recordings of 2026-11-04 and 11-06: 7 of 7, 3 and 4 stats).
 public sealed record EquipDetail(int ItemLevel, byte EquipSlot, byte EnchantLevel = 0, long SoulBindOwner = 0, byte SoulBindCount = 0,
-    IReadOnlyList<int>? Godstones = null, byte Exceed = 0, IReadOnlyList<(int Stone, int Stat, int Grade)>? MagicStones = null)
+    IReadOnlyList<int>? Godstones = null, byte Exceed = 0, IReadOnlyList<(int Stone, int Stat, int Grade)>? MagicStones = null,
+    IReadOnlyList<(int Type, int Value)>? SubStats = null)
 {
     public bool Equals(EquipDetail? other) => other is not null && ItemLevel == other.ItemLevel && EquipSlot == other.EquipSlot && EnchantLevel == other.EnchantLevel
         && SoulBindOwner == other.SoulBindOwner && SoulBindCount == other.SoulBindCount && Exceed == other.Exceed
-        && (Godstones ?? []).SequenceEqual(other.Godstones ?? []) && (MagicStones ?? []).SequenceEqual(other.MagicStones ?? []);
+        && (Godstones ?? []).SequenceEqual(other.Godstones ?? []) && (MagicStones ?? []).SequenceEqual(other.MagicStones ?? [])
+        && (SubStats ?? []).SequenceEqual(other.SubStats ?? []);
     public override int GetHashCode() => HashCode.Combine(ItemLevel, EquipSlot, EnchantLevel, SoulBindOwner, SoulBindCount, Exceed);
 }
 
@@ -643,9 +647,23 @@ public static class GamePackets
             w.I64(d.SoulBindOwner).U8(d.SoulBindCount)
                 .Varint(3);              // three godstone slots
             for (var i = 0; i < 3; i++) w.I32(d.Godstones is { } g && i < g.Count ? g[i] : 0);
-            w.Zeros(7).U8(0);            // seven empty arrays, skin extraction count
+            DetailTail(w, d.SubStats);
         }
         return w;
+    }
+
+    /// <summary>
+    /// The item detail after the godstones: _arcana_main_stats (empty), _sub_stats (the soul-bind stats), _add_sub_stats (their
+    /// types at 0), the four skill arrays (empty) and _skin_extraction_count 0 (usmap order; OBSERVED, see EquipDetail).
+    /// </summary>
+    public static PacketWriter DetailTail(PacketWriter w, IReadOnlyList<(int Type, int Value)>? subStats)
+    {
+        var stats = subStats ?? [];
+        w.Varint(0).Varint(stats.Count);
+        foreach (var (type, value) in stats) w.U16(type).I32(value);
+        w.Varint(stats.Count);
+        foreach (var (type, _) in stats) w.U16(type).I32(0);
+        return w.Zeros(4).U8(0);
     }
 
     /// <summary>Candidate 0x5611 equipped inventory with one item (observed record widths).</summary>
