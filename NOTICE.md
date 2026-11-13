@@ -32,6 +32,12 @@ and AIon2-Dps-Meter (GPL-3.0) were used only to compare packet layouts; no code 
   boxes, recovery orbs, the item-use-by-template and death-reason messages, separate staff sessions and ranks,
   configurable rates, the diagnostics API, nightly backups, and several tool fixes. The forks name KiskEmu as the
   source of parts of their own work.
+- **A community fork** (called "the community fork" in the code): its work was ported after each part was checked
+  against our own recordings of the official server: the premium shop and its platform gate (the goods list in
+  `tools/data/platform-goods.json` starts from that fork's recording of the official goods list), the battle pass
+  claims, kill experience, the level-up and respawn order, used-up objects, map-event cutscene keys, the swim snapshot,
+  the Kibelisk teleport, party focus targets, bag sort, item use, HP/MP regeneration, NPC skill casts and projectiles,
+  Spiritmaster spirits, and the world entry order.
 - **The release thread on RaGEZONE**: the reports and questions there (the Asmodian race bug, the Shadow Forest quest,
   the administrator launcher and NCGuard, closed registration, running on Windows) shaped the fixes and the
   documentation.
