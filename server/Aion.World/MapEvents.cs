@@ -457,11 +457,13 @@ public sealed class MapEventRun
                    && (index is not { } i || Step!.Objectives.Length <= i || ReferenceEquals(Step.Objectives[i], o)), now);
 
     /// <summary>
-    /// An object a UseEnvObj objective names: its spawn entry, or its EnvObjData name. <paramref name="envName"/> is set when the
-    /// spawn entry is named after another object (Munihelle's E_D0_FireWood_002 spawned as E_D0_FireWood_001_2): that object
-    /// answers to its own name and its exact spawn name, not to the other's name (the second batch never counted).
+    /// An object a UseEnvObj objective names: exactly its spawn entry or exactly its EnvObjData name (CANDIDATE, from the client's
+    /// tables: of the 2232 UseEnvObj names of map-events.json, the spawn-name prefix found placed objects for 1057, this rule for
+    /// 2000; the prefix also took other EnvObjData rows' objects, such as AbyssStone_01's V01/V02 variants). Munihelle's second
+    /// firewood (E_D0_FireWood_002 spawned as E_D0_FireWood_001_2) answers to its own name, not the first batch's (live 2026-10-28).
+    /// Without an EnvObjData name, the spawn-name rule of NPCs.
     /// </summary>
-    static bool NamesObject(MapEventObjective o, string spawnName, string? envName) => envName is null ? Names(o, spawnName)
+    internal static bool NamesObject(MapEventObjective o, string spawnName, string? envName) => envName is null ? Names(o, spawnName)
         : o.Names.Any(n => string.Equals(n, envName, StringComparison.OrdinalIgnoreCase) || string.Equals(n, spawnName, StringComparison.OrdinalIgnoreCase));
 
     public bool UsedObject(string spawnName, long now, string? envName = null) =>

@@ -65,14 +65,14 @@ class WorldObjectTests(unittest.TestCase):
         linked = {o['env'] for m in data['maps'].values() for o in m['objects'] if 'loot' in o}
         self.assertEqual(linked, {1100311, 1100312, 1200018, 1200019, 1200020})
 
-    def test_spawn_named_after_another_object_keeps_its_own_name(self):
-        names = {'e_d0_firewood_001', 'e_d0_firewood_002'}
-        self.assertTrue(world_objects.misleading('E_D0_FireWood_001_2', 'E_D0_FireWood_002', names))
-        self.assertFalse(world_objects.misleading('E_D0_FireWood_001_1', 'E_D0_FireWood_001', names))
-        self.assertFalse(world_objects.misleading('Gather_Herb_Spawner_01', 'E_D0_FireWood_002', names))
+    def test_every_placed_object_has_its_envobjdata_name(self):
         data = json.loads((ROOT / 'tools/data/world-objects.json').read_text(encoding='utf-8'))
-        fire = {o['name']: o.get('env_name') for o in data['maps']['110002']['objects'] if 'FireWood' in o['name']}
-        self.assertEqual(fire, {'E_D0_FireWood_001_1': None, 'E_D0_FireWood_001_2': 'E_D0_FireWood_002'})
+        names = data['env_names']
+        # Munihelle's second firewood is spawned as E_D0_FireWood_001_2 but is EnvObjData E_D0_FireWood_002.
+        fire = {o['name']: names.get(str(o['env'])) for o in data['maps']['110002']['objects'] if 'FireWood' in o['name']}
+        self.assertEqual(fire, {'E_D0_FireWood_001_1': 'E_D0_FireWood_001', 'E_D0_FireWood_001_2': 'E_D0_FireWood_002'})
+        placed = {o['env'] for m in data['maps'].values() for o in m['objects']}
+        self.assertTrue({str(e) for e in placed} >= set(names) and len(names) > 0.95 * len(placed))
 
     def test_doors(self):
         dungeons = {'2': {'name': 'World_L_A_Layer_01', 'type': 'InstanceLayer'}, '23': {'name': 'Abyss_Reshanta_C', 'type': 'Abyss'}}

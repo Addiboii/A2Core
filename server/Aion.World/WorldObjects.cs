@@ -21,8 +21,6 @@ public sealed record WorldObject(
     [property: JsonPropertyName("flight_ring")] bool FlightRing = false,
     // An exit door (EnvObjData Usage MoveMap): the MapData teleport point it leads to (tools/world_objects.py).
     [property: JsonPropertyName("move_to")] string? MoveTo = null,
-    // Its EnvObjData name, when the spawn entry is named after another object (tools/world_objects.py).
-    [property: JsonPropertyName("env_name")] string? EnvName = null,
     // EnvObj_Destroy objects: the hits that break one (EnvObjData HitLimit; 0/1: one) and the skills that count (empty: any).
     [property: JsonPropertyName("hit_limit")] int HitLimit = 0,
     [property: JsonPropertyName("hit_skills")] int[]? HitSkills = null,
@@ -39,6 +37,8 @@ public sealed record WorldObject(
     [property: JsonPropertyName("finish_ms")] int FinishMs = 0)
 {
     public Vector3d At => new(Position[0], Position[1], Position[2]);
+    /// <summary>Its EnvObjData name (world-objects.json env_names); null when the row has none.</summary>
+    public string? EnvName => WorldObjects.EnvName(Env);
     /// <summary>EnvObj_Destroy (ERelationshipEntity 15): broken by hits rather than used.</summary>
     public bool Destructible => Relationship == 15;
     public int HitsToBreak => Math.Max(1, HitLimit);
@@ -97,16 +97,20 @@ public static class WorldObjects
 
     sealed record MapEntry([property: JsonPropertyName("objects")] WorldObject[] Objects,
                            [property: JsonPropertyName("triggers")] TriggerArea[] Triggers);
-    sealed record File([property: JsonPropertyName("maps")] Dictionary<string, MapEntry> Maps);
+    sealed record File([property: JsonPropertyName("maps")] Dictionary<string, MapEntry> Maps,
+                       [property: JsonPropertyName("env_names")] Dictionary<string, string>? EnvNames = null);
 
-    static readonly Lazy<Dictionary<string, MapEntry>> maps = new(() =>
+    static readonly Lazy<File> file = new(() =>
     {
         using var stream = typeof(WorldObjects).Assembly.GetManifestResourceStream("world-objects.json")
             ?? throw new InvalidOperationException("world-objects.json is not embedded");
-        return (JsonSerializer.Deserialize<File>(stream) ?? throw new InvalidDataException("world-objects.json")).Maps;
+        return JsonSerializer.Deserialize<File>(stream) ?? throw new InvalidDataException("world-objects.json");
     });
 
-    static MapEntry? Map(int mapId) => maps.Value.GetValueOrDefault(mapId.ToString(System.Globalization.CultureInfo.InvariantCulture));
+    static MapEntry? Map(int mapId) => file.Value.Maps.GetValueOrDefault(mapId.ToString(System.Globalization.CultureInfo.InvariantCulture));
+
+    /// <summary>A placed object's EnvObjData name by its id (tools/world_objects.py env_names).</summary>
+    public static string? EnvName(int env) => file.Value.EnvNames?.GetValueOrDefault(env.ToString(System.Globalization.CultureInfo.InvariantCulture));
 
     public static IReadOnlyList<WorldObject> ObjectsOn(int mapId) => Map(mapId)?.Objects ?? [];
     public static IReadOnlyList<TriggerArea> TriggersOn(int mapId) => Map(mapId)?.Triggers ?? [];

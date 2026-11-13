@@ -170,6 +170,14 @@ static class MapEventChecks
         C(munihelle.StepOrder == 4 && munihelle.WantsObject(second.Name, second.EnvName), "the second batch: the second firewood counts by its own name");
         munihelle.UsedObject(second.Name, 4000, second.EnvName);
         C(munihelle.StepOrder == 5, "using it ends the step");
+        // UseEnvObj goals name an object exactly by its spawn entry or its EnvObjData name (world-objects.json env_names).
+        bool Named(string goal, int map, string spawn) => WorldObjects.ObjectsOn(map).Single(o => o.Name == spawn) is var obj
+            && MapEventRun.NamesObject(new MapEventObjective(1, "UseEnvObj", [goal, "1"]), obj.Name, obj.EnvName);
+        C(Named("E_PD_Bakron_SpiritAltar_01", 600071, "BakronIsland_Easy_SpiritAltar_Wind")
+          && Named("E_PD_ReforgedAbyss_AbyssStone_01_V01_1", 600082, "E_PD_ReforgedAbyss_AbyssStone_01_V01_1")
+          && Named("E_PD_ReforgedAbyss_AbyssStone_01", 600082, "E_PD_ReforgedAbyss_AbyssStone_01_1")
+          && !Named("E_PD_ReforgedAbyss_AbyssStone_01", 600082, "E_PD_ReforgedAbyss_AbyssStone_01_V01_1"),
+          "UseEnvObj by EnvObjData name (Bakron's wind altar) or spawn entry; another row's variant (AbyssStone_01_V01) is not taken");
         // Its ending (step 6): Elvida at 70% sends Maard away; at 40% she turns companion, the Dredgion comes, the friendly Elvida
         // follows the player into the Drakan wave (step 7).
         munihelle.PositionAt(n => n == "World_D_Starter_HQ001_TriggerActor_4", _ => false, 5000);

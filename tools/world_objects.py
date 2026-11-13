@@ -186,22 +186,12 @@ def party_portals(rows, dungeons, served_types=SERVED_TYPES):
     return out
 
 
-def misleading(spawn, own, env_names):
-    """A spawn entry whose name is another EnvObjData object's name (exactly or with a _n suffix)."""
-    spawn, own = spawn.lower(), own.lower()
-    if not own or spawn == own or spawn.startswith(own + '_'):
-        return False
-    parts = spawn.split('_')
-    return any('_'.join(parts[:i]) in env_names for i in range(len(parts), 1, -1))
-
-
 def objects(data, rows, wanted, gathers=None, everything=False, portals=None, dungeons=None, chests=None):
     """Placed EnvObjs: quest objects, gather nodes and the wanted ids; <paramref>everything</paramref> keeps every placed
     object with a row (instance maps: map events name walls, wagons and doors by spawn name)."""
     gathers = gathers or {}
     portals = portals or {}
     chests = chests or {}
-    env_names = {(row['name'] or '').lower() for row in rows.values()}
     found = []
     for record in data.get('SpawnInfoList', []):
         for entry in record.get('EnvObjIdList') or []:
@@ -222,11 +212,6 @@ def objects(data, rows, wanted, gathers=None, everything=False, portals=None, du
                               'position': [round(loc['X'], 1), round(loc['Y'], 1), round(loc['Z'], 1)], 'yaw': round(rot['Yaw'], 3),
                               'interact_time': row['interact_time'], 'interact_range': row['interact_range'],
                               'relationship': row['relationship']})
-                # Map events name an object by its spawn entry or its EnvObjData name. A spawn entry named after another
-                # object (Munihelle's second firewood, E_D0_FireWood_002, spawned as E_D0_FireWood_001_2) carries its own
-                # name, which is then the only one it answers to.
-                if misleading(record.get('Name') or '', row['name'] or '', env_names):
-                    found[-1]['env_name'] = row['name']
                 if gather:
                     # [..., gather gauge, attempts]: EnvObjData InteractCount is the node's attempts (1-3; guides: three tries).
                     found[-1]['gather'] = gather + [row['interact_count'] or 3]
@@ -339,8 +324,12 @@ def build():
             entry = maps.setdefault(str(data['MapId']), {'objects': [], 'triggers': []})
             entry['objects'].extend(placed)
             entry['triggers'].extend(areas)
+    # Map events' UseEnvObj goals name an object by its spawn entry or its EnvObjData name (the server matches either exactly):
+    # every placed object's EnvObjData name, by id.
+    placed = {o['env'] for m in maps.values() for o in m['objects']}
+    env_names = {str(env): rows[env]['name'] for env in sorted(placed) if rows[env]['name']}
     return {'source': 'MapData.dat SpawnInfoList/TriggerActorDataMap + EnvObjData.dat', 'maps': maps,
-            'recovery_orbs': recovery_orbs(rows)}
+            'env_names': env_names, 'recovery_orbs': recovery_orbs(rows)}
 
 
 def main():
