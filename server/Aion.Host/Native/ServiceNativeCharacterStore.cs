@@ -510,6 +510,12 @@ public sealed partial class ServiceNativeCharacterStore(string token, WorldIdent
         return await game.CrystallizeAsync(identity.Account, character, targets, ct);
     }
 
+    public async Task<bool> UseWingItemAsync(Guid character, Guid item, long revision, int wingId, CancellationToken ct)
+    {
+        await ValidateAsync(ct);
+        return await game.UseWingItemAsync(identity.Account, character, item, revision, wingId, ct);
+    }
+
     public async Task<bool> ConsumeItemAsync(Guid character, Guid item, long revision, int count, CancellationToken ct)
     {
         await ValidateAsync(ct);

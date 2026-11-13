@@ -1177,6 +1177,15 @@ public sealed partial class PostgresGameplayStore(NpgsqlDataSource source) : IGa
         await t.CommitAsync(ct); return true;
     }
 
+    public async Task<bool> UseWingItemAsync(VerifiedAccount account, Guid character, Guid item, long revision, int wingId, CancellationToken ct=default)
+    {
+        if(wingId<=0) return false;
+        await using var c=await source.OpenConnectionAsync(ct); await using var t=await c.BeginTransactionAsync(ct);
+        if(!await Own(c,t,account.AccountId,character,ct) || !await Consume(c,t,character,item,revision,1,ct)) return false;
+        if(await Scalar(c,t,"INSERT INTO game.character_wings(character_id,wing_id) VALUES($1,$2) ON CONFLICT DO NOTHING RETURNING wing_id",ct,character,wingId) is null) return false;
+        await t.CommitAsync(ct); return true;
+    }
+
     public async Task<bool> SetDefaultRideAsync(VerifiedAccount account, Guid character, int rideId, CancellationToken ct=default)
     {
         await using var c=await source.OpenConnectionAsync(ct); await using var t=await c.BeginTransactionAsync(ct);

@@ -126,6 +126,7 @@ public sealed partial class GameSession
             "GetSocialAction" when use.Values is [var emoteText, ..] && int.TryParse(emoteText, out var emote) => await UseSocialActionItemAsync(store, character, row, emote, reply, ct),
             "GetStigmaShard" when use.Values is [var shardText, ..] && int.TryParse(shardText, out var shards) && shards > 0 =>
                 await UseStigmaShardItemAsync(store, character, row, shards, reply, ct),
+            "GetWing" when use.Values is [var wingText, ..] && int.TryParse(wingText, out var wing) => await UseWingItemAsync(store, character, row, wing, reply, ct),   // GameSession.Wings.cs
             "GetSkillPoint" when use.Values is [var pointText, ..] && int.TryParse(pointText, out var skillPoints) =>
                 await UseSkillPointItemAsync(store, character, row, skillPoints, reply, ct),   // GameSession.ItemPoints.cs
             "GetDaevanionPoint" when use.Values is [var kind, var pointText, ..] && int.TryParse(pointText, out var daevanion) =>

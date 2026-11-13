@@ -1531,7 +1531,24 @@ Check((await staffSession.HandleAsync(new PacketWriter().U16(0x5674).U8(0).I32(9
     var toDefault = await lost.HandleAsync(new PacketWriter().U16(0x5674).U8(0).I32(30200600).ToArray(), Now);
     Check(toDefault[0].SequenceEqual(GamePackets.WingChangeReply(30200600, false)) && staffStore.EquippedWing == 0 && lost.Resource.HpMax == hpWithDefault,
           "the implied default wing clears the stored choice; its stats are back");
-    staffStore.Wings.Add(30100300);
+    // A wing item (532400015, GetWing 30100300): used up, the wing registered, WingAcquire_NT 0x5673 {key i32, wing, 0} after
+    // the 0x5619 (OBSERVED 2026-11-06 234912 #61770/#61774); the other race's wing (532400016, 40100300) and a second one are refused.
+    Check(Convert.ToHexStringLower(GamePackets.WingAcquire(0x2765, 30201900)) == "7356652700002cd8cc0100", "0x5673 as recorded (#61774)");
+    staffStore.Items.AddRange([Stored(532400015, 2, "bag", null, 9601), Stored(532400016, 1, "bag", null, 9602)]);
+    await lost.InventoryChangesAsync(default);
+    var wingUse = await lost.HandleAsync(new PacketWriter().U16(0x5612).I64(9601).ToArray(), Now);
+    Check(wingUse[0].SequenceEqual(RidePackets.ItemUseReply(0, 9601, 532400015)) && wingUse.FindIndex(b => Op(b) == 0x5673) > wingUse.FindIndex(b => Op(b) == 0x5619)
+          && wingUse.Any(b => b.SequenceEqual(GamePackets.WingAcquire(lost.PlayerKey, 30100300))) && !wingUse.Any(b => Op(b) == 0x5672)
+          && staffStore.Wings.Contains(30100300) && staffStore.Items.Single(i => i.WireId == 9601).Quantity == 1,
+          "a wing item registers its wing: one used, 0x5673 after 0x5619, the wing stored");
+    Check((await lost.HandleAsync(new PacketWriter().U16(0x5674).U8(0).I32(30100300).ToArray(), Now))[0].SequenceEqual(GamePackets.WingChangeReply(30100300, false)),
+          "the acquired wing can be worn at once");
+    Check(BitConverter.ToUInt16((await lost.HandleAsync(new PacketWriter().U16(0x5612).I64(9601).ToArray(), Now + 5000))[0], 2) == RidePackets.ItemUseFail
+          && staffStore.Items.Single(i => i.WireId == 9601).Quantity == 1
+          && BitConverter.ToUInt16((await lost.HandleAsync(new PacketWriter().U16(0x5612).I64(9602).ToArray(), Now + 10_000))[0], 2) == RidePackets.ItemUseFail
+          && staffStore.Items.Any(i => i.WireId == 9602), "an owned wing's item or the other race's is refused and kept");
+    staffStore.Items.RemoveAll(i => i.WireId is 9601 or 9602);
+    if (!staffStore.Wings.Contains(30100300)) staffStore.Wings.Add(30100300);
     staffStore.Wings.Add(30200600);
 }
 // Quests: a character without quests starts on HQ1101010 (opening quest skipped), which the world entry lists.
@@ -2925,8 +2942,9 @@ Check(rewarded.Count(b => Op(b) == 0x8d11) == 1 && jo.DevelopmentQuestLog().Get(
       && rewarded.Any(b => Op(b) == 0x922e) && jo.MapEventRuns.Any(r => r.Name == "Dungeon_0005_MapEvent"),
       "the reward auto-acquires HQ1101021 (0x8d11) and Dungeon_0005_MapEvent joins (0x922e)");
 Check(rewarded.Any(b => Op(b) == 0x5676) && rewarded.Any(b => Op(b) == 0x8d00 && b.AsSpan().IndexOf(new PacketWriter().U8(13).I32(GameSession.FpMax).ToArray()) > 0)
-      && rewarded.Any(b => Op(b) == 0x5672),
-      "HQ1101020's reward ascends the character: the flight gauge's maximum (0x8d00 type 13, 250,000), WingChange 0x5676, the wing list");
+      && rewarded.FindIndex(b => b.SequenceEqual(GamePackets.WingAcquire(jo.PlayerKey, GamePackets.DefaultWing(1)))) is var acquiredAt and >= 0
+      && rewarded.FindIndex(b => Op(b) == 0x364a) > acquiredAt && !rewarded.Any(b => Op(b) == 0x5672),
+      "HQ1101020's reward ascends the character: the flight gauge's maximum (0x8d00 type 13, 250,000), WingChange 0x5676, 0x5673 for the default wing before the stats (as #35172)");
 Check(GameSession.AscensionQuests.Select(c => book.Find(c)!).ToList() is [var lightAscent, var darkAscent]
       && lightAscent.Race == "Light" && darkAscent.Race == "Dark" && lightAscent.FinishNpc == darkAscent.FinishNpc
       && book.Find(lightAscent.Next!)!.Map == 200005 && book.Find(darkAscent.Next!)!.Map == 200005,
@@ -3892,6 +3910,12 @@ sealed partial class FakeStore : INativeCharacterStore
         return Task.FromResult<RideRecord?>(RideRows[index]);
     }
     public Task<bool> ConsumeItemAsync(Guid character, Guid item, long revision, int count, CancellationToken ct) => Task.FromResult(Consume(item, revision, count));
+    public Task<bool> UseWingItemAsync(Guid character, Guid item, long revision, int wingId, CancellationToken ct)
+    {
+        if (Wings.Contains(wingId) || !Consume(item, revision, 1)) return Task.FromResult(false);
+        Wings.Add(wingId);
+        return Task.FromResult(true);
+    }
     public Task<bool> SoulBindItemAsync(Guid character, Guid item, byte count, CancellationToken ct, IReadOnlyList<(int Type, int Value)>? stats = null)
     {
         var index = Items.FindIndex(i => i.InstanceId == item);

@@ -99,6 +99,8 @@ public interface INativeCharacterStore : IAsyncDisposable
     Task<bool> CrystallizeAsync(Guid character, IReadOnlyList<(int RideId, int Points, int CrystalType)> targets, CancellationToken ct) => Task.FromResult(false);
     /// <summary>Uses up count of a bag stack (an item used for its effect).</summary>
     Task<bool> ConsumeItemAsync(Guid character, Guid item, long revision, int count, CancellationToken ct) => Task.FromResult(false);
+    /// <summary>A wing item used up and its wing registered, together (false when the wing is already registered).</summary>
+    Task<bool> UseWingItemAsync(Guid character, Guid item, long revision, int wingId, CancellationToken ct) => Task.FromResult(false);
     /// <summary>Whether a character already uses this name (the name check answers "taken").</summary>
     Task<bool> NameTakenAsync(string name, CancellationToken ct) => Task.FromResult(false);
     /// <summary>

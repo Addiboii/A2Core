@@ -1168,8 +1168,8 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
     /// <summary>
     /// The quest whose turn-in ascends the character. OBSERVED in the 2026-10-19 recording at HQ1101020's reward (Ashar): the
     /// flight gauge's maximum (0x8d00 type 13, 250,000), WingChange 0x5676 with the race's default wing, the stats, then the
-    /// Subspace's event and quests; the gauge then filled from 40,000 in 40,000 steps (a self skill, 5002). OURS: filled at once,
-    /// the wing list resent (0x5672; the official 0x5673/0xe295 notices are not decoded). The Dark chain's counterpart is
+    /// Subspace's event and quests; the gauge then filled from 40,000 in 40,000 steps (a self skill, 5002), WingAcquire 0x5673 for
+    /// the default wing right before the stats (#35172). OURS: filled at once; 0xe295 is not decoded. The Dark chain's counterpart is
     /// HQ2101050 (same Ashar turn-in, then "Spread Your Wings" HQ2101060 in the Subspace, as HQ1101021); only the Light one
     /// ascended, so an Asmodian never got wings.
     /// </summary>
@@ -1178,12 +1178,14 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
     List<byte[]> Ascend(int grade)
     {
         if (selected is { } state) selected = state with { Ascension = grade };
-        wingId = WingAtLoad();
+        // An ascended character wears its race's default wing (OBSERVED #35166/#35172: 0x5676 and 0x5673 with 30200600); a session
+        // without a stored character (development) has no grade to keep, so the default rule is applied here (OURS).
+        wingId = selected is null && grade >= 2 ? GamePackets.DefaultWing(profileRace) : WingAtLoad();
         if (resources is null) return [];
         resources.FpMax = resources.Fp = FpMax;
         // OBSERVED order (2026-10-19 recording): the gauge, WingChange 0x5676, then the stats (now with the wing's EquipStatList).
         return [GamePackets.CharPoints(playerKey, [(CharPoint.MaxFp, resources.FpMax), (CharPoint.Fp, resources.Fp)]),
-                GamePackets.WingChangeNotice(playerKey, wingId, false), .. RefreshStats(), GamePackets.WingList(OwnedWings()), GamePackets.GlideCooltime(playerKey)];
+                GamePackets.WingChangeNotice(playerKey, wingId, false), GamePackets.WingAcquire(playerKey, wingId), .. RefreshStats(), GamePackets.GlideCooltime(playerKey)];
     }
 
     /// <summary>Builder QuestAdd / QuestComplete / QuestCompleteStep / QuestDelete for a quest code or numeric id.</summary>

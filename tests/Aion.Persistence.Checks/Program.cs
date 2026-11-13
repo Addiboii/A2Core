@@ -234,12 +234,24 @@ await using(var source=NpgsqlDataSource.Create(connectionString))
     Check(await game.RewardQuestAsync(first,id,"HQ1101010",1133,[]) is long xp && xp>=1133,"a complete quest pays its experience");
     Check(await game.RewardQuestAsync(first,id,"HQ1101010",1133,[]) is null && (await game.QuestsAsync(first,id))!.Single().Status==4,"and only once (Rewarded)");
     await Reject(()=>game.SaveQuestAsync(first,id,quest with {Goals=[1]}),"invalid_quest");
+    // A wing item: used up and the wing registered in one transaction; an owned wing, another account or a stale revision refused.
+    var wingItem=(await game.AdminAsync(second,new AdminCommand(Guid.NewGuid(),id,"grant","test",101))).GetProperty("instanceId").GetGuid();
+    var wingRow=(await game.InventoryAsync(first,id))!.Items.Single(x=>x.InstanceId==wingItem);
+    Check(!await game.UseWingItemAsync(second,id,wingItem,wingRow.Revision,30201900) && !await game.UseWingItemAsync(first,id,wingItem,wingRow.Revision+1,30201900),
+          "wing item: another account or a stale revision is refused");
+    Check(await game.UseWingItemAsync(first,id,wingItem,wingRow.Revision,30201900) && (await game.InventoryAsync(first,id))! is var winged
+          && winged.Wings!.Contains(30201900) && !winged.Items.Any(x=>x.InstanceId==wingItem),"wing item: used up, the wing registered");
+    wingItem=(await game.AdminAsync(second,new AdminCommand(Guid.NewGuid(),id,"grant","test",101))).GetProperty("instanceId").GetGuid();
+    wingRow=(await game.InventoryAsync(first,id))!.Items.Single(x=>x.InstanceId==wingItem);
+    Check(!await game.UseWingItemAsync(first,id,wingItem,wingRow.Revision,30201900) && (await game.InventoryAsync(first,id))!.Items.Any(x=>x.InstanceId==wingItem),
+          "wing item: an owned wing is refused and the item kept");
+    Check(await game.ConsumeItemAsync(first,id,wingItem,wingRow.Revision,1),"(the kept wing item is used up again, for the counts below)");
     // Wings: staff registration, stored once per wing, read back with the owner's inventory.
     await Reject(()=>game.AdminAsync(second,new(Guid.NewGuid(),id,"wings",Wings:[])),"invalid_wings");
     await Reject(()=>game.AdminAsync(first,new(Guid.NewGuid(),id,"wings",Wings:[30200600])),"forbidden");
     await game.AdminAsync(second,new(Guid.NewGuid(),id,"wings",Wings:[30200600,30100300]));
     await game.AdminAsync(second,new(Guid.NewGuid(),id,"wings",Wings:[30200600,30200400]));
-    Check((await game.InventoryAsync(first,id))!.Wings!.SequenceEqual(new[]{30100300,30200400,30200600}),"wings stored once each and loaded with the inventory");
+    Check((await game.InventoryAsync(first,id))!.Wings!.SequenceEqual(new[]{30100300,30200400,30200600,30201900}),"wings stored once each and loaded with the inventory");
     // The worn wing (migration 073): only a registered wing, only by the owner, 0 clears; read back with the inventory.
     Check((await game.InventoryAsync(first,id))!.EquippedWing==0,"no wing choice stored by default");
     Check(!await game.SetWingAsync(first,id,40100300) && !await game.SetWingAsync(second,id,30100300),"an unregistered wing or another account's character is refused");

@@ -269,6 +269,8 @@ public interface IGameplayStore
     Task<bool> CrystallizeAsync(VerifiedAccount account, Guid character, IReadOnlyList<(int RideId, int Points, int CrystalType)> targets, CancellationToken ct = default);
     /// <summary>Uses up count of a bag stack (an item used for its effect), revision-checked.</summary>
     Task<bool> ConsumeItemAsync(VerifiedAccount account, Guid character, Guid item, long revision, int count, CancellationToken ct = default);
+    /// <summary>A wing item (Item.dat GetWing): one used up and the wing registered, together; false when either fails (already registered).</summary>
+    Task<bool> UseWingItemAsync(VerifiedAccount account, Guid character, Guid item, long revision, int wingId, CancellationToken ct = default) => Task.FromResult(false);
     /// <summary>Sets the default ride (an owned one, or 0 to clear).</summary>
     Task<bool> SetDefaultRideAsync(VerifiedAccount account, Guid character, int rideId, CancellationToken ct = default);
     /// <summary>Whether a character already uses this name (names are unique regardless of case).</summary>

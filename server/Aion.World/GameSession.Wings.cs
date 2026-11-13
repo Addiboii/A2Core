@@ -1,3 +1,4 @@
+using Aion.Application.Gameplay;
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -103,5 +104,22 @@ public sealed partial class GameSession
         var notice = GamePackets.WingChangeNotice(playerKey, wanted, skin);
         worldPlayer?.Map?.Broadcast(worldPlayer, [notice]);
         return [GamePackets.WingChangeReply(wanted, skin), notice, .. RefreshStats()];
+    }
+
+    /// <summary>
+    /// A wing item (Item.dat UseEffect GetWing [Wing.dat id]): used up, the wing registered (stored), then WingAcquire_NT 0x5673
+    /// (OBSERVED order: 0x5619, then 0x5673; no new 0x5672 list). Refused for a wing of the other race or one already registered
+    /// (CANDIDATE: the item stays).
+    /// </summary>
+    async Task<List<byte[]>?> UseWingItemAsync(INativeCharacterStore store, Guid character, ItemState row, int wing, bool reply, CancellationToken ct)
+    {
+        if (WingData.Of(wing) is not { } info || info.Race != profileRace || OwnsWing(wing)) return null;
+        var used = await Stored(async () => await store.UseWingItemAsync(character, row.InstanceId, row.Revision, wing, ct) ? [[]] : []);
+        if (used.Count == 0) return null;
+        registeredWings.Add(wing);
+        var replies = Used(row, reply);
+        replies.Add(GamePackets.WingAcquire(playerKey, wing));
+        replies.AddRange(await InventoryChangesAsync(ct, 0, DecreaseItemUse));
+        return replies;
     }
 }

@@ -833,6 +833,12 @@ public static class GamePackets
     public static byte[] WingChangeReply(int wingId, bool skin, int result = 0) => PacketWriter.Opcode(0x5675).U16(result).Bool(skin).I32(wingId).ToArray();
     /// <summary>0x5676 WingChange_NT: character key, packed is_wing_skin, wing id. CANDIDATE.</summary>
     public static byte[] WingChangeNotice(int key, int wingId, bool skin) => PacketWriter.Opcode(0x5676).Varint(key).Bool(skin).I32(wingId).ToArray();
+    /// <summary>
+    /// 0x5673 WingAcquire_NT: the player key i32, the wing, its enchant level. OBSERVED 2 of 2: 2026-10-19 231752 #35172 (ascension,
+    /// the default wing 30200600, right before the stats) and 2026-11-06 234912 #61774 (wing item 512400013, GetWing 30201900, 49 ms
+    /// after its 0x5619).
+    /// </summary>
+    public static byte[] WingAcquire(int key, int wingId, byte enchant = 0) => PacketWriter.Opcode(0x5673).I32(key).I32(wingId).U8(enchant).ToArray();
 
     /// <summary>Default wings (items 532400001/532400002 grant them on use): Light 30200600, Dark 40200601.</summary>
     public static int DefaultWing(int race) => race == 2 ? 40200601 : 30200600;
