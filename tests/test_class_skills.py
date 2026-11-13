@@ -75,6 +75,29 @@ class ClassSkillTests(unittest.TestCase):
             build_skill_list([(11020000, 1), (11020000, 2)])
 
 
+class SpiritFieldTests(unittest.TestCase):
+    @staticmethod
+    def entry(effect_type, values):
+        return {'relationships': {'effects': [{'rows': [{'EffectType': 'ESkillEffectType::' + effect_type, 'EffectValueList': values}]}]}}
+
+    def test_summon_row_names_spirit_element_abnormal_and_angle(self):
+        values = ['200', 'Vacant', '1', '1', 'x', 'TRUE', 'TRUE', '9500, 500', 'FALSE', '2920121', '1', 'CasterLookDir', '161100001', '45',
+                  'ElementalSummon', 'Water', '101', 'TRUE']
+        self.assertEqual(class_skills.summon_fields(self.entry('Spawn', values)),
+                         {'summon': {'npc': 2920121, 'element': 2, 'abnormal': 161100001, 'angle': 45}})
+        self.assertEqual(class_skills.summon_fields(self.entry('Spawn', ['2920036', '2', 'Random'])), {})
+
+    def test_despawn_row_names_elements(self):
+        self.assertEqual(class_skills.despawn_fields(self.entry('Despawn', ['TRUE', 'Fire, Water, Earth, Wind, Ancient'])), {'despawn': [1, 2, 4, 3, 5]})
+        self.assertEqual(class_skills.despawn_fields(self.entry('Damage', ['1'])), {})
+
+    def test_built_data_carries_the_four_summons(self):
+        skills = class_skills.data()['skills']
+        self.assertEqual({s: skills[s]['summon']['element'] for s in ('16100000', '16110000', '16120000', '16130000')},
+                         {'16100000': 1, '16110000': 2, '16120000': 3, '16130000': 4})
+        self.assertEqual(skills['16290001']['despawn'], [2])
+
+
 class GeneralCastTests(unittest.TestCase):
     def test_any_learned_class_skill_casts_with_its_costs_and_cooldown(self):
         state = state_for('Gladiator', 25)

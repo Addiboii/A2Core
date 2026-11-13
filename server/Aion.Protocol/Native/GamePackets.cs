@@ -775,6 +775,46 @@ public static class GamePackets
         return w.U32(spawnTag ?? (npc.UniqueKey != 0 ? npc.UniqueKey : (uint)npc.Key)).U8(0).ToArray();
     }
 
+    /// <summary>
+    /// 0xe239 ElementalSummonActivate_NT / 0xe23a ElementalSummonDeactivate_NT: a presence mask (1: the element and key, 2: the
+    /// lifetime), EElementalSummonGroupType u8, the spirit's key varint, [lifetime ms i32]. OBSERVED 2026-11-04 192703 (2.0.6):
+    /// `39e2 01 04 dded01` (#11367), `3ae2 01 04 dded01` (#11436); the Ancient spirit `39e2 03 05 868301 30750000` (30 s).
+    /// </summary>
+    public static byte[] SpiritActivate(int element, int key, int? lifeMs = null)
+    {
+        var w = PacketWriter.Opcode(0xe239).U8((byte)(lifeMs is null ? 1 : 3)).U8((byte)element).Varint(key);
+        return (lifeMs is { } life ? w.I32(life) : w).ToArray();
+    }
+
+    public static byte[] SpiritDeactivate(int element, int key) => PacketWriter.Opcode(0xe23a).U8(1).U8((byte)element).Varint(key).ToArray();
+
+    /// <summary>
+    /// 0x3641 for a Spiritmaster's own spirit. OBSERVED 2026-11-04 192703 (2.0.6; 21 summons of one level-45 owner, #11374 rebuilt
+    /// byte for byte): mask 0x101f, the NpcAppear head, HP, 13 state values (<paramref name="state"/>: the recorded owner's; they
+    /// changed with the owner), relationship 1, one abnormal {mask 0x11, uid 1, the summon's abnormal, duration -1, the permanent
+    /// expiry, the owner, the summon level, 02, the owner's position}, move state 7 / substate 2 (floating), reason 6, the owner's
+    /// key i32, stats {205: 2197, 208: 319} (as recorded), the owner's level, the element's spawn act, 00.
+    /// </summary>
+    public static byte[] SpiritAppear(int key, int npcId, Vector3d position, double direction, int hp, int ownerKey, Vector3d ownerPosition,
+        int abnormal, int summonLevel, int level, int spawnAct, IReadOnlyList<int>? state = null, IReadOnlyList<(int Type, int Value)>? stats = null)
+    {
+        var w = PacketWriter.Opcode(0x3641).Varint(key).U16(0x101f).U8(0).U32((uint)npcId).U8(0).U8(2)
+            .Vec3(position).F32(direction).U16(HeadingU16(direction)).U8(1).Varint(hp).Varint(hp);
+        foreach (var v in state ?? SpiritState) w.I32(v);
+        w.U8(1).Varint(1).U8(0x11).Varint(1).I32(abnormal).I64(-1).I64(PermanentAbnormalExpiry).Varint(ownerKey).U8((byte)summonLevel).U8(2).Vec3(ownerPosition);
+        w.U8(NpcAppearance.FlyingOnAirStop).U8(2).U8(NpcAppearance.NpcSpawnReason).I32(ownerKey);
+        stats ??= SpiritStats;
+        w.U8((byte)stats.Count);
+        foreach (var (type, value) in stats) w.U16((ushort)type).I32(value);
+        return w.I32(level).I32(spawnAct).U8(0).ToArray();
+    }
+
+    /// <summary>The spirit appear's state values and stats as recorded for a level-45 owner (2026-11-04 192703; CANDIDATE elsewhere).</summary>
+    public static readonly int[] SpiritState = [3308, 3308, 0, 0, 0, 106000, 100, 150000, 1, 0, 100000, 0, 570000];
+    public static readonly (int Type, int Value)[] SpiritStats = [(205, 2197), (208, 319)];
+    /// <summary>A permanent abnormal's expiry on the wire (2099-12-31 15:00 UTC; OBSERVED in the spirit appears).</summary>
+    public const long PermanentAbnormalExpiry = 0x3bb2ad57580;
+
     /// <summary>0x8d00 entity points: kind 2 (i64), one entry, type 0 (HP). HP 0 is the kill.</summary>
     /// <summary>
     /// 0x8d00 CharPointUpdate_NT: key | mask (1: i32 map, 2: i64 map) | n,{type u8, i32} | n,{type u8, i64}.

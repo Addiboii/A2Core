@@ -102,6 +102,37 @@ def range_fields(entry):
             'follow_range': _whole(raw.get('NeedSkillFollowRange'))}
 
 
+# EElementalSummonGroupType (usmap 2.0.6): the element numbers ElementalSummonActivate_NT 0xe239 carries.
+ELEMENTS = {'Fire': 1, 'Water': 2, 'Wind': 3, 'Earth': 4, 'Ancient': 5}
+
+
+def _effect_rows(entry, effect_type):
+    for group in entry.get('relationships', {}).get('effects', []):
+        for row in group.get('rows', []):
+            if _short(row.get('EffectType')) == effect_type:
+                yield [str(v).strip() for v in row.get('EffectValueList') or []]
+
+
+def summon_fields(entry):
+    """A Spiritmaster summon (SkillEffect Spawn row with ElementalSummon): {'summon': {npc, element, abnormal, angle}}. The row's
+    EffectValueList [9] NpcData id (the spirit's level-1 row), [12] the abnormal it appears with, [13] the angle off the caster's
+    look direction, [14] ElementalSummon, [15] the element (Skill.dat/SkillEffect.dat of the catalogue)."""
+    for values in _effect_rows(entry, 'Spawn'):
+        if len(values) > 15 and values[14] == 'ElementalSummon' and values[15] in ELEMENTS and values[9].isdigit():
+            return {'summon': {'npc': int(values[9]), 'element': ELEMENTS[values[15]], 'abnormal': int(values[12] or 0),
+                               'angle': int(values[13] or 0)}}
+    return {}
+
+
+def despawn_fields(entry):
+    """The elements a Despawn row sends away ([1]: a comma list of element names; Return: All Spirits names all five)."""
+    for values in _effect_rows(entry, 'Despawn'):
+        elements = [ELEMENTS[n.strip()] for n in values[1].split(',') if n.strip() in ELEMENTS] if len(values) > 1 else []
+        if elements:
+            return {'despawn': elements}
+    return {}
+
+
 def cast_row(entry):
     facts = entry.get('facts', {})
     return {
@@ -116,6 +147,8 @@ def cast_row(entry):
         'damage': damage_rows(entry),
         **range_fields(entry),
         **chain_fields(entry),
+        **summon_fields(entry),
+        **despawn_fields(entry),
     }
 
 

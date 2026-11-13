@@ -49,6 +49,7 @@ partial class GameSession
         replies.AddRange(EnterCombat(now));
         replies.Add(resources!.Update());
         replies.AddRange(CombatReplies(skill, request, now, (byte)actionUid));
+        replies.AddRange(SpiritCast(skill, definition, request, now));   // GameSession.Spirits.cs
         return replies;
     }
 

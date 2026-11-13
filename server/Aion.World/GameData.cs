@@ -62,7 +62,19 @@ public sealed record SkillDefinition(
     [property: JsonPropertyName("use_height_range")] double UseHeightRange = 0,
     [property: JsonPropertyName("follow_range")] double FollowRange = 0,
     // Skill.dat ChargeId: the SkillCharge.dat row of a charged skill (GameSession.Charging.cs), 0 for an ordinary cast.
-    [property: JsonPropertyName("charge")] int Charge = 0);
+    [property: JsonPropertyName("charge")] int Charge = 0,
+    // A Spiritmaster summon (SkillEffect Spawn row ElementalSummon) and the elements a Dismiss/Return skill sends away
+    // (Despawn row), tools/class_skills.py; GameSession.Spirits.cs.
+    [property: JsonPropertyName("summon")] SpiritSummon? Summon = null,
+    [property: JsonPropertyName("despawn")] int[]? Despawn = null);
+
+/// <summary>A summon skill's Spawn row: the spirit's level-1 NpcData id, its EElementalSummonGroupType, the abnormal it appears with
+/// (the Lv1 tier), the angle off the caster's look direction.</summary>
+public sealed record SpiritSummon(
+    [property: JsonPropertyName("npc")] int Npc,
+    [property: JsonPropertyName("element")] int Element,
+    [property: JsonPropertyName("abnormal")] int Abnormal,
+    [property: JsonPropertyName("angle")] int Angle);
 
 /// <summary>A SkillCharge.dat row (build 26262663): ChargeMinTime, bMovableInCharge, steps [ChargeTime ms, ChargeSkillId].</summary>
 public sealed record ChargeRow(

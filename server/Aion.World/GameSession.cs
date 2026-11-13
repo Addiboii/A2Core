@@ -2057,6 +2057,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         objectHits.Clear();
         brokenObjects.Clear();
         breakRemovals.Clear();
+        replies.AddRange(SpiritMapLoad());   // GameSession.Spirits.cs
         pendingUse = null;
         replies.AddRange(ObjectVisibility(at, now));
         replies.AddRange(MapEventsStart(now));   // the layer's events join (0x922e) and run their first directives
@@ -3117,6 +3118,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         while (posted.TryDequeue(out var item)) replies.AddRange(await item.Run(now));
         replies.AddRange(ObjectRemovalTick(now));   // used-up objects die and despawn on their timing
         replies.AddRange(BreakRemovalTick(now));    // broken objects despawn (GameSession.Destroy.cs)
+        replies.AddRange(SpiritTick(now));          // dismissed spirits leave (GameSession.Spirits.cs)
         if (arrivalCheckDue && !reloading && position is { } arrivedAt)
         {
             // The arrival is a position too: event triggers, the area objectives (an EnterSubZone at the map's start: live

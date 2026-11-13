@@ -2702,6 +2702,45 @@ async Task<GameSession> ChargeRanger()
     return session;
 }
 Console.WriteLine($"{await ChargeChecks.RunAsync(ChargeRanger, Now)} charged-skill checks passed (Dead Shot: start, release step, cooldown, refusals).");
+// Spiritmaster spirits (GameSession.Spirits.cs), OBSERVED 2026-11-04 192703: 0xe239/0xe23a and the spirit's 0x3641 byte for byte.
+Check(Convert.ToHexStringLower(GamePackets.SpiritActivate(4, 30429)) == "39e20104dded01" && Convert.ToHexStringLower(GamePackets.SpiritDeactivate(4, 30429)) == "3ae20104dded01"
+      && Convert.ToHexStringLower(GamePackets.SpiritActivate(5, 16774, 30000)) == "39e2030586830130750000", "0xe239/0xe23a as recorded (#11367, #11436, the Ancient spirit #50353)");
+static Vector3d Floats(string hex) { var b = Convert.FromHexString(hex); return new(BitConverter.ToSingle(b, 0), BitConverter.ToSingle(b, 4), BitConverter.ToSingle(b, 8)); }
+Check(Convert.ToHexStringLower(GamePackets.SpiritAppear(30429, 2920173, Floats("8001e7c78095c6c70082b846"), BitConverter.ToSingle(Convert.FromHexString("e1c68643")), 24575, 14805,
+          Floats("63fae6c7703cc6c79e2fb846"), 161302304, 13, 45, 204277))
+      == "4136dded011f1000ed8e2c0000028001e7c78095c6c70082b846e1c68643afbf01ffbf01ffbf01ec0c0000ec0c0000000000000000000000000000109e010064000000f04902000100000000000000a08601000000000090b208000101110120479d09ffffffffffffffff8075d52abb030000d5730d0263fae6c7703cc6c79e2fb846070206d539000002cd0095080000d0003f0100002d000000f51d030000",
+      "the Earth spirit's 0x3641 rebuilt byte for byte (#11374)");
+var earthSummon = data.Skill(16130000)!.Summon!;
+Check(GameSession.SpiritFor(earthSummon, 13) == (2920173, 161300004) && GameSession.SpiritFor(earthSummon, 1) == (2920161, 161300001)
+      && GameSession.SpiritFor(earthSummon, 5).Abnormal == 161300002 && GameSession.SpiritFor(earthSummon, 99).Npc == 2920175,
+      "the spirit's NpcData row follows the summon level (_13 at 13, as recorded), its abnormal the Lv tier");
+var spiritCreation = (uint)Enumerable.Range(1, 64).First(id => data.Profile(id, 1) is { Race: 1, Class: "Elementalist" });
+var spiritStore = new FakeStore();
+var spiritMaster = new GameSession(data, new GameSessionOptions(), new Random(9)) { Store = spiritStore };
+await spiritMaster.HandleAsync(Strings(0x3613, Session, "", "t", "").Concat(new byte[9]).ToArray(), Now);
+await spiritMaster.HandleAsync(new PacketWriter().U16(0x361b).String("Ione").U8(1).U32(spiritCreation).Bytes([0x0c, 0x64]).U8(2).U8(1).U8(0).ToArray(), Now);
+spiritStore.States[0] = spiritStore.States[0] with { Progress = spiritStore.States[0].Progress with { Level = 20 } };
+await spiritMaster.HandleAsync(new PacketWriter().U16(0x361f).Varint((uint)spiritStore.States[0].WireId << 16).I32(0).Vec3(Vector3d.Zero).ToArray(), Now);
+await spiritMaster.HandleAsync(new PacketWriter().U16(0x3622).I32(1).ToArray(), Now);
+var spiritAt = spiritMaster.Position ?? new Vector3d(100, 200, 300);
+var fire = await spiritMaster.HandleAsync(Cast(16100000, spiritMaster.PlayerKey, spiritAt), Now + 1000);
+var fireKey = spiritMaster.SpiritKey ?? 0;
+Check(fire.Any(b => b.SequenceEqual(GamePackets.SpiritActivate(1, fireKey))) && fire.FindIndex(b => Op(b) == 0x3641) > fire.FindIndex(b => Op(b) == 0xe239)
+      && spiritMaster.SpiritNpc == 2920101 && fire.Single(b => Op(b) == 0x3641).AsSpan(2).StartsWith(NativeVarint.Encode(fireKey)) && !fire.Any(b => Op(b) == 0xe23a),
+      "Summon: Fire Spirit: 0xe239 {1, key}, then the spirit's 0x3641 (Elementalist_Skill010_FireEle_Lv1_1 at summon level 1)");
+var water = await spiritMaster.HandleAsync(Cast(16110000, spiritMaster.PlayerKey, spiritAt), Now + 2000);
+var waterKey = spiritMaster.SpiritKey ?? 0;
+Check(water.FindIndex(b => b.SequenceEqual(GamePackets.SpiritDeactivate(1, fireKey))) is var off and >= 0 && water.FindIndex(b => b.SequenceEqual(GamePackets.SpiritActivate(2, waterKey))) == off + 1
+      && water.FindIndex(b => Op(b) == 0x3641) == off + 2 && waterKey != fireKey && spiritMaster.SpiritNpc == 2920121,
+      "a second summon switches: 0xe23a for the Fire spirit, 0xe239 and the Water spirit's 0x3641 (as recorded)");
+Check(!(await spiritMaster.TickAsync(Now + 2000 + GameSession.SpiritLeaveMs - 10)).Any(b => Op(b) == 0x3642)
+      && (await spiritMaster.TickAsync(Now + 2000 + GameSession.SpiritLeaveMs)).Any(b => b.SequenceEqual(GamePackets.Death(fireKey, 7))),
+      "the Fire spirit's 0x3642 flag 7 comes 2550 ms after its 0xe23a");
+var wrongDismiss = await spiritMaster.HandleAsync(Cast(16290000, spiritMaster.PlayerKey, spiritAt), Now + 6000);
+var waterDismiss = await spiritMaster.HandleAsync(Cast(16290001, spiritMaster.PlayerKey, spiritAt), Now + 7000);
+Check(!wrongDismiss.Any(b => Op(b) == 0xe23a) && waterDismiss.Any(b => b.SequenceEqual(GamePackets.SpiritDeactivate(2, waterKey))) && spiritMaster.SpiritKey is null
+      && (await spiritMaster.TickAsync(Now + 7000 + GameSession.SpiritLeaveMs)).Any(b => b.SequenceEqual(GamePackets.Death(waterKey, 7))),
+      "Dismiss: Fire Spirit leaves the Water spirit; Dismiss: Water Spirit sends it away (0xe23a, 0x3642 flag 7 later)");
 // A session logged in on the store; a Gladiator created when the store has none yet (not selected: the checks enter it).
 async Task<GameSession> GladiatorOn(FakeStore store)
 {
