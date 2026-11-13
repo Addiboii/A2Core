@@ -1307,12 +1307,13 @@ public sealed partial class PostgresGameplayStore(NpgsqlDataSource source) : IGa
         await t.CommitAsync(ct); return added;
     }
 
-    public async Task<bool> SoulBindItemAsync(VerifiedAccount account, Guid character, Guid item, byte count, CancellationToken ct=default)
+    public async Task<bool> SoulBindItemAsync(VerifiedAccount account, Guid character, Guid item, byte count, CancellationToken ct=default, IReadOnlyList<(int Type, int Value)>? stats=null)
     {
         if(count<1) throw new GameplayException("invalid_soul_bind");
+        var soul=JsonSerializer.Serialize(stats is null?new Dictionary<string,object>{["soul_bind"]=(int)count}:new Dictionary<string,object>{["soul_bind"]=(int)count,["soul_stats"]=stats.Select(s=>new[]{s.Type,s.Value})});
         await using var c=await source.OpenConnectionAsync(ct); await using var t=await c.BeginTransactionAsync(ct);
         if(!await Own(c,t,account.AccountId,character,ct)) return false;
-        var bound=await Scalar(c,t,"UPDATE game.item_instances SET upgrades=upgrades||jsonb_build_object('soul_bind',$3::int),revision=revision+1 WHERE instance_id=$1 AND character_id=$2 RETURNING instance_id",ct,item,character,(int)count) is Guid;
+        var bound=await Scalar(c,t,"UPDATE game.item_instances SET upgrades=upgrades||$3::jsonb,revision=revision+1 WHERE instance_id=$1 AND character_id=$2 RETURNING instance_id",ct,item,character,soul) is Guid;
         await t.CommitAsync(ct); return bound;
     }
 

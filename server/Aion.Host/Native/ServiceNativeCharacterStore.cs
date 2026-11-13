@@ -573,10 +573,10 @@ public sealed partial class ServiceNativeCharacterStore(string token, WorldIdent
         return await game.EngraveTeleportArtifactAsync(identity.Account, character, artifactId, ct);
     }
 
-    public async Task<bool> SoulBindItemAsync(Guid character, Guid item, byte count, CancellationToken ct)
+    public async Task<bool> SoulBindItemAsync(Guid character, Guid item, byte count, CancellationToken ct, IReadOnlyList<(int Type, int Value)>? stats = null)
     {
         await ValidateAsync(ct);
-        return await game.SoulBindItemAsync(identity.Account, character, item, count, ct);
+        return await game.SoulBindItemAsync(identity.Account, character, item, count, ct, stats);
     }
 
     public async Task<IReadOnlyList<int>> WingsAsync(Guid character, CancellationToken ct)

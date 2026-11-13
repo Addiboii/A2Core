@@ -280,7 +280,8 @@ public interface IGameplayStore
     Task<bool> ExchangeAsync(VerifiedAccount first, Guid firstCharacter, IReadOnlyList<(Guid Item, long Count)> firstGives,
         VerifiedAccount second, Guid secondCharacter, IReadOnlyList<(Guid Item, long Count)> secondGives, CancellationToken ct = default);
     // Soul bind of an owned item: upgrades.soul_bind = count, revision bumped.
-    Task<bool> SoulBindItemAsync(VerifiedAccount account, Guid character, Guid item, byte count, CancellationToken ct = default);
+    /// <summary>Stores the bind count (upgrades.soul_bind) and, when given, the bound stats (upgrades.soul_stats, [[EStat, value]]).</summary>
+    Task<bool> SoulBindItemAsync(VerifiedAccount account, Guid character, Guid item, byte count, CancellationToken ct = default, IReadOnlyList<(int Type, int Value)>? stats = null);
     /// <summary>
     /// An enchant attempt, all or nothing: the costs (item, revision, count) are consumed and the item (at its revision)
     /// gets upgrades.enchant = level and upgrades.enchant_bonus = bonus (the failure correction built up so far).

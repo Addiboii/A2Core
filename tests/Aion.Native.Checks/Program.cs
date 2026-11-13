@@ -1636,6 +1636,28 @@ Check((await staffSession.HandleAsync(new PacketWriter().U16(0x562f).I64(13).ToA
 var boundWeapon = await staffSession.HandleAsync(new PacketWriter().U16(0x562f).I64(10).ToArray(), Now);
 Check(boundWeapon.Count >= 2 && boundWeapon[1][0] == 0x1b && boundWeapon[1][1] == 0x56, "a bound equipment item is resent (0x561b) carrying the bind");
 Check((await staffSession.HandleAsync(new PacketWriter().U16(0x562b).I64(999).I64(0).I32(0).ToArray(), Now)).Count == 0, "an unknown item is not bound");
+// Soul-bind stats (GameSession.SoulBind.cs). Byte-exact: community recording 2026-11-06 23:49 #49976 (gloves 210540022, count 3).
+Check(Convert.ToHexString(GamePackets.SoulBindComplete(0x116000005f825, 3, 0, [(41, 106), (194, 20), (2, 14)]))
+      == "3056000025F8050000160100030329006A000000C2001400000002000E00000000", "0x5630 carries the bound stats {u16 EStat, i32} and no skills (recorded)");
+if (SoulBindPools.Of(210540022) is { } gloves)
+{
+    var soulRng = new Random(7);
+    var bind1 = SoulBindPools.Bind(gloves, [], 1, soulRng);
+    var bind2 = SoulBindPools.Bind(gloves, bind1, 2, soulRng);
+    var bind3 = SoulBindPools.Bind(gloves, bind2, 3, soulRng);
+    bool Inside(List<(int Type, int Value)> s) => s.All(x => gloves.Pool.Any(p => p[0] == x.Type && x.Value >= p[1] && x.Value <= p[2]));
+    Check(gloves.StatCount == 3 && bind1.Count == 2 && bind2.Count == 3 && bind3.Count == 3 && bind2.Take(2).Select(s => s.Type).SequenceEqual(bind1.Select(s => s.Type))
+          && bind3.Select(s => s.Type).SequenceEqual(bind2.Select(s => s.Type)) && bind3.Zip(bind2).All(p => p.First.Value >= p.Second.Value)
+          && bind2.Select(s => s.Type).Distinct().Count() == 3 && Inside(bind1) && Inside(bind2) && Inside(bind3),
+          "soul binding: half the item's stats at the bind1 bind, all from the bind2, kept and raised within the pool's range");
+}
+else Check(false, "soulbind.json holds the recorded gloves 210540022");
+staffStore.Items.Add(Stored(210540022, 1, "bag", null, 9501));
+await staffSession.InventoryChangesAsync(default);
+var gloveBind = await staffSession.HandleAsync(new PacketWriter().U16(0x562f).I64(9501).ToArray(), Now);
+var gloveRow = staffStore.Items.Single(i => i.WireId == 9501);
+Check(gloveBind[0][13] == 2 && gloveBind[0].Length == 14 + 2 * 6 + 1 && gloveRow.Upgrades.GetProperty("soul_stats").GetArrayLength() == 2
+      && gloveRow.Upgrades.GetProperty("soul_bind").GetInt32() == 1, "a bound item's stats are sent in 0x5630 and stored on it");
 // Equip (live ItemEquip_RQ 0xe247): key 13 into the torso slot; the reply is the next opcode. Another
 // opcode of the same length is not an equip.
 Check((await staffSession.HandleAsync(new PacketWriter().U16(0x5a0a).I64(13).U8(5).ToArray(), Now)).Count == 0
@@ -3863,11 +3885,12 @@ sealed partial class FakeStore : INativeCharacterStore
         return Task.FromResult<RideRecord?>(RideRows[index]);
     }
     public Task<bool> ConsumeItemAsync(Guid character, Guid item, long revision, int count, CancellationToken ct) => Task.FromResult(Consume(item, revision, count));
-    public Task<bool> SoulBindItemAsync(Guid character, Guid item, byte count, CancellationToken ct)
+    public Task<bool> SoulBindItemAsync(Guid character, Guid item, byte count, CancellationToken ct, IReadOnlyList<(int Type, int Value)>? stats = null)
     {
         var index = Items.FindIndex(i => i.InstanceId == item);
         if (index < 0) return Task.FromResult(false);
-        Items[index] = Items[index] with { Upgrades = System.Text.Json.JsonDocument.Parse($"{{\"soul_bind\":{count}}}").RootElement, Revision = Items[index].Revision + 1 };
+        var soul = stats is null ? "" : ",\"soul_stats\":[" + string.Join(",", stats.Select(s => $"[{s.Type},{s.Value}]")) + "]";
+        Items[index] = Items[index] with { Upgrades = System.Text.Json.JsonDocument.Parse($"{{\"soul_bind\":{count}{soul}}}").RootElement, Revision = Items[index].Revision + 1 };
         return Task.FromResult(true);
     }
     public Task<bool> MoveItemAsync(Guid character, Guid item, long revision, int? equipmentSlot, CancellationToken ct)

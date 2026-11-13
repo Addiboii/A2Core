@@ -272,6 +272,8 @@ await using(var source=NpgsqlDataSource.Create(connectionString))
     Check(await game.SoulBindItemAsync(first,id,bagItem.InstanceId,1) && (await game.InventoryAsync(first,id))!.Items.Single(x=>x.InstanceId==bagItem.InstanceId).Upgrades.GetProperty("soul_bind").GetInt32()==1,"a soul bind is stored on the item");
     Check(!await game.ExchangeAsync(first,id,[(bagItem.InstanceId,bagItem.Quantity)],second,staffChar,[]),"soul-bound items are not traded");
     Check(!await game.SoulBindItemAsync(second,id,bagItem.InstanceId,1),"another account cannot bind the item");
+    Check(await game.SoulBindItemAsync(first,id,bagItem.InstanceId,1,default,[(41,99),(194,16)]) && (await game.InventoryAsync(first,id))!.Items.Single(x=>x.InstanceId==bagItem.InstanceId).Upgrades is var soulUp
+        && soulUp.GetProperty("soul_bind").GetInt32()==1 && soulUp.GetProperty("soul_stats")[1][0].GetInt32()==194 && soulUp.GetProperty("soul_stats")[1][1].GetInt32()==16,"a bind stores the count and the bound stats");
     // Manastones: upgrades.magicstones written at the item's revision, beside the soul bind; stale or foreign refused.
     var bound=(await game.InventoryAsync(first,id))!.Items.Single(x=>x.InstanceId==bagItem.InstanceId);
     MagicStoneSlot[] rolled=[new(531360001,199,2),new(531360001,307,1)];

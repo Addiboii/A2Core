@@ -140,7 +140,7 @@ public interface INativeCharacterStore : IAsyncDisposable
     Task<bool> SetSkinEquipsAsync(Guid character, IReadOnlyDictionary<int, int> equips, CancellationToken ct) => Task.FromResult(false);
     Task<bool> SaveMasteryAsync(Guid character, string kind, int category, int level, long exp, CancellationToken ct) => Task.FromResult(false);
     /// <summary>Stores a soul bind (bind count) on an owned item.</summary>
-    Task<bool> SoulBindItemAsync(Guid character, Guid item, byte count, CancellationToken ct);
+    Task<bool> SoulBindItemAsync(Guid character, Guid item, byte count, CancellationToken ct, IReadOnlyList<(int Type, int Value)>? stats = null);
     Task<bool> EnchantItemAsync(Guid character, Guid item, long revision, IReadOnlyList<(Guid Item, long Revision, int Count)> costs, int level, int bonus,
         CancellationToken ct) => Task.FromResult(false);
     Task<bool> ImprintItemAsync(Guid character, Guid item, long revision, IReadOnlyList<(Guid Item, long Revision, int Count)> costs,

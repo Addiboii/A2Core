@@ -606,9 +606,16 @@ public static class GamePackets
         PacketWriter.Opcode(0x562c).U16(result).I64(uid).I64(costUid).I32(costId).ToArray();
     /// <summary>0x562e ItemSoulBindCancel_RS: result, item uid.</summary>
     public static byte[] SoulBindCancel(long uid, int result = 0) => PacketWriter.Opcode(0x562e).U16(result).I64(uid).ToArray();
-    /// <summary>0x5630 ItemSoulBindComplete_RS: result, item uid, bind count, no bound stats or skills.</summary>
-    public static byte[] SoulBindComplete(long uid, byte count = 1, int result = 0) =>
-        PacketWriter.Opcode(0x5630).U16(result).I64(uid).U8(count).Varint(0).Varint(0).ToArray();
+    /// <summary>
+    /// 0x5630 ItemSoulBindComplete_RS: result, item uid, bind count, the bound stats {u16 EStat, i32 value} and skills (none).
+    /// OBSERVED (community recordings 2026-11-04 and 11-06, build 26262663: 3 and 4 stats, every one without skills).
+    /// </summary>
+    public static byte[] SoulBindComplete(long uid, byte count = 1, int result = 0, IReadOnlyList<(int Type, int Value)>? stats = null)
+    {
+        var w = PacketWriter.Opcode(0x5630).U16(result).I64(uid).U8(count).Varint(stats?.Count ?? 0);
+        foreach (var (type, value) in stats ?? []) w.U16(type).I32(value);
+        return w.Varint(0).ToArray();
+    }
 
     /// <summary>0x561d ItemEquipLevelChange_NT: equipped item level total and the highest reached.</summary>
     public static byte[] ItemEquipLevelChange(int level, int highest) => PacketWriter.Opcode(0x561d).I32(level).I32(highest).ToArray();

@@ -1431,10 +1431,14 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         if (Store is not { } store || CharacterId is not { } character || !storedItems.TryGetValue(key, out var row))
             return [GamePackets.SoulBindComplete(key)];
         var count = (byte)Math.Min(255, SoulBindCount(row) + 1);
-        var bound = await Stored(async () => await store.SoulBindItemAsync(character, row.InstanceId, count, ct) ? [Array.Empty<byte>()] : []);
+        // The item's stats from its soul-bind pool, kept and raised from bind to bind (GameSession.SoulBind.cs).
+        var stats = SoulBindPools.Of(row.TemplateId) is { } binding ? SoulBindPools.Bind(binding, SoulStatsOf(row), count, rng) : null;
+        var bound = await Stored(async () => await store.SoulBindItemAsync(character, row.InstanceId, count, ct, stats) ? [Array.Empty<byte>()] : []);
         if (bound.Count != 1) return [GamePackets.SoulBindComplete(key, 0, 1)];
         // Decrease 63 kItemSoulBind for the cost, update 3 on the item (OBSERVED, community recordings 2026-11-04 to 06).
-        return [GamePackets.SoulBindComplete(key, count), .. await InventoryChangesAsync(ct, 0, DecreaseSoulBind, UpdateSoulBind), .. Achieve("SoulbindTry")];
+        List<byte[]> replies = [GamePackets.SoulBindComplete(key, count, 0, stats), .. await InventoryChangesAsync(ct, 0, DecreaseSoulBind, UpdateSoulBind), .. Achieve("SoulbindTry")];
+        if (row.Location == "equipment" && stats is { Count: > 0 }) replies.AddRange(RefreshStats());
+        return replies;
     }
 
     void Remember(IEnumerable<InventoryItem> items)
@@ -2545,10 +2549,10 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
 
     /// <summary>Defense against NPC hits: PcStatLevel Defense plus the equipped items' ArmorDefense.</summary>
     public int Defense => data.BaseStats(className, level).GetValueOrDefault("Defense") + EquippedItems().Sum(i => i.Stat("ArmorDefense")) + EnchantStat("ArmorDefense") + BuffStat("Defense")
-        + BoardStat("Defense") + TitleStat("Defense") + WingStat("Defense");
+        + BoardStat("Defense") + TitleStat("Defense") + WingStat("Defense") + SoulStat("ArmorDefense");
 
     /// <summary>The MP pool: MPMax 1500 plus buffs.</summary>
-    int MpMax => MpMaxBase + BuffStat("MPMax") + BoardStat("MPMax") + TitleStat("MPMax") + WingStat("MPMax") + MagicStoneStat("MPMax");
+    int MpMax => MpMaxBase + BuffStat("MPMax") + BoardStat("MPMax") + TitleStat("MPMax") + WingStat("MPMax") + MagicStoneStat("MPMax") + SoulStat("MPMax");
 
     /// <summary>
     /// The stat sheet (0x3649 / 0x364a): the official sample's values, with HPMax from PcStatLevel
@@ -2559,14 +2563,14 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         var gear = EquippedItems().ToList();
         var basis = data.BaseStats(className, level);
         var hpMax = Math.Max(1, (basis.GetValueOrDefault("HPMax") is > 0 and var hp ? hp : GamePackets.SpawnHpMax) + gear.Sum(i => i.Stat("HPMax")) + EnchantStat("HPMax") + RideStat("HPMax")
-            + BuffStat("HPMax") + BoardStat("HPMax") + TitleStat("HPMax") + WingStat("HPMax"));
+            + BuffStat("HPMax") + BoardStat("HPMax") + TitleStat("HPMax") + WingStat("HPMax") + SoulStat("HPMax"));
         var weapon = data.WeaponStatsOf(equippedWeapon);
         var stats = GamePackets.DefaultStats.Select(s => s.Type switch
         {
             31 => (s.Type, weapon.Max + EnchantStat("WeaponDamage")), 33 => (s.Type, weapon.Min + EnchantStat("WeaponMinDamage")),
             128 => (s.Type, weapon.Critical + RideStat("Critical") + BuffStat("Critical") + BoardStat("Critical") + TitleStat("Critical") + WingStat("Critical")
-                + MagicStoneStat("Critical")),
-            318 => (s.Type, weapon.Accuracy), 193 => (s.Type, hpMax), 199 => (s.Type, MpMax), 242 => (s.Type, GamePackets.SpawnSp + BuffStat("SPMax")),
+                + MagicStoneStat("Critical") + SoulStat("Critical")),
+            318 => (s.Type, weapon.Accuracy + SoulStat("WeaponAccuracy")), 193 => (s.Type, hpMax), 199 => (s.Type, MpMax), 242 => (s.Type, GamePackets.SpawnSp + BuffStat("SPMax")),
             307 => (s.Type, Defense),
             RestSpRegenStat => (s.Type, SpRegen(battle: false)), BattleSpRegenStat => (s.Type, SpRegen(battle: true)),
             RestHpRegenStat => (s.Type, HpRegen(battle: false)), BattleHpRegenStat => (s.Type, HpRegen(battle: true)),
@@ -2586,7 +2590,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
     /// </summary>
     public const int RestHpRegenBase = 10, RestMpRegenBase = 250, BattleHpRegenBase = 5, BattleMpRegenBase = 25;
 
-    int RegenBonus(string stat) => EquippedItems().Sum(i => i.Stat(stat)) + BuffStat(stat) + BoardStat(stat) + TitleStat(stat) + WingStat(stat);
+    int RegenBonus(string stat) => EquippedItems().Sum(i => i.Stat(stat)) + BuffStat(stat) + BoardStat(stat) + TitleStat(stat) + WingStat(stat) + SoulStat(stat);
 
     /// <summary>
     /// HP regained a second: stat 195 out of combat, 275 in combat. OBSERVED (our recordings 2026-10-13 to 11-06): out of combat

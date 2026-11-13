@@ -45,6 +45,7 @@
     <EmbeddedResource Include="../../tools/data/skill-effect-conditions.json" LogicalName="skill-effect-conditions.json" />
     <EmbeddedResource Include="../../tools/data/stigmas.json" LogicalName="stigmas.json" />
     <EmbeddedResource Include="../../tools/data/projectiles.json" LogicalName="projectiles.json" />
+    <EmbeddedResource Include="../../tools/data/soulbind.json" LogicalName="soulbind.json" />
     <EmbeddedResource Include="../../tools/data/specialized-skills.json" LogicalName="specialized-skills.json" />
     <EmbeddedResource Include="../../tools/data/manastones.json" LogicalName="manastones.json" />
     <EmbeddedResource Include="../../tools/data/sealstones.json" LogicalName="sealstones.json" />
