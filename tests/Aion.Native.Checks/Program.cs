@@ -2533,6 +2533,9 @@ var trustAt = BitConverter.ToInt64(Convert.FromHexString("872fb3b0a1010000"));
 Check(Convert.ToHexStringLower(GameSession.TrustLimitInfo(trustAt)) == "62e2" + "0704020200000000000000000065cd1d00000000872fb3b0a101000003030000000000000000ffffffffffffffff872fb3b0a1010000"
           + "04040000000000000000ffffffffffffffff872fb3b0a101000005050000000000000000ffffffffffffffff872fb3b0a1010000872fb3b0a101000005000000",
       "TrustLimitInfo_NT as recorded (flags 07, type 2 at 500,000,000, types 3-5 unlimited, step 5)");
+var trust = await staffSession.HandleAsync(new PacketWriter().U16(GameSession.TrustLimitInfoRq).ToArray(), Now);
+Check(trust.Count == 2 && Op(trust[0]) == 0xe262 && trust[1].SequenceEqual(Convert.FromHexString("61e20000")),
+      "TrustLimitInfo_RQ: TrustLimitInfo_NT, then TrustLimitInfo_RS result 0 (as recorded)");
 var marked = await staffSession.HandleAsync(new PacketWriter().U16(GameSession.BookmarkRq).U8(4).I32(132).Bool(true).ToArray(), Now);
 Check(marked.Single().SequenceEqual(new PacketWriter().U16(GameSession.BookmarkRs).U16(0).U8(4).I32(132).Bool(true).I64(Now).ToArray())
       && staffSession.Bookmarks.Single() == new GameSession.BookmarkEntry(4, 132, Now), "Bookmark_RQ quest 132: 0x932f {0, 04, 84000000, 01, time} (the fork's recorded form), kept");

@@ -14,7 +14,7 @@ public sealed partial class GameSession
         AbyssArtifactEventInfoRq = 0xe306, AbyssArtifactEventInfoRs = 0xe307, MySeasonRankingRq = 0x8d56, MySeasonRankingRs = 0x8d57,
         CoinShopOpenRq = 0x8c06, CoinShopOpenRs = 0x8c07, QuickSlotContextSkillRq = 0x5607, QuickSlotContextSkillRs = 0x5608,
         UseTeleportArtifactRq = 0x9236, UseTeleportArtifactRs = 0x9237, ConversionLimitListRq = 0x8d8e, ConversionLimitListRs = 0x8d8f,
-        CoinShopBuyRq = 0x8c08, CoinShopBuyRs = 0x8c09;
+        CoinShopBuyRq = 0x8c08, CoinShopBuyRs = 0x8c09, TrustLimitInfoRq = 0xe260, TrustLimitInfoRs = 0xe261;
 
     /// <summary>
     /// Client packets that expect no reply: ClientTime_RT 0x3601 (i64 client ms), UpdateVisibleLen_RQ 0x3651 (f32 view
@@ -85,6 +85,10 @@ public sealed partial class GameSession
             // bound Kibelisk (GameSession.cs UseTeleportArtifact).
             case UseTeleportArtifactRq when plain.Length >= 6:
                 return UseTeleportArtifact(BitConverter.ToInt32(plain, 2), now);
+            // TrustLimitInfo_RQ (usmap position; the request is ciphered in our recordings, CANDIDATE): TrustLimitInfo_NT then
+            // TrustLimitInfo_RS result 0 (OBSERVED 2026-11-06 182716 and 234912, the same moment, that order).
+            case TrustLimitInfoRq:
+                return [TrustLimitInfo(now), PacketWriter.Opcode(TrustLimitInfoRs).U16(0).ToArray()];
             // Reports without a reply (SilentRequests).
             case 0x3651 or 0x3601 or 0xe350 or 0xe259 or 0xffa0 or 0xffa1:
                 return [];
