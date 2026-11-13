@@ -1,0 +1,141 @@
+"""How far our server covers the client's messages: research/protocol-coverage.md.
+
+For every message the client's mappings list (the usmap packet structs, numbered as tools/packet_schema.py derives them;
+named over by tools/data/opcode-names.json, the names our sources use) it shows:
+- whether the server sources name the opcode (any 0x.... literal under server/), in how many files, and which knowledge
+  labels (OBSERVED / CANDIDATE / OURS) stand on those lines;
+- how often the official server sent it in our recordings (server-to-client only: the client direction is ciphered), from
+  research/protocol-observed.json (opcode counts only; `observed` refreshes it from research/local).
+
+The status is derived from the sources and recordings, not reviewed by hand. CANDIDATE: the opcode of a message after the
+2.0.6 mappings' insertions on build 26262663 can be off where opcode-names.json does not name it (tools/usmap_diff.py shows
+the moves). Idea from the community fork (its protocol_coverage.py and docs/protocol); written here, smaller.
+
+    python tools/protocol_coverage.py observed    # recount research/local recordings -> research/protocol-observed.json
+    python tools/protocol_coverage.py build       # write research/protocol-coverage.md
+"""
+import argparse
+import glob
+import json
+import os
+import re
+from collections import Counter, defaultdict
+from pathlib import Path
+
+try:
+    from .packet_schema import PacketSchema
+except ImportError:   # run as a script from tools/
+    from packet_schema import PacketSchema
+
+ROOT = Path(__file__).resolve().parents[1]
+NAMES = ROOT / 'tools/data/opcode-names.json'
+OBSERVED = ROOT / 'research/protocol-observed.json'
+REPORT = ROOT / 'research/protocol-coverage.md'
+SERVER = ROOT / 'server'
+OPCODE = re.compile(r'\b0x([0-9a-fA-F]{4})\b')
+LABELS = ('OBSERVED', 'CANDIDATE', 'OURS')
+
+
+def messages(schema=None):
+    """{opcode: (name, family)} from the mappings, the names our sources use written over them."""
+    schema = schema or PacketSchema()
+    out = {op: (name.split('_', 2)[-1], 'game') for op, name in schema.game_opcode_map().items()}
+    out.update({op: (name.split('_', 2)[-1], 'login') for op, name in schema.login_opcode_map().items()})
+    if NAMES.exists():
+        for op, name in json.loads(NAMES.read_text(encoding='utf-8')).items():
+            value = int(op, 16)
+            out[value] = (name, out.get(value, (None, 'game'))[1])
+    return out
+
+
+def server_usage(root=SERVER):
+    """{opcode: {'files': set, 'labels': Counter}} for every 0x.... literal in the C# sources."""
+    usage = defaultdict(lambda: {'files': set(), 'labels': Counter()})
+    for path in sorted(Path(root).rglob('*.cs')):
+        if any(part in ('bin', 'obj') for part in path.parts):
+            continue
+        for line in path.read_text(encoding='utf-8', errors='replace').splitlines():
+            for match in OPCODE.finditer(line):
+                entry = usage[int(match.group(1), 16)]
+                entry['files'].add(path.relative_to(root).as_posix())
+                entry['labels'].update(label for label in LABELS if label in line)
+    return usage
+
+
+def count_recordings(local=ROOT / 'research/local'):
+    """Server-to-client opcode counts over our recordings' timelines."""
+    counts, files = Counter(), 0
+    patterns = ('capture-*/timeline-13328/timeline.jsonl', '*/capture-*/timeline-13328/timeline.jsonl')
+    for pattern in patterns:
+        for path in glob.glob(os.path.normpath(str(Path(local) / pattern))):
+            files += 1
+            with open(path, encoding='utf-8') as stream:
+                for line in stream:
+                    if '"s2c"' not in line:
+                        continue
+                    op = json.loads(line).get('op')
+                    if op:
+                        counts[op.lower()] += 1
+    return {'recordings': files, 'server_to_client': dict(sorted(counts.items()))}
+
+
+def rows(known, usage, observed):
+    out = []
+    for op in sorted(set(known) | {int(k, 16) for k in observed} | set(u for u in usage if u in known)):
+        name, family = known.get(op, (None, '?'))
+        used = usage.get(op)
+        recorded = observed.get(f'0x{op:04x}', 0)
+        if used is None and not recorded:
+            continue
+        labels = ', '.join(f'{label} {n}' for label, n in sorted(used['labels'].items())) if used else ''
+        status = ('recorded, never named by us' if used is None else
+                  'named, labelled OBSERVED' if used and used['labels'].get('OBSERVED') else
+                  'named, no OBSERVED label' if used else '')
+        out.append({'op': f'0x{op:04x}', 'name': name or '?', 'family': family, 'recorded': recorded,
+                    'files': len(used['files']) if used else 0, 'labels': labels, 'status': status})
+    return out
+
+
+def render(table, observed_meta, known_count):
+    groups = defaultdict(list)
+    for row in table:
+        groups[row['status']].append(row)
+    lines = ['# Protocol coverage', '',
+             'Generated by `python tools/protocol_coverage.py build`; do not edit by hand. The status comes from the sources and our',
+             'recordings, not a review. Names: the mappings by position, then tools/data/opcode-names.json.', '',
+             f"{known_count} messages in the mappings; {observed_meta.get('recordings', 0)} recordings counted (server to client only).", '']
+    order = ['recorded, never named by us', 'named, no OBSERVED label', 'named, labelled OBSERVED']
+    lines += [f'- {status}: {len(groups[status])}' for status in order] + ['']
+    for status in order:
+        lines += [f'## {status[0].upper()}{status[1:]} ({len(groups[status])})', '',
+                  '| Opcode | Name | Recorded | Files | Labels on those lines |', '|---|---|---:|---:|---|']
+        ranked = sorted(groups[status], key=lambda r: (-r['recorded'], r['op']))
+        lines += [f"| {r['op']} | {r['name']} | {r['recorded']} | {r['files']} | {r['labels']} |" for r in ranked]
+        lines.append('')
+    return '\n'.join(lines)
+
+
+def build():
+    observed_doc = json.loads(OBSERVED.read_text(encoding='utf-8')) if OBSERVED.exists() else {}
+    known = messages()
+    table = rows(known, server_usage(), observed_doc.get('server_to_client', {}))
+    REPORT.write_text(render(table, observed_doc, len(known)), encoding='utf-8', newline='\n')
+    return table
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument('command', choices=['observed', 'build'])
+    args = parser.parse_args(argv)
+    if args.command == 'observed':
+        doc = count_recordings()
+        OBSERVED.write_text(json.dumps(doc, indent=1) + '\n', encoding='utf-8', newline='\n')
+        print(doc['recordings'], 'recordings,', len(doc['server_to_client']), 'opcodes ->', OBSERVED.relative_to(ROOT))
+    else:
+        table = build()
+        print(len(table), 'messages ->', REPORT.relative_to(ROOT))
+    return 0
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())
