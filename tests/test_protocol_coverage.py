@@ -27,6 +27,7 @@ class ProtocolCoverageTests(unittest.TestCase):
         text = protocol_coverage.render(list(table.values()), {'recordings': 1}, len(known))
         self.assertIn('| 0x5555 | ? | 2 | 0 |  |', text)
 
+    @unittest.skipUnless(protocol_coverage.OBSERVED.is_file(), 'the recorded counts are kept with the research notes only')
     def test_tracked_counts_are_opcode_counts_only(self):
         doc = json.loads(protocol_coverage.OBSERVED.read_text(encoding='utf-8'))
         self.assertEqual(set(doc), {'recordings', 'server_to_client'})
