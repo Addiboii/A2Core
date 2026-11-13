@@ -107,7 +107,7 @@ and the certificate. Add `-Data <file>` when a release comes with a new data bun
 |---|---|
 | `C:\AionServer\host` | The built server. |
 | `C:\AionServer\data` | The unpacked data bundle. |
-| `C:\AionServer\postgres` | PostgreSQL and the database (listens on 127.0.0.1:55432 only). Back this up. |
+| `C:\AionServer\postgres` | PostgreSQL and the database (listens on 127.0.0.1:15432 only; an older install on 55432 moves at its next start). Back this up. |
 | `C:\AionServer\config` | `aion.env` (written by every install), `local.env` (your own settings, such as rates; never overwritten), the certificate in `tls`. |
 | `C:\AionServer\state` | Backups, logs, the launcher downloads. |
 

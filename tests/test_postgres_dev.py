@@ -12,6 +12,21 @@ from tools.postgres_dev import literal, migration_script, sql, migrate, role_sta
 
 
 class MigrationTests(unittest.TestCase):
+    def test_windows_port_is_below_the_dynamic_range(self):
+        from tools import postgres_dev
+        if postgres_dev.WINDOWS and not os.environ.get('AION_PG_PORT'):
+            self.assertLess(postgres_dev.PORT, 49152)
+
+    def test_an_older_cluster_moves_to_the_port(self):
+        from tools.postgres_dev import PORT, configured_port
+        with tempfile.TemporaryDirectory() as directory:
+            config = Path(directory) / 'postgresql.conf'
+            old = 55432 if PORT != 55432 else 15432
+            config.write_text(f"#port = 5432\nlisten_addresses='127.0.0.1'\nport={old}\n", encoding='utf-8')
+            self.assertTrue(configured_port(config))
+            self.assertEqual(config.read_text(encoding='utf-8'), f"#port = 5432\nlisten_addresses='127.0.0.1'\nport={PORT}\n")
+            self.assertFalse(configured_port(config))
+
     def test_sql_literal(self):
         self.assertEqual(literal("O'Brien"), "'O''Brien'")
 

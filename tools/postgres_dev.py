@@ -22,10 +22,14 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 HOME = Path(os.environ['AION_PG_HOME']) if os.environ.get('AION_PG_HOME') else ROOT / 'research/local/postgres'
-PORT = 55432
+WINDOWS = os.name == 'nt'
+# OURS: the cluster's port. On Windows below its dynamic port range (49152-65535): Hyper-V, WSL and WinNAT reserve blocks of it
+# at boot and took 55432 here once (and in the community fork's report of 2026-11-12, "could not bind IPv4 address
+# 127.0.0.1: Permission denied"); start() moves an existing cluster's postgresql.conf to it. Linux keeps 55432 (no such
+# reservations; the hosted server's cluster runs under systemd there). AION_PG_PORT overrides both.
+PORT = int(os.environ.get('AION_PG_PORT') or (15432 if WINDOWS else 55432))
 # AION_PG_DATABASE: another database of the cluster (a disposable restore to rehearse an upgrade); default aion.
 DATABASE = os.environ.get('AION_PG_DATABASE') or 'aion'
-WINDOWS = os.name == 'nt'
 # OURS: psql/pg_dump calls end after 180 s; long operations (backup, verify-backup, import-catalog,
 # upgrade-catalog) wait AION_PG_TIMEOUT seconds instead (default 3600: a large database or catalogue).
 SHORT_TIMEOUT = 180
@@ -154,7 +158,25 @@ def setup():
     migrate()
 
 
+def configured_port(config_path=None):
+    """The port line of the cluster's postgresql.conf moved to PORT; True when it changed (an older cluster)."""
+    config_path = Path(config_path) if config_path else HOME / 'data/postgresql.conf'
+    if not config_path.exists():
+        return False
+    lines = config_path.read_text(encoding='utf-8').splitlines(keepends=True)
+    changed = False
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped.replace(' ', '').startswith('port=') and stripped.replace(' ', '') != f'port={PORT}':
+            lines[i] = f'port={PORT}\n'
+            changed = True
+    if changed:
+        config_path.write_text(''.join(lines), encoding='utf-8')
+    return changed
+
+
 def start():
+    moved = configured_port()
     # Windows sandbox process inspection can report a running server as stopped.
     # Prefer an authenticated check and verify this is our own cluster first.
     probe = sql("SELECT current_setting('data_directory');", database='postgres', check=False)
@@ -165,6 +187,9 @@ def start():
     status = run('pg_ctl', ['status', '-D', HOME / 'data'], check=False)
     if status.returncode:
         run('pg_ctl', ['start', '-D', HOME / 'data', '-l', HOME / 'server.log', '-w', '-t', '30'])
+    elif moved:
+        # Still running on the old port: a restart takes the new one.
+        run('pg_ctl', ['restart', '-D', HOME / 'data', '-l', HOME / 'server.log', '-w', '-t', '30'])
 
 
 def migration_script(files):
@@ -313,7 +338,7 @@ def main():
     args = parser.parse_args()
     if args.command == 'setup':
         setup()
-        print('PostgreSQL configured at 127.0.0.1:55432, database aion; migrations applied.')
+        print(f'PostgreSQL configured at 127.0.0.1:{PORT}, database aion; migrations applied.')
     elif args.command == 'start':
         start()
     elif args.command == 'stop':

@@ -133,7 +133,8 @@ Invoke-Tool 'dotnet' @('publish', (Join-Path $Repo 'server\Aion.Host\Aion.Host.c
 if (Test-Path $HostDir) { Remove-Item -Recurse -Force $HostDir }
 Rename-Item $newHost $HostDir
 
-# ---- PostgreSQL: the project's own copy under $Root\postgres, loopback only, port 55432.
+# ---- PostgreSQL: the project's own copy under $Root\postgres, loopback only, port 15432 (tools/postgres_dev.py; an older
+#      cluster on 55432 moves at its next start, and the settings below follow).
 if (-not (Test-Path (Join-Path $PgHome 'pgsql\bin\initdb.exe'))) {
     $archive = Join-Path $PgHome $PgArchive
     if ($PostgresZip) { Copy-Item (Resolve-Path $PostgresZip).Path $archive -Force }
