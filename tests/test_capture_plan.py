@@ -22,12 +22,18 @@ class CapturePlanTests(unittest.TestCase):
         self.assertNotEqual(plan["session_name"], other["session_name"])
         self.assertEqual(plan["stop_arguments"], ["trace", "stop", "sessionname=" + plan["session_name"]])
         self.assertIn("sessionname=" + plan["session_name"], plan["start_arguments"])
-        for expected in ("Ethernet.Type=IPv4", "Protocol=TCP", "IPv4.Address=198.51.100.25", "persistent=no"):
+        for expected in ("Ethernet.Type=IPv4", "Protocol=TCP", "IPv4.Address=198.51.100.25", "persistent=no", "report=disabled"):
             self.assertIn(expected, plan["start_arguments"])
         self.assertEqual(plan["analysis_port"], 13700)
         self.assertFalse(plan["capture_complete"])
         trace_file = next(arg.split("=", 1)[1] for arg in plan["start_arguments"] if arg.startswith("tracefile="))
         self.assertFalse(Path(trace_file).parent.exists(), "Preview must not create capture files")
+
+    def test_server_discovery_does_not_parse_localized_netstat_text(self):
+        # netstat prints the state localized ("HERGESTELLT"); Get-NetTCPConnection gives it as an enum.
+        script = (Path(__file__).resolve().parents[1] / "tools" / "capture_port13700.ps1").read_text(encoding="utf-8")
+        self.assertNotIn("netstat.exe", script)
+        self.assertIn("Get-NetTCPConnection -State Established -RemotePort $discoveryPort", script)
 
     def test_loopback_and_ipv6_are_rejected_before_capture(self):
         for address in ("127.0.0.1", "::1", "198.51.100.25,127.0.0.1"):

@@ -38,19 +38,12 @@ $discoveryPort = if ($MovementCues -or $InGame) { 13328 } else { 13700 }
 # On a Wi-Fi link the physical layer alone records only the client's frames (2026-10-19: 2474 outbound, 0 inbound);
 # the multi-layer trace records both directions (the 2026-10-13 fight). Inside the game it is always on.
 if ($InGame) { $MultiLayer = $true }
-$gameIds = @(Get-Process -Name AION2 -ErrorAction SilentlyContinue | ForEach-Object { [string]$_.Id })
-$discovered = @()
-$rows = @(& "$env:SystemRoot\System32\netstat.exe" -ano -p tcp)
-if ($LASTEXITCODE -ne 0) { throw 'Could not read the TCP endpoint table.' }
-foreach ($row in $rows) {
-    $fields = $row.Trim() -split '\s+'
-    if ($fields.Count -eq 5 -and $fields[0] -eq 'TCP' -and $fields[4] -in $gameIds -and
-        $fields[3] -eq 'ESTABLISHED' -and
-        $fields[2] -match ('^(\d+\.\d+\.\d+\.\d+):' + $discoveryPort + '$')) {
-        $discovered += $Matches[1]
-    }
-}
-$discovered = @($discovered | Sort-Object -Unique)
+$gameIds = @(Get-Process -Name AION2 -ErrorAction SilentlyContinue | ForEach-Object { $_.Id })
+# Get-NetTCPConnection reports the state as an enum; netstat's text is localized ("HERGESTELLT" on a German Windows never
+# matched ESTABLISHED: the community fork's fix).
+$discovered = @(Get-NetTCPConnection -State Established -RemotePort $discoveryPort -ErrorAction SilentlyContinue |
+    Where-Object { $_.OwningProcess -in $gameIds -and $_.RemoteAddress -match '^\d+\.\d+\.\d+\.\d+$' } |
+    ForEach-Object { $_.RemoteAddress } | Sort-Object -Unique)
 if (-not $ServerAddress -and $discovered.Count -ne 1) {
     $screen = if ($discoveryPort -eq 13328) { 'inside the game' } else { 'at login (or use -InGame inside the game)' }
     throw "Could not identify one AION2 IPv4 server on port $discoveryPort. Keep AION2 open $screen, or supply -ServerAddress with an observed server IP."
@@ -77,7 +70,7 @@ $pcap = Join-Path $directory 'capture.pcapng'
 # netsh exposes address/protocol filters, not TCP-port filters on this system.
 # Scope collection to the observed server, then analyze only port 13700 offline.
 $startArguments = @('trace', 'start', "sessionname=$traceName", 'capture=yes',
-    'capturetype=physical', 'report=no', 'persistent=no', 'correlation=disabled', 'perfMerge=no',
+    'capturetype=physical', 'report=disabled', 'persistent=no', 'correlation=disabled', 'perfMerge=no',
     "tracefile=$etl", "maxsize=$MaxSizeMb", 'filemode=circular', 'overwrite=no',
     'Ethernet.Type=IPv4', 'Protocol=TCP', "IPv4.Address=$addressFilter", ('CaptureMultiLayer=' + $(if ($MultiLayer) { 'yes' } else { 'no' })))
 $stopArguments = @('trace', 'stop', "sessionname=$traceName")
