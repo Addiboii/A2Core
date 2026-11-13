@@ -2381,7 +2381,8 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             if (targets?.GetValueOrDefault(key) is { } hurt) replies.AddRange(MapEventHp(hurt, now, byPlayer: false));
         foreach (var (victim, killer) in fights.TakeNpcKills())
         {
-            respawnAt[victim.Key] = now + RespawnMs;
+            if (victim.Spirit is null) respawnAt[victim.Key] = now + RespawnMs;   // a killed spirit is sent away by its owner (GameSession.Spirits.cs)
+            CreditSpiritKill(victim, killer);
             replies.Add(GamePackets.TargetUpdate(victim.Key));
             replies.Add(GamePackets.Kill(victim.Key, 0, killer.Key, 0, ""));
             replies.AddRange(fights.Killed(victim));

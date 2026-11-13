@@ -57,6 +57,9 @@ public sealed class Target
     /// <summary>When a broken guard refills (the break + NpcData GroggyTime; Stagger.Refill).</summary>
     public long GroggyRefillAt { get; set; }
 
+    /// <summary>A Spiritmaster's spirit (GameSession.Spirits.cs): its owner and the fields of its own appear layout; null otherwise.</summary>
+    public SpiritLook? Spirit { get; init; }
+
     public bool Dead => Hp <= 0;
     /// <summary>The corpse was removed (0x3642) and the NPC waits for its respawn.</summary>
     public bool CorpseRemoved { get; set; }

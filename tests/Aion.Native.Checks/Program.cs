@@ -2733,13 +2733,22 @@ var waterKey = spiritMaster.SpiritKey ?? 0;
 Check(water.FindIndex(b => b.SequenceEqual(GamePackets.SpiritDeactivate(1, fireKey))) is var off and >= 0 && water.FindIndex(b => b.SequenceEqual(GamePackets.SpiritActivate(2, waterKey))) == off + 1
       && water.FindIndex(b => Op(b) == 0x3641) == off + 2 && waterKey != fireKey && spiritMaster.SpiritNpc == 2920121,
       "a second summon switches: 0xe23a for the Fire spirit, 0xe239 and the Water spirit's 0x3641 (as recorded)");
+// The spirit is a companion NPC of the owner's map: it follows its owner, and the monster its owner hits draws it in.
+Check(spiritMaster.Targets.GetValueOrDefault(waterKey) is { Function: "Companion", Spirit.Owner: var spiritOwner, Hostile: false } && spiritOwner == spiritMaster.PlayerKey
+      && spiritMaster.SpiritAi is { Mode: NpcAi.Mode.Follow } && spiritMaster.Targets.ContainsKey(fireKey),
+      "the Water spirit is a companion NPC of the map, following its owner (the Fire spirit stays until its 0x3642)");
+var spiritPrey = spiritMaster.Targets.Values.Where(t => t.Hostile && !t.Dead && t.Spirit is null).MinBy(t => Math.Pow(t.Position.X - spiritAt.X, 2) + Math.Pow(t.Position.Y - spiritAt.Y, 2))!;
+var coldShock = await spiritMaster.HandleAsync(new PacketWriter().U16(0x3800).U16(16).I32(16010000).U8(2).Varint((uint)spiritPrey.Key).F32(0).Vec3(spiritPrey.Position).U8(9).ToArray(), Now + 2100);
+Check(coldShock.Any(b => Op(b) == 0x3802) && spiritMaster.SpiritAi is { Mode: NpcAi.Mode.Chase } chase && chase.Victim == spiritPrey.Key,
+      "the owner's damaging cast (Cold Shock) sends the following spirit at its target");
 Check(!(await spiritMaster.TickAsync(Now + 2000 + GameSession.SpiritLeaveMs - 10)).Any(b => Op(b) == 0x3642)
       && (await spiritMaster.TickAsync(Now + 2000 + GameSession.SpiritLeaveMs)).Any(b => b.SequenceEqual(GamePackets.Death(fireKey, 7))),
       "the Fire spirit's 0x3642 flag 7 comes 2550 ms after its 0xe23a");
 var wrongDismiss = await spiritMaster.HandleAsync(Cast(16290000, spiritMaster.PlayerKey, spiritAt), Now + 6000);
 var waterDismiss = await spiritMaster.HandleAsync(Cast(16290001, spiritMaster.PlayerKey, spiritAt), Now + 7000);
 Check(!wrongDismiss.Any(b => Op(b) == 0xe23a) && waterDismiss.Any(b => b.SequenceEqual(GamePackets.SpiritDeactivate(2, waterKey))) && spiritMaster.SpiritKey is null
-      && (await spiritMaster.TickAsync(Now + 7000 + GameSession.SpiritLeaveMs)).Any(b => b.SequenceEqual(GamePackets.Death(waterKey, 7))),
+      && (await spiritMaster.TickAsync(Now + 7000 + GameSession.SpiritLeaveMs)).Any(b => b.SequenceEqual(GamePackets.Death(waterKey, 7)))
+      && !spiritMaster.Targets.ContainsKey(waterKey) && !spiritMaster.Targets.ContainsKey(fireKey),
       "Dismiss: Fire Spirit leaves the Water spirit; Dismiss: Water Spirit sends it away (0xe23a, 0x3642 flag 7 later)");
 // A session logged in on the store; a Gladiator created when the store has none yet (not selected: the checks enter it).
 async Task<GameSession> GladiatorOn(FakeStore store)

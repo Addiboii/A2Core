@@ -61,13 +61,27 @@ ROUTE_LINK_RANGE = 300.0
 ROUTE_SPAWN_WORDS = ('onway', 'roam')
 
 
+# The levels of a Spiritmaster spirit: NpcData Elementalist_Skill01x_*Ele_Lv*_1 .. _15 follow the summon row's level-1 id.
+SPIRIT_LEVELS = 15
+
+
+def spirit_template_ids(class_skills=ROOT / 'tools/data/class-skills.json'):
+    """The spirits' NpcData ids: each summon skill's Spawn row npc (tools/class_skills.py) and its 14 higher levels."""
+    try:
+        skills = json.loads(Path(class_skills).read_text(encoding='utf-8'))['skills']
+    except (OSError, ValueError, KeyError):
+        return []
+    return sorted({s['summon']['npc'] + n for s in skills.values() if 'summon' in s for n in range(SPIRIT_LEVELS)})
+
+
 def extra_template_ids():
-    """NpcData ids with no placement that the server spawns (tools/bosschallenge_data.py's bosses)."""
+    """NpcData ids with no placement that the server spawns (tools/bosschallenge_data.py's bosses, the summoned spirits)."""
     try:
         from bosschallenge_data import boss_npc_ids
-        return boss_npc_ids()
+        bosses = boss_npc_ids()
     except Exception:   # a partial research transfer without the tables
-        return []
+        bosses = []
+    return sorted(set(bosses) | set(spirit_template_ids()))
 
 
 def field_mapdata(maps=FIELD_MAPS + INSTANCE_MAPS, source=ALL_MAPDATA):
