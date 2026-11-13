@@ -2755,6 +2755,22 @@ Check(exitCutscene.Count > 1 && exitCutscene[0].SequenceEqual(GamePackets.Cutsce
       && exitLoad[^3] == 12 && exitLoad[^2] == 0 && exitLoad[^1] == 0,
       "a PCTeleport with a cutscene before the move sends the cutscene, then the move without a name in 0x3621");
 Check((await jo.HandleAsync(new PacketWriter().U16(0xe334).String("Cutscene_L_A_Seq_1291").I64(0).ToArray(), Now + 29)).Count == 1, "the cutscene's report after the move is only answered");
+// A map event's own Cutscene directive carries a group request key; its completion is answered 0xe335, 0xe002, 0xe004 (OBSERVED
+// 2026-10-19 231752 #29708, #30715-#30717, own key 0x25b7).
+Check(GamePackets.Cutscene("Cutscene_L_A_Seq_1290", groupKey: 0x28273).SequenceEqual(Convert.FromHexString("158d0009154375747363656e655f4c5f415f5365715f313239300073820200000000000100000000"))
+      && GamePackets.CutsceneCompleteReply("Cutscene_L_A_Seq_1290", 0x28273).SequenceEqual(Convert.FromHexString("35e30000154375747363656e655f4c5f415f5365715f313239307382020000000000"))
+      && GamePackets.GroupRequestProgressed(0x28273, 0x25b7).SequenceEqual(Convert.FromHexString("02e07382020000000000b7250000"))
+      && GamePackets.GroupRequestComplete(0x28273).SequenceEqual(Convert.FromHexString("04e07382020000000000")),
+      "the keyed cutscene, 0xe335, 0xe002 and 0xe004 byte-exact to 231752");
+((IMapEventHost)jo).Cutscene("Cutscene_L_A_Seq_1290");
+var keyedCutscene = (await jo.TickAsync(Now + 29)).First(b => Op(b) == 0x8d15);
+var groupKey = BitConverter.ToInt64(keyedCutscene, 4 + "Cutscene_L_A_Seq_1290".Length + 2);
+var keyedEnd = new PacketWriter().U16(0xe334).String("Cutscene_L_A_Seq_1290").I64(groupKey).ToArray();
+var keyedDone = await jo.HandleAsync(keyedEnd, Now + 29);
+Check(groupKey > 0 && keyedDone.Take(3).Select(Op).SequenceEqual([(ushort)0xe335, (ushort)0xe002, (ushort)0xe004])
+      && keyedDone[1].SequenceEqual(GamePackets.GroupRequestProgressed(groupKey, jo.PlayerKey))
+      && (await jo.HandleAsync(keyedEnd, Now + 29)).All(b => Op(b) is not (0xe002 or 0xe004)),
+      "a map event's cutscene carries a group key; its completion gets 0xe335, 0xe002, 0xe004, a second one 0xe335 alone");
 jo.DevelopmentQuestLog().Set(new QuestRecord("HQ1101020", 1101020, 80, QuestLog.Incomplete, 2, new int[6]));   // the cave cleared: "Arrive in Ascension Subspace"
 var subspace = await jo.HandleAsync(new PacketWriter().U16(0x3622).I32(1).ToArray(), Now + 30);
 Check(jo.MapId == 200005 && jo.InstanceKey == jo.PlayerKey, "Dungeon_0005_StartPoint: the move into the Ascension dungeon's own copy (map 200005)");

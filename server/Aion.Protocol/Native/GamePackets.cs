@@ -893,8 +893,8 @@ public static class GamePackets
     /// ShowGuide (46) with the guide name and count 0 (once); volume name and key list empty. The leading byte as a presence
     /// mask hiding _func_value2 is a CANDIDATE (the optional-field convention of the other messages).
     /// </summary>
-    public static byte[] EventFunc(byte action, string value, int memberCount = 0, string second = "") =>
-        PacketWriter.Opcode(0x8d15).U8(0).U8(action).String(value).String(second).I64(0).I32(memberCount).U8(0).ToArray();
+    public static byte[] EventFunc(byte action, string value, int memberCount = 0, string second = "", long groupKey = 0) =>
+        PacketWriter.Opcode(0x8d15).U8(0).U8(action).String(value).String(second).I64(groupKey).I32(memberCount).U8(0).ToArray();
 
     /// <summary>
     /// StartFocusCamera (45): the camera actor and the NPC talk shown with it (OBSERVED 2026-10-19: Dungeon_0005_FocusCamera_1 with
@@ -920,7 +920,17 @@ public static class GamePackets
     /// (a CompleteCutscene objective: the lake cave's 1290 and 1291) and 0 for a dungeon's own arrival cutscene (the Ascension
     /// dungeon's 1293). OBSERVED in the 2026-10-19 recording.
     /// </summary>
-    public static byte[] Cutscene(string name, bool wait = true) => EventFunc(FuncCutscene, name, wait ? 1 : 0);
+    public static byte[] Cutscene(string name, bool wait = true, long groupKey = 0) => EventFunc(FuncCutscene, name, wait ? 1 : 0, groupKey: groupKey);
+
+    /// <summary>
+    /// A map event's cutscene carries a group request key, which the client sends back with CutsceneComplete; the answer is
+    /// 0xe335, then GroupRequestProgressed_NT 0xe002 {key i64, character key i32 (the own player key)} and
+    /// GroupRequestComplete_NT 0xe004 {key i64}. OBSERVED 2026-10-19 231752: Cutscene_L_A_Seq_1290 and the two first
+    /// Teleport_Mirror_interaction_IN cutscenes with keys 0x28273, 0x2829e, 0x282a8 (#29708-#37985); the cutscene before a
+    /// map move (1291, mirror 03) and the arrival cutscene carry 0 and get 0xe335 alone. The community fork found the same.
+    /// </summary>
+    public static byte[] GroupRequestProgressed(long groupKey, int characterKey) => PacketWriter.Opcode(0xe002).I64(groupKey).I32(characterKey).ToArray();
+    public static byte[] GroupRequestComplete(long groupKey) => PacketWriter.Opcode(0xe004).I64(groupKey).ToArray();
 
     /// <summary>A caption played by name (NpcTalk.dat Name, ENpcTalkType Caption). OBSERVED.</summary>
     public static byte[] Caption(string talk) => EventFunc(FuncPlayNpcTalk, talk, 1);

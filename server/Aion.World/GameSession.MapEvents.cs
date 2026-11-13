@@ -392,6 +392,10 @@ public sealed partial class GameSession : IMapEventHost
     List<byte[]> MapEventCutsceneDone(string cutscene, long groupKey, long now)
     {
         var replies = new List<byte[]> { GamePackets.CutsceneCompleteReply(cutscene, groupKey) };
+        // A keyed cutscene of this session's runs (or the copy owner's): its member is done and the request complete, once
+        // (OBSERVED solo; in a party the first member completes it, CANDIDATE).
+        if (groupKey != 0 && (openGroupRequests.Remove(groupKey) || CopyOwner?.openGroupRequests.Remove(groupKey) == true))
+            replies.AddRange([GamePackets.GroupRequestProgressed(groupKey, playerKey), GamePackets.GroupRequestComplete(groupKey)]);
         if (CopyOwner is { } owner)
         {
             owner.mapEventNow = now;
@@ -887,7 +891,16 @@ public sealed partial class GameSession : IMapEventHost
     /// <summary>SetMapEnvSetting: 0x4002 MapEnvSetting_NT {map, [{group i32, env state u8, start time}], enter false}. CANDIDATE.</summary>
     void IMapEventHost.MapEnvSetting(int group, int state) => mapEventOut.Add(PacketWriter.Opcode(0x4002).I32(worldMap).Varint(1).I32(group).U8((byte)state).I64(mapEventNow).U8(0).ToArray());
     /// <summary>Cutscene: EventFuncAction Cutscene (9) with the sequence name; the client plays it and reports CompleteCutscene (0x9230 kind 2). CANDIDATE.</summary>
-    void IMapEventHost.Cutscene(string name) => mapEventOut.Add(GamePackets.Cutscene(name));
+    void IMapEventHost.Cutscene(string name)
+    {
+        var key = Interlocked.Increment(ref lastGroupRequestKey);
+        openGroupRequests.Add(key);
+        mapEventOut.Add(GamePackets.Cutscene(name, groupKey: key));
+    }
+
+    /// <summary>Group request keys, rising across the server (OBSERVED rising; OURS: from 1 at each start).</summary>
+    static long lastGroupRequestKey;
+    readonly HashSet<long> openGroupRequests = [];
     void IMapEventHost.ShowGuide(string guide) => mapEventOut.Add(GamePackets.Guide(guide));
     void IMapEventHost.FocusCamera(string camera, string talk) => mapEventOut.Add(GamePackets.FocusCamera(camera, talk));
     /// <summary>ShowNote: the note by its NoteData name (the client reads it and reports CloseNote with 0x9230 kind 2).</summary>
