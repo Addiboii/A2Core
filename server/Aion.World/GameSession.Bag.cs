@@ -96,7 +96,7 @@ public sealed partial class GameSession
         // kItem_Sort_Success 0x0240 (OBSERVED 2026-11-05 190825 i5338) / _Fail 0x0241 (usmap).
         byte[] Reply(int result) => PacketWriter.Opcode(ItemSortRs).U16(result == 0 ? 0x0240 : 0x0241).I32(npc).U8(container).ToArray();
         if (container != 1 || Store is not { } store || CharacterId is not { } character) return [Reply(1)];
-        var sorted = await Stored(async () => await store.SortBagAsync(character, ct) ? [[]] : []);
+        var sorted = await Stored(async () => await store.SortBagAsync(character, ItemRules.Embedded.Currencies, ct) ? [[]] : []);
         return sorted.Count == 0 ? [Reply(1)] : [Reply(0), .. await InventoryChangesAsync(ct, 0, 0)];
     }
 

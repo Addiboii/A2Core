@@ -413,10 +413,10 @@ public sealed partial class ServiceNativeCharacterStore(string token, WorldIdent
         return await game.TakeGroupRewardAsync(identity.Account, character, groupId, step, items, ct);
     }
 
-    public async Task<bool> SortBagAsync(Guid character, CancellationToken ct)
+    public async Task<bool> SortBagAsync(Guid character, IReadOnlyCollection<int> currencies, CancellationToken ct)
     {
         await ValidateAsync(ct);
-        return await game.SortBagAsync(identity.Account, character, ct);
+        return await game.SortBagAsync(identity.Account, character, currencies, ct);
     }
 
     public async Task<IReadOnlyList<QuickSlotRecord>> QuickSlotsAsync(Guid character, CancellationToken ct)

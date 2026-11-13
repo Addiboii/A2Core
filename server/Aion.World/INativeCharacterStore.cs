@@ -67,7 +67,7 @@ public interface INativeCharacterStore : IAsyncDisposable
     Task<bool> SaveAchievementsAsync(Guid character, IReadOnlyList<AchievementRecord> records, CancellationToken ct) => Task.FromResult(false);
     Task<bool> TakeAchievementRewardAsync(Guid character, int achievementId, int step, IReadOnlyList<(int TemplateId, long Count)> items, CancellationToken ct) => Task.FromResult(false);
     Task<bool> TakeGroupRewardAsync(Guid character, int groupId, int step, IReadOnlyList<(int TemplateId, long Count)> items, CancellationToken ct) => Task.FromResult(false);
-    Task<bool> SortBagAsync(Guid character, CancellationToken ct) => Task.FromResult(false);
+    Task<bool> SortBagAsync(Guid character, IReadOnlyCollection<int> currencies, CancellationToken ct) => Task.FromResult(false);
     Task<IReadOnlyList<QuickSlotRecord>> QuickSlotsAsync(Guid character, CancellationToken ct) => Task.FromResult<IReadOnlyList<QuickSlotRecord>>([]);
     Task<bool> SaveQuickSlotAsync(Guid character, int number, QuickSlotRecord? slot, CancellationToken ct) => Task.FromResult(false);
     /// <summary>Per-character settings by name (emotes, seal stone, auto-use, presets), JSON values.</summary>

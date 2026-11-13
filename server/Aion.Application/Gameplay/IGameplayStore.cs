@@ -222,8 +222,8 @@ public interface IGameplayStore
         Task.FromResult(false);
     /// <summary>A character id by name (any account), for mail to offline players.</summary>
     Task<Guid?> CharacterByNameAsync(VerifiedAccount account, string name, CancellationToken ct = default) => Task.FromResult<Guid?>(null);
-    /// <summary>Sorts the bag: items ordered by template, then age, on slots 0, 1, 2, ...</summary>
-    Task<bool> SortBagAsync(VerifiedAccount account, Guid character, CancellationToken ct = default);
+    /// <summary>Sorts the bag: items ordered by template, then age, on slots 0, 1, 2, ...; the currencies keep no slot.</summary>
+    Task<bool> SortBagAsync(VerifiedAccount account, Guid character, IReadOnlyCollection<int> currencies, CancellationToken ct = default);
     Task<IReadOnlyList<QuickSlotRecord>?> QuickSlotsAsync(VerifiedAccount account, Guid character, CancellationToken ct = default);
     /// <summary>Per-character settings by name (game.character_settings): emotes, seal stone, auto-use, presets.</summary>
     Task<IReadOnlyDictionary<string, JsonElement>?> CharacterSettingsAsync(VerifiedAccount account, Guid character, CancellationToken ct = default) =>

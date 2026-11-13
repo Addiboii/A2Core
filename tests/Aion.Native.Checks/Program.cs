@@ -1844,9 +1844,15 @@ Check(discard[0][0] == 0x3d && BitConverter.ToUInt16(discard[0], 2) == 0x0300 &&
 Check(BitConverter.ToUInt16((await staffSession.HandleAsync(new PacketWriter().U16(0x563c).Varint(1).I64(40).I64(99).Varint(0).ToArray(), Now))[0], 2) == 0x0301,
       "discarding more than the stack is refused (0x0301)");
 var sortReply = await staffSession.HandleAsync(new PacketWriter().U16(0x563e).I32(0).U8(1).ToArray(), Now);
-var sortedBag = staffStore.Items.Where(i => i.Location == "bag").OrderBy(i => i.Slot).ToList();
-Check(sortReply[0][0] == 0x3f && BitConverter.ToUInt16(sortReply[0], 2) == 0x0240 && sortedBag.Select(i => i.TemplateId).SequenceEqual(sortedBag.Select(i => i.TemplateId).Order()),
-      "ItemSort orders the bag by item (0x563f)");
+var currencyIds = ItemRules.Embedded.Currencies;
+var sortedBag = staffStore.Items.Where(i => i.Location == "bag" && !currencyIds.Contains(i.TemplateId)).OrderBy(i => i.Slot).ToList();
+Check(sortReply[0][0] == 0x3f && BitConverter.ToUInt16(sortReply[0], 2) == 0x0240 && sortedBag.Select(i => i.TemplateId).SequenceEqual(sortedBag.Select(i => i.TemplateId).Order())
+      && sortedBag.Select(i => i.Slot).SequenceEqual(sortedBag.Select((_, n) => (int?)n)),
+      "ItemSort orders the bag by item on slots 0, 1, 2, ... (0x563f)");
+Check(currencyIds.Contains(GameSession.KinaItemId) && currencyIds.Contains(GameSession.GameCashItemId) && !currencyIds.Contains(530126003)
+      && staffStore.Items.Any(i => i.Location == "bag" && i.TemplateId == GameSession.KinaItemId)
+      && staffStore.Items.Where(i => i.Location == "bag" && currencyIds.Contains(i.TemplateId)).All(i => i.Slot is null),
+      "the sort leaves the currencies (Item.dat ItemType Currency: Kina, Quna, ...) without a bag slot");
 // Hotbar: QuickSlotSet (0x5601, the live 27-byte request) stores a slot and echoes it (0x5602); a stored bar replaces
 // the class's default at world entry; QuickSlotReset (0x5603) clears it.
 var quickSet = new PacketWriter().U16(0x5601).U8(0).U8(5).U8(1).I64(41).I32(530126003).I32(0).U8(0).I32(0).U8(0).ToArray();
@@ -3745,9 +3751,12 @@ sealed partial class FakeStore : INativeCharacterStore
         Items[index] = Items[index] with { Slot = slot, Revision = revision + 1 };
         return Task.FromResult(true);
     }
-    public Task<bool> SortBagAsync(Guid character, CancellationToken ct)
+    public Task<bool> SortBagAsync(Guid character, IReadOnlyCollection<int> currencies, CancellationToken ct)
     {
-        var bag = Items.Select((item, index) => (item, index)).Where(x => x.item.Location == "bag").OrderBy(x => x.item.TemplateId).ThenBy(x => x.item.WireId).ToList();
+        for (var i = 0; i < Items.Count; i++)
+            if (Items[i].Location == "bag" && currencies.Contains(Items[i].TemplateId)) Items[i] = Items[i] with { Slot = null };
+        var bag = Items.Select((item, index) => (item, index)).Where(x => x.item.Location == "bag" && !currencies.Contains(x.item.TemplateId))
+            .OrderBy(x => x.item.TemplateId).ThenBy(x => x.item.WireId).ToList();
         for (var n = 0; n < bag.Count; n++) Items[bag[n].index] = bag[n].item with { Slot = n, Revision = bag[n].item.Revision + 1 };
         return Task.FromResult(true);
     }

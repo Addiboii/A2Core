@@ -684,15 +684,20 @@ public sealed partial class PostgresGameplayStore(NpgsqlDataSource source) : IGa
         await t.CommitAsync(ct); return true;
     }
 
-    public async Task<bool> SortBagAsync(VerifiedAccount account, Guid character, CancellationToken ct=default)
+    public async Task<bool> SortBagAsync(VerifiedAccount account, Guid character, IReadOnlyCollection<int> currencies, CancellationToken ct=default)
     {
         await using var c=await source.OpenConnectionAsync(ct); await using var t=await c.BeginTransactionAsync(ct);
         if(!await Own(c,t,account.AccountId,character,ct)) return false;
+        var skip=currencies.ToArray();
+        // Currencies (Item.dat ItemType Currency) take no slot: the client shows them in its currency bar, and a sorted-in one
+        // left a gap in the bag (the community fork saw Kina and Quna shown as bag items, 2026-11-11).
+        await Execute(c,t,"UPDATE game.item_instances SET slot=NULL,revision=revision+1 WHERE character_id=$1 AND location='bag' AND slot IS NOT NULL AND template_id=ANY($2)",ct,character,skip);
         await Execute(c,t,"""
             UPDATE game.item_instances i SET slot=o.n-1,revision=i.revision+1
-            FROM (SELECT instance_id,row_number() OVER (ORDER BY template_id,created_at,instance_id) n FROM game.item_instances WHERE character_id=$1 AND location='bag') o
+            FROM (SELECT instance_id,row_number() OVER (ORDER BY template_id,created_at,instance_id) n FROM game.item_instances
+                  WHERE character_id=$1 AND location='bag' AND NOT template_id=ANY($2)) o
             WHERE i.instance_id=o.instance_id
-            """,ct,character);
+            """,ct,character,skip);
         await t.CommitAsync(ct); return true;
     }
 

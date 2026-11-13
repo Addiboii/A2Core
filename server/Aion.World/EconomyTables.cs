@@ -122,7 +122,7 @@ public sealed class ExceedEnchantTables
 public sealed class ItemRules
 {
     readonly Dictionary<int, string> trade = [];
-    readonly HashSet<int> guildStorage, bindOnAcquire, nonExchangeable;
+    readonly HashSet<int> guildStorage, bindOnAcquire, nonExchangeable, currencies;
 
     ItemRules(JsonElement root)
     {
@@ -130,7 +130,11 @@ public sealed class ItemRules
         guildStorage = [.. root.GetProperty("guild_storage").EnumerateArray().Select(e => e.GetInt32())];
         bindOnAcquire = [.. root.GetProperty("bind_on_acquire").EnumerateArray().Select(e => e.GetInt32())];
         nonExchangeable = [.. root.GetProperty("non_exchangeable").EnumerateArray().Select(e => e.GetInt32())];
+        currencies = [.. root.GetProperty("currencies").EnumerateArray().Select(e => e.GetInt32())];
     }
+
+    /// <summary>Item.dat ItemType Currency (Kina, Quna, Mileage, ...): held in the bag without a bag slot of their own.</summary>
+    public IReadOnlyCollection<int> Currencies => currencies;
 
     static readonly Lazy<ItemRules> embedded = new(() => new ItemRules(EmbeddedJson.Load("item-rules.json")));
     public static ItemRules Embedded => embedded.Value;

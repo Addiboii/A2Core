@@ -161,6 +161,11 @@ await using(var source=NpgsqlDataSource.Create(connectionString))
     Check(await game.MoveItemAsync(first,id,original.InstanceId,original.Revision,1),"equipment swap succeeds");
     inventory=(await game.InventoryAsync(first,id))!;
     Check(inventory.Items.Count(x=>x.Location=="equipment")==1 && inventory.Items.Single(x=>x.InstanceId==granted).Location=="bag","swap retains both instances");
+    // The bag sort: slots 0, 1, ... for items; the given currency templates keep no slot (and lose one they had).
+    var bagTemplates=inventory.Items.Where(x=>x.Location=="bag").Select(x=>x.TemplateId).Distinct().ToArray();
+    Check(await game.SortBagAsync(first,id,[]) && (await game.InventoryAsync(first,id))!.Items.Where(x=>x.Location=="bag").Select(x=>x.Slot).Order().SequenceEqual(Enumerable.Range(0,bagTemplates.Length==0?0:inventory.Items.Count(x=>x.Location=="bag")).Select(n=>(int?)n))
+          && await game.SortBagAsync(first,id,bagTemplates) && (await game.InventoryAsync(first,id))!.Items.Where(x=>x.Location=="bag").All(x=>x.Slot is null)
+          && !await game.SortBagAsync(second,id,[]),"bag sort: slots from 0, currencies keep none, owner only");
     // Item points (migration 079): one item consumed with its points; another account or a stale revision refused.
     var pointItem=(await game.AdminAsync(second,new AdminCommand(Guid.NewGuid(),id,"grant","test",101))).GetProperty("instanceId").GetGuid();
     var pointRow=(await game.InventoryAsync(first,id))!.Items.Single(x=>x.InstanceId==pointItem);
