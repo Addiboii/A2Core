@@ -37,6 +37,23 @@ def _verification(paths):
 
 
 class LauncherBuildTests(unittest.TestCase):
+    def test_install_is_hashed_against_the_depot(self):
+        import hashlib
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'Aion2/Binaries/Win64').mkdir(parents=True)
+            (root / EXE).write_bytes(b'exe!')
+            (root / 'extra.txt').write_bytes(b'not in the depot')
+            depot = {'depotId': 3393111, 'manifestId': '586322693862358479', 'files': {EXE: 4}}
+            ok = launcher_build.verify_install(root, depot)
+            self.assertEqual((ok['status'], ok['file_count']), ('verified', 1))
+            self.assertEqual(ok['files'][0]['sha256'], hashlib.sha256(b'exe!').hexdigest())
+            self.assertEqual(launcher_build.build(ok, depot)['fileCount'], 1)
+            wrong = launcher_build.verify_install(root, {**depot, 'files': {EXE: 5, 'Aion2/missing.pak': 1}})
+            self.assertEqual((wrong['status'], len(wrong['errors'])), ('failed', 2))
+
     def test_depot_manifest_lists_files_not_directories(self):
         depot = launcher_build.depot_manifest(_manifest([('Aion2', 0, 0x40), ('Aion2\\Binaries\\Win64\\AION2.exe', 10, 0)]))
         self.assertEqual(depot, {'depotId': 3393111, 'manifestId': '586322693862358479', 'files': {EXE: 10}})

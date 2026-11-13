@@ -11,6 +11,12 @@ With --depot-manifest (Steam's depotcache/3393111_<manifest>.manifest, written w
 runs download_depot or updates), only the files the depot itself contains are listed. A copy that
 has been run also holds files the game creates (Aion2/InstallLog.txt, and NCGuard's own
 Aion2/Binaries/Win64/NCGuard/bb64.dll); a fresh download does not have them.
+
+With --install <Steam>/steamapps/common/AION2 as well, the verification is made from that install first: every file the
+depot lists is hashed (it must exist at the listed size) and written to --source, so a build update is one command
+(from the community fork):
+
+    python tools/launcher_build.py --depot-manifest <Steam>/depotcache/3393111_<manifest>.manifest --install <AION2 folder>
 """
 import argparse
 import hashlib
@@ -91,6 +97,20 @@ def depot_manifest(data):
     return {'depotId': meta.get(1), 'manifestId': str(meta.get(2)), 'files': files}
 
 
+def verify_install(root, depot):
+    """A verification of an install against the depot manifest: every listed file at its size, with its SHA-256."""
+    files, errors = [], []
+    for path, size in sorted(depot['files'].items(), key=lambda item: item[0].lower()):
+        target = Path(root) / path
+        if not target.is_file() or target.stat().st_size != size:
+            errors.append(f'{path}: missing or not {size} bytes')
+            continue
+        with target.open('rb') as stream:
+            files.append({'path': path, 'bytes': size, 'sha256': hashlib.file_digest(stream, 'sha256').hexdigest()})
+    return {'status': 'verified' if not errors else 'failed', 'errors': errors, 'file_count': len(files),
+            'depotId': depot['depotId'], 'manifestId': depot['manifestId'], 'files': files}
+
+
 def build(verification, depot=None):
     if verification.get('status') != 'verified' or verification.get('errors'):
         raise ValueError('verification.json is not a clean verified copy')
@@ -124,8 +144,18 @@ def main(argv=None):
     parser.add_argument('--source', type=Path, default=SOURCE)
     parser.add_argument('--output', type=Path, default=OUTPUT)
     parser.add_argument('--depot-manifest', type=Path, help='Steam depotcache/3393111_<manifest>.manifest')
+    parser.add_argument('--install', type=Path, help='an install of that manifest to hash first (needs --depot-manifest)')
     args = parser.parse_args(argv)
     depot = depot_manifest(args.depot_manifest.read_bytes()) if args.depot_manifest else None
+    if args.install:
+        if depot is None:
+            parser.error('--install needs --depot-manifest')
+        verification = verify_install(args.install, depot)
+        if verification['errors']:
+            print(f"{args.install}: {len(verification['errors'])} files differ, e.g. {verification['errors'][:3]}")
+            return 1
+        args.source.parent.mkdir(parents=True, exist_ok=True)
+        args.source.write_text(json.dumps(verification, indent=1) + '\n', encoding='utf-8')
     result = build(json.loads(args.source.read_text(encoding='utf-8')), depot)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(result, separators=(',', ':')) + '\n', encoding='utf-8')
