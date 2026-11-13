@@ -10,7 +10,7 @@ def decode_spawn(body):
     r = Reader(body)
     assert r.uint(2) == 0x3633
     result = {'key': r.varuint()}
-    assert r.uint(4) == 0x2006
+    assert r.uint(4) & ~0x3000 == 0x0006 | 1 << 23 | 1 << 27
     assert r.uint(1) == 0x37
     result['name'] = r.take(r.varuint()).decode()
     # Detail prefix already compared independently with the official sample.

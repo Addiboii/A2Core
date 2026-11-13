@@ -50,6 +50,11 @@ public sealed class ServerControl(IStaffTools tools, IServiceProvider services, 
         maintenance = await tools.MaintenanceAsync(ct);
         sanctions = await tools.ActiveSanctionsAsync(ct);
         events = await tools.LiveEventsAsync(ct);
+        // The Black Cloud market's staff settings over server-rules.xml (a refused setting keeps the file's rules).
+        var premium = await tools.PremiumShopSettingsAsync(ct);
+        if (!PremiumShop.Apply(premium.Json)) logger.LogWarning("Stored premium_shop settings refused; server-rules.xml applies");
+        var randomShop = await tools.RandomShopSettingsAsync(ct);
+        if (!RandomShop.Apply(randomShop.Json)) logger.LogWarning("Stored random_shop settings refused; server-rules.xml applies");
         refreshedAt = DateTimeOffset.UtcNow;
         ApplyBoosts(refreshedAt);
     }

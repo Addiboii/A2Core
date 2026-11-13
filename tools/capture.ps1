@@ -7,7 +7,8 @@ param(
     [switch]$MultiLayer,
     [switch]$InGame,
     [ValidateRange(64, 4096)][int]$MaxSizeMb = 128,
-    [switch]$PlanOnly
+    [switch]$PlanOnly,
+    [switch]$AutoStop
 )
 $PSBoundParameters['DurationSeconds'] = $DurationSeconds
 & (Join-Path $PSScriptRoot 'capture_port13700.ps1') @PSBoundParameters

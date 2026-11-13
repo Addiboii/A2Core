@@ -1,0 +1,6 @@
+[Unit]
+Description=A2Core feature-gap scan of client requests (research/local/feature-gaps.md)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 %h/aion/A2Core/tools/feature_gaps.py --since -7d

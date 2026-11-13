@@ -11,9 +11,16 @@ namespace Aion.World;
 public sealed class WorldChoices
 {
     readonly ConcurrentDictionary<string, int> races = new();
+    readonly ConcurrentDictionary<string, int> servers = new();
 
     public void Pick(string wireAccountId, int race) => races[wireAccountId] = race;
 
+    /// <summary>The picked world itself (four worlds, <see cref="WorldCatalog"/>): its lobby lists and creates that world's characters.</summary>
+    public void PickServer(string wireAccountId, int serverId) => servers[wireAccountId] = serverId;
+
     /// <summary>The picked world's race (1 Light, 2 Dark), or null when this account picked none since the host started.</summary>
     public int? Race(string wireAccountId) => races.TryGetValue(wireAccountId, out var race) ? race : null;
+
+    /// <summary>The picked world's id, or null when this account picked none since the host started.</summary>
+    public int? Server(string wireAccountId) => servers.TryGetValue(wireAccountId, out var id) ? id : null;
 }

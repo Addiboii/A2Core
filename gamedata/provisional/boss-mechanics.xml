@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Boss mechanics: a boss skill that calls helper casters (Stage 6 data). When the boss STARTS casting `skill`, `waves` waves of
+     `count` invisible helpers (`npc`) appear around it, aim at the player and fire their own `helper_skill` as a straight
+     projectile toward where the player stood when they began to aim; the shot hits whoever is within `hit_width` of its path,
+     a wall stops it (0x380e), and the helpers vanish after `life_ms`.
+     OBSERVED: Dungeon_D_0018 Lake Guardian (2701034) roar 1603860, capture 20261107-012837 (#5211-#5300): helpers 2920328 in
+     pairs 950 ms apart at 1180-1450 and ~2050 cm from the boss, cast bar 1603861 200 ms after they appear (2000 ms, client table
+     CastingTime), projectile 16038611 aimed 11000 cm past the helper, flight 3650 ms, walls at 1100-1400 ms; HP 6072; HP 0 after
+     ~10 s, gone at ~11.2 s. Damage: client table ratio 22000-24000 (effect 160386111).
+     PROVISIONAL: hit_width (the recorded player dodged every shot), the helper positions (random angle, only one recorded roar). -->
+<boss_mechanics>
+	<on_cast skill="1603860" npc="2920328" helper_skill="1603861" projectile="16038611" effect="160386111"
+	         count="2" waves="2" wave_gap_ms="950" radius_min="1200" radius_step="800" radius_jitter="250"
+	         aim_ms="200" cast_ms="2000" range="11000" flight_ms="3650" hit_width="150" ratio_min="22000" ratio_max="24000"
+	         hp="6072" life_ms="10100" gone_ms="11200"/>
+</boss_mechanics>

@@ -1,0 +1,1897 @@
+{
+ "source": "official recordings 2026-11-06/07 (tools/abnormal_traffic.py)",
+ "abnormals": {
+  "200": {
+   "samples": 203,
+   "on": {
+    "self": 203
+   },
+   "durations_ms": {
+    "300": 203
+   },
+   "skills": {},
+   "levels": {
+    "1": 203
+   },
+   "removed_reasons": {
+    "7": 203
+   },
+   "lasted_ms": 200,
+   "stat_changes": {
+    "65:-350": 1,
+    "104:-50": 1,
+    "379:-700": 1,
+    "425:-2000": 1,
+    "442:-1000": 1,
+    "443:-140": 1,
+    "65:+750": 1,
+    "282:+1500": 1
+   }
+  },
+  "231": {
+   "samples": 32,
+   "on": {
+    "self": 32
+   },
+   "durations_ms": {
+    "200": 32
+   },
+   "skills": {},
+   "levels": {
+    "1": 32
+   },
+   "removed_reasons": {
+    "1": 32
+   },
+   "lasted_ms": 202,
+   "stat_changes": {
+    "205:-3000": 1,
+    "214:-3000": 1,
+    "205:-2000": 1
+   }
+  },
+  "1000": {
+   "samples": 2,
+   "on": {
+    "self": 2
+   },
+   "durations_ms": {
+    "5000": 2
+   },
+   "skills": {},
+   "levels": {
+    "1": 2
+   },
+   "removed_reasons": {
+    "1": 2
+   },
+   "lasted_ms": 7749,
+   "stat_changes": {}
+  },
+  "3015": {
+   "samples": 63,
+   "on": {
+    "self": 63
+   },
+   "durations_ms": {
+    "3000": 63
+   },
+   "skills": {
+    "14000100": 23,
+    "15000100": 40
+   },
+   "levels": {
+    "1": 63
+   },
+   "removed_reasons": {
+    "1": 63
+   },
+   "lasted_ms": 3050,
+   "stat_changes": {
+    "65:-350": 1,
+    "104:-50": 1,
+    "379:-700": 1,
+    "425:-2000": 1,
+    "442:-1000": 1,
+    "443:-140": 1,
+    "65:-750": 1,
+    "282:-1500": 1
+   }
+  },
+  "4074": {
+   "samples": 1,
+   "on": {
+    "self": 1
+   },
+   "durations_ms": {
+    "-1": 1
+   },
+   "skills": {},
+   "levels": {
+    "1": 1
+   },
+   "removed_reasons": {},
+   "lasted_ms": null,
+   "stat_changes": {
+    "7:+35": 1,
+    "8:+28": 1,
+    "9:+4": 1,
+    "10:+7": 1,
+    "11:+35": 1,
+    "14:+20": 1,
+    "15:+4": 1,
+    "16:+7": 1
+   }
+  },
+  "4075": {
+   "samples": 1,
+   "on": {
+    "self": 1
+   },
+   "durations_ms": {
+    "-1": 1
+   },
+   "skills": {},
+   "levels": {
+    "1": 1
+   },
+   "removed_reasons": {},
+   "lasted_ms": null,
+   "stat_changes": {
+    "7:+35": 1,
+    "8:+28": 1,
+    "9:+4": 1,
+    "10:+7": 1,
+    "11:+35": 1,
+    "14:+20": 1,
+    "15:+4": 1,
+    "16:+7": 1
+   }
+  },
+  "4079": {
+   "samples": 1,
+   "on": {
+    "self": 1
+   },
+   "durations_ms": {
+    "-1": 1
+   },
+   "skills": {},
+   "levels": {
+    "1": 1
+   },
+   "removed_reasons": {},
+   "lasted_ms": null,
+   "stat_changes": {
+    "7:+35": 1,
+    "8:+28": 1,
+    "9:+4": 1,
+    "10:+7": 1,
+    "11:+35": 1,
+    "14:+20": 1,
+    "15:+4": 1,
+    "16:+7": 1
+   }
+  },
+  "4080": {
+   "samples": 1,
+   "on": {
+    "self": 1
+   },
+   "durations_ms": {
+    "-1": 1
+   },
+   "skills": {},
+   "levels": {
+    "1": 1
+   },
+   "removed_reasons": {},
+   "lasted_ms": null,
+   "stat_changes": {
+    "7:+35": 1,
+    "8:+28": 1,
+    "9:+4": 1,
+    "10:+7": 1,
+    "11:+35": 1,
+    "14:+20": 1,
+    "15:+4": 1,
+    "16:+7": 1
+   }
+  },
+  "4081": {
+   "samples": 1,
+   "on": {
+    "self": 1
+   },
+   "durations_ms": {
+    "-1": 1
+   },
+   "skills": {},
+   "levels": {
+    "1": 1
+   },
+   "removed_reasons": {},
+   "lasted_ms": null,
+   "stat_changes": {
+    "7:+35": 1,
+    "8:+28": 1,
+    "9:+4": 1,
+    "10:+7": 1,
+    "11:+35": 1,
+    "14:+20": 1,
+    "15:+4": 1,
+    "16:+7": 1
+   }
+  },
+  "4099": {
+   "samples": 1,
+   "on": {
+    "self": 1
+   },
+   "durations_ms": {
+    "-1": 1
+   },
+   "skills": {},
+   "levels": {
+    "1": 1
+   },
+   "removed_reasons": {},
+   "lasted_ms": null,
+   "stat_changes": {
+    "7:+35": 1,
+    "8:+28": 1,
+    "9:+4": 1,
+    "10:+7": 1,
+    "11:+35": 1,
+    "14:+20": 1,
+    "15:+4": 1,
+    "16:+7": 1
+   }
+  },
+  "4100": {
+   "samples": 1,
+   "on": {
+    "self": 1
+   },
+   "durations_ms": {
+    "-1": 1
+   },
+   "skills": {},
+   "levels": {
+    "1": 1
+   },
+   "removed_reasons": {},
+   "lasted_ms": null,
+   "stat_changes": {
+    "7:+35": 1,
+    "8:+28": 1,
+    "9:+4": 1,
+    "10:+7": 1,
+    "11:+35": 1,
+    "14:+20": 1,
+    "15:+4": 1,
+    "16:+7": 1
+   }
+  },
+  "4109": {
+   "samples": 1,
+   "on": {
+    "self": 1
+   },
+   "durations_ms": {
+    "-1": 1
+   },
+   "skills": {},
+   "levels": {
+    "1": 1
+   },
+   "removed_reasons": {},
+   "lasted_ms": null,
+   "stat_changes": {
+    "7:+35": 1,
+    "8:+28": 1,
+    "9:+4": 1,
+    "10:+7": 1,
+    "11:+35": 1,
+    "14:+20": 1,
+    "15:+4": 1,
+    "16:+7": 1
+   }
+  },
+  "4111": {
+   "samples": 1,
+   "on": {
+    "self": 1
+   },
+   "durations_ms": {
+    "-1": 1
+   },
+   "skills": {},
+   "levels": {
+    "1": 1
+   },
+   "removed_reasons": {},
+   "lasted_ms": null,
+   "stat_changes": {
+    "7:+35": 1,
+    "8:+28": 1,
+    "9:+4": 1,
+    "10:+7": 1,
+    "11:+35": 1,
+    "14:+20": 1,
+    "15:+4": 1,
+    "16:+7": 1
+   }
+  },
+  "4116": {
+   "samples": 1,
+   "on": {
+    "self": 1
+   },
+   "durations_ms": {
+    "-1": 1
+   },
+   "skills": {},
+   "levels": {
+    "1": 1
+   },
+   "removed_reasons": {},
+   "lasted_ms": null,
+   "stat_changes": {
+    "7:+35": 1,
+    "8:+28": 1,
+    "9:+4": 1,
+    "10:+7": 1,
+    "11:+35": 1,
+    "14:+20": 1,
+    "15:+4": 1,
+    "16:+7": 1
+   }
+  },
+  "10002": {
+   "samples": 34,
+   "on": {
+    "self": 34
+   },
+   "durations_ms": {
+    "5000": 27,
+    "50766": 1,
+    "17233": 1,
+    "534": 1,
+    "500": 1
+   },
+   "skills": {},
+   "levels": {
+    "1": 34
+   },
+   "removed_reasons": {
+    "1": 4,
+    "16": 21,
+    "15": 9
+   },
+   "lasted_ms": 3572,
+   "stat_changes": {}
+  },
+  "10018": {
+   "samples": 1,
+   "on": {
+    "self": 1
+   },
+   "durations_ms": {
+    "-1": 1
+   },
+   "skills": {},
+   "levels": {
+    "1": 1
+   },
+   "removed_reasons": {
+    "16": 1
+   },
+   "lasted_ms": 15548,
+   "stat_changes": {}
+  },
+  "11011": {
+   "samples": 2,
+   "on": {
+    "self": 2
+   },
+   "durations_ms": {
+    "2000": 2
+   },
+   "skills": {
+    "1101": 2
+   },
+   "levels": {
+    "1": 2
+   },
+   "removed_reasons": {
+    "1": 2
+   },
+   "lasted_ms": 1998,
+   "stat_changes": {}
+  },
+  "11021": {
+   "samples": 2,
+   "on": {
+    "self": 2
+   },
+   "durations_ms": {
+    "-1": 2
+   },
+   "skills": {
+    "1102": 2
+   },
+   "levels": {
+    "1": 2
+   },
+   "removed_reasons": {
+    "7": 1,
+    "1": 1
+   },
+   "lasted_ms": 394,
+   "stat_changes": {}
+  },
+  "12011": {
+   "samples": 2,
+   "on": {
+    "self": 2
+   },
+   "durations_ms": {
+    "-1": 2
+   },
+   "skills": {},
+   "levels": {
+    "1": 2
+   },
+   "removed_reasons": {},
+   "lasted_ms": null,
+   "stat_changes": {
+    "44:+300": 2,
+    "196:+60": 1,
+    "443:+50": 1,
+    "7:+35": 1,
+    "8:+28": 1,
+    "9:+4": 1,
+    "10:+7": 1,
+    "11:+35": 1
+   }
+  },
+  "12031": {
+   "samples": 1,
+   "on": {
+    "self": 1
+   },
+   "durations_ms": {
+    "-1": 1
+   },
+   "skills": {},
+   "levels": {
+    "1": 1
+   },
+   "removed_reasons": {},
+   "lasted_ms": null,
+   "stat_changes": {
+    "44:+300": 2,
+    "196:+60": 1,
+    "443:+50": 1,
+    "7:+35": 1,
+    "8:+28": 1,
+    "9:+4": 1,
+    "10:+7": 1,
+    "11:+35": 1
+   }
+  },
+  "80001": {
+   "samples": 3,
+   "on": {
+    "self": 3
+   },
+   "durations_ms": {
+    "-1": 3
+   },
+   "skills": {},
+   "levels": {
+    "1": 3
+   },
+   "removed_reasons": {},
+   "lasted_ms": null,
+   "stat_changes": {
+    "44:+300": 2,
+    "196:+60": 1,
+    "443:+50": 1,
+    "7:+35": 1,
+    "8:+28": 1,
+    "9:+4": 1,
+    "10:+7": 1,
+    "11:+35": 1
+   }
+  },
+  "150050": {
+   "samples": 1,
+   "on": {
+    "self": 1
+   },
+   "durations_ms": {
+    "500": 1
+   },
+   "skills": {},
+   "levels": {
+    "1": 1
+   },
+   "removed_reasons": {
+    "7": 1
+   },
+   "lasted_ms": 50,
+   "stat_changes": {}
+  },
+  "160010": {
+   "samples": 5,
+   "on": {
+    "self": 5
+   },
+   "durations_ms": {
+    "3600000": 5
+   },
+   "skills": {},
+   "levels": {
+    "1": 5
+   },
+   "removed_reasons": {
+    "16": 3,
+    "6": 2
+   },
+   "lasted_ms": 30450,
+   "stat_changes": {}
+  },
+  "160012": {
+   "samples": 13,
+   "on": {
+    "self": 13
+   },
+   "durations_ms": {
+    "-1": 13
+   },
+   "skills": {},
+   "levels": {
+    "1": 13
+   },
+   "removed_reasons": {
+    "3": 13
+   },
+   "lasted_ms": 1051,
+   "stat_changes": {}
+  },
+  "160013": {
+   "samples": 4,
+   "on": {
+    "monster": 4
+   },
+   "durations_ms": {
+    "2000": 4
+   },
+   "skills": {
+    "5001": 4
+   },
+   "levels": {
+    "1": 4
+   },
+   "removed_reasons": {
+    "1": 4
+   },
+   "lasted_ms": 2002,
+   "stat_changes": {}
+  },
+  "160014": {
+   "samples": 3,
+   "on": {
+    "monster": 3
+   },
+   "durations_ms": {
+    "1500": 3
+   },
+   "skills": {},
+   "levels": {
+    "1": 3
+   },
+   "removed_reasons": {
+    "7": 3
+   },
+   "lasted_ms": 1502,
+   "stat_changes": {}
+  },
+  "19000000": {
+   "samples": 2,
+   "on": {
+    "self": 2
+   },
+   "durations_ms": {
+    "-1": 2
+   },
+   "skills": {},
+   "levels": {
+    "1": 2
+   },
+   "removed_reasons": {
+    "7": 2
+   },
+   "lasted_ms": 104272,
+   "stat_changes": {}
+  },
+  "19000013": {
+   "samples": 1,
+   "on": {
+    "self": 1
+   },
+   "durations_ms": {
+    "800": 1
+   },
+   "skills": {},
+   "levels": {
+    "1": 1
+   },
+   "removed_reasons": {
+    "1": 1
+   },
+   "lasted_ms": 798,
+   "stat_changes": {}
+  },
+  "19000015": {
+   "samples": 2,
+   "on": {
+    "self": 2
+   },
+   "durations_ms": {
+    "800": 2
+   },
+   "skills": {},
+   "levels": {
+    "1": 2
+   },
+   "removed_reasons": {
+    "1": 2
+   },
+   "lasted_ms": 799,
+   "stat_changes": {}
+  },
+  "19000016": {
+   "samples": 1,
+   "on": {
+    "self": 1
+   },
+   "durations_ms": {
+    "800": 1
+   },
+   "skills": {},
+   "levels": {
+    "1": 1
+   },
+   "removed_reasons": {
+    "1": 1
+   },
+   "lasted_ms": 901,
+   "stat_changes": {}
+  },
+  "19000060": {
+   "samples": 2,
+   "on": {
+    "self": 2
+   },
+   "durations_ms": {
+    "-1": 2
+   },
+   "skills": {},
+   "levels": {
+    "1": 2
+   },
+   "removed_reasons": {
+    "7": 2
+   },
+   "lasted_ms": 14350,
+   "stat_changes": {}
+  },
+  "19000064": {
+   "samples": 1,
+   "on": {
+    "self": 1
+   },
+   "durations_ms": {
+    "3000": 1
+   },
+   "skills": {},
+   "levels": {
+    "1": 1
+   },
+   "removed_reasons": {
+    "1": 1
+   },
+   "lasted_ms": 4597,
+   "stat_changes": {}
+  },
+  "19000065": {
+   "samples": 2,
+   "on": {
+    "self": 2
+   },
+   "durations_ms": {
+    "100": 2
+   },
+   "skills": {},
+   "levels": {
+    "1": 2
+   },
+   "removed_reasons": {
+    "1": 2
+   },
+   "lasted_ms": 130,
+   "stat_changes": {}
+  },
+  "19000071": {
+   "samples": 3,
+   "on": {
+    "self": 3
+   },
+   "durations_ms": {
+    "-1": 3
+   },
+   "skills": {},
+   "levels": {
+    "1": 3
+   },
+   "removed_reasons": {
+    "7": 2
+   },
+   "lasted_ms": 36772,
+   "stat_changes": {}
+  },
+  "19000077": {
+   "samples": 1,
+   "on": {
+    "self": 1
+   },
+   "durations_ms": {
+    "1000": 1
+   },
+   "skills": {},
+   "levels": {
+    "1": 1
+   },
+   "removed_reasons": {
+    "1": 1
+   },
+   "lasted_ms": 1050,
+   "stat_changes": {}
+  },
+  "19000082": {
+   "samples": 1,
+   "on": {
+    "self": 1
+   },
+   "durations_ms": {
+    "-1": 1
+   },
+   "skills": {},
+   "levels": {
+    "1": 1
+   },
+   "removed_reasons": {
+    "7": 1
+   },
+   "lasted_ms": 196196,
+   "stat_changes": {}
+  },
+  "20111011": {
+   "samples": 6,
+   "on": {
+    "self": 6
+   },
+   "durations_ms": {
+    "10000": 6
+   },
+   "skills": {
+    "2011101": 6
+   },
+   "levels": {
+    "1": 6
+   },
+   "removed_reasons": {
+    "1": 6
+   },
+   "lasted_ms": 10051,
+   "stat_changes": {}
+  },
+  "22101031": {
+   "samples": 4,
+   "on": {
+    "self": 4
+   },
+   "durations_ms": {
+    "300000": 4
+   },
+   "skills": {
+    "2210103": 4
+   },
+   "levels": {
+    "1": 4
+   },
+   "removed_reasons": {
+    "1": 1
+   },
+   "lasted_ms": 300043,
+   "stat_changes": {
+    "205:+1000": 3
+   }
+  },
+  "22101051": {
+   "samples": 2,
+   "on": {
+    "self": 2
+   },
+   "durations_ms": {
+    "300000": 2
+   },
+   "skills": {
+    "2210105": 2
+   },
+   "levels": {
+    "1": 2
+   },
+   "removed_reasons": {},
+   "lasted_ms": null,
+   "stat_changes": {
+    "282:+1000": 1
+   }
+  },
+  "22104021": {
+   "samples": 2,
+   "on": {
+    "self": 2
+   },
+   "durations_ms": {
+    "300000": 2
+   },
+   "skills": {
+    "2210402": 2
+   },
+   "levels": {
+    "1": 2
+   },
+   "removed_reasons": {
+    "1": 1
+   },
+   "lasted_ms": 300046,
+   "stat_changes": {
+    "196:+1000": 2,
+    "199:+100": 2
+   }
+  },
+  "100000002": {
+   "samples": 2,
+   "on": {
+    "self": 2
+   },
+   "durations_ms": {
+    "-1": 2
+   },
+   "skills": {},
+   "levels": {
+    "1": 2
+   },
+   "removed_reasons": {
+    "16": 2
+   },
+   "lasted_ms": 7798,
+   "stat_changes": {}
+  },
+  "100000041": {
+   "samples": 9,
+   "on": {
+    "monster": 9
+   },
+   "durations_ms": {
+    "5000": 9
+   },
+   "skills": {
+    "14130240": 9
+   },
+   "levels": {
+    "1": 9
+   },
+   "removed_reasons": {
+    "1": 9
+   },
+   "lasted_ms": 5050,
+   "stat_changes": {}
+  },
+  "100000311": {
+   "samples": 6,
+   "on": {
+    "monster": 6
+   },
+   "durations_ms": {
+    "3000": 6
+   },
+   "skills": {
+    "18060030": 6
+   },
+   "levels": {
+    "1": 6
+   },
+   "removed_reasons": {
+    "11": 3,
+    "19": 3
+   },
+   "lasted_ms": 2279,
+   "stat_changes": {}
+  },
+  "100000401": {
+   "samples": 11,
+   "on": {
+    "self": 11
+   },
+   "durations_ms": {
+    "-1": 11
+   },
+   "skills": {},
+   "levels": {
+    "1": 11
+   },
+   "removed_reasons": {
+    "7": 11
+   },
+   "lasted_ms": 1048,
+   "stat_changes": {
+    "205:-3000": 11,
+    "214:-3000": 10,
+    "65:-750": 1,
+    "282:-1500": 1,
+    "379:-1500": 1
+   }
+  },
+  "100000802": {
+   "samples": 6,
+   "on": {
+    "monster": 6
+   },
+   "durations_ms": {
+    "3000": 6
+   },
+   "skills": {
+    "18150340": 6
+   },
+   "levels": {
+    "1": 6
+   },
+   "removed_reasons": {
+    "19": 6
+   },
+   "lasted_ms": 2030,
+   "stat_changes": {}
+  },
+  "100200001": {
+   "samples": 1,
+   "on": {
+    "self": 1
+   },
+   "durations_ms": {
+    "5000": 1
+   },
+   "skills": {
+    "14260000": 1
+   },
+   "levels": {
+    "1": 1
+   },
+   "removed_reasons": {
+    "1": 1
+   },
+   "lasted_ms": 5012,
+   "stat_changes": {}
+  },
+  "127300021": {
+   "samples": 4,
+   "on": {
+    "self": 4
+   },
+   "durations_ms": {
+    "10000": 4
+   },
+   "skills": {
+    "12730002": 4
+   },
+   "levels": {
+    "1": 4
+   },
+   "removed_reasons": {
+    "1": 4
+   },
+   "lasted_ms": 10025,
+   "stat_changes": {}
+  },
+  "140000001": {
+   "samples": 1,
+   "on": {
+    "self": 1
+   },
+   "durations_ms": {
+    "-1": 1
+   },
+   "skills": {},
+   "levels": {
+    "1": 1
+   },
+   "removed_reasons": {},
+   "lasted_ms": null,
+   "stat_changes": {
+    "44:+300": 2,
+    "196:+60": 1,
+    "443:+50": 1,
+    "7:+35": 1,
+    "8:+28": 1,
+    "9:+4": 1,
+    "10:+7": 1,
+    "11:+35": 1
+   }
+  },
+  "140500002": {
+   "samples": 6,
+   "on": {
+    "monster": 6
+   },
+   "durations_ms": {
+    "6000": 6
+   },
+   "skills": {
+    "14050340": 6
+   },
+   "levels": {
+    "13": 6
+   },
+   "removed_reasons": {
+    "1": 5,
+    "19": 1
+   },
+   "lasted_ms": 26273,
+   "stat_changes": {}
+  },
+  "140500071": {
+   "samples": 1,
+   "on": {
+    "self": 1
+   },
+   "durations_ms": {
+    "-1": 1
+   },
+   "skills": {},
+   "levels": {
+    "1": 1
+   },
+   "removed_reasons": {},
+   "lasted_ms": null,
+   "stat_changes": {
+    "44:+300": 2,
+    "196:+60": 1,
+    "443:+50": 1,
+    "7:+35": 1,
+    "8:+28": 1,
+    "9:+4": 1,
+    "10:+7": 1,
+    "11:+35": 1
+   }
+  },
+  "140500081": {
+   "samples": 12,
+   "on": {
+    "self": 12
+   },
+   "durations_ms": {
+    "3000": 12
+   },
+   "skills": {
+    "14050008": 12
+   },
+   "levels": {
+    "1": 12
+   },
+   "removed_reasons": {
+    "1": 12
+   },
+   "lasted_ms": 12437,
+   "stat_changes": {
+    "128:+300": 1,
+    "205:+2000": 1
+   }
+  },
+  "140600201": {
+   "samples": 4,
+   "on": {
+    "monster": 4
+   },
+   "durations_ms": {
+    "15000": 4
+   },
+   "skills": {
+    "14060020": 4
+   },
+   "levels": {
+    "10": 4
+   },
+   "removed_reasons": {
+    "1": 4
+   },
+   "lasted_ms": 15050,
+   "stat_changes": {}
+  },
+  "140900071": {
+   "samples": 9,
+   "on": {
+    "self": 9
+   },
+   "durations_ms": {
+    "10000": 9
+   },
+   "skills": {
+    "14090007": 9
+   },
+   "levels": {
+    "1": 9
+   },
+   "removed_reasons": {
+    "1": 9
+   },
+   "lasted_ms": 10598,
+   "stat_changes": {
+    "128:+300": 9
+   }
+  },
+  "141100461": {
+   "samples": 8,
+   "on": {
+    "self": 8
+   },
+   "durations_ms": {
+    "10000": 8
+   },
+   "skills": {
+    "14110046": 8
+   },
+   "levels": {
+    "1": 8
+   },
+   "removed_reasons": {
+    "1": 8
+   },
+   "lasted_ms": 10024,
+   "stat_changes": {
+    "65:+750": 8,
+    "282:+1500": 8,
+    "379:+1500": 8
+   }
+  },
+  "142200101": {
+   "samples": 2,
+   "on": {
+    "self": 2
+   },
+   "durations_ms": {
+    "12000": 2
+   },
+   "skills": {
+    "14220010": 2
+   },
+   "levels": {
+    "1": 2
+   },
+   "removed_reasons": {
+    "1": 2
+   },
+   "lasted_ms": 12077,
+   "stat_changes": {
+    "104:+100": 2,
+    "128:+200": 2,
+    "146:+5000": 2
+   }
+  },
+  "143100201": {
+   "samples": 3,
+   "on": {
+    "self": 3
+   },
+   "durations_ms": {
+    "14500": 3
+   },
+   "skills": {
+    "14310020": 3
+   },
+   "levels": {
+    "1": 3
+   },
+   "removed_reasons": {
+    "1": 3
+   },
+   "lasted_ms": 14501,
+   "stat_changes": {
+    "65:+350": 3,
+    "379:+700": 3,
+    "425:+2000": 3,
+    "442:+1000": 3,
+    "443:+140": 3,
+    "104:+100": 2,
+    "128:+200": 2,
+    "146:+5000": 2
+   }
+  },
+  "143800101": {
+   "samples": 2,
+   "on": {
+    "self": 2
+   },
+   "durations_ms": {
+    "15000": 2
+   },
+   "skills": {
+    "14380010": 2
+   },
+   "levels": {
+    "6": 2
+   },
+   "removed_reasons": {
+    "1": 2
+   },
+   "lasted_ms": 15047,
+   "stat_changes": {}
+  },
+  "147100001": {
+   "samples": 3,
+   "on": {
+    "self": 3
+   },
+   "durations_ms": {
+    "-1": 3
+   },
+   "skills": {},
+   "levels": {
+    "1": 1,
+    "8": 1,
+    "11": 1
+   },
+   "removed_reasons": {
+    "5": 2
+   },
+   "lasted_ms": 74,
+   "stat_changes": {
+    "44:+300": 5,
+    "7:+35": 3,
+    "8:+28": 3,
+    "9:+4": 3,
+    "10:+7": 3,
+    "11:+35": 3,
+    "14:+20": 3,
+    "15:+4": 3
+   }
+  },
+  "147200001": {
+   "samples": 3,
+   "on": {
+    "self": 3
+   },
+   "durations_ms": {
+    "-1": 3
+   },
+   "skills": {},
+   "levels": {
+    "1": 1,
+    "9": 1,
+    "12": 1
+   },
+   "removed_reasons": {
+    "5": 2
+   },
+   "lasted_ms": 74,
+   "stat_changes": {
+    "44:+300": 5,
+    "7:+35": 3,
+    "8:+28": 3,
+    "9:+4": 3,
+    "10:+7": 3,
+    "11:+35": 3,
+    "14:+20": 3,
+    "15:+4": 3
+   }
+  },
+  "147300001": {
+   "samples": 3,
+   "on": {
+    "self": 3
+   },
+   "durations_ms": {
+    "-1": 3
+   },
+   "skills": {},
+   "levels": {
+    "1": 1,
+    "10": 1,
+    "11": 1
+   },
+   "removed_reasons": {
+    "5": 2
+   },
+   "lasted_ms": 74,
+   "stat_changes": {
+    "44:+300": 5,
+    "7:+35": 3,
+    "8:+28": 3,
+    "9:+4": 3,
+    "10:+7": 3,
+    "11:+35": 3,
+    "14:+20": 3,
+    "15:+4": 3
+   }
+  },
+  "147300071": {
+   "samples": 8,
+   "on": {
+    "self": 8
+   },
+   "durations_ms": {
+    "2000": 8
+   },
+   "skills": {
+    "14730007": 8
+   },
+   "levels": {
+    "11": 8
+   },
+   "removed_reasons": {
+    "1": 8
+   },
+   "lasted_ms": 2026,
+   "stat_changes": {
+    "205:+2000": 8
+   }
+  },
+  "147400001": {
+   "samples": 3,
+   "on": {
+    "self": 3
+   },
+   "durations_ms": {
+    "-1": 3
+   },
+   "skills": {},
+   "levels": {
+    "1": 1,
+    "10": 1,
+    "14": 1
+   },
+   "removed_reasons": {
+    "5": 2
+   },
+   "lasted_ms": 74,
+   "stat_changes": {
+    "44:+300": 5,
+    "7:+35": 3,
+    "8:+28": 3,
+    "9:+4": 3,
+    "10:+7": 3,
+    "11:+35": 3,
+    "14:+20": 3,
+    "15:+4": 3
+   }
+  },
+  "147500001": {
+   "samples": 3,
+   "on": {
+    "self": 3
+   },
+   "durations_ms": {
+    "-1": 3
+   },
+   "skills": {},
+   "levels": {
+    "1": 1,
+    "7": 1,
+    "10": 1
+   },
+   "removed_reasons": {
+    "5": 2
+   },
+   "lasted_ms": 74,
+   "stat_changes": {
+    "44:+300": 5,
+    "7:+35": 3,
+    "8:+28": 3,
+    "9:+4": 3,
+    "10:+7": 3,
+    "11:+35": 3,
+    "14:+20": 3,
+    "15:+4": 3
+   }
+  },
+  "147600001": {
+   "samples": 2,
+   "on": {
+    "self": 2
+   },
+   "durations_ms": {
+    "-1": 2
+   },
+   "skills": {},
+   "levels": {
+    "1": 1,
+    "5": 1
+   },
+   "removed_reasons": {
+    "5": 1
+   },
+   "lasted_ms": 49,
+   "stat_changes": {
+    "44:+300": 4,
+    "196:+60": 2,
+    "443:+50": 2,
+    "7:+35": 2,
+    "8:+28": 2,
+    "9:+4": 2,
+    "10:+7": 2,
+    "11:+35": 2
+   }
+  },
+  "147700001": {
+   "samples": 3,
+   "on": {
+    "self": 3
+   },
+   "durations_ms": {
+    "-1": 3
+   },
+   "skills": {},
+   "levels": {
+    "1": 1,
+    "9": 1,
+    "10": 1
+   },
+   "removed_reasons": {
+    "5": 2
+   },
+   "lasted_ms": 74,
+   "stat_changes": {
+    "44:+300": 5,
+    "7:+35": 3,
+    "8:+28": 3,
+    "9:+4": 3,
+    "10:+7": 3,
+    "11:+35": 3,
+    "14:+20": 3,
+    "15:+4": 3
+   }
+  },
+  "147800001": {
+   "samples": 3,
+   "on": {
+    "self": 3
+   },
+   "durations_ms": {
+    "-1": 3
+   },
+   "skills": {},
+   "levels": {
+    "1": 1,
+    "10": 1,
+    "13": 1
+   },
+   "removed_reasons": {
+    "5": 2
+   },
+   "lasted_ms": 74,
+   "stat_changes": {
+    "44:+300": 5,
+    "7:+35": 3,
+    "8:+28": 3,
+    "9:+4": 3,
+    "10:+7": 3,
+    "11:+35": 3,
+    "14:+20": 3,
+    "15:+4": 3
+   }
+  },
+  "147900001": {
+   "samples": 3,
+   "on": {
+    "self": 3
+   },
+   "durations_ms": {
+    "-1": 3
+   },
+   "skills": {},
+   "levels": {
+    "1": 1,
+    "7": 1,
+    "8": 1
+   },
+   "removed_reasons": {
+    "5": 2
+   },
+   "lasted_ms": 74,
+   "stat_changes": {
+    "44:+300": 5,
+    "7:+35": 3,
+    "8:+28": 3,
+    "9:+4": 3,
+    "10:+7": 3,
+    "11:+35": 3,
+    "14:+20": 3,
+    "15:+4": 3
+   }
+  },
+  "148000001": {
+   "samples": 3,
+   "on": {
+    "self": 3
+   },
+   "durations_ms": {
+    "-1": 3
+   },
+   "skills": {},
+   "levels": {
+    "1": 1,
+    "10": 1,
+    "14": 1
+   },
+   "removed_reasons": {
+    "5": 2
+   },
+   "lasted_ms": 74,
+   "stat_changes": {
+    "44:+300": 5,
+    "7:+35": 3,
+    "8:+28": 3,
+    "9:+4": 3,
+    "10:+7": 3,
+    "11:+35": 3,
+    "14:+20": 3,
+    "15:+4": 3
+   }
+  },
+  "150000001": {
+   "samples": 2,
+   "on": {
+    "self": 2
+   },
+   "durations_ms": {
+    "-1": 2
+   },
+   "skills": {},
+   "levels": {
+    "1": 2
+   },
+   "removed_reasons": {},
+   "lasted_ms": null,
+   "stat_changes": {}
+  },
+  "150900001": {
+   "samples": 68,
+   "on": {
+    "monster": 68
+   },
+   "durations_ms": {
+    "5000": 68
+   },
+   "skills": {
+    "15090000": 68
+   },
+   "levels": {
+    "1": 68
+   },
+   "removed_reasons": {
+    "19": 61,
+    "1": 6
+   },
+   "lasted_ms": 1895,
+   "stat_changes": {}
+  },
+  "151500001": {
+   "samples": 4,
+   "on": {
+    "monster": 4
+   },
+   "durations_ms": {
+    "3000": 4
+   },
+   "skills": {
+    "15150000": 4
+   },
+   "levels": {
+    "1": 4
+   },
+   "removed_reasons": {
+    "19": 4
+   },
+   "lasted_ms": 2175,
+   "stat_changes": {}
+  },
+  "152200371": {
+   "samples": 1,
+   "on": {
+    "self": 1
+   },
+   "durations_ms": {
+    "-1": 1
+   },
+   "skills": {},
+   "levels": {
+    "1": 1
+   },
+   "removed_reasons": {},
+   "lasted_ms": null,
+   "stat_changes": {}
+  },
+  "157100001": {
+   "samples": 2,
+   "on": {
+    "self": 2
+   },
+   "durations_ms": {
+    "-1": 2
+   },
+   "skills": {},
+   "levels": {
+    "1": 2
+   },
+   "removed_reasons": {},
+   "lasted_ms": null,
+   "stat_changes": {}
+  },
+  "157100071": {
+   "samples": 49,
+   "on": {
+    "monster": 49
+   },
+   "durations_ms": {
+    "5000": 49
+   },
+   "skills": {
+    "15710007": 49
+   },
+   "levels": {
+    "1": 49
+   },
+   "removed_reasons": {
+    "19": 46,
+    "1": 2
+   },
+   "lasted_ms": 1550,
+   "stat_changes": {}
+  },
+  "157200001": {
+   "samples": 2,
+   "on": {
+    "self": 2
+   },
+   "durations_ms": {
+    "-1": 2
+   },
+   "skills": {},
+   "levels": {
+    "1": 2
+   },
+   "removed_reasons": {},
+   "lasted_ms": null,
+   "stat_changes": {}
+  },
+  "157300001": {
+   "samples": 1,
+   "on": {
+    "self": 1
+   },
+   "durations_ms": {
+    "-1": 1
+   },
+   "skills": {},
+   "levels": {
+    "1": 1
+   },
+   "removed_reasons": {},
+   "lasted_ms": null,
+   "stat_changes": {}
+  },
+  "180500401": {
+   "samples": 3,
+   "on": {
+    "monster": 3
+   },
+   "durations_ms": {
+    "3000": 3
+   },
+   "skills": {
+    "18050340": 3
+   },
+   "levels": {
+    "1": 3
+   },
+   "removed_reasons": {
+    "1": 3
+   },
+   "lasted_ms": 2998,
+   "stat_changes": {}
+  },
+  "180800001": {
+   "samples": 3,
+   "on": {
+    "monster": 3
+   },
+   "durations_ms": {
+    "500": 3
+   },
+   "skills": {
+    "18080000": 3
+   },
+   "levels": {
+    "1": 3
+   },
+   "removed_reasons": {
+    "1": 3
+   },
+   "lasted_ms": 548,
+   "stat_changes": {}
+  },
+  "180800002": {
+   "samples": 6,
+   "on": {
+    "self": 3,
+    "monster": 3
+   },
+   "durations_ms": {
+    "1950": 3,
+    "1700": 3
+   },
+   "skills": {
+    "18080000": 3
+   },
+   "levels": {
+    "1": 6
+   },
+   "removed_reasons": {
+    "1": 3,
+    "7": 3
+   },
+   "lasted_ms": 1853,
+   "stat_changes": {}
+  },
+  "182500101": {
+   "samples": 3,
+   "on": {
+    "self": 3
+   },
+   "durations_ms": {
+    "12000": 3
+   },
+   "skills": {
+    "18250010": 3
+   },
+   "levels": {
+    "5": 3
+   },
+   "removed_reasons": {
+    "1": 3
+   },
+   "lasted_ms": 12001,
+   "stat_changes": {}
+  },
+  "182900071": {
+   "samples": 6,
+   "on": {
+    "self": 6
+   },
+   "durations_ms": {
+    "30000": 6
+   },
+   "skills": {
+    "18290007": 6
+   },
+   "levels": {
+    "1": 6
+   },
+   "removed_reasons": {},
+   "lasted_ms": null,
+   "stat_changes": {}
+  },
+  "183300071": {
+   "samples": 15,
+   "on": {
+    "self": 15
+   },
+   "durations_ms": {
+    "2000": 15
+   },
+   "skills": {},
+   "levels": {
+    "1": 15
+   },
+   "removed_reasons": {
+    "1": 15
+   },
+   "lasted_ms": 2004,
+   "stat_changes": {}
+  },
+  "183300072": {
+   "samples": 15,
+   "on": {
+    "self": 15
+   },
+   "durations_ms": {
+    "0": 15
+   },
+   "skills": {},
+   "levels": {
+    "1": 15
+   },
+   "removed_reasons": {
+    "1": 12,
+    "7": 3
+   },
+   "lasted_ms": 0,
+   "stat_changes": {}
+  },
+  "187300011": {
+   "samples": 69,
+   "on": {
+    "self": 69
+   },
+   "durations_ms": {
+    "5000": 69
+   },
+   "skills": {
+    "18730001": 69
+   },
+   "levels": {
+    "1": 69
+   },
+   "removed_reasons": {
+    "11": 3,
+    "1": 45
+   },
+   "lasted_ms": 7698,
+   "stat_changes": {}
+  },
+  "187300021": {
+   "samples": 3,
+   "on": {
+    "self": 3
+   },
+   "durations_ms": {
+    "10000": 3
+   },
+   "skills": {
+    "18730002": 3
+   },
+   "levels": {
+    "1": 3
+   },
+   "removed_reasons": {
+    "7": 3
+   },
+   "lasted_ms": 402,
+   "stat_changes": {}
+  },
+  "187800011": {
+   "samples": 9,
+   "on": {
+    "monster": 9
+   },
+   "durations_ms": {
+    "5000": 9
+   },
+   "skills": {
+    "18780001": 9
+   },
+   "levels": {
+    "1": 9
+   },
+   "removed_reasons": {
+    "1": 3,
+    "19": 6
+   },
+   "lasted_ms": 1001,
+   "stat_changes": {}
+  }
+ }
+}

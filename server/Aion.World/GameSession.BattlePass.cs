@@ -23,7 +23,13 @@ public sealed partial class GameSession
     AchievementTables.PassGroup? PassOfMission(AchievementTables.Entry entry, long now) =>
         ActivePasses(now).FirstOrDefault(g => g.Missions is { } missions && string.Equals(missions, entry.Group, StringComparison.OrdinalIgnoreCase));
 
-    bool PaidPassLocked(int achievementId) =>
+    // Free mode (server-rules.xml subscription free="true", user 2026-11-07): every paid pass counts as bought, so all
+    // pass rewards can be claimed by everyone.
+    static bool PassesFree => ServerRules.Embedded.SubscriptionFree;
+
+    static bool IsPaid(long[] pass) => pass.Length >= 3 && pass[2] != 0;
+
+    bool PaidPassLocked(int achievementId) => !PassesFree &&
         Achievements.PassGroups.Any(g => g.Passes.Any(p => p.Length >= 3 && p[1] == achievementId && p[2] != 0));
 
     /// <summary>A mission step completed: its exp to the group's passes.</summary>
@@ -33,7 +39,9 @@ public sealed partial class GameSession
         var exp = mission.Points(step);
         if (exp <= 0) return [];
         var ids = group.Passes.Where(p => p.Length >= 2).Select(p => (int)p[1]).ToHashSet();
-        return Progress("BattlePassExp", e => ids.Contains(e.Id), s => s.Count + exp, now, 1);
+        var updates = Progress("BattlePassExp", e => ids.Contains(e.Id), s => s.Count + exp, now, 1);
+        // Official: every pass exp gain is followed by the refreshed pass list.
+        return updates.Count == 0 ? updates : [.. updates, BattlePassInfoList(now)];
     }
 
     /// <summary>
@@ -45,7 +53,7 @@ public sealed partial class GameSession
     /// value per pass, e.g. 40000; not understood) is sent empty. The exp values are our own pass exp (OURS).
     /// The community fork found the same tail and lists.
     /// </summary>
-    byte[] BattlePassInfoList(long now)
+    internal byte[] BattlePassInfoList(long now)
     {
         var groups = ActivePasses(now);
         var w = PacketWriter.Opcode(BattlePassInfoListNt).Varint((uint)groups.Count);

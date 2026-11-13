@@ -10,6 +10,9 @@ namespace Aion.World;
 // with one letter 2026-11-06 084658 i7000: the reason is two bytes and the parameters are JSON
 // {"_params":[{"_index":0,"_value":"10045"}]}). Staff mail uses Post.dat 106 (title "{0}", body "{1}", sender the client's
 // own name string); its parameters are stored joined by '|' (OURS) and sent as that JSON.
+// feature/systems-2: Post.dat is system mail only (no player-to-player send request exists in the client's protocol). A load
+// shows at most GlobalSetting post_load_count (100) posts, newest first, and none past its expiry; refusals use the client's
+// EResult Post_NotFound (8978) instead of 1.
 public sealed partial class GameSession
 {
     public const ushort PostLoadRq = 0xe214, PostLoadRs = 0xe215, PostRecvNt = 0xe216, PostReadRq = 0xe217, PostReadRs = 0xe218,
@@ -66,8 +69,11 @@ public sealed partial class GameSession
         var tab = plain[2];
         var unreadOnly = plain.Length > 3 && plain[3] != 0;
         var posts = Store is { } store && CharacterId is { } character ? await StoredValue(() => store.PostsAsync(character, ct), (IReadOnlyList<PostRecord>)[]) : [];
-        var shown = posts.Where(p => (tab == 0 || p.Tab == tab) && (!unreadOnly || !p.Read)).ToList();
-        var w = PacketWriter.Opcode(PostLoadRs).U16(0).U8(tab).I32(posts.Count(p => tab == 0 || p.Tab == tab)).I32(posts.Count(p => (tab == 0 || p.Tab == tab) && !p.Read)).Varint((uint)shown.Count);
+        var now = DateTimeOffset.FromUnixTimeMilliseconds(lastNow == 0 ? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() : lastNow);
+        var live = posts.Where(p => (tab == 0 || p.Tab == tab) && (p.Expire.ToUnixTimeMilliseconds() <= 0 || p.Expire > now)).ToList();
+        var limit = (int)Math.Max(1, Systems2Tables.Embedded.Global("post_load_count"));
+        var shown = live.Where(p => !unreadOnly || !p.Read).OrderByDescending(p => p.Sent).Take(limit).ToList();
+        var w = PacketWriter.Opcode(PostLoadRs).U16(0).U8(tab).I32(live.Count).I32(live.Count(p => !p.Read)).Varint((uint)shown.Count);
         foreach (var post in shown) WritePost(w, post);
         return [w.ToArray()];
     }
@@ -97,9 +103,9 @@ public sealed partial class GameSession
     {
         var pairs = PostPairs(plain);
         var opcode = delete ? PostDeleteRs : PostReadRs;
-        if (pairs.Count == 0 || Store is not { } store || CharacterId is not { } character) return [PostPairsReply(opcode, 1, pairs)];
+        if (pairs.Count == 0 || Store is not { } store || CharacterId is not { } character) return [PostPairsReply(opcode, EResult.Post_NotFound, pairs)];
         var ok = await Stored(async () => await store.MarkPostsAsync(character, pairs.Select(p => p.Id).ToList(), delete, ct) ? [[]] : []);
-        return [PostPairsReply(opcode, ok.Count == 0 ? 1 : 0, pairs)];
+        return [PostPairsReply(opcode, ok.Count == 0 ? EResult.Post_NotFound : 0, pairs)];
     }
 
     /// <summary>0xe21b TakePost_RQ {type u8, dbid i64}: the attachments into the bag, once.</summary>
@@ -108,9 +114,13 @@ public sealed partial class GameSession
         var type = plain[2];
         var id = BitConverter.ToInt64(plain, 3);
         byte[] Reply(int result) => PacketWriter.Opcode(PostTakeRs).U16(result).U8(type).I64(id).ToArray();
-        if (Store is not { } store || CharacterId is not { } character) return [Reply(1)];
+        if (Store is not { } store || CharacterId is not { } character) return [Reply(EResult.Post_NotFound)];
+        // The attachments need bag room (GameSession.BagRoom.cs); the mail keeps them otherwise.
+        var posts = await StoredValue(() => store.PostsAsync(character, ct), (IReadOnlyList<PostRecord>)[]);
+        if (posts.FirstOrDefault(p => p.Id == id) is { Taken: false } post && !BagRoomFor(post.Attachments))
+            return [Reply(EResult.Item_Common_Fail_NotEnoughSlotCountContainer)];
         var taken = await Stored(async () => await store.TakePostAsync(character, id, ct) ? [[]] : []);
-        if (taken.Count == 0) return [Reply(1)];
+        if (taken.Count == 0) return [Reply(EResult.Post_NotFound)];
         return [Reply(0), .. await InventoryChangesAsync(ct, IncreasePostTake, 0)];
     }
 

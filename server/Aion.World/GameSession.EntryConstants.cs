@@ -13,95 +13,105 @@ namespace Aion.World;
 // Not sent: 0x5712 and CharCombatPowerUpdate_NT 0x3656 (only at level 23+, their values unknown).
 public sealed partial class GameSession
 {
+    static readonly Lazy<string> SeasonListHex = new(() =>
+    {
+        using var stream = typeof(GameSession).Assembly.GetManifestResourceStream("season-list.hex")
+            ?? throw new InvalidOperationException("Missing embedded game data season-list.hex");
+        return new StreamReader(stream).ReadToEnd().Trim();
+    });
+
+    static readonly Lazy<string> ContentsTicketsHex = new(() =>
+    {
+        using var stream = typeof(GameSession).Assembly.GetManifestResourceStream("contents-tickets.hex")
+            ?? throw new InvalidOperationException("Missing embedded game data contents-tickets.hex");
+        return new StreamReader(stream).ReadToEnd().Trim();
+    });
+
+    /// <summary>
+    /// 0xe262 TrustLimitInfo_NT (catalogue 1371 + 0xdd07): the official body (identical in 30 entries but for the time, which
+    /// is the entry's now in four places; 0x1a5a167... is a fixed update time). PROVISIONAL: the trust step and limits are the
+    /// official account's, not tracked.
+    /// </summary>
+    static byte[] TrustLimitInfo(long now)
+    {
+        var t = Convert.ToHexString(BitConverter.GetBytes(now)).ToLowerInvariant();
+        return Observed(0xe262, "0704020200000000000000000065cd1d00000000" + t + "03030000000000000000ffffffffffffffff" + t
+            + "04040000000000000000ffffffffffffffff" + t + "05050000000000000000ffffffffffffffff" + t + "607167a5a101000005000000");
+    }
+
     static byte[] Observed(ushort opcode, string hex) => [.. PacketWriter.Opcode(opcode).ToArray(), .. Convert.FromHexString(hex)];
 
-    /// <summary>OURS: MonolithList_NT from this level (recorded absent at levels 1 and 9, present at 23, 44, 45; CANDIDATE: the level-10 unlocks).</summary>
-    public const int MonolithListLevel = 10;
+    /// <summary>
+    /// The first LoadComplete after a select (OBSERVED phase in 11 official entries: after 0x3623, before MyCharAppear_NT; again
+    /// only after a relog): BMShopTutorialInfo_NT, ArenaMatchingInfo_NT (0x400a, catalogue 273 + 0x3ef9: the matching servers
+    /// per contents type, one per race), MessageCardInitData_NT, 0xffab.
+    /// </summary>
+    List<byte[]> EntryLoadConstants() =>
+    [
+        Observed(0xe251, "00"),
+        ArenaMatchingInfo(),
+        Observed(0xe200, "00002392ffffffffff000000"),
+        Observed(0xffab, "0000000000000000c0c62d0000000000"),
+    ];
 
     /// <summary>
-    /// MonolithList_NT 0xe30b {list of {monolith id i32, resonate count i32}}: three monoliths by race, OBSERVED in all 27 entries
-    /// at level 23+ (Light 1001, 1002, 3001; Dark 2001, 2002, 4001). The counts are per character there (0-560); we keep no
-    /// resonance, so 0 (OURS).
+    /// ArenaMatchingInfo_NT 0x400a: one contents type (1) with its two matching servers, a Light and a Dark one. OFFICIAL (rec
+    /// 20261106-105448 #610, a character of Dark server 2316): `0a40 01 01 02 2405 01 0c09 02` = 1 type {1: [(1316, Light),
+    /// (2316, Dark)]}, the server ids u16 (they were varints here until 2026-11-12: 1204 went out as `b4 09`, read as 2484). The
+    /// servers: this world and its pair's other-race world (four worlds), else this host's server for both races.
     /// </summary>
-    static byte[] MonolithList(int race)
+    byte[] ArenaMatchingInfo()
     {
-        int[] ids = race == 2 ? [2001, 2002, 4001] : [1001, 1002, 3001];
-        var w = PacketWriter.Opcode(0xe30b).Varint(ids.Length);
-        foreach (var id in ids) w.I32(id).I32(0);
-        return w.ToArray();
+        var (light, dark) = options.Worlds is { } worlds ? worlds.ArenaPair(ServerId) : (ServerId, ServerId);
+        return PacketWriter.Opcode(0x400a).Varint(1).U8(1).Varint(2).U16(light).U8(1).U16(dark).U8(2).ToArray();
     }
 
-    /// <summary>
-    /// TrustLimitInfo_NT 0xe262: flags (07), the Kina limits by EContentsKinaLimitType {type u8, used i64, limit i64, time i64},
-    /// the update time i64 and the trust step i32. The form of every 2026-11-05/06 entry (21): type 2 limited to 500,000,000,
-    /// types 3-5 unlimited (-1), nothing used, step 5; the 2026-10 and some 11-04 accounts had flags 03, step 1 and type 2 at 0
-    /// (per account: OURS, the permissive one, as we enforce no Kina limit). CANDIDATE: the times (the server's clock).
-    /// </summary>
-    public static byte[] TrustLimitInfo(long now)
-    {
-        var w = PacketWriter.Opcode(0xe262).U8(0x07).Varint(4);
-        foreach (var type in new byte[] { 2, 3, 4, 5 })
-            w.U8(type).U8(type).I64(0).I64(type == 2 ? 500_000_000 : -1).I64(now);
-        return w.I64(now).I32(5).ToArray();
-    }
+    /// <summary>After MyCharAppear_NT of the first load (OBSERVED): WorldChatFreeChance_NT (its time), FieldEventInfo_NT 0x6000 (the
+    /// Shugo festival events running now, "00" when none: GameSession.Systems2.cs), 0x570f.</summary>
+    List<byte[]> EntryAfterAppearConstants(long now) =>
+    [
+        PacketWriter.Opcode(0xe223).I64(now).I32(0).ToArray(),
+        FieldEventInfoAtEntry(now),
+        Observed(0x570f, "000000"),
+    ];
 
-    /// <summary>
-    /// ArenaMatchingInfo_NT 0x400a, by race: Light 010102230501290502 (the level-1 entry 2026-10-28, 234912), Dark 010102630901650902
-    /// (the level-1 entries 2026-11-04 183516 and the Dark characters at 45). OBSERVED; their meaning is not decoded.
-    /// </summary>
-    static byte[] ArenaMatchingInfo(int race) => Observed(0x400a, race == 2 ? "010102630901650902" : "010102230501290502");
-
-    /// <summary>The world entry's lists and state messages (see the file remarks), after the load reply.</summary>
-    List<byte[]> EntryLists(long now)
-    {
-        var race = profileRace == 2 ? 2 : 1;
-        var replies = new List<byte[]>
-        {
-            Observed(0xe263, "023f005300"),            // TradeServerInfo_NT
-            SeasonSchedule,                            // SeasonSchedule_NT 0x8d53 (GameSession.SeasonSchedule.cs)
-            Observed(0x8d58, "00"),                    // MyPrevSeasonRanking_NT
-            Observed(0x5682, "00002300"),              // PrevSeasonMissionInfo_NT
-        };
-        // GodstoneList_NT: the owned godstones, else the empty list.
-        var godstoneList = EconomyAtEntry().ToList();
-        replies.AddRange(godstoneList.Count > 0 ? godstoneList : [Observed(0x5633, "00")]);
-        replies.AddRange(
-        [
-            Observed(0x8aaf, "00"),                    // AgitDecoList_NT
-            Observed(0xe22e, "05010000020000030000040000050000"),   // DaevanionPointUpdate_NT: five point types at 0
-            Observed(0xe226, "00"),                    // DaevanionBoardInfo_NT
-            BookmarkList(),                            // 0x9330 right before 0x610b (OBSERVED 34 of 34; GameSession.Bookmarks.cs)
-        ]);
-        if (Store is not null) replies.Add(ContentTicketList(now));   // 0x610b (GameSession.ContentTickets.cs)
-        replies.AddRange(CraftListsAtEntry());         // 0x8d7e, 0x8d37, 0x8d8c (GameSession.Craft.cs)
-        replies.AddRange(
-        [
-            Observed(0xe224, "02010202"),              // ContentsControl_NT
-            Observed(0xe32a, "0301dc05000000000000000000000002dc05000000000000000000000003dc050000000000000000000000"),   // ArenaRanking_NT: Single/Team/Strategy at 1500
-            Observed(0x9331, "00"),                    // ? (0x9331, after BookmarkedContentList_NT)
-            Observed(0xe33b, "00"),                    // SubscribeList_NT
-            Observed(0xe33e, "00"),                    // ? (0xe33e)
-            PacketWriter.Opcode(0xffae).U8(0).I64(now).ToArray(),   // ? (0xffae): none, a time (OBSERVED 00 + the server time at level 1)
-            Observed(0x6103, "00"),                    // ? (0x6103)
-        ]);
-        if (level >= MonolithListLevel) replies.Add(MonolithList(race));
-        replies.AddRange(
-        [
-            Observed(0x56b6, "00"),                    // AccountContentsInfoList_NT
-            PacketWriter.Opcode(0xffa5).I64(0).I64(now).ToArray(),  // ? (0xffa5): 0, a time (OBSERVED at level 1)
-            PacketWriter.Opcode(0xffa7).I64(0).I64(now).ToArray(),  // ? (0xffa7): 0, a time (OBSERVED at level 1)
-            TrustLimitInfo(now),                       // TrustLimitInfo_NT 0xe262
-            Observed(0xe25c, "014b01"),                // ContentsFeatureOnOffListByAdmin_NT
-            Observed(0x572d, "00"),                    // ? (0x572d; 00 in all 34)
-            Observed(0xe251, "00"),                    // BMShopTutorialInfo_NT
-            ArenaMatchingInfo(race),                   // ArenaMatchingInfo_NT 0x400a
-            Observed(0xe200, "00002392ffffffffff000000"),   // MessageCardInitData_NT
-            // ? (0xffab): i64 0, i64 3000000 (OBSERVED 2.0.6, 31 of 31; the first value 0 for the new characters).
-            PacketWriter.Opcode(0xffab).I64(0).I64(3_000_000).ToArray(),
-            PacketWriter.Opcode(0xe223).I64(now).I32(0).ToArray(),   // WorldChatFreeChance_NT (observed: a time then four zero bytes)
-            Observed(0x6000, "00"),                    // ? (0x6000)
-            Observed(0x570f, "000000"),                // MonsterCubeRewardList_RS (the usmap position, 0x47 above the old base; 0x6108 is DungeonClearKillNpc_NT)
-        ]);
-        return replies;
-    }
+    /// <summary>The observed constants of the select burst (none depends on the character but the times).</summary>
+    List<byte[]> EntryConstants(long now, byte[] daevanionPoints) =>
+    [
+        Observed(0xe263, "023f005300"),            // TradeServerInfo_NT
+        Observed(0x5682, "00002300"),              // PrevSeasonMissionInfo_NT
+        GodstoneList(),                            // GodstoneList_NT (OBSERVED "00" when none; GameSession.Godstones.cs)
+        AgitDecoList(),                            // AgitDecoList_NT 0x8aaf (OBSERVED right after 0x5633; GameSession.Pantheon.cs)
+        PresetInfo(),                              // PresetInfo_NT 0xe28c (OBSERVED right after 0x8aaf in 16 entries; it went with the load)
+        daevanionPoints,                           // DaevanionPointUpdate_NT 0xe22e: used points per type (OBSERVED "0501000002..." with none)
+        // DaevanionBoardInfo_NT 0xe226 follows here: the character's boards (GameSession.Daevanion.cs).
+        Observed(0xe224, "02010202"),              // ContentsControl_NT
+        // ArenaRanking_NT: Single/Team/Strategy, OBSERVED "0301dc05000000000000000000000002dc05...03dc05..." (1500 each) for a new
+        // character; the stored ratings and counts since feature/rank-system (GameSession.Ranking.cs).
+        ArenaRanking(),
+        SubscribeList(now),                        // SubscribeList_NT (free mode: every benefit, GameSession.Subscriptions.cs)
+        Observed(0xe33e, "00"),                    // ? (0xe33e)
+        // AccountCurrencyLimitStatus_NT (0xffae, catalogue 1533 + 0xf9b1): reward counts per dungeon category {1: 0, 2: 0}, now
+        // (OBSERVED after 0xe33e in all 10 entries; 0xffab AbyssPointUpdate_NT and 0xffa7 InitKinaLimitStatus_NT fit the same base).
+        PacketWriter.Opcode(0xffae).Varint(2).U8(1).I32(0).U8(2).I32(0).I64(now).ToArray(),
+        WaveDungeonInfoAtEntry(),                  // WaveDungeonInfo_NT 0x6103: the daily dungeon records ("00" with none; GameSession.DailyDungeons.cs)
+        Observed(0x56b6, "00"),                    // AccountContentsInfoList_NT
+        Observed(0xe25c, "014b01"),                // ContentsFeatureOnOffListByAdmin_NT
+        // OBSERVED at every official entry (37 sessions, the auto checker 2026-11-07): three empty lists we never sent.
+        Observed(0x572d, "00"),                    // ? (0x572d)
+        BookmarkList(),                            // 0x9330 bookmarks (GameSession.Bookmarks.cs; "00" when none, OBSERVED)
+        // ContentsTickets_NT (0x610b, catalogue 584 + 0x5ec3): 73 entry tickets {mask u8 | id i32 | bit0 reset time i64 | bit2 count
+        // varint ...}; the official body of a character with nothing used (OBSERVED after 0x9330, tools/data/contents-tickets.hex).
+        // The counts this character used are replaced (GameSession.Tickets.cs).
+        ContentsTicketsBody(now),
+        Observed(0x9331, "00"),                    // ? (0x9331)
+        // 0x8d53 the season list (34 entries: Season_Main_Live, ArenaStrategy_Season, ...): the official body, identical in all
+        // 10 recordings (tools/data/season-list.hex). We sent a cut 38-byte prefix announcing 34 entries with only one. The main
+        // seasons' rows follow the schedule (GameSession.Ranking.cs: identical to the observed body in season 1).
+        SeasonSchedule(now),
+        PacketWriter.Opcode(0xffa7).Zeros(8).I64(now).ToArray(),   // InitKinaLimitStatus_NT (0xffa7): Kina acquired 0, now (OBSERVED, 8 entries)
+        TrustLimitInfo(now),                       // TrustLimitInfo_NT (OBSERVED right after 0xffa7)
+        // 0xffa5 {i64, now} (OBSERVED after 0xe256 in 10 entries, 0 or 1530: the same shape as the Kina limit status; CANDIDATE).
+        PacketWriter.Opcode(0xffa5).Zeros(8).I64(now).ToArray(),
+    ];
 }

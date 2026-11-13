@@ -40,6 +40,12 @@ def main():
         (Path(wardrobe.name) / relative).write_text(content, encoding='utf-8')
     (Path(wardrobe.name).parent / 'outside.json').write_text('{}', encoding='utf-8')
     env['Aion__WardrobePath'] = wardrobe.name
+    # A synthetic item database (tools/build_item_database.py output shapes) for /api/admin/itemdb.
+    for relative, content in {'index.json': '{"version":1,"items":[[102,"Sword of Tests"]]}', 'names/de-DE.json': '{"102":"Testschwert"}',
+                              'items/102.json': '{"id":102}'}.items():
+        (Path(wardrobe.name).parent / 'aion-itemdb' / relative).parent.mkdir(parents=True, exist_ok=True)
+        (Path(wardrobe.name).parent / 'aion-itemdb' / relative).write_text(content, encoding='utf-8')
+    env['Aion__ItemDatabasePath'] = str(Path(wardrobe.name).parent / 'aion-itemdb')
     host = None
     log_path = HOME / 'authentication-check-host.log'
     sql(f'CREATE DATABASE {name} OWNER aion_owner;', database='postgres')
@@ -255,6 +261,14 @@ def main():
             check(paged['total'] == 1 and paged['items'][0]['templateId'] == 102, 'HTTP catalogue category filter')
             check(request('/api/admin/items?limit=500', token=staff_token)[0] == 400, 'HTTP catalogue page bound')
             check(request('/api/admin/items', token=second_token)[0] == 401, 'HTTP ordinary user cannot browse the catalogue')
+            check(request('/api/admin/itemdb', token=staff_token)[1]['items'] == [[102, 'Sword of Tests']], 'HTTP staff item database index')
+            check(request('/api/admin/itemdb/names/de-DE', token=staff_token)[1] == {'102': 'Testschwert'}, 'HTTP item database names per language')
+            check(request('/api/admin/itemdb/items/102', token=staff_token)[1] == {'id': 102}, 'HTTP item database item detail')
+            check(request('/api/admin/itemdb/items/103', token=staff_token)[0] == 404 and request('/api/admin/itemdb/names/xx', token=staff_token)[0] == 404,
+                  'HTTP item database unknown item or language')
+            check(request('/api/admin/itemdb', token=second_token)[0] == 401 and request('/api/admin/itemdb/items/102', token=second_token)[0] == 401,
+                  'HTTP ordinary user cannot read the item database')
+            check(request('/api/admin/itemdb')[0] == 401, 'HTTP item database needs a sign-in')
             new_account = {'username': 'made_by_admin', 'password': 'admin-made-password-1'}
             check(request('/api/admin/accounts', 'POST', new_account, second_token)[0] == 401, 'HTTP ordinary user cannot create accounts')
             check(request('/api/admin/accounts', 'POST', new_account, staff_token)[0] == 201, 'HTTP admin creates an account')

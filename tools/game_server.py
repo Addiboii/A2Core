@@ -386,14 +386,13 @@ def build_select_character(key=1, dbid=1, char_key=1, last_using_pc_id=1,
     from our own state; nothing is replayed from captures.
     """
     if server_start_time is None:
-        server_start_time = int(time.time() * 1000)
+        server_start_time = 0  # official: 0 in 13 of 13 samples (byte audit 2026-11-09)
     out = bytearray(b"\x20\x36")
     out += (0).to_bytes(2, "little")                       # _result u16 (official wire)
     out += encode_varint(int(key))                         # _key varint (official wire)
     out += int(last_using_pc_id).to_bytes(4, "little", signed=True)
     out += int(dbid).to_bytes(8, "little", signed=True)    # _dbid
-    out += bytes(5)  # as the client read the older layout (see the .NET builder)
-    out += int(char_key).to_bytes(4, "little", signed=True)
+    out += encode_varint(int(char_key))                    # _char_key varint (official wire, byte audit 2026-11-09)
     out += encode_varint(len(option_data)) + bytes(option_data)
     out += encode_varint(len(skill_customizing))
     for cond_id, skill_id, priority in skill_customizing:
@@ -408,25 +407,29 @@ def build_select_character(key=1, dbid=1, char_key=1, last_using_pc_id=1,
 def build_character_created(name, gender=1, pc_creation_id=1, key=1,
                             customizing_data=b"", voice_type=0, slot_no=0,
                             race=1, position=(0.0, 0.0, 0.0),
-                            zone_id=3016, now_ms=None, dbid=0, level=1):
+                            zone_id=None, now_ms=None, dbid=0, level=1):
     """0x361c CharCreate_RS reply body: result + LobbyCharDesc.
 
     Schema is DevPacketData_GameServer_CharCreate_RS (_result IntProperty,
     _character DevPacketData_Common_LobbyCharDesc). The character record is
     generated from our own state plus the request's appearance bytes; never
-    replayed from captures.
+    replayed from captures. OBSERVED (two official samples 2026-11-07): the
+    result is a u16, logout time 0, combat level 1 and the race's creation
+    subzone (Elyos 3040, Asmodian 4011) unless zone_id is given.
     """
     if now_ms is None:
         now_ms = int(time.time() * 1000)
     profile = starter_profile(pc_creation_id, gender)
+    race = profile["race"] if profile else race
     character = _lobby_char_desc(
         key=key, nickname=name, pc_id=profile["pc_id"] if profile else 1,
-        race=profile["race"] if profile else race, gender=gender,
-        level=level, equip_item_level=0, combat_level=level, guild_name="",
-        logout_time=now_ms, position=position, zone_id=zone_id,
+        race=race, gender=gender,
+        level=level, equip_item_level=0, combat_level=1, guild_name="",
+        logout_time=0, position=position,
+        zone_id=zone_id if zone_id is not None else (4011 if race == 2 else 3040),
         reg_time=now_ms, customizing_data=customizing_data,
         voice_type=voice_type, slot_no=slot_no, combat_power=0, dbid=dbid)
-    return b"\x1c\x36" + (0).to_bytes(4, "little", signed=True) + character
+    return b"\x1c\x36" + (0).to_bytes(2, "little") + character
 
 
 def build_prepare_enter_map(enter_map_ticket=1, map_id=1000, game_time=None,
@@ -475,7 +478,7 @@ def build_load_complete(enter_map_ticket=0, position=(0.0, 0.0, 0.0),
     _server_enter_map_pos Vec3, _frame, _char_key). Learned widths from the
     official sample, disambiguated by requiring _server_enter_map_pos to equal
     PrepareEnterMap_NT._pos: _result u16, _enter_map_ticket i32, _frame i32,
-    _char_key u16. The position is the server-authoritative spawn point we
+    _char_key varint. The position is the server-authoritative spawn point we
     already sent in 0x3621; char_key matches the synthetic record from 0x3620.
     """
     out = bytearray(b"\x23\x36")
@@ -483,7 +486,11 @@ def build_load_complete(enter_map_ticket=0, position=(0.0, 0.0, 0.0),
     out += int(enter_map_ticket).to_bytes(4, "little", signed=True)
     out += struct.pack("<3f", *position)
     out += int(frame).to_bytes(4, "little", signed=True)
-    out += int(char_key).to_bytes(2, "little", signed=False)
+    key = int(char_key)                      # _char_key varint (official fe16 = 2942; was u16 before Stage 1)
+    while key >= 0x80:
+        out.append((key & 0x7F) | 0x80)
+        key >>= 7
+    out.append(key)
     return bytes(out)
 
 
@@ -546,7 +553,7 @@ def build_my_char_appear(key=1, name="", server_id=1204, pc_id=1, race=1,
     body = bytearray(b"\x33\x36")
     # ---- front: key, mask/flag, name, identity ----
     body += encode_varint(key)
-    body += (0x2006).to_bytes(4, "little")
+    body += (0x0006 | 1 << 6 | 1 << 8 | (0x2000 if voice_type else 0) | 1 << 23 | 1 << 27).to_bytes(4, "little")  # bits 6 ground z, 8 weather, 23 match server id, 27 succession info (official)
     body += bytes([0x37])                            # flag; bit0 -> name
     body += _fstring(name)
     body += int(server_id).to_bytes(2, "little")     # _server_id u16
@@ -565,8 +572,9 @@ def build_my_char_appear(key=1, name="", server_id=1204, pc_id=1, race=1,
     body += struct.pack('<H3ffHB', 0, *position, direction, 0, 1)
     body += encode_varint(hp) + encode_varint(hp_max)
     # MP, AP, SP, DP (+step), OP and FP, in receiver order.
+    # dp_max 0 below level 20, 150000 from 20; dp_step 1 (official, 2026-11-07; the opening level PROVISIONAL)
     body += struct.pack('<13i', mp, mp_max, 0, 0, SPAWN_SP, SPAWN_SP,
-                        0, 10000, 0, 100000, 100000, 10000, 10000)
+                        0, 150000 if char_level >= 20 else 0, 1, 100000, 100000, 10000, 10000)
     body += b'\x03'
     body += _stat_entry(206, -3000)
     body += _stat_entry(208, 300)
@@ -582,14 +590,17 @@ def build_my_char_appear(key=1, name="", server_id=1204, pc_id=1, race=1,
         body += b'\x00\x03' + bytes(12)  # no dyes, three empty godstones
         # All 15 reference equip records (including empty slots) use fx_bit14.
         body += b'\x0e'  # fx_bit varint; bools use the reserved byte
-    body += struct.pack('<Bqiiq', appear_reason, 1, map_id, 3000, 1)
+    # _map_key = map id | instance << 32 (official; instance 0 here), then after the dbid bits 6 and 8: the ground z, weather type 1.
+    body += struct.pack('<Bqiiq', appear_reason, map_id & 0xFFFFFFFF, map_id, 3000, 1)
+    body += struct.pack('<fB', position[2], 1)
     body += encode_varint(len(customizing_data)) + bytes(customizing_data)
     if not weapon_id:
         body += b'\x00'  # first packed bool: purchased-customizing=false
-    body += bytes([voice_type])
-    body += struct.pack('<iiq', 0, 0, 0)  # conqueror info (always present)
+    # After the customizing data (official, re-checked 2026-11-09): [bit 13 voice u8], [bit 23 match server id u16],
+    # conqueror info (16 bytes), [bit 27 succession count info, 16 bytes], then current and highest Combat Power.
+    body += (bytes([voice_type]) if voice_type else b'') + int(server_id).to_bytes(2, 'little') + bytes(32)
     body += struct.pack('<qq', combat_power, combat_power)
-    body += b'\x00\x00'  # used/bonus daevanion point arrays
+    body += bytes.fromhex('0501000002000003000004000005000005010000020000030000040000050000')
     return bytes(body)
 
 
@@ -715,12 +726,12 @@ def build_char_all_stats(stats=(), stat_hpmax=1500):
 
     Schema: DevPacketData_GameServer_CharAllStats_RS (_result IntProperty,
     _stats array<StatType>, _stat_hpmax Int64Property). Official sample layout:
-    result u16=0 | count u8 | {stat_type u16, stat_value i32} entries |
+    result u16=0 | count varint | {stat_type u16, stat_value i32} entries |
     _stat_hpmax i64. All values here are generated from our own state.
     """
     out = bytearray(b"\x49\x36")
     out += b"\x00\x00"                            # _result u16 = 0
-    out.append(len(stats))                        # count u8
+    out += encode_varint(len(stats))              # count varint (TArray; official 80 01 = 128 stats)
     for stat_type, stat_value in stats:
         out += _stat_entry(stat_type, stat_value)
     out += int(stat_hpmax).to_bytes(8, "little", signed=True)

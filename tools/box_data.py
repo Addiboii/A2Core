@@ -49,6 +49,9 @@ ABNORMALS = LOCAL / 'abnormal-tables-20261016'
 TABLES = LOCAL / 'pet-tables-20261016'
 CATALOG = LOCAL / 'game-catalog-v2/entries.jsonl'
 MAP_EVENTS = ROOT / 'tools/data/map-events.json'
+# The recovery orbs' abnormals (EventFunc.dat Event_EnvObj_HP/MP/STA/SPD/OP_Marble: AddAbnormal 19000013/15/16/17/29; the orbs
+# themselves are EnvObjData Basic_RecoveryOrb_01..05, GameSession.EnvBoxes.cs). OBSERVED on the player at each orb pickup (rec 105448).
+ORB_ABNORMALS = {19000013, 19000015, 19000016, 19000017, 19000029}
 EFFECTS = {'RewardBox', 'GetVehicle', 'GetVehicleSoul', 'GetVehicleSoulCrystal', 'Fix_VehicleCreatureLevel', 'Skill', 'Telpo_Home', 'GetKina', 'GetNonBindingKina',
            'GetTitle', 'GetSkin', 'GetSkinSet', 'GetSocialAction', 'GetStigmaShard', 'GetSkillPoint', 'GetDaevanionPoint', 'GetWing'}
 CRYSTALS = {'SoulCrystalFeral': 1, 'SoulCrystalIntellect': 2, 'SoulCrystalNature': 3, 'SoulCrystalTrans': 4, 'SoulCrystalSpecial': 5,
@@ -97,6 +100,7 @@ def _map_event_abnormals(path=MAP_EVENTS):
 def _abnormals(skills, tables=ABNORMALS):
     wanted = {int(row[3]) for rows in skills.values() for row in rows if row[0] == 'Abnormal_True' and len(row) > 3 and row[3].isdigit()}
     wanted |= _map_event_abnormals()
+    wanted |= ORB_ABNORMALS
     load = lambda i: json.loads((tables / f'table-{i:03}.json').read_text(encoding='utf-8'))['Properties']['Data']
     value = lambda v: v['Value'] if isinstance(v, dict) else v
     found = {value(r['ID']): {'group': int(r.get('GroupId') or 0), 'effects': []} for r in load(0) if value(r['ID']) in wanted}
@@ -138,8 +142,9 @@ def build(tables=TABLES, catalog=CATALOG):
     for row in _rows(tables, 0):
         packages = [[p['Item'], int(p.get('Prob') or 0), int(p.get('Count') or 1)] for p in row.get('PackageItems') or []]
         wanted.update(p[0] for p in packages)
-        boxes[row['Group']] = {'items': items(row.get('Items')), 'select': items(row.get('SelectItems')), 'packages': packages,
-                               'max': max(1, int(row.get('MultiUseMax') or 1))}
+        # A group's Light / Dark rows (BoxReward Race) live in box-race.json (tools/box_race_data.py); the first row stays here.
+        boxes.setdefault(row['Group'], {'items': items(row.get('Items')), 'select': items(row.get('SelectItems')), 'packages': packages,
+                               'max': max(1, int(row.get('MultiUseMax') or 1))})
     packages = {}
     for row in _rows(tables, 4):
         if row['PackageName'] in wanted:

@@ -170,6 +170,11 @@ def convert(event, npc_ids):
             if fail:
                 entry['fail'] = fail
                 entry['faildir'] = _directives(step.get('FailDirectives'))
+            # "Collect points" steps (UnifiedObjectives): the UnifiedObjectivesList kills each give their value 1 in points, the step's
+            # AchieveUnifiedObjectivesScore objective waits for UnifiedObjectiveScore of them (500 sub-objectives in 351 steps).
+            if step.get('UnifiedObjectives') and step.get('UnifiedObjectivesList'):
+                entry['uobj'] = [_objective(o, npc_ids) for o in step['UnifiedObjectivesList']]
+                entry['score'] = int(step.get('UnifiedObjectiveScore') or 0)
             record['steps'].append(entry)
         stages.append(record)
     out['stages'] = stages
@@ -494,6 +499,12 @@ def teleport_targets(events, points, paths, table=TELEPORTS):
         for name in re.findall(r'"t": "PCTeleport", "v": \["([^"]*)"', json.dumps(event)):
             if name and name not in own and name in rows:
                 wanted.add(name)
+    # Exit doors (EnvObjData Usage MoveMap / MovemapCondition: the value is a Teleport.dat name); see tools/door_teleports.py.
+    env = ROOT / 'tools/data/env-usages.json'
+    if env.exists():
+        for usage in json.loads(env.read_text(encoding='utf-8'))['objects'].values():
+            if usage.get('usage') in ('MoveMap', 'MovemapCondition') and usage.get('value') in rows:
+                wanted.add(usage['value'])
     actors = {}
     out = {}
     for name in sorted(wanted):

@@ -33,6 +33,11 @@ public sealed record WorldObject(
     // A field-event treasure box: the loot.json reward table opening it pays (tools/world_objects.py; CANDIDATE link by the
     // table name reward_manual_FieldEvent_<x>_TreasureBox_<EnvObjData id>).
     [property: JsonPropertyName("loot")] string? Loot = null,
+    [property: JsonPropertyName("achievement")] int Achievement = 0,
+    [property: JsonPropertyName("monolith")] int[]? Monolith = null,
+    [property: JsonPropertyName("pool")] int? Pool = null,
+    [property: JsonPropertyName("pool_slots")] int[]? PoolSlots = null,
+    [property: JsonPropertyName("rift")] string? Rift = null,
     // EnvObjData FinishDuration (ms) of an object that dies after use (bDespawn); 0: none (tools/world_objects.py).
     [property: JsonPropertyName("finish_ms")] int FinishMs = 0)
 {
@@ -92,6 +97,9 @@ public static class WorldObjects
     public const double TriggerRange = 20000;
     /// <summary>Objects are spawned for a player within this distance and despawned beyond it (cm).</summary>
     public const double VisibleRange = 6000;
+    /// <summary>Outside instance maps, flight rings (EnvObjData VisibleRangeType LongRange) are spawned within this (OURS: rings are
+    /// flown at, the 60 m of VisibleRange showed them too late).</summary>
+    public const double RingRange = 20000;
     /// <summary>Slack on EnvObjData InteractRange for latency and collision radii.</summary>
     public const double InteractSlack = 400;
 
@@ -112,7 +120,14 @@ public static class WorldObjects
     /// <summary>A placed object's EnvObjData name by its id (tools/world_objects.py env_names).</summary>
     public static string? EnvName(int env) => file.Value.EnvNames?.GetValueOrDefault(env.ToString(System.Globalization.CultureInfo.InvariantCulture));
 
-    public static IReadOnlyList<WorldObject> ObjectsOn(int mapId) => Map(mapId)?.Objects ?? [];
+    static readonly System.Collections.Concurrent.ConcurrentDictionary<int, WorldObject[]> merged = new();
+
+    /// <summary>
+    /// A map's placed objects: world-objects.json, then the random pools and Spacetime Rifts of world-pools.json (WorldPools,
+    /// tools/world_objects.py pools) after them, so every key of world-objects.json stays what it was.
+    /// </summary>
+    public static IReadOnlyList<WorldObject> ObjectsOn(int mapId) => merged.GetOrAdd(mapId, id =>
+        WorldPools.ObjectsOn(id) is { Count: > 0 } extra ? [.. Map(id)?.Objects ?? [], .. extra] : Map(id)?.Objects ?? []);
     public static IReadOnlyList<TriggerArea> TriggersOn(int mapId) => Map(mapId)?.Triggers ?? [];
 
     static readonly System.Collections.Concurrent.ConcurrentDictionary<int, int[]> longRange = new();
@@ -120,4 +135,10 @@ public static class WorldObjects
     /// <summary>Indexes of the map's long-range objects (sent at entry on instance maps).</summary>
     public static IReadOnlyList<int> LongRangeOn(int mapId) => longRange.GetOrAdd(mapId, id =>
         ObjectsOn(id).Select((o, i) => (o, i)).Where(x => x.o.LongRange).Select(x => x.i).ToArray());
+
+    static readonly System.Collections.Concurrent.ConcurrentDictionary<int, int[]> rings = new();
+
+    /// <summary>Indexes of the map's flight rings (Usage FlightRing).</summary>
+    public static IReadOnlyList<int> RingsOn(int mapId) => rings.GetOrAdd(mapId, id =>
+        ObjectsOn(id).Select((o, i) => (o, i)).Where(x => x.o.FlightRing).Select(x => x.i).ToArray());
 }

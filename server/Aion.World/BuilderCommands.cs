@@ -222,7 +222,7 @@ public sealed class BuilderCommands(WorldPresence presence, GmPolicy policy, Act
                 if (target.Session.MapId is not { } map || target.Session.Position is not { } at) return BuilderOutcome.Fail($"{args[0]} is still loading.");
                 return BuilderOutcome.Ok($"Teleporting to {args[0]}.", actor.Teleport(map, at, now));
             }
-            // 0xe258 ContentsUnlockUpdate: the packet that unlocks chat (45) at world entry.
+            // 0xe258 ContentsUnlockUpdate: the update the official server sends when a content opens.
             case "ContentsUnlock" when args is [var value] && UnlockType(value) is { } type:
                 return BuilderOutcome.Ok($"Unlocked {UnlockTypes[type]}.", [GamePackets.ContentsUnlockUpdate([(byte)type])]);
             case "QuestAdd" or "QuestComplete" or "QuestCompleteStep" or "QuestReward" or "QuestDelete" when args is [var quest]:
@@ -357,6 +357,9 @@ public sealed class BuilderCommands(WorldPresence presence, GmPolicy policy, Act
             : rows.FirstOrDefault(r => r.Name.Equals(args[0], StringComparison.OrdinalIgnoreCase) || r.Id.ToString(CultureInfo.InvariantCulture) == args[0]);
         if (item.Name is null)
             return BuilderOutcome.Fail(rows.Count == 0 ? $"No item matches {args[0]}." : "Several items match: " + string.Join(", ", rows.Select(r => $"{r.Id} {r.Name}")));
+        // A collection item without any use action (CollectionItems.IsPlaceholder): the client can neither learn nor show it.
+        if (CollectionItems.IsPlaceholder(item.Id))
+            return BuilderOutcome.Fail($"{item.Name} ({item.Id}) is a placeholder item the client cannot use (no use effect); not granted.");
         await grant(store.AccountId, character, item.Id, count, ct);
         // Stored first, then the client gets the difference (0x561b) so the item shows at once.
         return BuilderOutcome.Ok($"{count} x {item.Name} ({item.Id}) added.", await actor.InventoryChangesAsync(ct));

@@ -65,6 +65,26 @@ public sealed partial class PostgresAccountAuthentication : IAccountAuthenticati
         { return false; }
     }
 
+    /// <summary>
+    /// A server-run bot's account (provider 'bot', no password: it cannot sign in from outside), created once with the auth role -
+    /// the game role may only read accounts (live 2026-11-09: the bot service's own insert was refused and stopped the host).
+    /// </summary>
+    public async Task<Guid> BotAccountAsync(string subject, CancellationToken cancellationToken)
+    {
+        if (!ValidUsername(subject.Replace('-', '_'))) throw new ArgumentException("bad bot subject", nameof(subject));
+        await using var connection = await source.OpenConnectionAsync(cancellationToken);
+        await using (var insert = new NpgsqlCommand(
+            "INSERT INTO auth.accounts(account_id,provider,subject) VALUES($1,'bot',$2) ON CONFLICT (provider,subject) DO NOTHING", connection))
+        {
+            insert.Parameters.AddWithValue(Guid.NewGuid());
+            insert.Parameters.AddWithValue(subject);
+            await insert.ExecuteNonQueryAsync(cancellationToken);
+        }
+        await using var query = new NpgsqlCommand("SELECT account_id FROM auth.accounts WHERE provider='bot' AND subject=$1", connection);
+        query.Parameters.AddWithValue(subject);
+        return (Guid)(await query.ExecuteScalarAsync(cancellationToken))!;
+    }
+
     public Task<AccountSession?> SignInAsync(string username, string password, CancellationToken cancellationToken) =>
         SignInAsync(username, password, DefaultSessionLifetime, cancellationToken);
 

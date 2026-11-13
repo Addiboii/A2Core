@@ -106,6 +106,11 @@ class QuestConverterTests(unittest.TestCase):
         o = quests.objective(goal('KillPC', 'LastHit,Contribute', '50', '22'), {}, {}, {})
         self.assertEqual(o['value'], ['LastHit,Contribute', '50', '22', '', ''])
 
+    def test_player_kill_counts_come_from_the_values(self):
+        self.assertEqual(quests.objective(goal('KillPC', 'LastHit,Contribute', '50', '22'), {}, {}, {})['count'], 50)
+        grade = quests.objective(goal('KillPCAbyssGrade', '3', '4', 'LastHit,Contribute', '5', '22'), {}, {}, {})
+        self.assertEqual((grade['count'], grade['value'][:2]), (5, ['3', '4']))
+
     def test_spawn_check_counts_spawned_npcs(self):
         with tempfile.TemporaryDirectory() as tmp:
             spawns = Path(tmp) / 'npcs.json'

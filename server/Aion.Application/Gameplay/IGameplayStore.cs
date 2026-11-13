@@ -4,9 +4,19 @@ using Aion.Core.Accounts;
 namespace Aion.Application.Gameplay;
 
 public sealed record CreatePlayer(Guid RequestId, string ProfileId, string Name, byte[] Appearance,
-    int? WorldId = null, int VoiceType = 0, int? LobbySlot = null);
+    int? WorldId = null, int VoiceType = 0, int? LobbySlot = null, int? HomeServerId = null);
 public sealed record ItemState(Guid InstanceId, string BuildId, int TemplateId, long Quantity,
-    string Location, int? Slot, long Revision, JsonElement RolledStats, JsonElement Upgrades, long WireId = 0);
+    string Location, int? Slot, long Revision, JsonElement RolledStats, JsonElement Upgrades, long WireId = 0)
+{
+    /// <summary>When the row was created (game.item_instances.created_at): the start of an Item.dat MaintainTime period.</summary>
+    public DateTimeOffset? Acquired { get; init; }
+}
+/// <summary>
+/// One row of an item arrangement (sort, store, take out, stack merge): the row ends in Location on Slot (null: no slot) holding
+/// Quantity (0: the row goes, merged into another stack). Split: a new row cloned from Item (same build, stats and upgrades) with
+/// Quantity on Location/Slot; Item is then also listed as a plain row. Per template the quantities add up to what the rows held.
+/// </summary>
+public sealed record ItemArrangement(Guid Item, long Revision, string Location, int? Slot, long Quantity, bool Split = false);
 /// <summary>A learned skill: the level the client sees, its quick slot, and the level bought with skill points (0: none).</summary>
 public sealed record SkillState(int SkillId, int Level, int? Slot, int Purchased = 0);
 // Legions: a member (grade EGuildMemberGrade 0 Master, 1 Officer, 2 Member) and a legion with its members.
@@ -26,18 +36,35 @@ public sealed record CharacterExtras(IReadOnlyList<int> Titles, IReadOnlyDiction
 {
     public static readonly CharacterExtras None = new([], new Dictionary<int, int>(), new Dictionary<int, int>(), new Dictionary<int, int>(), []);
 }
+/// <summary>
+/// A character's Daevanion (migration 083): learned nodes (DaevanionNode ids, the auto-learned Start nodes not stored) and the
+/// points items added per EDaevanionPointType (1 DaevanionCrystal .. 5 Season03Crystal01).
+/// </summary>
+public sealed record DaevanionRecord(IReadOnlyList<int> Nodes, IReadOnlyDictionary<int, int> Bonus)
+{
+    public static readonly DaevanionRecord None = new([], new Dictionary<int, int>());
+}
 /// <summary>EquippedWing: the stored wing choice (migration 073; 0 none stored: the default rule applies).</summary>
 public sealed record PlayerInventory(IReadOnlyList<ItemState> Items, IReadOnlyList<SkillState> Skills, IReadOnlyList<int>? Wings = null, CharacterExtras? Extras = null,
     int EquippedWing = 0);
 // Trusted server calls only: progress changes are not accepted from a player API.
 public sealed record AdminCommand(Guid RequestId, Guid CharacterId, string Command,
     string? BuildId = null, int TemplateId = 0, long Quantity = 1, int Level = 1,
-    int MapId = 0, double X = 0, double Y = 0, double Z = 0, int CreationId = 0, int Ascension = 0, int[]? Wings = null, bool Staff = false);
+    int MapId = 0, double X = 0, double Y = 0, double Z = 0, int CreationId = 0, int Ascension = 0, int[]? Wings = null, bool Staff = false,
+    int Category = 0);
 // Quest progress (game.character_quests): EQuestStatus 2 Incomplete, 3 Complete, 4 Rewarded.
 /// <summary>A ride (pet/mount, VehicleList id): level, soul points, and whether it is acquired (souls collect before).</summary>
 public sealed record RideRecord(int RideId, int Level, int SoulPoints, bool Owned = true);
-/// <summary>A hotbar slot: EQuickSlotType (0 skill, 1 item, ...), the item (uid, template) or skill.</summary>
-public sealed record QuickSlotRecord(int Slot, int Type, long ItemUid, int ItemId, int SkillId);
+/// <summary>
+/// A hotbar slot (QuickSlotInfo): EQuickSlotType (0 skill, 1 item, 2 macro, 3 emote, 4 stigma), the item (uid, template) or skill,
+/// the context skills, the macro number, the emote and the toggle flag. A row with no skill and no item is an emptied slot (it keeps
+/// a class default off the bar).
+/// </summary>
+public sealed record QuickSlotRecord(int Slot, int Type, long ItemUid, int ItemId, int SkillId, IReadOnlyList<int>? ContextSkills = null,
+    int Macro = 0, int SocialAction = 0, bool Toggle = false)
+{
+    public bool IsEmpty => ItemId == 0 && SkillId == 0 && SocialAction == 0 && Macro == 0;
+}
 
 /// <summary>A creature board: ECreatureType, level, exp and its panels as JSON ({"1": [[slot, grade, stat, value, locked], ...]}).</summary>
 public sealed record CreatureBoardRecord(int Type, int Level, long Exp, string Panels);
@@ -46,7 +73,11 @@ public sealed record CreatureBoardRecord(int Type, int Level, long Exp, string P
 public sealed record RideCollection(int DefaultRide, IReadOnlyList<RideRecord> Rides, IReadOnlyDictionary<int, int>? Crystals = null,
     IReadOnlyList<CreatureBoardRecord>? Boards = null);
 
-public sealed record QuestRecord(string Code, int QuestId, long Uid, int Status, int Step, int[] Goals);
+/// <summary>
+/// A quest row. UpdatedAt: the row's updated_at (null for rows not read from the database); a Rewarded row is not written again,
+/// so for it this is when it was rewarded (the Ascension Gauge counts the quests rewarded after its own start, QuestLog.GaugeRecount).
+/// </summary>
+public sealed record QuestRecord(string Code, int QuestId, long Uid, int Status, int Step, int[] Goals, DateTimeOffset? UpdatedAt = null);
 /// <summary>An achievement's state (migration 031): count, when its last step completed, the highest step rewarded.</summary>
 public sealed record AchievementRecord(int Id, int Count, DateTimeOffset? CompletedAt, int RewardedStep, DateTimeOffset UpdatedAt);
 /// <summary>A boss challenge group's progress (migration 033).</summary>
@@ -55,10 +86,6 @@ public sealed record BossChallengeRecord(int GroupId, int ClearLevel, long BestP
 public sealed record ContentTicketRecord(int TicketId, int Remaining, DateTimeOffset UpdatedAt);
 /// <summary>A stigma skill learned with shards and the level it reached (migration 072).</summary>
 public sealed record StigmaRecord(int SkillId, int Level);
-/// <summary>Points items granted (migration 079): category 1 skill points (ESkillPointType), 2 Daevanion points (EDaevanionPointType).</summary>
-public sealed record ItemPointRecord(int Category, int Type, int Points);
-/// <summary>One manastone slot of an item (upgrades.magicstones): the stone, its EStat id and grade (1-3).</summary>
-public sealed record MagicStoneSlot(int StoneId, int Stat, int Grade);
 /// <summary>A part equipped on a mastery skill's specialisation slot (migration 078).</summary>
 public sealed record SkillPartRecord(int SkillId, int Slot, int PartId);
 /// <summary>A character's stigmas and the shards its GetStigmaShard items gave (on top of Exp.dat's total for its level).</summary>
@@ -88,7 +115,7 @@ public sealed record AdminAuditEntry(long Id, DateTimeOffset At, string Action, 
 public sealed record AdminCharacter(Guid CharacterId, string Name, Guid AccountId, string AccountName,
     int WorldId, int Level, int Race, int Gender, int CreationId, bool AccountDisabled, IReadOnlyList<string>? AccountRoles = null, bool Staff = false);
 /// <summary>A catalogue item for the staff dashboard (latest build): grade and level from the item facts.</summary>
-public sealed record AdminCatalogItem(int TemplateId, string Name, string? Category, string? Grade, int? Level);
+public sealed record AdminCatalogItem(int TemplateId, string Name, string? Category, string? Grade, int? Level, string? Race = null);
 public sealed record AdminCatalogPage(IReadOnlyList<AdminCatalogItem> Items, int Total, IReadOnlyList<string> Categories);
 public sealed record AdminCharacterDetail(AdminCharacter Character, PlayerInventory Inventory, AdminAppearance? Appearance = null,
     string? ClassName = null, IReadOnlyList<AdminClass>? Classes = null, int Ascension = 1);
@@ -104,10 +131,12 @@ public sealed record AdminAppearance(int Version, int? HeadType, int? HairType, 
         a.Fields);
 }
 public sealed class GameplayException(string code) : Exception(code) { public string Code => Message; }
-public interface IGameplayStore
+public partial interface IGameplayStore
 {
     Task<Guid> CreateAsync(VerifiedAccount account, CreatePlayer input, CancellationToken ct = default);
-    Task<PlayerInventory?> InventoryAsync(VerifiedAccount account, Guid character, CancellationToken ct = default);
+    /// <param name="adoptAccountStorage">Move the account warehouse rows the account's other characters hold to this one (the playing
+    /// character's own load only - the lobby and side reads pass false, or the warehouse jumps to whichever character was read last).</param>
+    Task<PlayerInventory?> InventoryAsync(VerifiedAccount account, Guid character, CancellationToken ct = default, bool adoptAccountStorage = true);
     Task<bool> MoveItemAsync(VerifiedAccount account, Guid character, Guid item, long revision, int? equipmentSlot, CancellationToken ct = default);
     // World-map fog groups an owned character has uncovered; null when not owned.
     Task<IReadOnlyList<int>?> MapFogAsync(VerifiedAccount account, Guid character, CancellationToken ct = default);
@@ -125,6 +154,35 @@ public interface IGameplayStore
     Task<bool> SetWingAsync(VerifiedAccount account, Guid character, int wingId, CancellationToken ct = default) => Task.FromResult(false);
     /// <summary>Skins added to the collection (a count per skin).</summary>
     Task<bool> GrantSkinsAsync(VerifiedAccount account, Guid character, IReadOnlyList<int> skins, CancellationToken ct = default) => Task.FromResult(false);
+    /// <summary>Items (whole stacks or part of one) from the bag to a warehouse ('storage' the account's, 'character_storage'
+    /// the character's) or back, all or nothing.</summary>
+    Task<bool> TransferItemsAsync(VerifiedAccount account, Guid character, IReadOnlyList<(Guid Item, long Revision, long Count)> items, string from, string to,
+        CancellationToken ct = default) => Task.FromResult(false);
+    /// <summary>The account's currencies (ECurrencyCategory -> balance: Quna and its states), through one of its characters.</summary>
+    Task<IReadOnlyDictionary<int, long>> AccountCurrenciesAsync(VerifiedAccount account, Guid character, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyDictionary<int, long>>(new Dictionary<int, long>());
+    /// <summary>Adds (or, negative, spends) an account currency; the new balance, null when it would go below zero.</summary>
+    Task<long?> AddAccountCurrencyAsync(VerifiedAccount account, Guid character, int category, long delta, CancellationToken ct = default) => Task.FromResult<long?>(null);
+    /// <summary>The character's Daevanion nodes and item points.</summary>
+    Task<DaevanionRecord> DaevanionAsync(VerifiedAccount account, Guid character, CancellationToken ct = default) => Task.FromResult(DaevanionRecord.None);
+    /// <summary>
+    /// Learns <paramref name="add"/> and forgets <paramref name="remove"/> nodes, paying <paramref name="kina"/> (a bag stack,
+    /// revision-checked) in the same transaction; false when something changed or is short.
+    /// </summary>
+    Task<bool> SaveDaevanionNodesAsync(VerifiedAccount account, Guid character, IReadOnlyList<int> add, IReadOnlyList<int> remove,
+        (Guid Item, long Revision, long Count)? kina, CancellationToken ct = default) => Task.FromResult(false);
+    /// <summary>Uses up count of a Daevanion point item stack and sets that point type's item points to <paramref name="bonus"/>, atomically.</summary>
+    Task<bool> UseDaevanionPointItemAsync(VerifiedAccount account, Guid character, Guid item, long revision, int count, int type, int bonus,
+        CancellationToken ct = default) => Task.FromResult(false);
+    /// <summary>The character's Monolith resonance counts (migration 090): Monolith id -> tokens resonated.</summary>
+    Task<IReadOnlyDictionary<int, int>> MonolithsAsync(VerifiedAccount account, Guid character, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyDictionary<int, int>>(new Dictionary<int, int>());
+    /// <summary>
+    /// Uses up the token stacks (revision-checked), moves the Monolith's count from <paramref name="previous"/> to <paramref name="count"/>
+    /// (false when it is no longer <paramref name="previous"/>) and grants the rewards, in one transaction.
+    /// </summary>
+    Task<bool> ResonateMonolithAsync(VerifiedAccount account, Guid character, IReadOnlyList<(Guid Item, long Revision, int Count)> costs, int monolith,
+        int previous, int count, IReadOnlyList<(int TemplateId, long Count)> rewards, CancellationToken ct = default) => Task.FromResult(false);
     /// <summary>Equipped skins by ESkinEquipSlot; 0 clears the slot. Each skin must be owned.</summary>
     Task<bool> SetSkinEquipsAsync(VerifiedAccount account, Guid character, IReadOnlyDictionary<int, int> equips, CancellationToken ct = default) => Task.FromResult(false);
     /// <summary>A learned skill's level (a skill level bought with skill points).</summary>
@@ -156,6 +214,29 @@ public interface IGameplayStore
     /// </summary>
     Task<bool> ShopBuyAsync(VerifiedAccount account, Guid character, IReadOnlyList<(Guid Item, long Revision, int Count)> costs,
         IReadOnlyList<(int TemplateId, long Count)> goods, IReadOnlyList<(int Target, int GoodsId, string Period, int Count, int Limit)> limits, CancellationToken ct = default);
+    /// <summary>
+    /// A Black Cloud market purchase, all or nothing: the Kina stacks consumed, <paramref name="quna"/> account Quna spent (bound
+    /// Quna first), each limited goods' count raised within its limit, the items granted and <paramref name="qunaGranted"/> Quna
+    /// credited (a Quna pack), audited with <paramref name="audit"/>. "ok", "money" (not enough Quna), "limit" or "failed".
+    /// </summary>
+    Task<string> PremiumShopBuyAsync(VerifiedAccount account, Guid character, IReadOnlyList<(Guid Item, long Revision, int Count)> costs, long quna,
+        IReadOnlyList<(int TemplateId, long Count)> goods, long qunaGranted, long mileage, long mileageGranted, IReadOnlyList<(int Target, int GoodsId, string Period, int Count, int Limit)> limits,
+        object audit, CancellationToken ct = default) => Task.FromResult("failed");
+    /// <summary>The host's field boss kills (game.field_boss_kills): map, WorldMapFieldNamed id, kill and respawn time (Unix ms).</summary>
+    Task<IReadOnlyList<(int Map, int Id, long KilledAt, long RespawnAt)>> FieldBossKillsAsync(VerifiedAccount account, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<(int, int, long, long)>>([]);
+    /// <summary>Keeps a field boss's last kill (the newer kill wins).</summary>
+    Task<bool> SaveFieldBossKillAsync(VerifiedAccount account, int map, int id, long killedAt, long respawnAt, CancellationToken ct = default) => Task.FromResult(false);
+    /// <summary>The character's Black Cloud Merchants lists: (wire category, revision, JSON state).</summary>
+    Task<IReadOnlyList<(int Category, long Revision, string State)>> RandomShopOffersAsync(VerifiedAccount account, Guid character, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<(int, long, string)>>([]);
+    /// <summary>
+    /// Stores a Black Cloud Merchants list, all or nothing: the row written only at <paramref name="revision"/> (0: not there yet), the
+    /// Kina stacks consumed, the items granted, audited (random_shop) when <paramref name="audit"/> is set. "ok", "stale" or "failed".
+    /// </summary>
+    Task<string> RandomShopSaveAsync(VerifiedAccount account, Guid character, int category, long revision, string state,
+        IReadOnlyList<(Guid Item, long Revision, int Count)> costs, IReadOnlyList<(int TemplateId, long Count)> goods, object? audit, CancellationToken ct = default) =>
+        Task.FromResult("failed");
     /// <summary>Sells part or all of a bag stack: Kina granted, the sold units kept for buyback (72 hours, 50 items).</summary>
     Task<bool> SellToMerchantAsync(VerifiedAccount account, Guid character, Guid item, long revision, int count, long kina, CancellationToken ct = default);
     /// <summary>The items waiting for buyback (expired ones are removed first).</summary>
@@ -183,7 +264,7 @@ public interface IGameplayStore
     Task<string> RenameCharacterAsync(VerifiedAccount account, Guid character, string name, CancellationToken ct = default);
     /// <summary>Moves a bag item to a bag slot; an item already there takes the moved item's old slot.</summary>
     Task<bool> MoveBagItemAsync(VerifiedAccount account, Guid character, Guid item, long revision, int slot, CancellationToken ct = default);
-    /// <summary>Moves a bag or warehouse item to a slot of 'bag' or 'storage' (the item on that slot takes the old one).</summary>
+    /// <summary>Moves a bag or warehouse item to a slot of 'bag', 'storage' or 'character_storage' (the item on that slot takes the old one).</summary>
     Task<bool> MoveItemToContainerAsync(VerifiedAccount account, Guid character, Guid item, long revision, string location, int slot, CancellationToken ct = default) => Task.FromResult(false);
     /// <summary>The character's mail, newest first (deleted ones left out).</summary>
     Task<IReadOnlyList<PostRecord>> PostsAsync(VerifiedAccount account, Guid character, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<PostRecord>>([]);
@@ -216,14 +297,14 @@ public interface IGameplayStore
     /// <summary>Replaces one skill's equipped parts when they still equal <paramref name="expected"/>; false otherwise.</summary>
     Task<bool> ReplaceSkillPartsAsync(VerifiedAccount account, Guid character, int skillId, IReadOnlyList<SkillPartRecord> expected, IReadOnlyList<SkillPartRecord> parts,
         CancellationToken ct = default) => Task.FromResult(false);
-    Task<IReadOnlyList<ItemPointRecord>> ItemPointsAsync(VerifiedAccount account, Guid character, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<ItemPointRecord>>([]);
-    /// <summary>Consumes one point item and adds its points, in one transaction.</summary>
-    Task<bool> UsePointItemAsync(VerifiedAccount account, Guid character, Guid item, long revision, int category, int type, int points, CancellationToken ct = default) =>
-        Task.FromResult(false);
     /// <summary>A character id by name (any account), for mail to offline players.</summary>
     Task<Guid?> CharacterByNameAsync(VerifiedAccount account, string name, CancellationToken ct = default) => Task.FromResult<Guid?>(null);
-    /// <summary>Sorts the bag: items ordered by template, then age, on slots 0, 1, 2, ...; the currencies keep no slot.</summary>
-    Task<bool> SortBagAsync(VerifiedAccount account, Guid character, IReadOnlyCollection<int> currencies, CancellationToken ct = default);
+    /// <summary>
+    /// Rearranges bag and warehouse rows (ItemSort, ItemStore/TakeOut, MergeStorageItem) all or nothing: every listed row must still
+    /// have its revision and lie in the bag or a warehouse, and the quantities of each template must add up as before.
+    /// </summary>
+    Task<bool> ArrangeItemsAsync(VerifiedAccount account, Guid character, IReadOnlyList<ItemArrangement> items, string reason, CancellationToken ct = default) =>
+        Task.FromResult(false);
     Task<IReadOnlyList<QuickSlotRecord>?> QuickSlotsAsync(VerifiedAccount account, Guid character, CancellationToken ct = default);
     /// <summary>Per-character settings by name (game.character_settings): emotes, seal stone, auto-use, presets.</summary>
     Task<IReadOnlyDictionary<string, JsonElement>?> CharacterSettingsAsync(VerifiedAccount account, Guid character, CancellationToken ct = default) =>
@@ -244,10 +325,22 @@ public interface IGameplayStore
     Task<bool> ConsumeAndGrantAsync(VerifiedAccount account, Guid character, Guid item, long revision, int count,
         IReadOnlyList<(int TemplateId, long Count)> rewards, CancellationToken ct = default);
     /// <summary>
+    /// Which of the character's items came from a staff grant (game.item_grants of a game.admin_requests "grant": the staff
+    /// item panel, staff rewards, the in-game GM command). Read only; items of another account or character are never listed.
+    /// </summary>
+    Task<IReadOnlyList<Guid>> StaffGrantedItemsAsync(VerifiedAccount account, Guid character, IReadOnlyList<Guid> items, CancellationToken ct = default);
+    /// <summary>Uses up one wing item (GetWing) and registers its wing, in one transaction; false when the item does not match.</summary>
+    Task<bool> UseWingItemAsync(VerifiedAccount account, Guid character, Guid item, long revision, int wingId, CancellationToken ct = default);
+    /// <summary>
     /// Uses up one pet item and acquires its ride; a ride already owned gains a soul point instead.
     /// Null when the item does not match.
     /// </summary>
     Task<RideRecord?> UseRideItemAsync(VerifiedAccount account, Guid character, Guid item, long revision, int rideId, CancellationToken ct = default);
+    /// <summary>
+    /// Uses up pet items of one ride in one transaction (self-using items gained by the hundred: staff grants, boxes): the first
+    /// acquires the ride when not owned, every other one is a soul point. Items that no longer match are skipped; null when none was used.
+    /// </summary>
+    Task<RideRecord?> UseRideItemsAsync(VerifiedAccount account, Guid character, IReadOnlyList<(Guid Item, long Revision)> items, int rideId, CancellationToken ct = default);
     /// <summary>Uses up one soul item: the ride gains soul points (owned or not). Null when the item does not match.</summary>
     Task<RideRecord?> AddRideSoulsAsync(VerifiedAccount account, Guid character, Guid item, long revision, int rideId, int souls, CancellationToken ct = default);
     /// <summary>
@@ -269,10 +362,11 @@ public interface IGameplayStore
     Task<bool> CrystallizeAsync(VerifiedAccount account, Guid character, IReadOnlyList<(int RideId, int Points, int CrystalType)> targets, CancellationToken ct = default);
     /// <summary>Uses up count of a bag stack (an item used for its effect), revision-checked.</summary>
     Task<bool> ConsumeItemAsync(VerifiedAccount account, Guid character, Guid item, long revision, int count, CancellationToken ct = default);
-    /// <summary>A wing item (Item.dat GetWing): one used up and the wing registered, together; false when either fails (already registered).</summary>
-    Task<bool> UseWingItemAsync(VerifiedAccount account, Guid character, Guid item, long revision, int wingId, CancellationToken ct = default) => Task.FromResult(false);
     /// <summary>Sets the default ride (an owned one, or 0 to clear).</summary>
     Task<bool> SetDefaultRideAsync(VerifiedAccount account, Guid character, int rideId, CancellationToken ct = default);
+
+    /// <summary>Records a suspected cheat (speed/teleport/skill-rate) in the staff audit log; best-effort, no transaction.</summary>
+    Task RecordCheatAsync(Guid character, string kind, object details, CancellationToken ct = default) => Task.CompletedTask;
     /// <summary>Whether a character already uses this name (names are unique regardless of case).</summary>
     Task<bool> NameTakenAsync(VerifiedAccount account, string name, CancellationToken ct = default);
     Task<bool> UnblockAsync(VerifiedAccount account, Guid character, Guid blocked, CancellationToken ct = default);
@@ -282,23 +376,29 @@ public interface IGameplayStore
     Task<bool> ExchangeAsync(VerifiedAccount first, Guid firstCharacter, IReadOnlyList<(Guid Item, long Count)> firstGives,
         VerifiedAccount second, Guid secondCharacter, IReadOnlyList<(Guid Item, long Count)> secondGives, CancellationToken ct = default);
     // Soul bind of an owned item: upgrades.soul_bind = count, revision bumped.
-    /// <summary>Stores the bind count (upgrades.soul_bind) and, when given, the bound stats (upgrades.soul_stats, [[EStat, value]]).</summary>
     Task<bool> SoulBindItemAsync(VerifiedAccount account, Guid character, Guid item, byte count, CancellationToken ct = default, IReadOnlyList<(int Type, int Value)>? stats = null);
+    /// <summary>Removes copies of owned skins (skin id -> count; the last copy deletes the row) and grants new ones, in one transaction.</summary>
+    Task<bool> CombineSkinsAsync(VerifiedAccount account, Guid character, IReadOnlyDictionary<int, int> used, IReadOnlyList<int> granted, CancellationToken ct = default) =>
+        Task.FromResult(false);
+    /// <summary>Sets one field of an owned item's upgrades (JSON value), revision bumped; false when the item is not the character's.</summary>
+    Task<bool> SetItemUpgradeAsync(VerifiedAccount account, Guid character, Guid item, string field, string json, CancellationToken ct = default) =>
+        Task.FromResult(false);
     /// <summary>
     /// An enchant attempt, all or nothing: the costs (item, revision, count) are consumed and the item (at its revision)
     /// gets upgrades.enchant = level and upgrades.enchant_bonus = bonus (the failure correction built up so far).
     /// </summary>
     Task<bool> EnchantItemAsync(VerifiedAccount account, Guid character, Guid item, long revision,
-        IReadOnlyList<(Guid Item, long Revision, int Count)> costs, int level, int bonus, CancellationToken ct = default);
-    /// <summary>
-    /// A manastone imprint, all or nothing: the costs (stone, Kinah) are consumed and the item (at its revision) gets
-    /// upgrades.magicstones = the rolled slots.
-    /// </summary>
-    Task<bool> ImprintItemAsync(VerifiedAccount account, Guid character, Guid item, long revision,
-        IReadOnlyList<(Guid Item, long Revision, int Count)> costs, IReadOnlyList<MagicStoneSlot> slots, CancellationToken ct = default) => Task.FromResult(false);
+        IReadOnlyList<(Guid Item, long Revision, int Count)> costs, int level, int bonus, CancellationToken ct = default, string field = "enchant");
     Task<JsonElement> AdminAsync(VerifiedAccount actor, AdminCommand command, CancellationToken ct = default);
     /// <summary>The account's own character ascends by play (the HQ1101020 turn-in): the grade rises to <paramref name="grade"/>, never falls.</summary>
     Task<bool> AscendAsync(VerifiedAccount account, Guid character, int grade, CancellationToken ct = default) => Task.FromResult(false);
+    /// <summary>
+    /// Staff: removes the given counts of a character's items (any location; a count at or above the stack removes the row), in
+    /// one transaction, audited as staff_items_deleted and delivered live (pg_notify aion_inventory). The rows removed, or null
+    /// when an item is not the character's.
+    /// </summary>
+    Task<int?> AdminDeleteItemsAsync(VerifiedAccount actor, Guid character, IReadOnlyList<(Guid Item, long Count)> items, CancellationToken ct = default) =>
+        Task.FromResult<int?>(null);
     // Throw GameplayException("forbidden") unless the actor holds gamemaster or admin.
     Task<AdminProfile> AdminProfileAsync(VerifiedAccount actor, CancellationToken ct = default);
     /// <summary>The actor's rank and the database's answer for one permission-table action (migration 076).</summary>
@@ -316,7 +416,7 @@ public interface IGameplayStore
         Task.FromResult<IReadOnlyList<AdminAuditEntry>>([]);
     /// <summary>Records a staff action taken outside the store (dashboard announcement, kick, teleport); checks the staff role.</summary>
     Task AdminRecordAsync(VerifiedAccount actor, string action, Guid? character, object details, CancellationToken ct = default) => Task.CompletedTask;
-    Task<AdminCatalogPage> AdminCatalogAsync(VerifiedAccount actor, string query, string? category, int offset, int limit, CancellationToken ct = default);
+    Task<AdminCatalogPage> AdminCatalogAsync(VerifiedAccount actor, string query, string? category, int offset, int limit, CancellationToken ct = default, string? race = null);
     // Quests of an owned character; null when not owned.
     Task<IReadOnlyList<QuestRecord>?> QuestsAsync(VerifiedAccount account, Guid character, CancellationToken ct = default);
     // Insert or update one quest by code (uid assigned on insert); the stored record.

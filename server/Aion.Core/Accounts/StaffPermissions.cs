@@ -76,6 +76,25 @@ public static class StaffPermissions
         ["api POST /api/admin/accounts/{id:guid}/disable"] = A,
         ["api POST /api/admin/accounts/{id:guid}/roles"] = A,
         ["api POST /api/admin/accounts/{id:guid}/totp/reset"] = A,
+        // The Dell version's staff routes and command kinds (merge 2026-11-13, migration 097; OURS ranks): health, item database,
+        // map layers and tiles, item deletion, bulk grants, the Black Cloud and random shop settings, account currencies.
+        ["api GET /api/admin/health"] = G,
+        ["api GET /api/admin/itemdb"] = G,
+        ["api GET /api/admin/itemdb/items/{id:int}"] = G,
+        ["api GET /api/admin/itemdb/names/{language}"] = G,
+        ["api GET /api/admin/itemdb/unusable"] = G,
+        ["api GET /api/admin/items/{id:int}"] = G,
+        ["api GET /api/admin/maps/names"] = G,
+        ["api GET /api/admin/maps/{id:int}/layers"] = G,
+        ["api GET /api/admin/maps/{id:int}/tiles/{x:int}/{y:int}"] = G,
+        ["api POST /api/admin/characters/{id:guid}/items/delete"] = M,
+        ["api POST /api/admin/grant-many"] = M,
+        ["api GET /api/admin/premium-shop"] = G,
+        ["api POST /api/admin/premium-shop"] = A,
+        ["api DELETE /api/admin/premium-shop"] = A,
+        ["api GET /api/admin/random-shop"] = G,
+        ["api POST /api/admin/random-shop"] = A,
+        ["api DELETE /api/admin/random-shop"] = A,
 
         // ---- Account operations checked inside the database functions ----
         ["account.disable"] = A,
@@ -90,6 +109,7 @@ public static class StaffPermissions
         ["command.wings"] = M,
         ["command.grant"] = M,
         ["command.staff"] = A,
+        ["command.currency"] = M,   // migration 097
         [GrantOwnAccount] = A,
 
         // ---- In-game builder commands (BuilderCommands.Supported) ----

@@ -40,9 +40,10 @@ public sealed partial class PostgresGameplayStore(NpgsqlDataSource source) : IGa
     private static async Task<List<ItemState>> Items(NpgsqlConnection c, NpgsqlTransaction t, Guid character, CancellationToken ct)
     {
         var items=new List<ItemState>();
-        await using var q=Query(c,t,"SELECT instance_id,build_id,template_id,quantity,location,slot,revision,rolled_stats::text,upgrades::text,wire_id FROM game.item_instances WHERE character_id=$1 ORDER BY instance_id",character);
+        await using var q=Query(c,t,"SELECT instance_id,build_id,template_id,quantity,location,slot,revision,rolled_stats::text,upgrades::text,wire_id,created_at FROM game.item_instances WHERE character_id=$1 ORDER BY instance_id",character);
         await using var r=await q.ExecuteReaderAsync(ct);
-        while(await r.ReadAsync(ct)) items.Add(new(r.GetGuid(0),r.GetString(1),r.GetInt32(2),r.GetInt64(3),r.GetString(4),r.IsDBNull(5)?null:r.GetInt32(5),r.GetInt64(6),JsonSerializer.Deserialize<JsonElement>(r.GetString(7)),JsonSerializer.Deserialize<JsonElement>(r.GetString(8)),r.GetInt64(9)));
+        while(await r.ReadAsync(ct)) items.Add(new(r.GetGuid(0),r.GetString(1),r.GetInt32(2),r.GetInt64(3),r.GetString(4),r.IsDBNull(5)?null:r.GetInt32(5),r.GetInt64(6),JsonSerializer.Deserialize<JsonElement>(r.GetString(7)),JsonSerializer.Deserialize<JsonElement>(r.GetString(8)),r.GetInt64(9))
+            { Acquired=r.IsDBNull(10)?null:r.GetFieldValue<DateTimeOffset>(10) });
         return items;
     }
     private static async Task<List<int>> Wings(NpgsqlConnection c, NpgsqlTransaction t, Guid character, CancellationToken ct)
@@ -61,6 +62,44 @@ public sealed partial class PostgresGameplayStore(NpgsqlDataSource source) : IGa
         while(await r.ReadAsync(ct)) skills.Add(new(r.GetInt32(0),r.GetInt32(1),r.IsDBNull(2)?null:r.GetInt32(2),r.GetInt32(3)));
         return skills;
     }
+    /// <summary>The two warehouse locations: 'storage' (kStorage 2, the account's) and 'character_storage' (kCharacterStorage 15).</summary>
+    private static bool IsWarehouse(string location) => location is "storage" or "character_storage";
+    /// <summary>
+    /// The account warehouse (location 'storage') belongs to the account on its server: rows another character of the same
+    /// account and world left there move to this character (only one of them plays at a time), keeping their slot when it is
+    /// free here and otherwise taking the next free one. Every other item operation stays per character. Items the client's
+    /// Item.dat marks CanStorage 0 (bound items: character warehouse only) are never handed over, even when an older server
+    /// put them in 'storage' (before 2026-11-10 both tabs stored there).
+    /// </summary>
+    private static async Task AdoptAccountStorage(NpgsqlConnection c, NpgsqlTransaction t, Guid account, Guid character, CancellationToken ct)
+    {
+        var adopted=new List<(Guid Item,int? Slot,Guid From)>();
+        await using(var q=Query(c,t,"""
+            SELECT i.instance_id,i.slot,i.character_id FROM game.item_instances i JOIN game.characters o ON o.character_id=i.character_id
+            JOIN game.characters me ON me.character_id=$1 JOIN catalog.items ci ON ci.build_id=i.build_id AND ci.template_id=i.template_id
+            WHERE i.location='storage' AND o.account_id=$2 AND o.world_id=me.world_id AND o.character_id<>$1
+              AND ci.definition->'raw'->>'CanStorage' IS DISTINCT FROM '0'
+            ORDER BY i.slot NULLS LAST,i.instance_id FOR UPDATE OF i
+            """,character,account))
+        {
+            await using var r=await q.ExecuteReaderAsync(ct);
+            while(await r.ReadAsync(ct)) adopted.Add((r.GetGuid(0),r.IsDBNull(1)?null:r.GetInt32(1),r.GetGuid(2)));
+        }
+        if(adopted.Count==0) return;
+        var used=new HashSet<int>();
+        await using(var q=Query(c,t,"SELECT slot FROM game.item_instances WHERE character_id=$1 AND location='storage' AND slot IS NOT NULL",character))
+        { await using var r=await q.ExecuteReaderAsync(ct); while(await r.ReadAsync(ct)) used.Add(r.GetInt32(0)); }
+        var next=0;
+        foreach(var (item,slot,_) in adopted)
+        {
+            int to;
+            if(slot is { } kept && used.Add(kept)) to=kept;
+            else { while(used.Contains(next)) next++; used.Add(to=next); }
+            await Execute(c,t,"UPDATE game.item_instances SET character_id=$2,slot=$3,revision=revision+1 WHERE instance_id=$1",ct,item,character,to);
+        }
+        await Execute(c,t,"INSERT INTO audit.events(action,character_id,actor_id,details) VALUES('account_storage_adopted',$1,$2,$3)",ct,character,account,
+            Json(new {items=adopted.Select(a=>new{item=a.Item,from=a.From})}));
+    }
     private static async Task<bool> Own(NpgsqlConnection c, NpgsqlTransaction t, Guid account, Guid character, CancellationToken ct) =>
         await Scalar(c,t,"SELECT c.character_id FROM game.characters c JOIN auth.accounts a USING(account_id) WHERE c.character_id=$1 AND c.account_id=$2 AND a.disabled_at IS NULL FOR UPDATE OF c",ct,character,account) is Guid;
 
@@ -68,7 +107,7 @@ public sealed partial class PostgresGameplayStore(NpgsqlDataSource source) : IGa
     {
         if (input.RequestId == Guid.Empty || string.IsNullOrWhiteSpace(input.ProfileId) || string.IsNullOrWhiteSpace(input.Name) || input.Name.Length>64 || input.Name!=input.Name.Trim()
             || input.Name.Any(char.IsControl) || input.Appearance is null || input.Appearance.Length>8192
-            || input.VoiceType is < 0 or > 255 || input.LobbySlot is < 0 or > 255)
+            || input.VoiceType is < 0 or > 255 || input.LobbySlot is < 0 or > 255 || input.HomeServerId is < 1 or > 65535)
             throw new GameplayException("invalid_character");
         await using var c = await source.OpenConnectionAsync(ct);
         await using var t = await c.BeginTransactionAsync(ct);
@@ -85,6 +124,7 @@ public sealed partial class PostgresGameplayStore(NpgsqlDataSource source) : IGa
         if(input.WorldId is int requestedWorld) arguments["WorldId"]=requestedWorld;
         if(input.VoiceType!=0) arguments["VoiceType"]=input.VoiceType;
         if(input.LobbySlot is int requestedSlot) arguments["LobbySlot"]=requestedSlot;
+        if(input.HomeServerId is int requestedServer) arguments["HomeServerId"]=requestedServer;
         var args=Json(arguments);
         await using (var retry = Query(c,t,"SELECT character_id,arguments=$2 FROM game.character_initializations WHERE request_id=$1",input.RequestId,args))
         {
@@ -105,10 +145,10 @@ public sealed partial class PostgresGameplayStore(NpgsqlDataSource source) : IGa
         try
         {
             character=(Guid)(await Scalar(c,t,"""
-                INSERT INTO game.characters(account_id,world_id,name,creation_id,race,gender,appearance,map_id,position,resources,voice_type,lobby_slot)
-                VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NULLIF($12,-1)) RETURNING character_id
+                INSERT INTO game.characters(account_id,world_id,name,creation_id,race,gender,appearance,map_id,position,resources,voice_type,lobby_slot,home_server_id)
+                VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NULLIF($12,-1),NULLIF($13,0)) RETURNING character_id
                 """,ct,account.AccountId,p.GetProperty("worldId").GetInt32(),input.Name,creation,race,gender,input.Appearance,
-                p.GetProperty("mapId").GetInt32(),p.GetProperty("position"),p.GetProperty("resources"),input.VoiceType,input.LobbySlot??-1))!;
+                p.GetProperty("mapId").GetInt32(),p.GetProperty("position"),p.GetProperty("resources"),input.VoiceType,input.LobbySlot??-1,input.HomeServerId??0))!;
         }
         catch(PostgresException e) when(e.SqlState==PostgresErrorCodes.UniqueViolation)
         { throw new GameplayException(e.ConstraintName=="character_lobby_slot_idx"?"slot_unavailable":"name_unavailable"); }
@@ -142,7 +182,7 @@ public sealed partial class PostgresGameplayStore(NpgsqlDataSource source) : IGa
         { await using var r=await q.ExecuteReaderAsync(ct); while(await r.ReadAsync(ct)) titles.Add(r.GetInt32(0)); }
         await using(var q=Query(c,t,"SELECT category,title_id FROM game.character_title_equips WHERE character_id=$1",character))
         { await using var r=await q.ExecuteReaderAsync(ct); while(await r.ReadAsync(ct)) titleEquips[Convert.ToInt32(r.GetValue(0))]=r.GetInt32(1); }
-        await using(var q=Query(c,t,"SELECT skin_id,count FROM game.character_skins WHERE character_id=$1",character))
+        await using(var q=Query(c,t,"SELECT skin_id,count FROM game.account_skins WHERE account_id=(SELECT account_id FROM game.characters WHERE character_id=$1)",character))
         { await using var r=await q.ExecuteReaderAsync(ct); while(await r.ReadAsync(ct)) skins[r.GetInt32(0)]=r.GetInt32(1); }
         await using(var q=Query(c,t,"SELECT slot,skin_id FROM game.character_skin_equips WHERE character_id=$1",character))
         { await using var r=await q.ExecuteReaderAsync(ct); while(await r.ReadAsync(ct)) skinEquips[Convert.ToInt32(r.GetValue(0))]=r.GetInt32(1); }
@@ -150,11 +190,14 @@ public sealed partial class PostgresGameplayStore(NpgsqlDataSource source) : IGa
         { await using var r=await q.ExecuteReaderAsync(ct); while(await r.ReadAsync(ct)) masteries.Add(new(r.GetString(0),Convert.ToInt32(r.GetValue(1)),r.GetInt32(2),r.GetInt64(3))); }
         return new(titles,titleEquips,skins,skinEquips,masteries);
     }
-    public async Task<PlayerInventory?> InventoryAsync(VerifiedAccount account, Guid character, CancellationToken ct=default)
+    public async Task<PlayerInventory?> InventoryAsync(VerifiedAccount account, Guid character, CancellationToken ct=default, bool adoptAccountStorage=true)
     {
         await using var c=await source.OpenConnectionAsync(ct);
         await using var t=await c.BeginTransactionAsync(ct);
         if(!await Own(c,t,account.AccountId,character,ct)) return null;
+        // Live 2026-11-13: the lobby read every character's items (to draw their gear) and each read adopted the account warehouse,
+        // so it ended with the last character drawn (zenyc) and Axel3's warehouse looked emptied after every visit to the lobby.
+        if(adoptAccountStorage) await AdoptAccountStorage(c,t,account.AccountId,character,ct);
         var items=await Items(c,t,character,ct); var skills=await Skills(c,t,character,ct); var wings=await Wings(c,t,character,ct); var extras=await Extras(c,t,character,ct);
         var equippedWing=await Scalar(c,t,"SELECT wing_id FROM game.character_wing_equips WHERE character_id=$1",ct,character) is int w ? w : 0;
         await t.CommitAsync(ct); return new(items,skills,wings,extras,equippedWing);
@@ -197,13 +240,137 @@ public sealed partial class PostgresGameplayStore(NpgsqlDataSource source) : IGa
         await t.CommitAsync(ct); return true;
     }
 
+    public async Task<bool> TransferItemsAsync(VerifiedAccount account, Guid character, IReadOnlyList<(Guid Item, long Revision, long Count)> items, string from, string to, CancellationToken ct=default)
+    {
+        // Bag <-> one of the two warehouses: 'storage' (kStorage, the account's) or 'character_storage' (kCharacterStorage).
+        if(items.Count is 0 or >300 || !(from=="bag" && IsWarehouse(to) || to=="bag" && IsWarehouse(from)) || items.Any(i=>i.Count<1)) throw new GameplayException("invalid_transfer");
+        await using var c=await source.OpenConnectionAsync(ct); await using var t=await c.BeginTransactionAsync(ct);
+        if(!await Own(c,t,account.AccountId,character,ct)) return false;
+        var next=Convert.ToInt32(await Scalar(c,t,"SELECT COALESCE(MAX(slot)+1,0) FROM game.item_instances WHERE character_id=$1 AND location=$2",ct,character,to) ?? 0);
+        foreach(var (item,revision,count) in items)
+        {
+            if(await Scalar(c,t,"SELECT quantity FROM game.item_instances WHERE instance_id=$1 AND character_id=$2 AND revision=$3 AND location=$4 FOR UPDATE",ct,item,character,revision,from) is not long quantity
+               || count>quantity) return false;   // rolled back: nothing moves
+            if(count==quantity)
+                await Execute(c,t,"UPDATE game.item_instances SET location=$2,slot=$3 WHERE instance_id=$1",ct,item,to,next);
+            else
+            {
+                // Part of a stack: the rest stays, the taken part becomes its own row (same build, stats and upgrades).
+                await Execute(c,t,"UPDATE game.item_instances SET quantity=quantity-$2 WHERE instance_id=$1",ct,item,count);
+                await Execute(c,t,"INSERT INTO game.item_instances(character_id,build_id,template_id,quantity,location,slot,rolled_stats,upgrades) "
+                    +"SELECT character_id,build_id,template_id,$2,$3,$4,rolled_stats,upgrades FROM game.item_instances WHERE instance_id=$1",ct,item,count,to,next);
+            }
+            next++;
+        }
+        await Execute(c,t,"INSERT INTO audit.events(action,character_id,actor_id,details) VALUES('items_transferred',$1,$2,$3)",ct,character,account.AccountId,
+            Json(new {from,to,items=items.Select(i=>new{item=i.Item,count=i.Count})}));
+        await t.CommitAsync(ct); return true;
+    }
+
+    public async Task<IReadOnlyDictionary<int, long>> AccountCurrenciesAsync(VerifiedAccount account, Guid character, CancellationToken ct=default)
+    {
+        await using var c=await source.OpenConnectionAsync(ct); await using var t=await c.BeginTransactionAsync(ct);
+        var map=new Dictionary<int,long>();
+        if(!await Own(c,t,account.AccountId,character,ct)) return map;
+        await using(var q=Query(c,t,"SELECT category,balance FROM game.account_currencies WHERE account_id=$1",account.AccountId))
+        { await using var r=await q.ExecuteReaderAsync(ct); while(await r.ReadAsync(ct)) map[Convert.ToInt32(r.GetValue(0))]=r.GetInt64(1); }
+        await t.CommitAsync(ct); return map;
+    }
+
+    public async Task<long?> AddAccountCurrencyAsync(VerifiedAccount account, Guid character, int category, long delta, CancellationToken ct=default)
+    {
+        if(category is <=0 or >32767) throw new GameplayException("invalid_currency");
+        await using var c=await source.OpenConnectionAsync(ct); await using var t=await c.BeginTransactionAsync(ct);
+        if(!await Own(c,t,account.AccountId,character,ct)) return null;
+        var balance=delta>=0
+            ? await Scalar(c,t,"INSERT INTO game.account_currencies(account_id,category,balance) VALUES($1,$2,$3) ON CONFLICT(account_id,category) DO UPDATE SET balance=game.account_currencies.balance+$3,updated_at=now() RETURNING balance",ct,account.AccountId,(short)category,delta)
+            : await Scalar(c,t,"UPDATE game.account_currencies SET balance=balance+$3,updated_at=now() WHERE account_id=$1 AND category=$2 AND balance+$3>=0 RETURNING balance",ct,account.AccountId,(short)category,delta);
+        if(balance is not long now) return null;
+        await Execute(c,t,"INSERT INTO audit.events(action,character_id,actor_id,details) VALUES('currency_changed',$1,$2,$3)",ct,character,account.AccountId,Json(new {category,delta,balance=now}));
+        await t.CommitAsync(ct); return now;
+    }
+
+    // Daevanion (migration 083): learned nodes and the points items added per EDaevanionPointType.
+    public async Task<DaevanionRecord> DaevanionAsync(VerifiedAccount account, Guid character, CancellationToken ct=default)
+    {
+        await using var c=await source.OpenConnectionAsync(ct); await using var t=await c.BeginTransactionAsync(ct);
+        if(!await Own(c,t,account.AccountId,character,ct)) return DaevanionRecord.None;
+        var nodes=new List<int>(); var bonus=new Dictionary<int,int>();
+        await using(var q=Query(c,t,"SELECT node_id FROM game.character_daevanion_nodes WHERE character_id=$1 ORDER BY node_id",character))
+        { await using var r=await q.ExecuteReaderAsync(ct); while(await r.ReadAsync(ct)) nodes.Add(r.GetInt32(0)); }
+        await using(var q=Query(c,t,"SELECT point_type,bonus FROM game.character_daevanion_points WHERE character_id=$1",character))
+        { await using var r=await q.ExecuteReaderAsync(ct); while(await r.ReadAsync(ct)) bonus[Convert.ToInt32(r.GetValue(0))]=r.GetInt32(1); }
+        await t.CommitAsync(ct); return new DaevanionRecord(nodes,bonus);
+    }
+
+    public async Task<bool> SaveDaevanionNodesAsync(VerifiedAccount account, Guid character, IReadOnlyList<int> add, IReadOnlyList<int> remove,
+        (Guid Item, long Revision, long Count)? kina, CancellationToken ct=default)
+    {
+        if(add.Count+remove.Count is 0 or >1000 || add.Concat(remove).Any(n=>n<=0) || add.Intersect(remove).Any() || kina is { Count: <0 })
+            throw new GameplayException("invalid_daevanion");
+        await using var c=await source.OpenConnectionAsync(ct); await using var t=await c.BeginTransactionAsync(ct);
+        if(!await Own(c,t,account.AccountId,character,ct)) return false;
+        if(kina is { } k && k.Count>0 && !await Consume(c,t,character,k.Item,k.Revision,(int)Math.Min(int.MaxValue,k.Count),ct)) return false;
+        foreach(var node in remove)
+            if(await Scalar(c,t,"DELETE FROM game.character_daevanion_nodes WHERE character_id=$1 AND node_id=$2 RETURNING node_id",ct,character,node) is not int) return false;
+        foreach(var node in add)
+            if(await Scalar(c,t,"INSERT INTO game.character_daevanion_nodes(character_id,node_id) VALUES($1,$2) ON CONFLICT DO NOTHING RETURNING node_id",ct,character,node) is not int) return false;
+        await t.CommitAsync(ct); return true;
+    }
+
+    public async Task<bool> UseDaevanionPointItemAsync(VerifiedAccount account, Guid character, Guid item, long revision, int count, int type, int bonus,
+        CancellationToken ct=default)
+    {
+        if(type is <1 or >5 || bonus is <0 or >65535 || count<1) throw new GameplayException("invalid_daevanion_points");
+        await using var c=await source.OpenConnectionAsync(ct); await using var t=await c.BeginTransactionAsync(ct);
+        if(!await Own(c,t,account.AccountId,character,ct) || !await Consume(c,t,character,item,revision,count,ct)) return false;
+        await Execute(c,t,"INSERT INTO game.character_daevanion_points(character_id,point_type,bonus) VALUES($1,$2,$3) ON CONFLICT(character_id,point_type) DO UPDATE SET bonus=EXCLUDED.bonus",
+            ct,character,(short)type,bonus);
+        await t.CommitAsync(ct); return true;
+    }
+
+    // Monoliths (migration 090): the Empyrean Trace tokens resonated per Monolith.
+    public async Task<IReadOnlyDictionary<int,int>> MonolithsAsync(VerifiedAccount account, Guid character, CancellationToken ct=default)
+    {
+        var counts=new Dictionary<int,int>();
+        await using var c=await source.OpenConnectionAsync(ct); await using var t=await c.BeginTransactionAsync(ct);
+        if(!await Own(c,t,account.AccountId,character,ct)) return counts;
+        await using(var q=Query(c,t,"SELECT monolith_id,resonate_count FROM game.character_monoliths WHERE character_id=$1",character))
+        { await using var r=await q.ExecuteReaderAsync(ct); while(await r.ReadAsync(ct)) counts[r.GetInt32(0)]=r.GetInt32(1); }
+        await t.CommitAsync(ct); return counts;
+    }
+
+    public async Task<bool> ResonateMonolithAsync(VerifiedAccount account, Guid character, IReadOnlyList<(Guid Item,long Revision,int Count)> costs, int monolith,
+        int previous, int count, IReadOnlyList<(int TemplateId,long Count)> rewards, CancellationToken ct=default)
+    {
+        if(monolith<=0 || previous<0 || count<=previous || costs.Count==0 || costs.Any(x=>x.Count<1) || rewards.Any(r=>r.Count<1)) throw new GameplayException("invalid_monolith");
+        await using var c=await source.OpenConnectionAsync(ct); await using var t=await c.BeginTransactionAsync(ct);
+        if(!await Own(c,t,account.AccountId,character,ct)) return false;
+        foreach(var (cost,revision,n) in costs)
+            if(!await Consume(c,t,character,cost,revision,n,ct)) return false;
+        // The count moves only from the value the session saw (two resonances at once cannot both pass).
+        var stored=previous==0
+            ? await Scalar(c,t,"INSERT INTO game.character_monoliths(character_id,monolith_id,resonate_count) VALUES($1,$2,$3) ON CONFLICT(character_id,monolith_id) "
+                +"DO UPDATE SET resonate_count=EXCLUDED.resonate_count,updated_at=now() WHERE game.character_monoliths.resonate_count=0 RETURNING resonate_count",ct,character,monolith,count)
+            : await Scalar(c,t,"UPDATE game.character_monoliths SET resonate_count=$3,updated_at=now() WHERE character_id=$1 AND monolith_id=$2 AND resonate_count=$4 RETURNING resonate_count",
+                ct,character,monolith,count,previous);
+        if(stored is not int) return false;
+        var build=await Scalar(c,t,"SELECT build_id FROM catalog.builds ORDER BY imported_at DESC LIMIT 1",ct) as string;
+        foreach(var (template,n) in rewards)
+            if(build is not null && await Scalar(c,t,"SELECT template_id FROM catalog.items WHERE build_id=$1 AND template_id=$2",ct,build,template) is not null)
+                await Scalar(c,t,"SELECT game.grant_item($1,$2,$3,$4,$5)",ct,character,build,template,n,Guid.NewGuid());
+        await Execute(c,t,"INSERT INTO audit.events(action,character_id,actor_id,details) VALUES('monolith_resonated',$1,$2,$3)",ct,character,account.AccountId,
+            Json(new {monolith,previous,count,costs=costs.Select(x=>new{x.Item,x.Count}),rewards=rewards.Select(r=>new[]{(long)r.TemplateId,r.Count})}));
+        await t.CommitAsync(ct); return true;
+    }
+
     public async Task<bool> GrantSkinsAsync(VerifiedAccount account, Guid character, IReadOnlyList<int> skins, CancellationToken ct=default)
     {
         if(skins.Count is 0 or >64 || skins.Any(s=>s<=0)) throw new GameplayException("invalid_skins");
         await using var c=await source.OpenConnectionAsync(ct); await using var t=await c.BeginTransactionAsync(ct);
         if(!await Own(c,t,account.AccountId,character,ct)) return false;
         foreach(var skin in skins)
-            await Execute(c,t,"INSERT INTO game.character_skins(character_id,skin_id,count) VALUES($1,$2,1) ON CONFLICT (character_id,skin_id) DO UPDATE SET count=game.character_skins.count+1",ct,character,skin);
+            await Execute(c,t,"INSERT INTO game.account_skins(account_id,skin_id,count) SELECT account_id,$2,1 FROM game.characters WHERE character_id=$1 ON CONFLICT (account_id,skin_id) DO UPDATE SET count=game.account_skins.count+1",ct,character,skin);
         await t.CommitAsync(ct); return true;
     }
 
@@ -215,7 +382,7 @@ public sealed partial class PostgresGameplayStore(NpgsqlDataSource source) : IGa
         foreach(var (slot,skin) in equips)
         {
             if(skin==0) { await Execute(c,t,"DELETE FROM game.character_skin_equips WHERE character_id=$1 AND slot=$2",ct,character,(short)slot); continue; }
-            if(await Scalar(c,t,"SELECT skin_id FROM game.character_skins WHERE character_id=$1 AND skin_id=$2",ct,character,skin) is not int) return false;
+            if(await Scalar(c,t,"SELECT skin_id FROM game.account_skins WHERE account_id=(SELECT account_id FROM game.characters WHERE character_id=$1) AND skin_id=$2",ct,character,skin) is not int) return false;
             await Execute(c,t,"INSERT INTO game.character_skin_equips(character_id,slot,skin_id) VALUES($1,$2,$3) ON CONFLICT (character_id,slot) DO UPDATE SET skin_id=EXCLUDED.skin_id",ct,character,(short)slot,skin);
         }
         await t.CommitAsync(ct); return true;
@@ -232,7 +399,9 @@ public sealed partial class PostgresGameplayStore(NpgsqlDataSource source) : IGa
 
     public async Task<bool> SaveMasteryAsync(VerifiedAccount account, Guid character, string kind, int category, int level, long exp, CancellationToken ct=default)
     {
-        if(kind is not ("craft" or "gather") || category is <0 or >5 || level is <1 or >100 || exp<0) throw new GameplayException("invalid_mastery");
+        // Masteries ('craft' 1..5, 'gather' 0) and learned gather skills ('gather_skill', GatherSkill id / 100, level 0 = unlearned; migration 084).
+        var valid = kind switch { "craft" or "gather" => category is >=0 and <=5 && level is >=1 and <=100, "gather_skill" => category is >=1 and <=999 && level is >=0 and <=100, _ => false };
+        if(!valid || exp<0) throw new GameplayException("invalid_mastery");
         await using var c=await source.OpenConnectionAsync(ct); await using var t=await c.BeginTransactionAsync(ct);
         if(!await Own(c,t,account.AccountId,character,ct)) return false;
         await Execute(c,t,"INSERT INTO game.character_masteries(character_id,kind,category,level,exp) VALUES($1,$2,$3,$4,$5) ON CONFLICT (character_id,kind,category) DO UPDATE SET level=EXCLUDED.level,exp=EXCLUDED.exp",ct,character,kind,(short)category,level,exp);
@@ -244,10 +413,11 @@ public sealed partial class PostgresGameplayStore(NpgsqlDataSource source) : IGa
         await using var c=await source.OpenConnectionAsync(ct); await using var t=await c.BeginTransactionAsync(ct);
         if(!await Own(c,t,account.AccountId,character,ct)) return null;
         var quests=new List<QuestRecord>();
-        await using(var q=Query(c,t,"SELECT quest_code,quest_id,uid,status,step,goals FROM game.character_quests WHERE character_id=$1 ORDER BY uid",character))
+        await using(var q=Query(c,t,"SELECT quest_code,quest_id,uid,status,step,goals,updated_at FROM game.character_quests WHERE character_id=$1 ORDER BY uid",character))
         {
             await using var r=await q.ExecuteReaderAsync(ct);
-            while(await r.ReadAsync(ct)) quests.Add(new(r.GetString(0),r.GetInt32(1),r.GetInt64(2),r.GetInt16(3),r.GetInt16(4),r.GetFieldValue<int[]>(5)));
+            while(await r.ReadAsync(ct)) quests.Add(new(r.GetString(0),r.GetInt32(1),r.GetInt64(2),r.GetInt16(3),r.GetInt16(4),r.GetFieldValue<int[]>(5),
+                r.IsDBNull(6)?(DateTimeOffset?)null:new DateTimeOffset(DateTime.SpecifyKind(r.GetDateTime(6),DateTimeKind.Utc))));
         }
         await t.CommitAsync(ct); return quests;
     }
@@ -301,7 +471,7 @@ public sealed partial class PostgresGameplayStore(NpgsqlDataSource source) : IGa
 
     // ---------- Friends, blocks, player trade ----------
 
-    const int FriendLimit = 100;   // OURS (no official limit recovered)
+    const int FriendLimit = 50;   // GlobalSetting Community_friend_max_count (client table)
 
     static async Task<SocialRelation?> CharacterByName(NpgsqlConnection c, NpgsqlTransaction t, Guid of, string name, CancellationToken ct)
     {
@@ -474,6 +644,119 @@ public sealed partial class PostgresGameplayStore(NpgsqlDataSource source) : IGa
         await Execute(c,t,"INSERT INTO audit.events(action,character_id,actor_id,details) VALUES('shop_bought',$1,$2,$3)",ct,character,account.AccountId,
             Json(new {goods=goods.Select(g=>new[]{(long)g.TemplateId,g.Count}),costs=costs.Select(x=>new{x.Item,x.Count})}));
         await t.CommitAsync(ct); return true;
+    }
+
+    public async Task<string> PremiumShopBuyAsync(VerifiedAccount account, Guid character, IReadOnlyList<(Guid Item,long Revision,int Count)> costs, long quna,
+        IReadOnlyList<(int TemplateId,long Count)> goods, long qunaGranted, long mileage, long mileageGranted, IReadOnlyList<(int Target,int GoodsId,string Period,int Count,int Limit)> limits,
+        object audit, CancellationToken ct=default)
+    {
+        if(goods.Count==0 && qunaGranted<=0 || quna<0 || qunaGranted<0 || mileage<0 || mileageGranted<0 || goods.Any(g=>g.Count<1) || costs.Any(x=>x.Count<1) || limits.Any(l=>l.Count<1 || l.Limit<1))
+            throw new GameplayException("invalid_premium_buy");
+        await using var c=await source.OpenConnectionAsync(ct); await using var t=await c.BeginTransactionAsync(ct);
+        if(!await Own(c,t,account.AccountId,character,ct)) return "failed";
+        foreach(var (cost,revision,count) in costs)
+            if(!await Consume(c,t,character,cost,revision,count,ct)) return "failed";
+        // Account Quna: bound (95) first, then GameCash (7); the rows are locked so two characters of the account cannot both spend it.
+        var left=quna;
+        foreach(var category in new short[]{95,7})
+        {
+            if(left<=0) break;
+            var have=await Scalar(c,t,"SELECT balance FROM game.account_currencies WHERE account_id=$1 AND category=$2 FOR UPDATE",ct,account.AccountId,category) is long b ? b : 0;
+            var take=Math.Min(have,left);
+            if(take>0) await Execute(c,t,"UPDATE game.account_currencies SET balance=balance-$3,updated_at=now() WHERE account_id=$1 AND category=$2",ct,account.AccountId,category,take);
+            left-=take;
+        }
+        if(left>0) return "money";
+        // A2 Mileage (account, category 6): spent for a Mileage goods, the row locked like the Quna.
+        if(mileage>0)
+        {
+            var have=await Scalar(c,t,"SELECT balance FROM game.account_currencies WHERE account_id=$1 AND category=6 FOR UPDATE",ct,account.AccountId) is long m ? m : 0;
+            if(have<mileage) return "money";
+            await Execute(c,t,"UPDATE game.account_currencies SET balance=balance-$2,updated_at=now() WHERE account_id=$1 AND category=6",ct,account.AccountId,mileage);
+        }
+        foreach(var (target,goodsId,period,count,limit) in limits)
+        {
+            var owner=target==2 ? account.AccountId : character;
+            var total=await Scalar(c,t,"INSERT INTO game.shop_purchases(owner_id,goods_id,period,count) VALUES($1,$2,$3,$4) ON CONFLICT(owner_id,goods_id,period) "
+                +"DO UPDATE SET count=game.shop_purchases.count+EXCLUDED.count RETURNING count",ct,owner,goodsId,period,count);
+            if(total is not int n || n>limit) return "limit";
+        }
+        var build=await Scalar(c,t,"SELECT build_id FROM catalog.builds ORDER BY imported_at DESC LIMIT 1",ct) as string;
+        foreach(var (template,count) in goods)
+        {
+            if(build is null || await Scalar(c,t,"SELECT template_id FROM catalog.items WHERE build_id=$1 AND template_id=$2",ct,build,template) is null) return "failed";
+            await Scalar(c,t,"SELECT game.grant_item($1,$2,$3,$4,$5)",ct,character,build,template,count,Guid.NewGuid());
+        }
+        if(qunaGranted>0)
+            await Execute(c,t,"INSERT INTO game.account_currencies(account_id,category,balance) VALUES($1,7,$2) ON CONFLICT(account_id,category) "
+                +"DO UPDATE SET balance=game.account_currencies.balance+$2,updated_at=now()",ct,account.AccountId,qunaGranted);
+        if(mileageGranted>0)
+            await Execute(c,t,"INSERT INTO game.account_currencies(account_id,category,balance) VALUES($1,6,$2) ON CONFLICT(account_id,category) "
+                +"DO UPDATE SET balance=game.account_currencies.balance+$2,updated_at=now()",ct,account.AccountId,mileageGranted);
+        await Execute(c,t,"INSERT INTO audit.events(action,character_id,actor_id,details) VALUES('premium_shop_bought',$1,$2,$3)",ct,character,account.AccountId,
+            Json(new {purchase=audit,goods=goods.Select(g=>new[]{(long)g.TemplateId,g.Count}),costs=costs.Select(x=>new{x.Item,x.Count}),quna,qunaGranted}));
+        await t.CommitAsync(ct); return "ok";
+    }
+
+    public async Task<IReadOnlyList<(int Map,int Id,long KilledAt,long RespawnAt)>> FieldBossKillsAsync(VerifiedAccount account, CancellationToken ct=default)
+    {
+        await using var c=await source.OpenConnectionAsync(ct); await using var t=await c.BeginTransactionAsync(ct);
+        var rows=new List<(int,int,long,long)>();
+        await using(var q=Query(c,t,"SELECT map_id,data_id,killed_at,respawn_at FROM game.field_boss_kills"))
+        {
+            await using var r=await q.ExecuteReaderAsync(ct);
+            while(await r.ReadAsync(ct)) rows.Add((r.GetInt32(0),r.GetInt32(1),r.GetInt64(2),r.GetInt64(3)));
+        }
+        await t.CommitAsync(ct); return rows;
+    }
+
+    public async Task<bool> SaveFieldBossKillAsync(VerifiedAccount account, int map, int id, long killedAt, long respawnAt, CancellationToken ct=default)
+    {
+        await using var c=await source.OpenConnectionAsync(ct); await using var t=await c.BeginTransactionAsync(ct);
+        int n;
+        await using(var q=Query(c,t,"INSERT INTO game.field_boss_kills(map_id,data_id,killed_at,respawn_at,updated_at) VALUES($1,$2,$3,$4,now()) ON CONFLICT (map_id,data_id) DO UPDATE SET killed_at=EXCLUDED.killed_at,respawn_at=EXCLUDED.respawn_at,updated_at=now() WHERE game.field_boss_kills.killed_at<=EXCLUDED.killed_at",map,id,killedAt,respawnAt))
+            n=await q.ExecuteNonQueryAsync(ct);
+        await t.CommitAsync(ct); return n>0;
+    }
+
+    public async Task<IReadOnlyList<(int Category,long Revision,string State)>> RandomShopOffersAsync(VerifiedAccount account, Guid character, CancellationToken ct=default)
+    {
+        await using var c=await source.OpenConnectionAsync(ct); await using var t=await c.BeginTransactionAsync(ct);
+        if(!await Own(c,t,account.AccountId,character,ct)) return [];
+        var rows=new List<(int,long,string)>();
+        await using(var q=Query(c,t,"SELECT category,revision,state::text FROM game.character_random_shops WHERE character_id=$1",character))
+        {
+            await using var r=await q.ExecuteReaderAsync(ct);
+            while(await r.ReadAsync(ct)) rows.Add((r.GetInt16(0),r.GetInt64(1),r.GetString(2)));
+        }
+        await t.CommitAsync(ct); return rows;
+    }
+
+    // Black Cloud Merchants (migration 086): the list row is written only at the revision the game read (two logins of one
+    // character cannot both buy one slot), with the Kina and the item in the same transaction.
+    public async Task<string> RandomShopSaveAsync(VerifiedAccount account, Guid character, int category, long revision, string state,
+        IReadOnlyList<(Guid Item,long Revision,int Count)> costs, IReadOnlyList<(int TemplateId,long Count)> goods, object? audit, CancellationToken ct=default)
+    {
+        if(category is <101 or >299 || revision<0 || state.Length is 0 or >16384 || goods.Any(g=>g.Count<1) || costs.Any(x=>x.Count<1))
+            throw new GameplayException("invalid_random_shop");
+        await using var c=await source.OpenConnectionAsync(ct); await using var t=await c.BeginTransactionAsync(ct);
+        if(!await Own(c,t,account.AccountId,character,ct)) return "failed";
+        foreach(var (cost,costRevision,count) in costs)
+            if(!await Consume(c,t,character,cost,costRevision,count,ct)) return "failed";
+        var written=revision==0
+            ? await ExecuteCount(c,t,"INSERT INTO game.character_random_shops(character_id,category,revision,state) VALUES($1,$2,1,$3::jsonb) ON CONFLICT DO NOTHING",ct,character,(short)category,state)
+            : await ExecuteCount(c,t,"UPDATE game.character_random_shops SET revision=revision+1,state=$4::jsonb,updated_at=now() WHERE character_id=$1 AND category=$2 AND revision=$3",ct,character,(short)category,revision,state);
+        if(written==0) return "stale";
+        var build=goods.Count==0 ? null : await Scalar(c,t,"SELECT build_id FROM catalog.builds ORDER BY imported_at DESC LIMIT 1",ct) as string;
+        foreach(var (template,count) in goods)
+        {
+            if(build is null || await Scalar(c,t,"SELECT template_id FROM catalog.items WHERE build_id=$1 AND template_id=$2",ct,build,template) is null) return "failed";
+            await Scalar(c,t,"SELECT game.grant_item($1,$2,$3,$4,$5)",ct,character,build,template,count,Guid.NewGuid());
+        }
+        if(audit is not null)
+            await Execute(c,t,"INSERT INTO audit.events(action,character_id,actor_id,details) VALUES('random_shop',$1,$2,$3)",ct,character,account.AccountId,
+                Json(new {shop=audit,goods=goods.Select(g=>new[]{(long)g.TemplateId,g.Count}),costs=costs.Select(x=>new{x.Item,x.Count})}));
+        await t.CommitAsync(ct); return "ok";
     }
 
     // Buyback rows: 72 hours, the newest 50 per character.
@@ -684,20 +967,40 @@ public sealed partial class PostgresGameplayStore(NpgsqlDataSource source) : IGa
         await t.CommitAsync(ct); return true;
     }
 
-    public async Task<bool> SortBagAsync(VerifiedAccount account, Guid character, IReadOnlyCollection<int> currencies, CancellationToken ct=default)
+    public async Task<bool> ArrangeItemsAsync(VerifiedAccount account, Guid character, IReadOnlyList<ItemArrangement> items, string reason, CancellationToken ct=default)
     {
+        // Bag and warehouse rows only; a slot within the containers' range, at most once per location; no negative quantity.
+        if(items.Count is 0 or >2000 || items.Any(i=>i.Location is not "bag" && !IsWarehouse(i.Location) || i.Slot is <0 or >999 || i.Quantity<0 || i.Split && i.Quantity<1)
+           || items.Where(i=>i.Slot is not null && i.Quantity>0).GroupBy(i=>(i.Location,i.Slot)).Any(g=>g.Count()>1)
+           || items.Where(i=>!i.Split).GroupBy(i=>i.Item).Any(g=>g.Count()>1)) throw new GameplayException("invalid_arrangement");
         await using var c=await source.OpenConnectionAsync(ct); await using var t=await c.BeginTransactionAsync(ct);
         if(!await Own(c,t,account.AccountId,character,ct)) return false;
-        var skip=currencies.ToArray();
-        // Currencies (Item.dat ItemType Currency) take no slot: the client shows them in its currency bar, and a sorted-in one
-        // left a gap in the bag (the community fork saw Kina and Quna shown as bag items, 2026-11-11).
-        await Execute(c,t,"UPDATE game.item_instances SET slot=NULL,revision=revision+1 WHERE character_id=$1 AND location='bag' AND slot IS NOT NULL AND template_id=ANY($2)",ct,character,skip);
-        await Execute(c,t,"""
-            UPDATE game.item_instances i SET slot=o.n-1,revision=i.revision+1
-            FROM (SELECT instance_id,row_number() OVER (ORDER BY template_id,created_at,instance_id) n FROM game.item_instances
-                  WHERE character_id=$1 AND location='bag' AND NOT template_id=ANY($2)) o
-            WHERE i.instance_id=o.instance_id
-            """,ct,character,skip);
+        var rows=items.Where(i=>!i.Split).ToList();
+        var before=new Dictionary<Guid,(int Template,long Quantity)>();
+        foreach(var row in rows)
+        {
+            await using var q=Query(c,t,"SELECT template_id,quantity FROM game.item_instances WHERE instance_id=$1 AND character_id=$2 AND revision=$3 AND location IN ('bag','storage','character_storage') FOR UPDATE",row.Item,character,row.Revision);
+            await using var r=await q.ExecuteReaderAsync(ct);
+            if(!await r.ReadAsync(ct)) return false;   // changed meanwhile: nothing moves
+            before[row.Item]=(r.GetInt32(0),r.GetInt64(1));
+        }
+        // A split clones a listed row; each template keeps its total (nothing is created or lost by arranging).
+        if(items.Any(i=>i.Split && !before.ContainsKey(i.Item))) return false;
+        var was=before.Values.GroupBy(b=>b.Template).ToDictionary(g=>g.Key,g=>g.Sum(b=>b.Quantity));
+        var now=items.GroupBy(i=>before[i.Item].Template).ToDictionary(g=>g.Key,g=>g.Sum(i=>i.Quantity));
+        if(was.Count!=now.Count || was.Any(w=>now.GetValueOrDefault(w.Key)!=w.Value)) return false;
+        // item_slot_idx is checked per row, so the listed rows leave their slots first (a sort renumbers in place).
+        foreach(var row in rows) await Execute(c,t,"UPDATE game.item_instances SET slot=NULL WHERE instance_id=$1",ct,row.Item);
+        foreach(var row in rows)
+            if(row.Quantity==0) await Execute(c,t,"DELETE FROM game.item_instances WHERE instance_id=$1",ct,row.Item);
+            else await Execute(c,t,"UPDATE game.item_instances SET location=$2,slot=$3,quantity=$4,revision=revision+1 WHERE instance_id=$1",ct,
+                row.Item,row.Location,row.Slot is { } slot ? (object)slot : DBNull.Value,row.Quantity);
+        foreach(var split in items.Where(i=>i.Split))
+            await Execute(c,t,"INSERT INTO game.item_instances(character_id,build_id,template_id,quantity,location,slot,rolled_stats,upgrades) "
+                +"SELECT character_id,build_id,template_id,$2::bigint,$3::text,$4::integer,rolled_stats,upgrades FROM game.item_instances WHERE instance_id=$1",ct,
+                split.Item,split.Quantity,split.Location,split.Slot is { } slot ? (object)slot : DBNull.Value);
+        await Execute(c,t,"INSERT INTO audit.events(action,character_id,actor_id,details) VALUES('items_arranged',$1,$2,$3)",ct,character,account.AccountId,
+            Json(new {reason,items=items.Select(i=>new{item=i.Item,location=i.Location,slot=i.Slot,quantity=i.Quantity,split=i.Split})}));
         await t.CommitAsync(ct); return true;
     }
 
@@ -706,10 +1009,10 @@ public sealed partial class PostgresGameplayStore(NpgsqlDataSource source) : IGa
         await using var c=await source.OpenConnectionAsync(ct); await using var t=await c.BeginTransactionAsync(ct);
         if(!await Own(c,t,account.AccountId,character,ct)) return null;
         var slots=new List<QuickSlotRecord>();
-        await using(var q=Query(c,t,"SELECT slot,slot_type,item_uid,item_id,skill_id FROM game.quick_slots WHERE character_id=$1 ORDER BY slot",character))
+        await using(var q=Query(c,t,"SELECT slot,slot_type,item_uid,item_id,skill_id,context_skills,skill_macro_no,social_action_id,toggle FROM game.quick_slots WHERE character_id=$1 ORDER BY slot",character))
         {
             await using var r=await q.ExecuteReaderAsync(ct);
-            while(await r.ReadAsync(ct)) slots.Add(new(r.GetInt16(0),r.GetInt16(1),r.GetInt64(2),r.GetInt32(3),r.GetInt32(4)));
+            while(await r.ReadAsync(ct)) slots.Add(new(r.GetInt16(0),r.GetInt16(1),r.GetInt64(2),r.GetInt32(3),r.GetInt32(4),r.GetFieldValue<int[]>(5),r.GetInt16(6),r.GetInt32(7),r.GetBoolean(8)));
         }
         await t.CommitAsync(ct); return slots;
     }
@@ -742,8 +1045,8 @@ public sealed partial class PostgresGameplayStore(NpgsqlDataSource source) : IGa
         await using var c=await source.OpenConnectionAsync(ct); await using var t=await c.BeginTransactionAsync(ct);
         if(!await Own(c,t,account.AccountId,character,ct)) return false;
         if(slot is null) await Execute(c,t,"DELETE FROM game.quick_slots WHERE character_id=$1 AND slot=$2",ct,character,(short)number);
-        else await Execute(c,t,"INSERT INTO game.quick_slots VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(character_id,slot) DO UPDATE SET slot_type=$3,item_uid=$4,item_id=$5,skill_id=$6",
-            ct,character,(short)number,(short)slot.Type,slot.ItemUid,slot.ItemId,slot.SkillId);
+        else await Execute(c,t,"INSERT INTO game.quick_slots(character_id,slot,slot_type,item_uid,item_id,skill_id,context_skills,skill_macro_no,social_action_id,toggle) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT(character_id,slot) DO UPDATE SET slot_type=$3,item_uid=$4,item_id=$5,skill_id=$6,context_skills=$7,skill_macro_no=$8,social_action_id=$9,toggle=$10",
+            ct,character,(short)number,(short)slot.Type,slot.ItemUid,slot.ItemId,slot.SkillId,(slot.ContextSkills ?? []).ToArray(),(short)Math.Clamp(slot.Macro,0,255),slot.SocialAction,slot.Toggle);
         await t.CommitAsync(ct); return true;
     }
 
@@ -775,7 +1078,7 @@ public sealed partial class PostgresGameplayStore(NpgsqlDataSource source) : IGa
         await using var c=await source.OpenConnectionAsync(ct); await using var t=await c.BeginTransactionAsync(ct);
         if(!await Own(c,t,account.AccountId,character,ct)) return null;
         var rides=new List<RideRecord>();
-        await using(var q=Query(c,t,"SELECT ride_id,level,soul_points,owned FROM game.character_rides WHERE character_id=$1 ORDER BY acquired_at,ride_id",character))
+        await using(var q=Query(c,t,"SELECT ride_id,level,soul_points,owned FROM game.account_rides WHERE account_id=(SELECT account_id FROM game.characters WHERE character_id=$1) ORDER BY acquired_at,ride_id",character))
         {
             await using var r=await q.ExecuteReaderAsync(ct);
             while(await r.ReadAsync(ct)) rides.Add(new(r.GetInt32(0),r.GetInt16(1),r.GetInt32(2),r.GetBoolean(3)));
@@ -799,10 +1102,10 @@ public sealed partial class PostgresGameplayStore(NpgsqlDataSource source) : IGa
     // Count units of a bag stack are used up: the row shrinks, or goes when it reaches zero.
     public async Task<bool> MoveItemToContainerAsync(VerifiedAccount account, Guid character, Guid item, long revision, string location, int slot, CancellationToken ct=default)
     {
-        if(slot is <0 or >999 || location is not ("bag" or "storage")) throw new GameplayException("invalid_slot");
+        if(slot is <0 or >999 || location is not "bag" && !IsWarehouse(location)) throw new GameplayException("invalid_slot");
         await using var c=await source.OpenConnectionAsync(ct); await using var t=await c.BeginTransactionAsync(ct);
         if(!await Own(c,t,account.AccountId,character,ct)) return false;
-        await using(var q=Query(c,t,"SELECT location,slot FROM game.item_instances WHERE instance_id=$1 AND character_id=$2 AND revision=$3 AND location IN ('bag','storage') FOR UPDATE",item,character,revision))
+        await using(var q=Query(c,t,"SELECT location,slot FROM game.item_instances WHERE instance_id=$1 AND character_id=$2 AND revision=$3 AND location IN ('bag','storage','character_storage') FOR UPDATE",item,character,revision))
         {
             await using var r=await q.ExecuteReaderAsync(ct);
             if(!await r.ReadAsync(ct)) return false;
@@ -1063,15 +1366,62 @@ public sealed partial class PostgresGameplayStore(NpgsqlDataSource source) : IGa
         await t.CommitAsync(ct); return true;
     }
 
+    public async Task<IReadOnlyList<Guid>> StaffGrantedItemsAsync(VerifiedAccount account, Guid character, IReadOnlyList<Guid> items, CancellationToken ct=default)
+    {
+        if(items.Count==0) return [];
+        await using var c=await source.OpenConnectionAsync(ct); await using var t=await c.BeginTransactionAsync(ct);
+        // A stack several grants landed in points at the stack (game.grant_item): one staff grant in it is enough.
+        var found=new List<Guid>();
+        await using(var q=Query(c,t,"""
+            SELECT i.instance_id FROM game.item_instances i JOIN game.characters ch USING(character_id)
+            WHERE ch.account_id=$1 AND i.character_id=$2 AND i.instance_id=ANY($3)
+              AND EXISTS(SELECT 1 FROM game.item_grants g JOIN game.admin_requests r USING(request_id) WHERE g.instance_id=i.instance_id)
+            """,account.AccountId,character,items.Distinct().ToArray()))
+        {
+            await using var r=await q.ExecuteReaderAsync(ct);
+            while(await r.ReadAsync(ct)) found.Add(r.GetGuid(0));
+        }
+        await t.CommitAsync(ct); return found;
+    }
+
+    public async Task<bool> UseWingItemAsync(VerifiedAccount account, Guid character, Guid item, long revision, int wingId, CancellationToken ct=default)
+    {
+        if(wingId<=0) throw new GameplayException("invalid_wing");
+        await using var c=await source.OpenConnectionAsync(ct); await using var t=await c.BeginTransactionAsync(ct);
+        if(!await Own(c,t,account.AccountId,character,ct) || !await Consume(c,t,character,item,revision,1,ct)) return false;
+        await Execute(c,t,"INSERT INTO game.character_wings(character_id,wing_id) VALUES($1,$2) ON CONFLICT DO NOTHING",ct,character,wingId);
+        await Execute(c,t,"INSERT INTO audit.events(action,character_id,actor_id,details) VALUES('wing_acquired',$1,$2,$3)",ct,character,account.AccountId,
+            Json(new {item,wing=wingId}));
+        await t.CommitAsync(ct); return true;
+    }
+
     public async Task<RideRecord?> UseRideItemAsync(VerifiedAccount account, Guid character, Guid item, long revision, int rideId, CancellationToken ct=default)
     {
         if(rideId<=0) throw new GameplayException("invalid_ride");
         await using var c=await source.OpenConnectionAsync(ct); await using var t=await c.BeginTransactionAsync(ct);
         if(!await Own(c,t,account.AccountId,character,ct) || !await Consume(c,t,character,item,revision,1,ct)) return null;
         // A pet item acquires the ride; for a ride already acquired it becomes a soul point.
-        var ride=await Ride(c,t,"INSERT INTO game.character_rides(character_id,ride_id) VALUES($1,$2) ON CONFLICT(character_id,ride_id) DO UPDATE SET "
-            +"soul_points=game.character_rides.soul_points+CASE WHEN game.character_rides.owned THEN 1 ELSE 0 END,owned=true RETURNING ride_id,level,soul_points,owned",ct,character,rideId);
+        var ride=await Ride(c,t,"INSERT INTO game.account_rides(account_id,ride_id) SELECT account_id,$2 FROM game.characters WHERE character_id=$1 ON CONFLICT (account_id,ride_id) DO UPDATE SET "
+            +"soul_points=game.account_rides.soul_points+CASE WHEN game.account_rides.owned THEN 1 ELSE 0 END,owned=true RETURNING ride_id,level,soul_points,owned",ct,character,rideId);
         await Execute(c,t,"INSERT INTO audit.events(action,character_id,actor_id,details) VALUES('ride_acquired',$1,$2,$3)",ct,character,account.AccountId,Json(new {item,rideId}));
+        await t.CommitAsync(ct); return ride;
+    }
+
+    public async Task<RideRecord?> UseRideItemsAsync(VerifiedAccount account, Guid character, IReadOnlyList<(Guid Item,long Revision)> items, int rideId, CancellationToken ct=default)
+    {
+        if(rideId<=0) throw new GameplayException("invalid_ride");
+        if(items.Count==0) return null;
+        await using var c=await source.OpenConnectionAsync(ct); await using var t=await c.BeginTransactionAsync(ct);
+        if(!await Own(c,t,account.AccountId,character,ct)) return null;
+        var used=0;
+        foreach(var (item,revision) in items) if(await Consume(c,t,character,item,revision,1,ct)) used++;
+        if(used==0) return null;
+        // As UseRideItemAsync once per item: a new ride is acquired by the first item (the others are its soul points), an owned
+        // ride takes every item as a soul point, a ride with souls only is acquired and keeps them.
+        var ride=await Ride(c,t,"INSERT INTO game.account_rides(account_id,ride_id,soul_points,owned) SELECT account_id,$2,$3,true FROM game.characters WHERE character_id=$1 "
+            +"ON CONFLICT (account_id,ride_id) DO UPDATE SET soul_points=game.account_rides.soul_points+CASE WHEN game.account_rides.owned THEN $4 ELSE $3 END,owned=true "
+            +"RETURNING ride_id,level,soul_points,owned",ct,character,rideId,used-1,used);
+        await Execute(c,t,"INSERT INTO audit.events(action,character_id,actor_id,details) VALUES('ride_items_used',$1,$2,$3)",ct,character,account.AccountId,Json(new {rideId,used}));
         await t.CommitAsync(ct); return ride;
     }
 
@@ -1087,21 +1437,21 @@ public sealed partial class PostgresGameplayStore(NpgsqlDataSource source) : IGa
         if(rideId<=0 || souls<1) throw new GameplayException("invalid_ride");
         await using var c=await source.OpenConnectionAsync(ct); await using var t=await c.BeginTransactionAsync(ct);
         if(!await Own(c,t,account.AccountId,character,ct) || !await Consume(c,t,character,item,revision,1,ct)) return null;
-        var ride=await Ride(c,t,"INSERT INTO game.character_rides(character_id,ride_id,soul_points,owned) VALUES($1,$2,$3,false) ON CONFLICT(character_id,ride_id) DO UPDATE SET "
-            +"soul_points=game.character_rides.soul_points+$3 RETURNING ride_id,level,soul_points,owned",ct,character,rideId,souls);
+        var ride=await Ride(c,t,"INSERT INTO game.account_rides(account_id,ride_id,soul_points,owned) SELECT account_id,$2,$3,false FROM game.characters WHERE character_id=$1 ON CONFLICT (account_id,ride_id) DO UPDATE SET "
+            +"soul_points=game.account_rides.soul_points+$3 RETURNING ride_id,level,soul_points,owned",ct,character,rideId,souls);
         await t.CommitAsync(ct); return ride;
     }
 
     // Pays cost from a ride's soul points, the rest from crystals of its type, then All (6). False when short.
     private static async Task<bool> PaySouls(NpgsqlConnection c, NpgsqlTransaction t, Guid character, int rideId, int cost, int crystalType, CancellationToken ct)
     {
-        var souls=await Scalar(c,t,"SELECT soul_points FROM game.character_rides WHERE character_id=$1 AND ride_id=$2 FOR UPDATE",ct,character,rideId) as int? ?? 0;
+        var souls=await Scalar(c,t,"SELECT soul_points FROM game.account_rides WHERE account_id=(SELECT account_id FROM game.characters WHERE character_id=$1) AND ride_id=$2 FOR UPDATE",ct,character,rideId) as int? ?? 0;
         var rest=cost-Math.Min(souls,cost);
         var crystals=new Dictionary<int,int>();
         foreach(var type in new[]{crystalType,6}.Where(x=>x is >0 and <=6).Distinct())
             crystals[type]=await Scalar(c,t,"SELECT amount FROM game.character_ride_crystals WHERE character_id=$1 AND crystal_type=$2 FOR UPDATE",ct,character,(short)type) as int? ?? 0;
         if(crystals.Values.Sum()<rest) return false;
-        await Execute(c,t,"UPDATE game.character_rides SET soul_points=soul_points-$3 WHERE character_id=$1 AND ride_id=$2",ct,character,rideId,Math.Min(souls,cost));
+        await Execute(c,t,"UPDATE game.account_rides SET soul_points=soul_points-$3 WHERE account_id=(SELECT account_id FROM game.characters WHERE character_id=$1) AND ride_id=$2",ct,character,rideId,Math.Min(souls,cost));
         foreach(var (type,amount) in crystals)
         {
             var take=Math.Min(amount,rest);
@@ -1116,10 +1466,10 @@ public sealed partial class PostgresGameplayStore(NpgsqlDataSource source) : IGa
         await using var c=await source.OpenConnectionAsync(ct); await using var t=await c.BeginTransactionAsync(ct);
         if(!await Own(c,t,account.AccountId,character,ct)) return null;
         // A ride never seen gets its row first (crystals alone may pay for it).
-        await Execute(c,t,"INSERT INTO game.character_rides(character_id,ride_id,owned) VALUES($1,$2,false) ON CONFLICT DO NOTHING",ct,character,rideId);
-        if(await Scalar(c,t,"SELECT owned FROM game.character_rides WHERE character_id=$1 AND ride_id=$2",ct,character,rideId) is not false
+        await Execute(c,t,"INSERT INTO game.account_rides(account_id,ride_id,owned) SELECT account_id,$2,false FROM game.characters WHERE character_id=$1 ON CONFLICT DO NOTHING",ct,character,rideId);
+        if(await Scalar(c,t,"SELECT owned FROM game.account_rides WHERE account_id=(SELECT account_id FROM game.characters WHERE character_id=$1) AND ride_id=$2",ct,character,rideId) is not false
             || !await PaySouls(c,t,character,rideId,cost,crystalType,ct)) return null;
-        var ride=await Ride(c,t,"UPDATE game.character_rides SET owned=true,acquired_at=now() WHERE character_id=$1 AND ride_id=$2 RETURNING ride_id,level,soul_points,owned",ct,character,rideId);
+        var ride=await Ride(c,t,"UPDATE game.account_rides SET owned=true,acquired_at=now() WHERE account_id=(SELECT account_id FROM game.characters WHERE character_id=$1) AND ride_id=$2 RETURNING ride_id,level,soul_points,owned",ct,character,rideId);
         await t.CommitAsync(ct); return ride;
     }
 
@@ -1127,9 +1477,9 @@ public sealed partial class PostgresGameplayStore(NpgsqlDataSource source) : IGa
     {
         await using var c=await source.OpenConnectionAsync(ct); await using var t=await c.BeginTransactionAsync(ct);
         if(!await Own(c,t,account.AccountId,character,ct)) return null;
-        if(await Scalar(c,t,"SELECT level FROM game.character_rides WHERE character_id=$1 AND ride_id=$2 AND owned",ct,character,rideId) is not short level || level>=maxLevel
+        if(await Scalar(c,t,"SELECT level FROM game.account_rides WHERE account_id=(SELECT account_id FROM game.characters WHERE character_id=$1) AND ride_id=$2 AND owned",ct,character,rideId) is not short level || level>=maxLevel
             || !await PaySouls(c,t,character,rideId,cost,crystalType,ct)) return null;
-        var ride=await Ride(c,t,"UPDATE game.character_rides SET level=level+1 WHERE character_id=$1 AND ride_id=$2 RETURNING ride_id,level,soul_points,owned",ct,character,rideId);
+        var ride=await Ride(c,t,"UPDATE game.account_rides SET level=level+1 WHERE account_id=(SELECT account_id FROM game.characters WHERE character_id=$1) AND ride_id=$2 RETURNING ride_id,level,soul_points,owned",ct,character,rideId);
         await t.CommitAsync(ct); return ride;
     }
 
@@ -1164,7 +1514,7 @@ public sealed partial class PostgresGameplayStore(NpgsqlDataSource source) : IGa
         if(!await Own(c,t,account.AccountId,character,ct)) return false;
         foreach(var (ride,points,type) in targets)
         {
-            if(await Scalar(c,t,"UPDATE game.character_rides SET soul_points=soul_points-$3 WHERE character_id=$1 AND ride_id=$2 AND soul_points>=$3 RETURNING ride_id",ct,character,ride,points) is not int) return false;
+            if(await Scalar(c,t,"UPDATE game.account_rides SET soul_points=soul_points-$3 WHERE account_id=(SELECT account_id FROM game.characters WHERE character_id=$1) AND ride_id=$2 AND soul_points>=$3 RETURNING ride_id",ct,character,ride,points) is not int) return false;
             await Execute(c,t,"INSERT INTO game.character_ride_crystals VALUES($1,$2,$3) ON CONFLICT(character_id,crystal_type) DO UPDATE SET amount=game.character_ride_crystals.amount+$3",ct,character,(short)type,points);
         }
         await t.CommitAsync(ct); return true;
@@ -1177,20 +1527,18 @@ public sealed partial class PostgresGameplayStore(NpgsqlDataSource source) : IGa
         await t.CommitAsync(ct); return true;
     }
 
-    public async Task<bool> UseWingItemAsync(VerifiedAccount account, Guid character, Guid item, long revision, int wingId, CancellationToken ct=default)
+    public async Task RecordCheatAsync(Guid character, string kind, object details, CancellationToken ct=default)
     {
-        if(wingId<=0) return false;
-        await using var c=await source.OpenConnectionAsync(ct); await using var t=await c.BeginTransactionAsync(ct);
-        if(!await Own(c,t,account.AccountId,character,ct) || !await Consume(c,t,character,item,revision,1,ct)) return false;
-        if(await Scalar(c,t,"INSERT INTO game.character_wings(character_id,wing_id) VALUES($1,$2) ON CONFLICT DO NOTHING RETURNING wing_id",ct,character,wingId) is null) return false;
-        await t.CommitAsync(ct); return true;
+        // Staff see these in the audit log (action 'cheat_suspected'); system-detected, so no actor.
+        await using var c=await source.OpenConnectionAsync(ct);
+        await Execute(c,null!,"INSERT INTO audit.events(action,character_id,details) VALUES('cheat_suspected',$1,$2)",ct,character,Json(new{kind,details}));
     }
 
     public async Task<bool> SetDefaultRideAsync(VerifiedAccount account, Guid character, int rideId, CancellationToken ct=default)
     {
         await using var c=await source.OpenConnectionAsync(ct); await using var t=await c.BeginTransactionAsync(ct);
         if(!await Own(c,t,account.AccountId,character,ct)) return false;
-        if(rideId!=0 && await Scalar(c,t,"SELECT ride_id FROM game.character_rides WHERE character_id=$1 AND ride_id=$2 AND owned",ct,character,rideId) is null) return false;
+        if(rideId!=0 && await Scalar(c,t,"SELECT ride_id FROM game.account_rides WHERE account_id=(SELECT account_id FROM game.characters WHERE character_id=$1) AND ride_id=$2 AND owned",ct,character,rideId) is null) return false;
         if(rideId==0) await Execute(c,t,"UPDATE game.characters SET default_ride=NULL WHERE character_id=$1",ct,character);
         else await Execute(c,t,"UPDATE game.characters SET default_ride=$2 WHERE character_id=$1",ct,character,rideId);
         await t.CommitAsync(ct); return true;
@@ -1326,18 +1674,48 @@ public sealed partial class PostgresGameplayStore(NpgsqlDataSource source) : IGa
         await t.CommitAsync(ct); return bound;
     }
 
-    public async Task<bool> EnchantItemAsync(VerifiedAccount account, Guid character, Guid item, long revision,
-        IReadOnlyList<(Guid Item, long Revision, int Count)> costs, int level, int bonus, CancellationToken ct=default)
+    public async Task<bool> CombineSkinsAsync(VerifiedAccount account, Guid character, IReadOnlyDictionary<int, int> used, IReadOnlyList<int> granted, CancellationToken ct=default)
     {
+        if(used.Count is 0 or >400 || used.Any(u=>u.Value<1) || granted.Count>100) throw new GameplayException("invalid_skin_combine");
+        await using var c=await source.OpenConnectionAsync(ct); await using var t=await c.BeginTransactionAsync(ct);
+        if(!await Own(c,t,account.AccountId,character,ct)) return false;
+        foreach(var (skin,count) in used)
+        {
+            if(await Scalar(c,t,"SELECT count FROM game.account_skins WHERE account_id=(SELECT account_id FROM game.characters WHERE character_id=$1) AND skin_id=$2 FOR UPDATE",ct,character,skin) is not int have || have<count) return false;
+            if(have==count) await Execute(c,t,"DELETE FROM game.account_skins WHERE account_id=(SELECT account_id FROM game.characters WHERE character_id=$1) AND skin_id=$2",ct,character,skin);
+            else await Execute(c,t,"UPDATE game.account_skins SET count=count-$3 WHERE account_id=(SELECT account_id FROM game.characters WHERE character_id=$1) AND skin_id=$2",ct,character,skin,count);
+        }
+        foreach(var skin in granted)
+            await Execute(c,t,"INSERT INTO game.account_skins(account_id,skin_id,count) SELECT account_id,$2,1 FROM game.characters WHERE character_id=$1 ON CONFLICT (account_id,skin_id) DO UPDATE SET count=game.account_skins.count+1",ct,character,skin);
+        await Execute(c,t,"INSERT INTO audit.events(action,character_id,actor_id,details) VALUES('skins_combined',$1,$2,$3)",ct,character,account.AccountId,Json(new {used,granted}));
+        await t.CommitAsync(ct); return true;
+    }
+
+    public async Task<bool> SetItemUpgradeAsync(VerifiedAccount account, Guid character, Guid item, string field, string json, CancellationToken ct=default)
+    {
+        // godstones: the socketed godstone ids by slot; soul_add_stats: the stats soul add rolled (GameSession.Godstones/Succession);
+        // sub_skills: the sub-stat skills a soul bind rolled (GameSession.GearEffects).
+        if(field is not ("soul_bind_stats" or "magic_stones" or "godstones" or "soul_add_stats" or "sub_skills")) throw new GameplayException("invalid_upgrade");
+        await using var c=await source.OpenConnectionAsync(ct); await using var t=await c.BeginTransactionAsync(ct);
+        if(!await Own(c,t,account.AccountId,character,ct)) return false;
+        var set=await Scalar(c,t,"UPDATE game.item_instances SET upgrades=upgrades||jsonb_build_object($3::text,$4::jsonb),revision=revision+1 WHERE instance_id=$1 AND character_id=$2 RETURNING instance_id",ct,item,character,field,json) is Guid;
+        await t.CommitAsync(ct); return set;
+    }
+
+    public async Task<bool> EnchantItemAsync(VerifiedAccount account, Guid character, Guid item, long revision,
+        IReadOnlyList<(Guid Item, long Revision, int Count)> costs, int level, int bonus, CancellationToken ct=default, string field="enchant")
+    {
+        // field: "enchant" (enchant, enchant_bonus), "surpass" (Enhance Potential: surpass, surpass_bonus) or "soul_add" (soul add count).
+        if(field is not ("enchant" or "surpass" or "soul_add")) throw new GameplayException("invalid_enchant");
         if(level<0 || level>30 || bonus<0 || revision<0 || costs.Any(x=>x.Count<1 || x.Item==item)) throw new GameplayException("invalid_enchant");
         await using var c=await source.OpenConnectionAsync(ct); await using var t=await c.BeginTransactionAsync(ct);
         if(!await Own(c,t,account.AccountId,character,ct)) return false;
         foreach(var (cost,costRevision,count) in costs)
             if(!await Consume(c,t,character,cost,costRevision,count,ct)) return false;
-        var done=await Scalar(c,t,"UPDATE game.item_instances SET upgrades=upgrades||jsonb_build_object('enchant',$3::int,'enchant_bonus',$4::int),revision=revision+1 "
-            +"WHERE instance_id=$1 AND character_id=$2 AND revision=$5 RETURNING instance_id",ct,item,character,level,bonus,revision) is Guid;
+        var done=await Scalar(c,t,"UPDATE game.item_instances SET upgrades=upgrades||jsonb_build_object($6::text,$3::int,$6::text||'_bonus',$4::int),revision=revision+1 "
+            +"WHERE instance_id=$1 AND character_id=$2 AND revision=$5 RETURNING instance_id",ct,item,character,level,bonus,revision,field) is Guid;
         if(!done) return false;
-        await Execute(c,t,"INSERT INTO audit.events(action,character_id,actor_id,details) VALUES('item_enchanted',$1,$2,$3)",ct,character,account.AccountId,Json(new {item,level,bonus}));
+        await Execute(c,t,"INSERT INTO audit.events(action,character_id,actor_id,details) VALUES('item_enchanted',$1,$2,$3)",ct,character,account.AccountId,Json(new {item,field,level,bonus}));
         await t.CommitAsync(ct); return true;
     }
 
@@ -1373,9 +1751,36 @@ public sealed partial class PostgresGameplayStore(NpgsqlDataSource source) : IGa
         return updated;
     }
 
+    public async Task<int?> AdminDeleteItemsAsync(VerifiedAccount actor, Guid character, IReadOnlyList<(Guid Item, long Count)> items, CancellationToken ct=default)
+    {
+        if(items.Count is 0 or > 500 || items.Any(i=>i.Count<1)) throw new GameplayException("invalid_items");
+        await using var c=await source.OpenConnectionAsync(ct); await using var t=await c.BeginTransactionAsync(ct);
+        await RequireStaff(c,t,actor.AccountId,ct);
+        var removed=new List<object>();
+        foreach(var (item,count) in items.GroupBy(i=>i.Item).Select(g=>(g.Key,g.Sum(i=>i.Count))))
+        {
+            long quantity; int template; string location;
+            await using(var q=Query(c,t,"SELECT quantity,template_id,location FROM game.item_instances WHERE instance_id=$1 AND character_id=$2 FOR UPDATE",item,character))
+            {
+                await using var r=await q.ExecuteReaderAsync(ct);
+                if(!await r.ReadAsync(ct)) return null;
+                quantity=r.GetInt64(0); template=r.GetInt32(1); location=r.GetString(2);
+            }
+            if(count>=quantity) await Execute(c,t,"DELETE FROM game.item_instances WHERE instance_id=$1",ct,item);
+            else await Execute(c,t,"UPDATE game.item_instances SET quantity=quantity-$2,revision=revision+1 WHERE instance_id=$1",ct,item,count);
+            removed.Add(new {item,template,location,removed=Math.Min(count,quantity),had=quantity});
+        }
+        await Execute(c,t,"INSERT INTO audit.events(action,character_id,actor_id,details) VALUES('staff_items_deleted',$1,$2,$3)",ct,character,actor.AccountId,
+            Json(new {items=removed}));
+        // Delivered on commit: a game host with the character in the world sends the removal at once (InventoryNotifications).
+        await Execute(c,t,"SELECT pg_notify('aion_inventory',$1)",ct,character.ToString());
+        await t.CommitAsync(ct); return removed.Count;
+    }
+
     public async Task<JsonElement> AdminAsync(VerifiedAccount actor, AdminCommand command, CancellationToken ct=default)
     {
-        if(command.RequestId==Guid.Empty || command.Command is not ("grant" or "level" or "teleport" or "class" or "ascension" or "wings" or "staff")) throw new GameplayException("invalid_command");
+        if(command.RequestId==Guid.Empty || command.Command is not ("grant" or "level" or "teleport" or "class" or "ascension" or "wings" or "staff" or "currency")) throw new GameplayException("invalid_command");
+        if(command.Command=="currency" && (command.Category is <=0 or >32767 || command.Quantity is 0 or < -1_000_000_000_000 or > 1_000_000_000_000)) throw new GameplayException("invalid_currency");
         if(command.Command=="wings" && (command.Wings is not { Length: > 0 and <= 500 } || command.Wings.Any(w=>w<=0))) throw new GameplayException("invalid_wings");
         if(command.Command=="class" && command.CreationId<=0) throw new GameplayException("unknown_class");
         if(command.Command=="ascension" && command.Ascension is < 1 or > 6) throw new GameplayException("invalid_ascension");
@@ -1400,6 +1805,14 @@ public sealed partial class PostgresGameplayStore(NpgsqlDataSource source) : IGa
             // Delivered on commit: a game host in the world sends the item at once (InventoryNotifications).
             await Execute(c,t,"SELECT pg_notify('aion_inventory',$1)",ct,command.CharacterId.ToString());
             result=Json(new {instanceId=(Guid)id!});
+        }
+        else if(command.Command=="currency")
+        {
+            // An account currency (Quna and its states): the character's account, shared by all its characters; never below zero.
+            var balance=await Scalar(c,t,"INSERT INTO game.account_currencies(account_id,category,balance) SELECT account_id,$2,GREATEST(0,$3) FROM game.characters WHERE character_id=$1 "
+                +"ON CONFLICT(account_id,category) DO UPDATE SET balance=GREATEST(0,game.account_currencies.balance+$3),updated_at=now() RETURNING balance",ct,command.CharacterId,(short)command.Category,command.Quantity);
+            await Execute(c,t,"SELECT pg_notify('aion_inventory',$1)",ct,command.CharacterId.ToString());   // an online player sees it at once
+            result=Json(new {category=command.Category,balance=(long)balance!});
         }
         else if(command.Command=="wings")
         {
@@ -1578,9 +1991,11 @@ public sealed partial class PostgresGameplayStore(NpgsqlDataSource source) : IGa
         await t.CommitAsync(ct);
     }
 
-    public async Task<AdminCatalogPage> AdminCatalogAsync(VerifiedAccount actor, string query, string? category, int offset, int limit, CancellationToken ct=default)
+    public async Task<AdminCatalogPage> AdminCatalogAsync(VerifiedAccount actor, string query, string? category, int offset, int limit, CancellationToken ct=default, string? race=null)
     {
         query=(query??"").Trim(); category=string.IsNullOrWhiteSpace(category) ? null : category.Trim();
+        // Staff race filter (Elyos = Light, Asmodian = Dark): that race's items plus the items for every race.
+        race=race is "Light" or "Dark" ? race : null;
         if(query.Length>64 || query.Any(char.IsControl) || category is { Length: >64 } || offset<0 || limit is <1 or >200) throw new GameplayException("invalid_query");
         await using var c=await source.OpenConnectionAsync(ct); await using var t=await c.BeginTransactionAsync(ct);
         await RequireStaff(c,t,actor.AccountId,ct);
@@ -1590,16 +2005,17 @@ public sealed partial class PostgresGameplayStore(NpgsqlDataSource source) : IGa
         await using(var q=Query(c,t,$"""
             SELECT template_id,name,category,replace(definition->'facts'->>'ItemGrade','EItemGrade::',''),
                    CASE WHEN jsonb_typeof(definition->'facts'->'ItemLevel')='number' THEN (definition->'facts'->>'ItemLevel')::int END,
-                   count(*) OVER ()
+                   count(*) OVER (), replace(definition->'facts'->>'ItemRace','ERace::','')
             FROM catalog.items
             WHERE build_id={Latest} AND ($1='' OR template_id::text=$1 OR name ILIKE $2) AND ($3::text IS NULL OR category=$3)
+              AND ($6::text IS NULL OR replace(definition->'facts'->>'ItemRace','ERace::','') IN ($6,'All','None'))
             ORDER BY template_id::text<>$1,lower(name),template_id OFFSET $4 LIMIT $5
-            """,query,pattern,(object?)category??DBNull.Value,offset,limit))
+            """,query,pattern,(object?)category??DBNull.Value,offset,limit,(object?)race??DBNull.Value))
         {
             await using var r=await q.ExecuteReaderAsync(ct);
             while(await r.ReadAsync(ct))
             {
-                items.Add(new(r.GetInt32(0),r.GetString(1),r.IsDBNull(2)?null:r.GetString(2),r.IsDBNull(3)?null:r.GetString(3),r.IsDBNull(4)?null:r.GetInt32(4)));
+                items.Add(new(r.GetInt32(0),r.GetString(1),r.IsDBNull(2)?null:r.GetString(2),r.IsDBNull(3)?null:r.GetString(3),r.IsDBNull(4)?null:r.GetInt32(4),r.IsDBNull(6)?null:r.GetString(6)));
                 total=(int)r.GetInt64(5);
             }
         }

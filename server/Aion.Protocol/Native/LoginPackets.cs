@@ -6,7 +6,12 @@ namespace Aion.Protocol.Native;
 public sealed record LoginCharacterRow(int ServerId, string Name, uint Level = 1, uint Experience = 0,
     uint Code = 5, byte Flags = 1, ulong LastPlayedUnixMs = 0);
 
-/// <summary>A 0x3909 world-directory row. Group is the world's race (Common_ServerInfo _server_race: 1 Light, 2 Dark).</summary>
+/// <summary>
+/// A 0x3909 world-directory row (DevPacketData_Common_ServerInfo). Group is the world's race (_server_race: 1 Light, 2 Dark).
+/// Status is _tags (EServerTag flags: 1 BrandNew, 2 Recommend, 4 ProhibitCreation, 8 InternalMatching) and Load is
+/// _congestion_value: the two bytes after the packed _is_running/_in_maintenance bits in usmap order (CANDIDATE mapping of the
+/// observed row; the client draws New/Recommended/Creation Restricted badges and Normal/Busy/Full from them).
+/// </summary>
 public sealed record WorldRow(int Id, int Group, string Name, byte Status = 0, byte Load = 0);
 
 /// <summary>
@@ -85,6 +90,12 @@ public static class LoginPackets
         return (byte)mask;
     }
 
+    /// <summary>
+    /// 0x3909 ListServer_RS {result u16, servers[] Common_ServerInfo, current page, total page}. Row (observed layout, fields by usmap
+    /// order): _server_id u16 | _server_race u8 | _server_data_id (the id, then 00 00) | _server_name | [packed bools: _is_running
+    /// bit 2k, _in_maintenance bit 2k+1 of a byte opened every fourth row] | _tags u8 | _congestion_value u8 | _congestion_ratio u8
+    /// (0x50 observed) | _server_group_id u16 (1 observed); then pages 1/1.
+    /// </summary>
     public static byte[] WorldDirectory(IReadOnlyList<WorldRow> worlds)
     {
         if (worlds.Count is < 1 or > 255) throw new ArgumentException("World directory must hold 1..255 rows");
@@ -102,7 +113,12 @@ public static class LoginPackets
         return w.U8(1).U8(1).ToArray();
     }
 
-    public static byte[] SelectResult(int worldId) => PacketWriter.Opcode(0x390d).U16(0).U8(0).U16(worldId).ToArray();
+    /// <summary>
+    /// 0x390d SelectServer_RS {result u16, _select_server_result u8 (ESelectServerResult 0 Success), server}. A refusal carries the
+    /// client's EResult (LoginServer_SelectServer_RestrictCreation 8968 for a world closed to new characters; CANDIDATE: no refusal
+    /// was recorded).
+    /// </summary>
+    public static byte[] SelectResult(int worldId, int result = 0) => PacketWriter.Opcode(0x390d).U16(result).U8(0).U16(worldId).ToArray();
 
     /// <summary>0x390f handoff: the game server the client connects to next.</summary>
     public static byte[] Redirect(int worldId, string address, int port)

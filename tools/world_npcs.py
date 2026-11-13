@@ -58,6 +58,10 @@ INSTANCE_MAPS = _served_instance_maps()
 SPAWN_FIELDS = ('name', 'npc_id', 'x', 'y', 'z', 'yaw', 'unique_key', 'social_action', 'route')
 SOCIAL_ACTIONS = ROOT / 'tools/data/npc-social-actions.json'
 ROUTE_LINK_RANGE = 300.0
+# AggroTypes whose monsters notice players on their own. OFFICIAL (0x3641 aggressive bit 0x08, 20 recordings 2026-11-06/07):
+# Aggro_A 726 of 726 appears flagged, Revenge_A 60 of 60 (the bombs: they arm as soon as a player is near, rec 20261107-013918
+# #17897), AggroNormal 0 of 2975 (they fight only when hit: 556 combat starts, every one after a hit). Aggro_A_SearchOnlyPC by name.
+AGGRESSIVE_TYPES = ('Aggro_A', 'Aggro_A_SearchOnlyPC', 'Revenge_A')
 ROUTE_SPAWN_WORDS = ('onway', 'roam')
 
 
@@ -221,7 +225,9 @@ def routes(mapdata):
                     'points': [[round(pt['X'], 1), round(pt['Y'], 1), round(pt['Z'], 1)] for pt in value['Points']],
                     'traverse': str(value.get('TraverseType', 'EWaypointTraverseType::OneWay')).split('::')[-1],
                     # MoveType 2 ran (the HQ001 quest routes), 1 walked (the patrol). OBSERVED.
-                    'run': value.get('MoveType') == 2})
+                    'run': value.get('MoveType') == 2,
+                    # AdditionalMoveStat: the route's speed bonus in 1/10000 (Robin's HQ001 route 8000 = the observed MoveSpeed 8000).
+                    **({'boost': int(value['AdditionalMoveStat'])} if value.get('AdditionalMoveStat') else {})})
     return out
 
 
@@ -270,7 +276,7 @@ def build(maps=MAPDATA, npc_table=NPCDATA, aggro_table=AGGRODATA, skill_table=SK
                                    'level': row['Level'],
                                    'type': row['NpcType'].split('::')[1],
                                    'relationship': RELATIONSHIP.get(relationship, 6),
-                                   'aggressive': row['AggroType'].endswith(('Aggro_A', 'Aggro_A_SearchOnlyPC')),
+                                   'aggressive': _enum(row['AggroType']) in AGGRESSIVE_TYPES,
                                    # Units/s; the official 0x371b-c walk/run moves match these.
                                    'walk_speed': row.get('BaseWalkSpeed', 0.0),
                                    'run_speed': row.get('BaseMoveSpeed', 0.0),
@@ -309,7 +315,7 @@ def build(maps=MAPDATA, npc_table=NPCDATA, aggro_table=AGGRODATA, skill_table=SK
         relationship = row['RelationshipEntity'].split('::')[1]
         skills = [s['Value'] for s in row.get('ActiveSkillList', []) if s['Value']]
         templates[str(npc_id)] = {'level': row['Level'], 'type': row['NpcType'].split('::')[1], 'relationship': RELATIONSHIP.get(relationship, 6),
-                                  'aggressive': row['AggroType'].endswith(('Aggro_A', 'Aggro_A_SearchOnlyPC')), 'walk_speed': row.get('BaseWalkSpeed', 0.0),
+                                  'aggressive': _enum(row['AggroType']) in AGGRESSIVE_TYPES, 'walk_speed': row.get('BaseWalkSpeed', 0.0),
                                   'run_speed': row.get('BaseMoveSpeed', 0.0), 'radius': row.get('CollisionCylinderRadius', 0),
                                   'function': row.get('FunctionType', 'ENpcFuncType::None').split('::')[-1], 'aggro_type': _enum(row.get('AggroType', 'EAggroType::None')),
                                   'aggro': shapes.get(row.get('AggroDetectRange')), 'skills': skills, 'height': row.get('CollisionCylinderHeight', 0),

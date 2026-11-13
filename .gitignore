@@ -25,6 +25,8 @@ tools/WardrobeExport/bin/
 tools/WardrobeExport/obj/
 tools/MapImageExport/bin/
 tools/MapImageExport/obj/
+tools/ItemIconExport/bin/
+tools/ItemIconExport/obj/
 
 # React pages (web/) build into the host wwwroot; wardrobe-viewer.js there stays hand-written.
 web/node_modules/
@@ -42,3 +44,6 @@ launcher/**/obj/
 /research/local/tooling/*
 !/research/local/tooling/opcodes.json
 !/research/local/tooling/mappings/
+tools/data/wire-probe.log
+tools/WireLearn/bin/
+tools/WireLearn/obj/

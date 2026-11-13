@@ -1,0 +1,4067 @@
+{
+ "global": {
+  "guild_join_level": 1,
+  "guild_create_gold": 100000,
+  "guild_join_req_count": 3,
+  "guild_join_recv_count": 20,
+  "l10n_guild_name_max": 12,
+  "l10n_guild_notice_max_length": 160,
+  "l10n_guild_intro_max_length": 48,
+  "l10n_guild_member_comment_max_length": 32,
+  "l10n_guild_password_min_length": 1,
+  "l10n_guild_password_max_length": 6,
+  "guild_storage_slot_count_default": 20,
+  "guild_storage_slot_count_per_extension": 10,
+  "guild_info_history_max_count": 300,
+  "delete_reputation_value_rate_for_leaving_guild": 10,
+  "Community_friend_max_count": 50,
+  "Community_friend_request_max_count": 50,
+  "Community_friend_block_max_count": 100,
+  "post_load_count": 100,
+  "abyss_ranking_base_level": 20,
+  "attendance_reset_time": 57600000,
+  "season_mission_reset_time": 57600000,
+  "season_mission_reset_day": 3,
+  "arena_countdown_time": 10000,
+  "arena_result_notice_time": 3000,
+  "dungeon_matching_complete_popup_ready_waiting_time": 20000,
+  "party_invite_recommend_list_max_count": 10,
+  "party_auto_delay": 20,
+  "rift_contentsticket_default_time": 3600000,
+  "rift_pvp_on_activation_level": 45
+ },
+ "guild_levels": [
+  {
+   "level": 1,
+   "accumulate_exp": 1000,
+   "max_members": 128,
+   "officers": 4,
+   "stats": [
+    {
+     "stat": "ExperienceBonus",
+     "value": 100
+    }
+   ]
+  },
+  {
+   "level": 2,
+   "accumulate_exp": 3100,
+   "max_members": 128,
+   "officers": 4,
+   "stats": [
+    {
+     "stat": "ExperienceBonus",
+     "value": 100
+    },
+    {
+     "stat": "HPMax",
+     "value": 4
+    },
+    {
+     "stat": "MPMax",
+     "value": 4
+    }
+   ]
+  },
+  {
+   "level": 3,
+   "accumulate_exp": 6500,
+   "max_members": 128,
+   "officers": 4,
+   "stats": [
+    {
+     "stat": "ExperienceBonus",
+     "value": 100
+    },
+    {
+     "stat": "HPMax",
+     "value": 8
+    },
+    {
+     "stat": "MPMax",
+     "value": 8
+    },
+    {
+     "stat": "Evasion",
+     "value": 1
+    }
+   ]
+  },
+  {
+   "level": 4,
+   "accumulate_exp": 11700,
+   "max_members": 128,
+   "officers": 4,
+   "stats": [
+    {
+     "stat": "ExperienceBonus",
+     "value": 200
+    },
+    {
+     "stat": "HPMax",
+     "value": 12
+    },
+    {
+     "stat": "MPMax",
+     "value": 12
+    },
+    {
+     "stat": "Evasion",
+     "value": 1
+    },
+    {
+     "stat": "Accuracy",
+     "value": 1
+    }
+   ]
+  },
+  {
+   "level": 5,
+   "accumulate_exp": 19000,
+   "max_members": 128,
+   "officers": 4,
+   "stats": [
+    {
+     "stat": "ExperienceBonus",
+     "value": 200
+    },
+    {
+     "stat": "HPMax",
+     "value": 16
+    },
+    {
+     "stat": "MPMax",
+     "value": 16
+    },
+    {
+     "stat": "Evasion",
+     "value": 1
+    },
+    {
+     "stat": "Accuracy",
+     "value": 1
+    },
+    {
+     "stat": "FixingDamage",
+     "value": 1
+    }
+   ]
+  },
+  {
+   "level": 6,
+   "accumulate_exp": 29000,
+   "max_members": 128,
+   "officers": 4,
+   "stats": [
+    {
+     "stat": "ExperienceBonus",
+     "value": 200
+    },
+    {
+     "stat": "HPMax",
+     "value": 20
+    },
+    {
+     "stat": "MPMax",
+     "value": 20
+    },
+    {
+     "stat": "Evasion",
+     "value": 2
+    },
+    {
+     "stat": "Accuracy",
+     "value": 1
+    },
+    {
+     "stat": "FixingDamage",
+     "value": 1
+    }
+   ]
+  },
+  {
+   "level": 7,
+   "accumulate_exp": 42500,
+   "max_members": 128,
+   "officers": 4,
+   "stats": [
+    {
+     "stat": "ExperienceBonus",
+     "value": 200
+    },
+    {
+     "stat": "HPMax",
+     "value": 24
+    },
+    {
+     "stat": "MPMax",
+     "value": 24
+    },
+    {
+     "stat": "Evasion",
+     "value": 2
+    },
+    {
+     "stat": "Accuracy",
+     "value": 2
+    },
+    {
+     "stat": "FixingDamage",
+     "value": 1
+    },
+    {
+     "stat": "Defense",
+     "value": 1
+    }
+   ]
+  },
+  {
+   "level": 8,
+   "accumulate_exp": 60000,
+   "max_members": 128,
+   "officers": 4,
+   "stats": [
+    {
+     "stat": "ExperienceBonus",
+     "value": 200
+    },
+    {
+     "stat": "HPMax",
+     "value": 28
+    },
+    {
+     "stat": "MPMax",
+     "value": 28
+    },
+    {
+     "stat": "Evasion",
+     "value": 2
+    },
+    {
+     "stat": "Accuracy",
+     "value": 2
+    },
+    {
+     "stat": "FixingDamage",
+     "value": 2
+    },
+    {
+     "stat": "Defense",
+     "value": 1
+    }
+   ]
+  },
+  {
+   "level": 9,
+   "accumulate_exp": 82500,
+   "max_members": 128,
+   "officers": 4,
+   "stats": [
+    {
+     "stat": "ExperienceBonus",
+     "value": 300
+    },
+    {
+     "stat": "HPMax",
+     "value": 32
+    },
+    {
+     "stat": "MPMax",
+     "value": 32
+    },
+    {
+     "stat": "Evasion",
+     "value": 2
+    },
+    {
+     "stat": "Accuracy",
+     "value": 2
+    },
+    {
+     "stat": "FixingDamage",
+     "value": 2
+    },
+    {
+     "stat": "Defense",
+     "value": 1
+    }
+   ]
+  },
+  {
+   "level": 10,
+   "accumulate_exp": 110500,
+   "max_members": 128,
+   "officers": 4,
+   "stats": [
+    {
+     "stat": "ExperienceBonus",
+     "value": 300
+    },
+    {
+     "stat": "HPMax",
+     "value": 36
+    },
+    {
+     "stat": "MPMax",
+     "value": 36
+    },
+    {
+     "stat": "Evasion",
+     "value": 2
+    },
+    {
+     "stat": "Accuracy",
+     "value": 2
+    },
+    {
+     "stat": "FixingDamage",
+     "value": 2
+    },
+    {
+     "stat": "Defense",
+     "value": 2
+    }
+   ]
+  },
+  {
+   "level": 11,
+   "accumulate_exp": 143000,
+   "max_members": 128,
+   "officers": 4,
+   "stats": [
+    {
+     "stat": "ExperienceBonus",
+     "value": 300
+    },
+    {
+     "stat": "HPMax",
+     "value": 40
+    },
+    {
+     "stat": "MPMax",
+     "value": 40
+    },
+    {
+     "stat": "Evasion",
+     "value": 3
+    },
+    {
+     "stat": "Accuracy",
+     "value": 2
+    },
+    {
+     "stat": "FixingDamage",
+     "value": 2
+    },
+    {
+     "stat": "Defense",
+     "value": 2
+    }
+   ]
+  },
+  {
+   "level": 12,
+   "accumulate_exp": 180000,
+   "max_members": 128,
+   "officers": 4,
+   "stats": [
+    {
+     "stat": "ExperienceBonus",
+     "value": 300
+    },
+    {
+     "stat": "HPMax",
+     "value": 44
+    },
+    {
+     "stat": "MPMax",
+     "value": 44
+    },
+    {
+     "stat": "Evasion",
+     "value": 3
+    },
+    {
+     "stat": "Accuracy",
+     "value": 3
+    },
+    {
+     "stat": "FixingDamage",
+     "value": 3
+    },
+    {
+     "stat": "Defense",
+     "value": 2
+    }
+   ]
+  },
+  {
+   "level": 13,
+   "accumulate_exp": 223000,
+   "max_members": 128,
+   "officers": 4,
+   "stats": [
+    {
+     "stat": "ExperienceBonus",
+     "value": 300
+    },
+    {
+     "stat": "HPMax",
+     "value": 48
+    },
+    {
+     "stat": "MPMax",
+     "value": 48
+    },
+    {
+     "stat": "Evasion",
+     "value": 3
+    },
+    {
+     "stat": "Accuracy",
+     "value": 3
+    },
+    {
+     "stat": "FixingDamage",
+     "value": 3
+    },
+    {
+     "stat": "Defense",
+     "value": 3
+    }
+   ]
+  },
+  {
+   "level": 14,
+   "accumulate_exp": 272000,
+   "max_members": 128,
+   "officers": 4,
+   "stats": [
+    {
+     "stat": "ExperienceBonus",
+     "value": 300
+    },
+    {
+     "stat": "HPMax",
+     "value": 52
+    },
+    {
+     "stat": "MPMax",
+     "value": 52
+    },
+    {
+     "stat": "Evasion",
+     "value": 4
+    },
+    {
+     "stat": "Accuracy",
+     "value": 3
+    },
+    {
+     "stat": "FixingDamage",
+     "value": 3
+    },
+    {
+     "stat": "Defense",
+     "value": 3
+    }
+   ]
+  },
+  {
+   "level": 15,
+   "accumulate_exp": 328500,
+   "max_members": 128,
+   "officers": 4,
+   "stats": [
+    {
+     "stat": "ExperienceBonus",
+     "value": 300
+    },
+    {
+     "stat": "HPMax",
+     "value": 56
+    },
+    {
+     "stat": "MPMax",
+     "value": 56
+    },
+    {
+     "stat": "Evasion",
+     "value": 4
+    },
+    {
+     "stat": "Accuracy",
+     "value": 4
+    },
+    {
+     "stat": "FixingDamage",
+     "value": 3
+    },
+    {
+     "stat": "Defense",
+     "value": 3
+    }
+   ]
+  },
+  {
+   "level": 16,
+   "accumulate_exp": 393500,
+   "max_members": 128,
+   "officers": 4,
+   "stats": [
+    {
+     "stat": "ExperienceBonus",
+     "value": 300
+    },
+    {
+     "stat": "HPMax",
+     "value": 60
+    },
+    {
+     "stat": "MPMax",
+     "value": 60
+    },
+    {
+     "stat": "Evasion",
+     "value": 4
+    },
+    {
+     "stat": "Accuracy",
+     "value": 4
+    },
+    {
+     "stat": "FixingDamage",
+     "value": 4
+    },
+    {
+     "stat": "Defense",
+     "value": 3
+    }
+   ]
+  },
+  {
+   "level": 17,
+   "accumulate_exp": 468500,
+   "max_members": 128,
+   "officers": 4,
+   "stats": [
+    {
+     "stat": "ExperienceBonus",
+     "value": 300
+    },
+    {
+     "stat": "HPMax",
+     "value": 65
+    },
+    {
+     "stat": "MPMax",
+     "value": 65
+    },
+    {
+     "stat": "Evasion",
+     "value": 4
+    },
+    {
+     "stat": "Accuracy",
+     "value": 4
+    },
+    {
+     "stat": "FixingDamage",
+     "value": 4
+    },
+    {
+     "stat": "Defense",
+     "value": 4
+    }
+   ]
+  },
+  {
+   "level": 18,
+   "accumulate_exp": 554500,
+   "max_members": 128,
+   "officers": 4,
+   "stats": [
+    {
+     "stat": "ExperienceBonus",
+     "value": 300
+    },
+    {
+     "stat": "HPMax",
+     "value": 70
+    },
+    {
+     "stat": "MPMax",
+     "value": 70
+    },
+    {
+     "stat": "Evasion",
+     "value": 4
+    },
+    {
+     "stat": "Accuracy",
+     "value": 4
+    },
+    {
+     "stat": "FixingDamage",
+     "value": 4
+    },
+    {
+     "stat": "Defense",
+     "value": 4
+    }
+   ]
+  },
+  {
+   "level": 19,
+   "accumulate_exp": 653500,
+   "max_members": 128,
+   "officers": 4,
+   "stats": [
+    {
+     "stat": "ExperienceBonus",
+     "value": 300
+    },
+    {
+     "stat": "HPMax",
+     "value": 75
+    },
+    {
+     "stat": "MPMax",
+     "value": 70
+    },
+    {
+     "stat": "Evasion",
+     "value": 5
+    },
+    {
+     "stat": "Accuracy",
+     "value": 4
+    },
+    {
+     "stat": "FixingDamage",
+     "value": 4
+    },
+    {
+     "stat": "Defense",
+     "value": 4
+    }
+   ]
+  },
+  {
+   "level": 20,
+   "accumulate_exp": 767500,
+   "max_members": 128,
+   "officers": 4,
+   "stats": [
+    {
+     "stat": "ExperienceBonus",
+     "value": 300
+    },
+    {
+     "stat": "HPMax",
+     "value": 80
+    },
+    {
+     "stat": "MPMax",
+     "value": 70
+    },
+    {
+     "stat": "Evasion",
+     "value": 5
+    },
+    {
+     "stat": "Accuracy",
+     "value": 5
+    },
+    {
+     "stat": "FixingDamage",
+     "value": 4
+    },
+    {
+     "stat": "Defense",
+     "value": 4
+    }
+   ]
+  }
+ ],
+ "guild_authority": {
+  "Master": 8190,
+  "Officer": 1688,
+  "Member": 512
+ },
+ "guild_emblems": [
+  {
+   "id": 1,
+   "unlock_level": 1
+  },
+  {
+   "id": 2,
+   "unlock_level": 1
+  },
+  {
+   "id": 3,
+   "unlock_level": 1
+  },
+  {
+   "id": 4,
+   "unlock_level": 1
+  },
+  {
+   "id": 5,
+   "unlock_level": 1
+  },
+  {
+   "id": 6,
+   "unlock_level": 1
+  },
+  {
+   "id": 7,
+   "unlock_level": 1
+  },
+  {
+   "id": 8,
+   "unlock_level": 1
+  },
+  {
+   "id": 9,
+   "unlock_level": 1
+  },
+  {
+   "id": 10,
+   "unlock_level": 1
+  }
+ ],
+ "guild_storage_extensions": [
+  {
+   "id": 1,
+   "cost": 1000,
+   "currency": "GoldCombined",
+   "level": 1
+  },
+  {
+   "id": 2,
+   "cost": 1000,
+   "currency": "GoldCombined",
+   "level": 1
+  },
+  {
+   "id": 3,
+   "cost": 1500,
+   "currency": "GoldCombined",
+   "level": 1
+  },
+  {
+   "id": 4,
+   "cost": 2000,
+   "currency": "GoldCombined",
+   "level": 1
+  },
+  {
+   "id": 5,
+   "cost": 2500,
+   "currency": "GoldCombined",
+   "level": 1
+  },
+  {
+   "id": 6,
+   "cost": 3500,
+   "currency": "GoldCombined",
+   "level": 1
+  },
+  {
+   "id": 7,
+   "cost": 5000,
+   "currency": "GoldCombined",
+   "level": 1
+  },
+  {
+   "id": 8,
+   "cost": 6500,
+   "currency": "GoldCombined",
+   "level": 1
+  },
+  {
+   "id": 9,
+   "cost": 9000,
+   "currency": "GoldCombined",
+   "level": 1
+  },
+  {
+   "id": 10,
+   "cost": 15000,
+   "currency": "GoldCombined",
+   "level": 1
+  },
+  {
+   "id": 11,
+   "cost": 20000,
+   "currency": "GoldCombined",
+   "level": 1
+  },
+  {
+   "id": 12,
+   "cost": 25000,
+   "currency": "GoldCombined",
+   "level": 1
+  },
+  {
+   "id": 13,
+   "cost": 35000,
+   "currency": "GoldCombined",
+   "level": 1
+  },
+  {
+   "id": 14,
+   "cost": 45000,
+   "currency": "GoldCombined",
+   "level": 1
+  },
+  {
+   "id": 15,
+   "cost": 60000,
+   "currency": "GoldCombined",
+   "level": 1
+  },
+  {
+   "id": 16,
+   "cost": 80000,
+   "currency": "GoldCombined",
+   "level": 1
+  },
+  {
+   "id": 17,
+   "cost": 150000,
+   "currency": "GoldCombined",
+   "level": 1
+  },
+  {
+   "id": 18,
+   "cost": 150000,
+   "currency": "GoldCombined",
+   "level": 1
+  },
+  {
+   "id": 19,
+   "cost": 200000,
+   "currency": "GoldCombined",
+   "level": 1
+  },
+  {
+   "id": 20,
+   "cost": 300000,
+   "currency": "GoldCombined",
+   "level": 1
+  },
+  {
+   "id": 21,
+   "cost": 400000,
+   "currency": "GoldCombined",
+   "level": 1
+  },
+  {
+   "id": 22,
+   "cost": 550000,
+   "currency": "GoldCombined",
+   "level": 1
+  },
+  {
+   "id": 23,
+   "cost": 700000,
+   "currency": "GoldCombined",
+   "level": 1
+  },
+  {
+   "id": 24,
+   "cost": 950000,
+   "currency": "GoldCombined",
+   "level": 1
+  },
+  {
+   "id": 25,
+   "cost": 1300000,
+   "currency": "GoldCombined",
+   "level": 1
+  },
+  {
+   "id": 26,
+   "cost": 1800000,
+   "currency": "GoldCombined",
+   "level": 1
+  },
+  {
+   "id": 27,
+   "cost": 2500000,
+   "currency": "GoldCombined",
+   "level": 1
+  },
+  {
+   "id": 28,
+   "cost": 3300000,
+   "currency": "GoldCombined",
+   "level": 1
+  },
+  {
+   "id": 29,
+   "cost": 4500000,
+   "currency": "GoldCombined",
+   "level": 1
+  },
+  {
+   "id": 30,
+   "cost": 6200000,
+   "currency": "GoldCombined",
+   "level": 1
+  },
+  {
+   "id": 31,
+   "cost": 8400000,
+   "currency": "GoldCombined",
+   "level": 1
+  }
+ ],
+ "guild_agits": [
+  {
+   "id": 1,
+   "race": "Light",
+   "map": 902,
+   "base_map": 1010,
+   "level": 1,
+   "days": 30,
+   "cost": 1000000
+  },
+  {
+   "id": 2,
+   "race": "Dark",
+   "map": 901,
+   "base_map": 1110,
+   "level": 1,
+   "days": 30,
+   "cost": 1000000
+  },
+  {
+   "id": 3,
+   "race": "Light",
+   "map": 904,
+   "base_map": 1011,
+   "level": 1,
+   "days": 30,
+   "cost": 1000000
+  },
+  {
+   "id": 4,
+   "race": "Dark",
+   "map": 905,
+   "base_map": 1111,
+   "level": 1,
+   "days": 30,
+   "cost": 1000000
+  }
+ ],
+ "matching": [
+  {
+   "id": 1,
+   "type": "Single",
+   "teams": 2,
+   "team_size": 1,
+   "party_size": 0,
+   "hidden": false,
+   "reward_join": "Reward_Join_Single",
+   "reward_win": "Reward_Win_Single",
+   "schedule_group": 0,
+   "contents": [
+    {
+     "id": 11,
+     "prob": 5000
+    },
+    {
+     "id": 22,
+     "prob": 5000
+    }
+   ]
+  },
+  {
+   "id": 2,
+   "type": "Team",
+   "teams": 2,
+   "team_size": 5,
+   "party_size": 0,
+   "hidden": false,
+   "reward_join": "Reward_Join_Team",
+   "reward_win": "Reward_Win_Team",
+   "schedule_group": 0,
+   "contents": [
+    {
+     "id": 33,
+     "prob": 5000
+    },
+    {
+     "id": 44,
+     "prob": 5000
+    }
+   ]
+  },
+  {
+   "id": 3,
+   "type": "Strategy",
+   "teams": 2,
+   "team_size": 10,
+   "party_size": 1,
+   "hidden": false,
+   "reward_join": "Reward_Join_Strategy",
+   "reward_win": "Reward_Win_Strategy",
+   "schedule_group": 100,
+   "contents": [
+    {
+     "id": 55,
+     "prob": 10000
+    }
+   ]
+  },
+  {
+   "id": 4,
+   "type": "Strategy",
+   "teams": 2,
+   "team_size": 10,
+   "party_size": 5,
+   "hidden": true,
+   "reward_join": "Reward_Join_Strategy",
+   "reward_win": "Reward_Win_Strategy",
+   "schedule_group": 100,
+   "contents": [
+    {
+     "id": 55,
+     "prob": 10000
+    }
+   ]
+  }
+ ],
+ "matching_contents": [
+  {
+   "id": 11,
+   "type": "SingleCombat",
+   "values": [],
+   "dungeon": 7,
+   "map": 60,
+   "play_ms": 600000,
+   "lives": 3,
+   "respawn_ms": 5000
+  },
+  {
+   "id": 22,
+   "type": "SingleCombat",
+   "values": [],
+   "dungeon": 8,
+   "map": 61,
+   "play_ms": 600000,
+   "lives": 3,
+   "respawn_ms": 5000
+  },
+  {
+   "id": 33,
+   "type": "TeamCombat",
+   "values": [],
+   "dungeon": 7,
+   "map": 60,
+   "play_ms": 600000,
+   "lives": 1,
+   "respawn_ms": 5000
+  },
+  {
+   "id": 44,
+   "type": "TeamCombat",
+   "values": [],
+   "dungeon": 8,
+   "map": 61,
+   "play_ms": 600000,
+   "lives": 1,
+   "respawn_ms": 5000
+  },
+  {
+   "id": 55,
+   "type": "CarMode",
+   "values": [
+    "0, 3, 5, 7, 10",
+    "2680015"
+   ],
+   "dungeon": 10,
+   "map": 62,
+   "play_ms": 600000,
+   "lives": 0,
+   "respawn_ms": 10000
+  },
+  {
+   "id": 66,
+   "type": "CTF",
+   "values": [
+    "2",
+    "1401718, 1401720",
+    "30034, 30035"
+   ],
+   "dungeon": 12,
+   "map": 63,
+   "play_ms": 600000,
+   "lives": 0,
+   "respawn_ms": 10000
+  },
+  {
+   "id": 77,
+   "type": "Dom",
+   "values": [
+    "1500",
+    "2680029:500:4, 2680030:750:6, 2680031:500:4",
+    "10, 5, 20, -20, 35, -35, 50, -50, 60, -60"
+   ],
+   "dungeon": 14,
+   "map": 64,
+   "play_ms": 600000,
+   "lives": 0,
+   "respawn_ms": 10000
+  }
+ ],
+ "matching_schedule": [
+  {
+   "group": 100,
+   "day": "Monday",
+   "windows": [
+    [
+     39600000,
+     50400000
+    ],
+    [
+     68400000,
+     75600000
+    ]
+   ]
+  },
+  {
+   "group": 100,
+   "day": "Tuesday",
+   "windows": [
+    [
+     39600000,
+     50400000
+    ],
+    [
+     68400000,
+     75600000
+    ]
+   ]
+  },
+  {
+   "group": 100,
+   "day": "Wednesday",
+   "windows": [
+    [
+     39600000,
+     50400000
+    ],
+    [
+     68400000,
+     75600000
+    ]
+   ]
+  },
+  {
+   "group": 100,
+   "day": "Thursday",
+   "windows": [
+    [
+     39600000,
+     50400000
+    ],
+    [
+     68400000,
+     75600000
+    ]
+   ]
+  },
+  {
+   "group": 100,
+   "day": "Friday",
+   "windows": [
+    [
+     39600000,
+     50400000
+    ],
+    [
+     68400000,
+     75600000
+    ]
+   ]
+  },
+  {
+   "group": 100,
+   "day": "Saturday",
+   "windows": [
+    [
+     39600000,
+     50400000
+    ],
+    [
+     68400000,
+     75600000
+    ]
+   ]
+  },
+  {
+   "group": 100,
+   "day": "Sunday",
+   "windows": [
+    [
+     39600000,
+     50400000
+    ],
+    [
+     68400000,
+     75600000
+    ]
+   ]
+  }
+ ],
+ "arena_rewards": {
+  "Reward_Join_Single": [
+   {
+    "item": "AbyssPoint",
+    "count": 300
+   }
+  ],
+  "Reward_Win_Single": [
+   {
+    "item": "AbyssPoint",
+    "count": 500
+   }
+  ],
+  "Reward_Join_Team": [
+   {
+    "item": "AbyssPoint",
+    "count": 300
+   }
+  ],
+  "Reward_Win_Team": [
+   {
+    "item": "AbyssPoint",
+    "count": 500
+   }
+  ],
+  "Reward_Join_Strategy": [
+   {
+    "item": "AbyssPoint",
+    "count": 1000
+   },
+   {
+    "item": "Medal2",
+    "count": 1
+   }
+  ],
+  "Reward_Win_Strategy": [
+   {
+    "item": "AbyssPoint",
+    "count": 3000
+   },
+   {
+    "item": "Medal2",
+    "count": 2
+   }
+  ]
+ },
+ "field_events": [
+  {
+   "id": 110101,
+   "name": "festa_110101",
+   "kind": "ShugoFesta",
+   "contents": "GetContribution",
+   "value": "None",
+   "group": "Group_Light_JumpJump",
+   "map": 500037,
+   "entrance": "Direct",
+   "entrance_map": 500037,
+   "progress_s": 175,
+   "ready_s": 180,
+   "start_members": 0,
+   "title": "STR_CONTENTS_TITLE_FE_JUMPJUMP"
+  },
+  {
+   "id": 110102,
+   "name": "festa_110102",
+   "kind": "None",
+   "contents": "GetContribution",
+   "value": "None",
+   "group": "Group_Light_JumpJump",
+   "map": 500011,
+   "entrance": "Interact",
+   "entrance_map": 1010,
+   "progress_s": 240,
+   "ready_s": 180,
+   "start_members": 0,
+   "title": "STR_CONTENTS_TITLE_FE_JUMPJUMP"
+  },
+  {
+   "id": 110103,
+   "name": "festa_110103",
+   "kind": "None",
+   "contents": "GetContribution",
+   "value": "None",
+   "group": "Group_Light_JumpJump",
+   "map": 500024,
+   "entrance": "Interact",
+   "entrance_map": 1010,
+   "progress_s": 175,
+   "ready_s": 180,
+   "start_members": 0,
+   "title": "STR_CONTENTS_TITLE_FE_JUMPJUMP"
+  },
+  {
+   "id": 110201,
+   "name": "festa_110201",
+   "kind": "ShugoFesta",
+   "contents": "GetContribution",
+   "value": "None",
+   "group": "Group_Light_SpecterEvasion",
+   "map": 500040,
+   "entrance": "Direct",
+   "entrance_map": 500040,
+   "progress_s": 300,
+   "ready_s": 180,
+   "start_members": 0,
+   "title": "STR_CONTENTS_TITLE_FE_SPECTER"
+  },
+  {
+   "id": 110202,
+   "name": "festa_110202",
+   "kind": "None",
+   "contents": "GetContribution",
+   "value": "None",
+   "group": "Group_Light_SpecterEvasion",
+   "map": 500010,
+   "entrance": "Interact",
+   "entrance_map": 1010,
+   "progress_s": 300,
+   "ready_s": 180,
+   "start_members": 0,
+   "title": "STR_CONTENTS_TITLE_FE_SPECTER"
+  },
+  {
+   "id": 110301,
+   "name": "festa_110301",
+   "kind": "ShugoFesta",
+   "contents": "Racing",
+   "value": "SF_Racing_01",
+   "group": "Group_Light_Racing",
+   "map": 500039,
+   "entrance": "Direct",
+   "entrance_map": 500039,
+   "progress_s": 300,
+   "ready_s": 180,
+   "start_members": 0,
+   "title": "STR_CONTENTS_TITLE_FE_RACING"
+  },
+  {
+   "id": 110302,
+   "name": "festa_110302",
+   "kind": "None",
+   "contents": "Racing",
+   "value": "FE_Racing_L_A_01",
+   "group": "Group_Light_Racing",
+   "map": 500013,
+   "entrance": "Interact",
+   "entrance_map": 1010,
+   "progress_s": 300,
+   "ready_s": 180,
+   "start_members": 0,
+   "title": "STR_CONTENTS_TITLE_FE_RACING"
+  },
+  {
+   "id": 110303,
+   "name": "festa_110303",
+   "kind": "None",
+   "contents": "Racing",
+   "value": "FE_Racing_L_A_02",
+   "group": "Group_Light_Racing",
+   "map": 500022,
+   "entrance": "Interact",
+   "entrance_map": 1010,
+   "progress_s": 300,
+   "ready_s": 180,
+   "start_members": 0,
+   "title": "STR_CONTENTS_TITLE_FE_RACING"
+  },
+  {
+   "id": 110401,
+   "name": "festa_110401",
+   "kind": "ShugoFesta",
+   "contents": "Masquerade",
+   "value": "Masquerade_Light",
+   "group": "Group_Light_Masquerade",
+   "map": 500038,
+   "entrance": "Direct",
+   "entrance_map": 500038,
+   "progress_s": 210,
+   "ready_s": 180,
+   "start_members": 2,
+   "title": "STR_CONTENTS_TITLE_FE_LUGGI"
+  },
+  {
+   "id": 110403,
+   "name": "festa_110403",
+   "kind": "None",
+   "contents": "Masquerade",
+   "value": "Masquerade_Light",
+   "group": "Group_Light_Masquerade",
+   "map": 500012,
+   "entrance": "Interact",
+   "entrance_map": 1010,
+   "progress_s": 210,
+   "ready_s": 180,
+   "start_members": 2,
+   "title": "STR_CONTENTS_TITLE_FE_LUGGI"
+  },
+  {
+   "id": 110501,
+   "name": "festa_110501",
+   "kind": "ShugoFesta",
+   "contents": "GetContribution",
+   "value": "None",
+   "group": "Group_Light_OdBubble",
+   "map": 500042,
+   "entrance": "Direct",
+   "entrance_map": 500042,
+   "progress_s": 210,
+   "ready_s": 180,
+   "start_members": 0,
+   "title": "STR_CONTENTS_TITLE_FE_ODBUBBLE"
+  },
+  {
+   "id": 110502,
+   "name": "festa_110502",
+   "kind": "None",
+   "contents": "GetContribution",
+   "value": "None",
+   "group": "Group_Light_OdBubble",
+   "map": 500003,
+   "entrance": "Interact",
+   "entrance_map": 1010,
+   "progress_s": 210,
+   "ready_s": 180,
+   "start_members": 0,
+   "title": "STR_CONTENTS_TITLE_FE_ODBUBBLE"
+  },
+  {
+   "id": 110601,
+   "name": "festa_110601",
+   "kind": "ShugoFesta",
+   "contents": "GetContribution",
+   "value": "None",
+   "group": "Group_Light_TreasureHunter",
+   "map": 500041,
+   "entrance": "Direct",
+   "entrance_map": 500041,
+   "progress_s": 230,
+   "ready_s": 180,
+   "start_members": 0,
+   "title": "STR_CONTENTS_TITLE_FE_TREASURE"
+  },
+  {
+   "id": 110602,
+   "name": "festa_110602",
+   "kind": "None",
+   "contents": "GetContribution",
+   "value": "None",
+   "group": "Group_Light_TreasureHunter",
+   "map": 500008,
+   "entrance": "Interact",
+   "entrance_map": 1010,
+   "progress_s": 230,
+   "ready_s": 180,
+   "start_members": 0,
+   "title": "STR_CONTENTS_TITLE_FE_TREASURE"
+  },
+  {
+   "id": 110603,
+   "name": "festa_110603",
+   "kind": "None",
+   "contents": "GetContribution",
+   "value": "None",
+   "group": "Group_Light_TreasureHunter",
+   "map": 500027,
+   "entrance": "Interact",
+   "entrance_map": 1010,
+   "progress_s": 230,
+   "ready_s": 180,
+   "start_members": 0,
+   "title": "STR_CONTENTS_TITLE_FE_TREASURE"
+  },
+  {
+   "id": 110701,
+   "name": "festa_110701",
+   "kind": "ShugoFesta",
+   "contents": "Defence",
+   "value": "None",
+   "group": "Group_Light_Defence",
+   "map": 500043,
+   "entrance": "Direct",
+   "entrance_map": 500043,
+   "progress_s": 300,
+   "ready_s": 180,
+   "start_members": 0,
+   "title": "STR_CONTENTS_TITLE_FE_DEFENCE"
+  },
+  {
+   "id": 110702,
+   "name": "festa_110702",
+   "kind": "None",
+   "contents": "Defence",
+   "value": "None",
+   "group": "Group_Light_Defence",
+   "map": 500007,
+   "entrance": "Interact",
+   "entrance_map": 1010,
+   "progress_s": 300,
+   "ready_s": 180,
+   "start_members": 0,
+   "title": "STR_CONTENTS_TITLE_FE_DEFENCE"
+  },
+  {
+   "id": 110703,
+   "name": "festa_110703",
+   "kind": "None",
+   "contents": "Defence",
+   "value": "None",
+   "group": "Group_Light_Defence",
+   "map": 500026,
+   "entrance": "Interact",
+   "entrance_map": 1010,
+   "progress_s": 300,
+   "ready_s": 180,
+   "start_members": 0,
+   "title": "STR_CONTENTS_TITLE_FE_DEFENCE"
+  },
+  {
+   "id": 110801,
+   "name": "festa_110801",
+   "kind": "ShugoFesta",
+   "contents": "Platformer",
+   "value": "SF_Platformer_L_01",
+   "group": "Group_Light_HighHigh",
+   "map": 500035,
+   "entrance": "Direct",
+   "entrance_map": 500035,
+   "progress_s": 300,
+   "ready_s": 180,
+   "start_members": 0,
+   "title": "STR_CONTENTS_TITLE_FE_HIGHHIGH"
+  },
+  {
+   "id": 110802,
+   "name": "festa_110802",
+   "kind": "None",
+   "contents": "Platformer",
+   "value": "FE_Platformer_L_A_01",
+   "group": "Group_Light_HighHigh",
+   "map": 500016,
+   "entrance": "Interact",
+   "entrance_map": 1010,
+   "progress_s": 300,
+   "ready_s": 180,
+   "start_members": 0,
+   "title": "STR_CONTENTS_TITLE_FE_HIGHHIGH"
+  },
+  {
+   "id": 110803,
+   "name": "festa_110803",
+   "kind": "None",
+   "contents": "Platformer",
+   "value": "FE_Platformer_L_A_02",
+   "group": "Group_Light_HighHigh",
+   "map": 500023,
+   "entrance": "Interact",
+   "entrance_map": 1010,
+   "progress_s": 300,
+   "ready_s": 180,
+   "start_members": 0,
+   "title": "STR_CONTENTS_TITLE_FE_HIGHHIGH"
+  },
+  {
+   "id": 110901,
+   "name": "festa_110901",
+   "kind": "ShugoFesta",
+   "contents": "TrapBoard",
+   "value": "SF_Trapboard_Light",
+   "group": "Group_Light_TrapBoard",
+   "map": 500036,
+   "entrance": "Direct",
+   "entrance_map": 500036,
+   "progress_s": 195,
+   "ready_s": 180,
+   "start_members": 0,
+   "title": "STR_CONTENTS_TITLE_FE_TRAPBOARD"
+  },
+  {
+   "id": 110902,
+   "name": "festa_110902",
+   "kind": "None",
+   "contents": "TrapBoard",
+   "value": "FE_Trapboard_Light",
+   "group": "Group_Light_TrapBoard",
+   "map": 500029,
+   "entrance": "Interact",
+   "entrance_map": 1010,
+   "progress_s": 195,
+   "ready_s": 180,
+   "start_members": 0,
+   "title": "STR_CONTENTS_TITLE_FE_TRAPBOARD"
+  },
+  {
+   "id": 110903,
+   "name": "festa_110903",
+   "kind": "None",
+   "contents": "TrapBoard",
+   "value": "FE_Trapboard_Light",
+   "group": "Group_Light_TrapBoard",
+   "map": 500015,
+   "entrance": "Interact",
+   "entrance_map": 1010,
+   "progress_s": 195,
+   "ready_s": 180,
+   "start_members": 0,
+   "title": "STR_CONTENTS_TITLE_FE_TRAPBOARD"
+  },
+  {
+   "id": 111101,
+   "name": "festa_111101",
+   "kind": "None",
+   "contents": "Shooting",
+   "value": "fe_shooting_01",
+   "group": "Group_Light_Pang",
+   "map": 500030,
+   "entrance": "Direct",
+   "entrance_map": 1010,
+   "progress_s": 150,
+   "ready_s": 180,
+   "start_members": 0,
+   "title": "STR_CONTENTS_TITLE_FE_PANG"
+  },
+  {
+   "id": 111201,
+   "name": "festa_111201",
+   "kind": "None",
+   "contents": "PlatformerDilemma",
+   "value": "FE_Dilemma_Light",
+   "group": "Group_Light_Dilemma",
+   "map": 500034,
+   "entrance": "Direct",
+   "entrance_map": 500034,
+   "progress_s": 300,
+   "ready_s": 180,
+   "start_members": 3,
+   "title": "STR_CONTENTS_TITLE_FE_DILEMMA"
+  },
+  {
+   "id": 120101,
+   "name": "invasion_120101",
+   "kind": "Invasion",
+   "contents": "BossKill",
+   "value": "None",
+   "group": "Group_Light_Invasion",
+   "map": 500032,
+   "entrance": "Direct",
+   "entrance_map": 500032,
+   "progress_s": 600,
+   "ready_s": 180,
+   "start_members": 0,
+   "title": "STR_CONTENTS_TITLE_FE_INVASION"
+  },
+  {
+   "id": 120102,
+   "name": "invasion_120102",
+   "kind": "None",
+   "contents": "BossKill",
+   "value": "None",
+   "group": "Group_Light_Invasion",
+   "map": 500001,
+   "entrance": "Direct",
+   "entrance_map": 1010,
+   "progress_s": 600,
+   "ready_s": 180,
+   "start_members": 0,
+   "title": "STR_CONTENTS_TITLE_FE_INVASION"
+  },
+  {
+   "id": 120103,
+   "name": "invasion_120103",
+   "kind": "None",
+   "contents": "BossKill",
+   "value": "None",
+   "group": "Group_Light_Invasion",
+   "map": 500017,
+   "entrance": "Interact",
+   "entrance_map": 1010,
+   "progress_s": 600,
+   "ready_s": 180,
+   "start_members": 0,
+   "title": "STR_CONTENTS_TITLE_FE_INVASION"
+  },
+  {
+   "id": 120104,
+   "name": "invasion_120104",
+   "kind": "None",
+   "contents": "BossKill",
+   "value": "None",
+   "group": "Group_Light_Invasion",
+   "map": 500018,
+   "entrance": "Interact",
+   "entrance_map": 1010,
+   "progress_s": 600,
+   "ready_s": 180,
+   "start_members": 0,
+   "title": "STR_CONTENTS_TITLE_FE_INVASION"
+  },
+  {
+   "id": 120201,
+   "name": "invasion_120201",
+   "kind": "Invasion",
+   "contents": "BossKill",
+   "value": "None",
+   "group": "Group_Light_Invasion",
+   "map": 500031,
+   "entrance": "Direct",
+   "entrance_map": 500031,
+   "progress_s": 600,
+   "ready_s": 180,
+   "start_members": 0,
+   "title": "STR_CONTENTS_TITLE_FE_BROKENSWORD"
+  },
+  {
+   "id": 120202,
+   "name": "invasion_120202",
+   "kind": "None",
+   "contents": "BossKill",
+   "value": "None",
+   "group": "Group_Light_Invasion",
+   "map": 500002,
+   "entrance": "Interact",
+   "entrance_map": 1010,
+   "progress_s": 600,
+   "ready_s": 180,
+   "start_members": 0,
+   "title": "STR_CONTENTS_TITLE_FE_BROKENSWORD"
+  },
+  {
+   "id": 120203,
+   "name": "invasion_120203",
+   "kind": "None",
+   "contents": "BossKill",
+   "value": "None",
+   "group": "Group_Light_Invasion",
+   "map": 500019,
+   "entrance": "Interact",
+   "entrance_map": 1010,
+   "progress_s": 600,
+   "ready_s": 180,
+   "start_members": 0,
+   "title": "STR_CONTENTS_TITLE_FE_BROKENSWORD"
+  },
+  {
+   "id": 120204,
+   "name": "invasion_120204",
+   "kind": "None",
+   "contents": "BossKill",
+   "value": "None",
+   "group": "Group_Light_Invasion",
+   "map": 500020,
+   "entrance": "Interact",
+   "entrance_map": 1010,
+   "progress_s": 600,
+   "ready_s": 180,
+   "start_members": 0,
+   "title": "STR_CONTENTS_TITLE_FE_BROKENSWORD"
+  },
+  {
+   "id": 120301,
+   "name": "invasion_120301",
+   "kind": "Invasion",
+   "contents": "BossKill",
+   "value": "None",
+   "group": "Group_Light_Invasion",
+   "map": 500033,
+   "entrance": "Direct",
+   "entrance_map": 500033,
+   "progress_s": 600,
+   "ready_s": 180,
+   "start_members": 0,
+   "title": "STR_CONTENTS_TITLE_FE_SPIRIT"
+  },
+  {
+   "id": 120302,
+   "name": "invasion_120302",
+   "kind": "None",
+   "contents": "BossKill",
+   "value": "None",
+   "group": "Group_Light_Invasion",
+   "map": 500006,
+   "entrance": "Interact",
+   "entrance_map": 1010,
+   "progress_s": 600,
+   "ready_s": 180,
+   "start_members": 0,
+   "title": "STR_CONTENTS_TITLE_FE_SPIRIT"
+  },
+  {
+   "id": 120303,
+   "name": "invasion_120303",
+   "kind": "None",
+   "contents": "BossKill",
+   "value": "None",
+   "group": "Group_Light_Invasion",
+   "map": 500021,
+   "entrance": "Interact",
+   "entrance_map": 1010,
+   "progress_s": 600,
+   "ready_s": 180,
+   "start_members": 0,
+   "title": "STR_CONTENTS_TITLE_FE_SPIRIT"
+  },
+  {
+   "id": 120304,
+   "name": "invasion_120304",
+   "kind": "None",
+   "contents": "BossKill",
+   "value": "None",
+   "group": "Group_Light_Invasion",
+   "map": 500005,
+   "entrance": "Interact",
+   "entrance_map": 1010,
+   "progress_s": 600,
+   "ready_s": 180,
+   "start_members": 0,
+   "title": "STR_CONTENTS_TITLE_FE_SPIRIT"
+  },
+  {
+   "id": 210101,
+   "name": "festa_210101",
+   "kind": "ShugoFesta",
+   "contents": "GetContribution",
+   "value": "None",
+   "group": "Group_Dark_JumpJump",
+   "map": 510032,
+   "entrance": "Direct",
+   "entrance_map": 510032,
+   "progress_s": 175,
+   "ready_s": 180,
+   "start_members": 0,
+   "title": "STR_CONTENTS_TITLE_FE_JUMPJUMP"
+  },
+  {
+   "id": 210102,
+   "name": "festa_210102",
+   "kind": "None",
+   "contents": "GetContribution",
+   "value": "None",
+   "group": "Group_Dark_JumpJump",
+   "map": 510003,
+   "entrance": "Interact",
+   "entrance_map": 1110,
+   "progress_s": 240,
+   "ready_s": 180,
+   "start_members": 0,
+   "title": "STR_CONTENTS_TITLE_FE_JUMPJUMP"
+  },
+  {
+   "id": 210103,
+   "name": "festa_210103",
+   "kind": "None",
+   "contents": "GetContribution",
+   "value": "None",
+   "group": "Group_Dark_JumpJump",
+   "map": 510020,
+   "entrance": "Interact",
+   "entrance_map": 1110,
+   "progress_s": 175,
+   "ready_s": 180,
+   "start_members": 0,
+   "title": "STR_CONTENTS_TITLE_FE_JUMPJUMP"
+  },
+  {
+   "id": 210201,
+   "name": "festa_210201",
+   "kind": "ShugoFesta",
+   "contents": "GetContribution",
+   "value": "None",
+   "group": "Group_Dark_SpecterEvasion",
+   "map": 510035,
+   "entrance": "Direct",
+   "entrance_map": 510035,
+   "progress_s": 300,
+   "ready_s": 180,
+   "start_members": 0,
+   "title": "STR_CONTENTS_TITLE_FE_SPECTER"
+  },
+  {
+   "id": 210202,
+   "name": "festa_210202",
+   "kind": "None",
+   "contents": "GetContribution",
+   "value": "None",
+   "group": "Group_Dark_SpecterEvasion",
+   "map": 510005,
+   "entrance": "Interact",
+   "entrance_map": 1110,
+   "progress_s": 300,
+   "ready_s": 180,
+   "start_members": 0,
+   "title": "STR_CONTENTS_TITLE_FE_SPECTER"
+  },
+  {
+   "id": 210301,
+   "name": "festa_210301",
+   "kind": "ShugoFesta",
+   "contents": "Racing",
+   "value": "SF_Racing_01",
+   "group": "Group_Dark_Racing",
+   "map": 510034,
+   "entrance": "Direct",
+   "entrance_map": 510034,
+   "progress_s": 300,
+   "ready_s": 180,
+   "start_members": 0,
+   "title": "STR_CONTENTS_TITLE_FE_RACING"
+  },
+  {
+   "id": 210302,
+   "name": "festa_210302",
+   "kind": "None",
+   "contents": "Racing",
+   "value": "FE_Racing_D_A_01",
+   "group": "Group_Dark_Racing",
+   "map": 510006,
+   "entrance": "Interact",
+   "entrance_map": 1110,
+   "progress_s": 300,
+   "ready_s": 180,
+   "start_members": 0,
+   "title": "STR_CONTENTS_TITLE_FE_RACING"
+  },
+  {
+   "id": 210303,
+   "name": "festa_210303",
+   "kind": "None",
+   "contents": "Racing",
+   "value": "FE_Racing_D_A_02",
+   "group": "Group_Dark_Racing",
+   "map": 510019,
+   "entrance": "Interact",
+   "entrance_map": 1110,
+   "progress_s": 300,
+   "ready_s": 180,
+   "start_members": 0,
+   "title": "STR_CONTENTS_TITLE_FE_RACING"
+  },
+  {
+   "id": 210401,
+   "name": "festa_210401",
+   "kind": "ShugoFesta",
+   "contents": "Masquerade",
+   "value": "Masquerade_Dark",
+   "group": "Group_Dark_Masquerade",
+   "map": 510033,
+   "entrance": "Direct",
+   "entrance_map": 510033,
+   "progress_s": 210,
+   "ready_s": 180,
+   "start_members": 2,
+   "title": "STR_CONTENTS_TITLE_FE_LUGGI"
+  },
+  {
+   "id": 210403,
+   "name": "festa_210403",
+   "kind": "None",
+   "contents": "Masquerade",
+   "value": "Masquerade_Dark",
+   "group": "Group_Dark_Masquerade",
+   "map": 510004,
+   "entrance": "Interact",
+   "entrance_map": 1110,
+   "progress_s": 210,
+   "ready_s": 180,
+   "start_members": 2,
+   "title": "STR_CONTENTS_TITLE_FE_LUGGI"
+  },
+  {
+   "id": 210501,
+   "name": "festa_210501",
+   "kind": "ShugoFesta",
+   "contents": "GetContribution",
+   "value": "None",
+   "group": "Group_Dark_OdBubble",
+   "map": 510037,
+   "entrance": "Direct",
+   "entrance_map": 510037,
+   "progress_s": 210,
+   "ready_s": 180,
+   "start_members": 0,
+   "title": "STR_CONTENTS_TITLE_FE_ODBUBBLE"
+  },
+  {
+   "id": 210502,
+   "name": "festa_210502",
+   "kind": "None",
+   "contents": "GetContribution",
+   "value": "None",
+   "group": "Group_Dark_OdBubble",
+   "map": 510001,
+   "entrance": "Interact",
+   "entrance_map": 1110,
+   "progress_s": 210,
+   "ready_s": 180,
+   "start_members": 0,
+   "title": "STR_CONTENTS_TITLE_FE_ODBUBBLE"
+  },
+  {
+   "id": 210601,
+   "name": "festa_210601",
+   "kind": "ShugoFesta",
+   "contents": "GetContribution",
+   "value": "None",
+   "group": "Group_Dark_TreasureHunter",
+   "map": 510036,
+   "entrance": "Direct",
+   "entrance_map": 510036,
+   "progress_s": 230,
+   "ready_s": 180,
+   "start_members": 0,
+   "title": "STR_CONTENTS_TITLE_FE_TREASURE"
+  },
+  {
+   "id": 210602,
+   "name": "festa_210602",
+   "kind": "None",
+   "contents": "GetContribution",
+   "value": "None",
+   "group": "Group_Dark_TreasureHunter",
+   "map": 510007,
+   "entrance": "Interact",
+   "entrance_map": 1110,
+   "progress_s": 230,
+   "ready_s": 180,
+   "start_members": 0,
+   "title": "STR_CONTENTS_TITLE_FE_TREASURE"
+  },
+  {
+   "id": 210603,
+   "name": "festa_210603",
+   "kind": "None",
+   "contents": "GetContribution",
+   "value": "None",
+   "group": "Group_Dark_TreasureHunter",
+   "map": 510022,
+   "entrance": "Interact",
+   "entrance_map": 1110,
+   "progress_s": 230,
+   "ready_s": 180,
+   "start_members": 0,
+   "title": "STR_CONTENTS_TITLE_FE_TREASURE"
+  },
+  {
+   "id": 210701,
+   "name": "festa_210701",
+   "kind": "ShugoFesta",
+   "contents": "Defence",
+   "value": "None",
+   "group": "Group_Dark_Defence",
+   "map": 510038,
+   "entrance": "Direct",
+   "entrance_map": 510038,
+   "progress_s": 300,
+   "ready_s": 180,
+   "start_members": 0,
+   "title": "STR_CONTENTS_TITLE_FE_DEFENCE"
+  },
+  {
+   "id": 210702,
+   "name": "festa_210702",
+   "kind": "None",
+   "contents": "Defence",
+   "value": "None",
+   "group": "Group_Dark_Defence",
+   "map": 111005,
+   "entrance": "Interact",
+   "entrance_map": 1110,
+   "progress_s": 300,
+   "ready_s": 180,
+   "start_members": 0,
+   "title": "STR_CONTENTS_TITLE_FE_DEFENCE"
+  },
+  {
+   "id": 210703,
+   "name": "festa_210703",
+   "kind": "None",
+   "contents": "Defence",
+   "value": "None",
+   "group": "Group_Dark_Defence",
+   "map": 510021,
+   "entrance": "Interact",
+   "entrance_map": 1110,
+   "progress_s": 300,
+   "ready_s": 180,
+   "start_members": 0,
+   "title": "STR_CONTENTS_TITLE_FE_DEFENCE"
+  },
+  {
+   "id": 210801,
+   "name": "festa_210801",
+   "kind": "ShugoFesta",
+   "contents": "Platformer",
+   "value": "SF_Platformer_D_01",
+   "group": "Group_Dark_HighHigh",
+   "map": 510030,
+   "entrance": "Direct",
+   "entrance_map": 510030,
+   "progress_s": 300,
+   "ready_s": 180,
+   "start_members": 0,
+   "title": "STR_CONTENTS_TITLE_FE_HIGHHIGH"
+  },
+  {
+   "id": 210802,
+   "name": "festa_210802",
+   "kind": "None",
+   "contents": "Platformer",
+   "value": "FE_Platformer_D_A_01",
+   "group": "Group_Dark_HighHigh",
+   "map": 510010,
+   "entrance": "Interact",
+   "entrance_map": 1110,
+   "progress_s": 300,
+   "ready_s": 180,
+   "start_members": 0,
+   "title": "STR_CONTENTS_TITLE_FE_HIGHHIGH"
+  },
+  {
+   "id": 210803,
+   "name": "festa_210803",
+   "kind": "None",
+   "contents": "Platformer",
+   "value": "FE_Platformer_D_A_02",
+   "group": "Group_Dark_HighHigh",
+   "map": 510018,
+   "entrance": "Interact",
+   "entrance_map": 1110,
+   "progress_s": 300,
+   "ready_s": 180,
+   "start_members": 0,
+   "title": "STR_CONTENTS_TITLE_FE_HIGHHIGH"
+  },
+  {
+   "id": 210901,
+   "name": "festa_210901",
+   "kind": "ShugoFesta",
+   "contents": "TrapBoard",
+   "value": "SF_Trapboard_Dark",
+   "group": "Group_Dark_TrapBoard",
+   "map": 510031,
+   "entrance": "Direct",
+   "entrance_map": 510031,
+   "progress_s": 195,
+   "ready_s": 180,
+   "start_members": 0,
+   "title": "STR_CONTENTS_TITLE_FE_TRAPBOARD"
+  },
+  {
+   "id": 210902,
+   "name": "festa_210902",
+   "kind": "None",
+   "contents": "TrapBoard",
+   "value": "FE_Trapboard_Dark",
+   "group": "Group_Dark_TrapBoard",
+   "map": 510024,
+   "entrance": "Interact",
+   "entrance_map": 1110,
+   "progress_s": 195,
+   "ready_s": 180,
+   "start_members": 0,
+   "title": "STR_CONTENTS_TITLE_FE_TRAPBOARD"
+  },
+  {
+   "id": 210903,
+   "name": "festa_210903",
+   "kind": "None",
+   "contents": "TrapBoard",
+   "value": "FE_Trapboard_Dark",
+   "group": "Group_Dark_TrapBoard",
+   "map": 510012,
+   "entrance": "Interact",
+   "entrance_map": 1110,
+   "progress_s": 195,
+   "ready_s": 180,
+   "start_members": 0,
+   "title": "STR_CONTENTS_TITLE_FE_TRAPBOARD"
+  },
+  {
+   "id": 211001,
+   "name": "festa_211001",
+   "kind": "None",
+   "contents": "Shooting",
+   "value": "fe_shooting_02",
+   "group": "Group_Dark_Pang",
+   "map": 510025,
+   "entrance": "Direct",
+   "entrance_map": 1110,
+   "progress_s": 150,
+   "ready_s": 180,
+   "start_members": 0,
+   "title": "STR_CONTENTS_TITLE_FE_PANG"
+  },
+  {
+   "id": 211201,
+   "name": "festa_211201",
+   "kind": "None",
+   "contents": "PlatformerDilemma",
+   "value": "FE_Dilemma_Dark",
+   "group": "Group_Dark_Dilemma",
+   "map": 510029,
+   "entrance": "Direct",
+   "entrance_map": 510029,
+   "progress_s": 300,
+   "ready_s": 180,
+   "start_members": 3,
+   "title": "STR_CONTENTS_TITLE_FE_DILEMMA"
+  },
+  {
+   "id": 220101,
+   "name": "invasion_220101",
+   "kind": "Invasion",
+   "contents": "BossKill",
+   "value": "None",
+   "group": "Group_Dark_Invasion",
+   "map": 510027,
+   "entrance": "Direct",
+   "entrance_map": 510027,
+   "progress_s": 600,
+   "ready_s": 180,
+   "start_members": 0,
+   "title": "STR_CONTENTS_TITLE_FE_INVASION"
+  },
+  {
+   "id": 220102,
+   "name": "invasion_220102",
+   "kind": "None",
+   "contents": "BossKill",
+   "value": "None",
+   "group": "Group_Dark_Invasion",
+   "map": 510002,
+   "entrance": "Interact",
+   "entrance_map": 1110,
+   "progress_s": 600,
+   "ready_s": 180,
+   "start_members": 0,
+   "title": "STR_CONTENTS_TITLE_FE_INVASION"
+  },
+  {
+   "id": 220103,
+   "name": "invasion_220103",
+   "kind": "None",
+   "contents": "BossKill",
+   "value": "None",
+   "group": "Group_Dark_Invasion",
+   "map": 510008,
+   "entrance": "Interact",
+   "entrance_map": 1110,
+   "progress_s": 600,
+   "ready_s": 180,
+   "start_members": 0,
+   "title": "STR_CONTENTS_TITLE_FE_INVASION"
+  },
+  {
+   "id": 220104,
+   "name": "invasion_220104",
+   "kind": "None",
+   "contents": "BossKill",
+   "value": "None",
+   "group": "Group_Dark_Invasion",
+   "map": 510009,
+   "entrance": "Interact",
+   "entrance_map": 1110,
+   "progress_s": 600,
+   "ready_s": 180,
+   "start_members": 0,
+   "title": "STR_CONTENTS_TITLE_FE_INVASION"
+  },
+  {
+   "id": 220201,
+   "name": "invasion_220201",
+   "kind": "Invasion",
+   "contents": "BossKill",
+   "value": "None",
+   "group": "Group_Dark_Invasion",
+   "map": 510026,
+   "entrance": "Direct",
+   "entrance_map": 510026,
+   "progress_s": 600,
+   "ready_s": 180,
+   "start_members": 0,
+   "title": "STR_CONTENTS_TITLE_FE_BROKENSWORD"
+  },
+  {
+   "id": 220202,
+   "name": "invasion_220202",
+   "kind": "None",
+   "contents": "BossKill",
+   "value": "None",
+   "group": "Group_Dark_Invasion",
+   "map": 502001,
+   "entrance": "Interact",
+   "entrance_map": 1110,
+   "progress_s": 600,
+   "ready_s": 180,
+   "start_members": 0,
+   "title": "STR_CONTENTS_TITLE_FE_BROKENSWORD"
+  },
+  {
+   "id": 220203,
+   "name": "invasion_220203",
+   "kind": "None",
+   "contents": "BossKill",
+   "value": "None",
+   "group": "Group_Dark_Invasion",
+   "map": 510013,
+   "entrance": "Interact",
+   "entrance_map": 1110,
+   "progress_s": 600,
+   "ready_s": 180,
+   "start_members": 0,
+   "title": "STR_CONTENTS_TITLE_FE_BROKENSWORD"
+  },
+  {
+   "id": 220204,
+   "name": "invasion_220204",
+   "kind": "None",
+   "contents": "BossKill",
+   "value": "None",
+   "group": "Group_Dark_Invasion",
+   "map": 510014,
+   "entrance": "Interact",
+   "entrance_map": 1110,
+   "progress_s": 600,
+   "ready_s": 180,
+   "start_members": 0,
+   "title": "STR_CONTENTS_TITLE_FE_BROKENSWORD"
+  },
+  {
+   "id": 220301,
+   "name": "invasion_220301",
+   "kind": "Invasion",
+   "contents": "BossKill",
+   "value": "None",
+   "group": "Group_Dark_Invasion",
+   "map": 510028,
+   "entrance": "Direct",
+   "entrance_map": 510028,
+   "progress_s": 600,
+   "ready_s": 180,
+   "start_members": 0,
+   "title": "STR_CONTENTS_TITLE_FE_SPIRIT"
+  },
+  {
+   "id": 220302,
+   "name": "invasion_220302",
+   "kind": "None",
+   "contents": "BossKill",
+   "value": "None",
+   "group": "Group_Dark_Invasion",
+   "map": 510015,
+   "entrance": "Interact",
+   "entrance_map": 1110,
+   "progress_s": 600,
+   "ready_s": 180,
+   "start_members": 0,
+   "title": "STR_CONTENTS_TITLE_FE_SPIRIT"
+  },
+  {
+   "id": 220303,
+   "name": "invasion_220303",
+   "kind": "None",
+   "contents": "BossKill",
+   "value": "None",
+   "group": "Group_Dark_Invasion",
+   "map": 111002,
+   "entrance": "Interact",
+   "entrance_map": 1110,
+   "progress_s": 600,
+   "ready_s": 180,
+   "start_members": 0,
+   "title": "STR_CONTENTS_TITLE_FE_SPIRIT"
+  },
+  {
+   "id": 220304,
+   "name": "invasion_220304",
+   "kind": "None",
+   "contents": "BossKill",
+   "value": "None",
+   "group": "Group_Dark_Invasion",
+   "map": 111003,
+   "entrance": "Interact",
+   "entrance_map": 1110,
+   "progress_s": 600,
+   "ready_s": 180,
+   "start_members": 0,
+   "title": "STR_CONTENTS_TITLE_FE_SPIRIT"
+  }
+ ],
+ "event_schedules": [
+  {
+   "id": 1001,
+   "days": [
+    "Sunday",
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday"
+   ],
+   "times_ms": [
+    1800000,
+    5400000,
+    9000000,
+    12600000,
+    16200000,
+    19800000,
+    23400000,
+    27000000,
+    30600000,
+    34200000,
+    37800000,
+    41400000,
+    45000000,
+    48600000,
+    52200000,
+    55800000,
+    59400000,
+    63000000,
+    66600000,
+    70200000,
+    73800000,
+    77400000,
+    81000000,
+    84600000
+   ],
+   "events": [
+    {
+     "category": "FieldEvent",
+     "key": "Group_Light_Invasion"
+    }
+   ]
+  },
+  {
+   "id": 1101,
+   "days": [
+    "Sunday",
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday"
+   ],
+   "times_ms": [
+    0,
+    3600000,
+    7200000,
+    10800000,
+    14400000,
+    18000000,
+    21600000,
+    25200000,
+    28800000,
+    32400000,
+    36000000,
+    39600000,
+    43200000,
+    46800000,
+    50400000,
+    54000000,
+    57600000,
+    61200000,
+    64800000,
+    68400000,
+    72000000,
+    75600000,
+    79200000,
+    82800000
+   ],
+   "events": [
+    {
+     "category": "FieldEvent",
+     "key": "Group_Light_JumpJump"
+    }
+   ]
+  },
+  {
+   "id": 1102,
+   "days": [
+    "Sunday",
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday"
+   ],
+   "times_ms": [
+    0,
+    3600000,
+    7200000,
+    10800000,
+    14400000,
+    18000000,
+    21600000,
+    25200000,
+    28800000,
+    32400000,
+    36000000,
+    39600000,
+    43200000,
+    46800000,
+    50400000,
+    54000000,
+    57600000,
+    61200000,
+    64800000,
+    68400000,
+    72000000,
+    75600000,
+    79200000,
+    82800000
+   ],
+   "events": [
+    {
+     "category": "FieldEvent",
+     "key": "Group_Light_SpecterEvasion"
+    }
+   ]
+  },
+  {
+   "id": 1103,
+   "days": [
+    "Sunday",
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday"
+   ],
+   "times_ms": [
+    0,
+    3600000,
+    7200000,
+    10800000,
+    14400000,
+    18000000,
+    21600000,
+    25200000,
+    28800000,
+    32400000,
+    36000000,
+    39600000,
+    43200000,
+    46800000,
+    50400000,
+    54000000,
+    57600000,
+    61200000,
+    64800000,
+    68400000,
+    72000000,
+    75600000,
+    79200000,
+    82800000
+   ],
+   "events": [
+    {
+     "category": "FieldEvent",
+     "key": "Group_Light_Racing"
+    }
+   ]
+  },
+  {
+   "id": 1104,
+   "days": [
+    "Sunday",
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday"
+   ],
+   "times_ms": [
+    0,
+    3600000,
+    7200000,
+    10800000,
+    14400000,
+    18000000,
+    21600000,
+    25200000,
+    28800000,
+    32400000,
+    36000000,
+    39600000,
+    43200000,
+    46800000,
+    50400000,
+    54000000,
+    57600000,
+    61200000,
+    64800000,
+    68400000,
+    72000000,
+    75600000,
+    79200000,
+    82800000
+   ],
+   "events": [
+    {
+     "category": "FieldEvent",
+     "key": "Group_Light_Masquerade"
+    }
+   ]
+  },
+  {
+   "id": 1105,
+   "days": [
+    "Sunday",
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday"
+   ],
+   "times_ms": [
+    0,
+    3600000,
+    7200000,
+    10800000,
+    14400000,
+    18000000,
+    21600000,
+    25200000,
+    28800000,
+    32400000,
+    36000000,
+    39600000,
+    43200000,
+    46800000,
+    50400000,
+    54000000,
+    57600000,
+    61200000,
+    64800000,
+    68400000,
+    72000000,
+    75600000,
+    79200000,
+    82800000
+   ],
+   "events": [
+    {
+     "category": "FieldEvent",
+     "key": "Group_Light_OdBubble"
+    }
+   ]
+  },
+  {
+   "id": 1106,
+   "days": [
+    "Sunday",
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday"
+   ],
+   "times_ms": [
+    0,
+    3600000,
+    7200000,
+    10800000,
+    14400000,
+    18000000,
+    21600000,
+    25200000,
+    28800000,
+    32400000,
+    36000000,
+    39600000,
+    43200000,
+    46800000,
+    50400000,
+    54000000,
+    57600000,
+    61200000,
+    64800000,
+    68400000,
+    72000000,
+    75600000,
+    79200000,
+    82800000
+   ],
+   "events": [
+    {
+     "category": "FieldEvent",
+     "key": "Group_Light_TreasureHunter"
+    }
+   ]
+  },
+  {
+   "id": 1107,
+   "days": [
+    "Sunday",
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday"
+   ],
+   "times_ms": [
+    0,
+    3600000,
+    7200000,
+    10800000,
+    14400000,
+    18000000,
+    21600000,
+    25200000,
+    28800000,
+    32400000,
+    36000000,
+    39600000,
+    43200000,
+    46800000,
+    50400000,
+    54000000,
+    57600000,
+    61200000,
+    64800000,
+    68400000,
+    72000000,
+    75600000,
+    79200000,
+    82800000
+   ],
+   "events": [
+    {
+     "category": "FieldEvent",
+     "key": "Group_Light_Defence"
+    }
+   ]
+  },
+  {
+   "id": 1108,
+   "days": [
+    "Sunday",
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday"
+   ],
+   "times_ms": [
+    0,
+    3600000,
+    7200000,
+    10800000,
+    14400000,
+    18000000,
+    21600000,
+    25200000,
+    28800000,
+    32400000,
+    36000000,
+    39600000,
+    43200000,
+    46800000,
+    50400000,
+    54000000,
+    57600000,
+    61200000,
+    64800000,
+    68400000,
+    72000000,
+    75600000,
+    79200000,
+    82800000
+   ],
+   "events": [
+    {
+     "category": "FieldEvent",
+     "key": "Group_Light_HighHigh"
+    }
+   ]
+  },
+  {
+   "id": 1109,
+   "days": [
+    "Sunday",
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday"
+   ],
+   "times_ms": [
+    0,
+    3600000,
+    7200000,
+    10800000,
+    14400000,
+    18000000,
+    21600000,
+    25200000,
+    28800000,
+    32400000,
+    36000000,
+    39600000,
+    43200000,
+    46800000,
+    50400000,
+    54000000,
+    57600000,
+    61200000,
+    64800000,
+    68400000,
+    72000000,
+    75600000,
+    79200000,
+    82800000
+   ],
+   "events": [
+    {
+     "category": "FieldEvent",
+     "key": "Group_Light_TrapBoard"
+    }
+   ]
+  },
+  {
+   "id": 1110,
+   "days": [
+    "Sunday",
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday"
+   ],
+   "times_ms": [
+    0,
+    3600000,
+    7200000,
+    10800000,
+    14400000,
+    18000000,
+    21600000,
+    25200000,
+    28800000,
+    32400000,
+    36000000,
+    39600000,
+    43200000,
+    46800000,
+    50400000,
+    54000000,
+    57600000,
+    61200000,
+    64800000,
+    68400000,
+    72000000,
+    75600000,
+    79200000,
+    82800000
+   ],
+   "events": [
+    {
+     "category": "FieldEvent",
+     "key": "Group_Light_Pang"
+    }
+   ]
+  },
+  {
+   "id": 1111,
+   "days": [
+    "Sunday",
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday"
+   ],
+   "times_ms": [
+    0,
+    3600000,
+    7200000,
+    10800000,
+    14400000,
+    18000000,
+    21600000,
+    25200000,
+    28800000,
+    32400000,
+    36000000,
+    39600000,
+    43200000,
+    46800000,
+    50400000,
+    54000000,
+    57600000,
+    61200000,
+    64800000,
+    68400000,
+    72000000,
+    75600000,
+    79200000,
+    82800000
+   ],
+   "events": [
+    {
+     "category": "FieldEvent",
+     "key": "Group_Light_Dilemma"
+    }
+   ]
+  },
+  {
+   "id": 2001,
+   "days": [
+    "Sunday",
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday"
+   ],
+   "times_ms": [
+    1800000,
+    5400000,
+    9000000,
+    12600000,
+    16200000,
+    19800000,
+    23400000,
+    27000000,
+    30600000,
+    34200000,
+    37800000,
+    41400000,
+    45000000,
+    48600000,
+    52200000,
+    55800000,
+    59400000,
+    63000000,
+    66600000,
+    70200000,
+    73800000,
+    77400000,
+    81000000,
+    84600000
+   ],
+   "events": [
+    {
+     "category": "FieldEvent",
+     "key": "Group_Dark_Invasion"
+    }
+   ]
+  },
+  {
+   "id": 2101,
+   "days": [
+    "Sunday",
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday"
+   ],
+   "times_ms": [
+    0,
+    3600000,
+    7200000,
+    10800000,
+    14400000,
+    18000000,
+    21600000,
+    25200000,
+    28800000,
+    32400000,
+    36000000,
+    39600000,
+    43200000,
+    46800000,
+    50400000,
+    54000000,
+    57600000,
+    61200000,
+    64800000,
+    68400000,
+    72000000,
+    75600000,
+    79200000,
+    82800000
+   ],
+   "events": [
+    {
+     "category": "FieldEvent",
+     "key": "Group_Dark_JumpJump"
+    }
+   ]
+  },
+  {
+   "id": 2102,
+   "days": [
+    "Sunday",
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday"
+   ],
+   "times_ms": [
+    0,
+    3600000,
+    7200000,
+    10800000,
+    14400000,
+    18000000,
+    21600000,
+    25200000,
+    28800000,
+    32400000,
+    36000000,
+    39600000,
+    43200000,
+    46800000,
+    50400000,
+    54000000,
+    57600000,
+    61200000,
+    64800000,
+    68400000,
+    72000000,
+    75600000,
+    79200000,
+    82800000
+   ],
+   "events": [
+    {
+     "category": "FieldEvent",
+     "key": "Group_Dark_SpecterEvasion"
+    }
+   ]
+  },
+  {
+   "id": 2103,
+   "days": [
+    "Sunday",
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday"
+   ],
+   "times_ms": [
+    0,
+    3600000,
+    7200000,
+    10800000,
+    14400000,
+    18000000,
+    21600000,
+    25200000,
+    28800000,
+    32400000,
+    36000000,
+    39600000,
+    43200000,
+    46800000,
+    50400000,
+    54000000,
+    57600000,
+    61200000,
+    64800000,
+    68400000,
+    72000000,
+    75600000,
+    79200000,
+    82800000
+   ],
+   "events": [
+    {
+     "category": "FieldEvent",
+     "key": "Group_Dark_Racing"
+    }
+   ]
+  },
+  {
+   "id": 2104,
+   "days": [
+    "Sunday",
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday"
+   ],
+   "times_ms": [
+    0,
+    3600000,
+    7200000,
+    10800000,
+    14400000,
+    18000000,
+    21600000,
+    25200000,
+    28800000,
+    32400000,
+    36000000,
+    39600000,
+    43200000,
+    46800000,
+    50400000,
+    54000000,
+    57600000,
+    61200000,
+    64800000,
+    68400000,
+    72000000,
+    75600000,
+    79200000,
+    82800000
+   ],
+   "events": [
+    {
+     "category": "FieldEvent",
+     "key": "Group_Dark_Masquerade"
+    }
+   ]
+  },
+  {
+   "id": 2105,
+   "days": [
+    "Sunday",
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday"
+   ],
+   "times_ms": [
+    0,
+    3600000,
+    7200000,
+    10800000,
+    14400000,
+    18000000,
+    21600000,
+    25200000,
+    28800000,
+    32400000,
+    36000000,
+    39600000,
+    43200000,
+    46800000,
+    50400000,
+    54000000,
+    57600000,
+    61200000,
+    64800000,
+    68400000,
+    72000000,
+    75600000,
+    79200000,
+    82800000
+   ],
+   "events": [
+    {
+     "category": "FieldEvent",
+     "key": "Group_Dark_OdBubble"
+    }
+   ]
+  },
+  {
+   "id": 2106,
+   "days": [
+    "Sunday",
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday"
+   ],
+   "times_ms": [
+    0,
+    3600000,
+    7200000,
+    10800000,
+    14400000,
+    18000000,
+    21600000,
+    25200000,
+    28800000,
+    32400000,
+    36000000,
+    39600000,
+    43200000,
+    46800000,
+    50400000,
+    54000000,
+    57600000,
+    61200000,
+    64800000,
+    68400000,
+    72000000,
+    75600000,
+    79200000,
+    82800000
+   ],
+   "events": [
+    {
+     "category": "FieldEvent",
+     "key": "Group_Dark_TreasureHunter"
+    }
+   ]
+  },
+  {
+   "id": 2107,
+   "days": [
+    "Sunday",
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday"
+   ],
+   "times_ms": [
+    0,
+    3600000,
+    7200000,
+    10800000,
+    14400000,
+    18000000,
+    21600000,
+    25200000,
+    28800000,
+    32400000,
+    36000000,
+    39600000,
+    43200000,
+    46800000,
+    50400000,
+    54000000,
+    57600000,
+    61200000,
+    64800000,
+    68400000,
+    72000000,
+    75600000,
+    79200000,
+    82800000
+   ],
+   "events": [
+    {
+     "category": "FieldEvent",
+     "key": "Group_Dark_Defence"
+    }
+   ]
+  },
+  {
+   "id": 2108,
+   "days": [
+    "Sunday",
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday"
+   ],
+   "times_ms": [
+    0,
+    3600000,
+    7200000,
+    10800000,
+    14400000,
+    18000000,
+    21600000,
+    25200000,
+    28800000,
+    32400000,
+    36000000,
+    39600000,
+    43200000,
+    46800000,
+    50400000,
+    54000000,
+    57600000,
+    61200000,
+    64800000,
+    68400000,
+    72000000,
+    75600000,
+    79200000,
+    82800000
+   ],
+   "events": [
+    {
+     "category": "FieldEvent",
+     "key": "Group_Dark_HighHigh"
+    }
+   ]
+  },
+  {
+   "id": 2109,
+   "days": [
+    "Sunday",
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday"
+   ],
+   "times_ms": [
+    0,
+    3600000,
+    7200000,
+    10800000,
+    14400000,
+    18000000,
+    21600000,
+    25200000,
+    28800000,
+    32400000,
+    36000000,
+    39600000,
+    43200000,
+    46800000,
+    50400000,
+    54000000,
+    57600000,
+    61200000,
+    64800000,
+    68400000,
+    72000000,
+    75600000,
+    79200000,
+    82800000
+   ],
+   "events": [
+    {
+     "category": "FieldEvent",
+     "key": "Group_Dark_TrapBoard"
+    }
+   ]
+  },
+  {
+   "id": 2110,
+   "days": [
+    "Sunday",
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday"
+   ],
+   "times_ms": [
+    0,
+    3600000,
+    7200000,
+    10800000,
+    14400000,
+    18000000,
+    21600000,
+    25200000,
+    28800000,
+    32400000,
+    36000000,
+    39600000,
+    43200000,
+    46800000,
+    50400000,
+    54000000,
+    57600000,
+    61200000,
+    64800000,
+    68400000,
+    72000000,
+    75600000,
+    79200000,
+    82800000
+   ],
+   "events": [
+    {
+     "category": "FieldEvent",
+     "key": "Group_Dark_Pang"
+    }
+   ]
+  },
+  {
+   "id": 2111,
+   "days": [
+    "Sunday",
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday"
+   ],
+   "times_ms": [
+    0,
+    3600000,
+    7200000,
+    10800000,
+    14400000,
+    18000000,
+    21600000,
+    25200000,
+    28800000,
+    32400000,
+    36000000,
+    39600000,
+    43200000,
+    46800000,
+    50400000,
+    54000000,
+    57600000,
+    61200000,
+    64800000,
+    68400000,
+    72000000,
+    75600000,
+    79200000,
+    82800000
+   ],
+   "events": [
+    {
+     "category": "FieldEvent",
+     "key": "Group_Dark_Dilemma"
+    }
+   ]
+  },
+  {
+   "id": 3001,
+   "days": [
+    "Monday",
+    "Thursday",
+    "Saturday"
+   ],
+   "times_ms": [
+    75600000
+   ],
+   "events": [
+    {
+     "category": "AbyssEvent",
+     "key": "abyss_ar1_artifactwar"
+    }
+   ]
+  }
+ ],
+ "abyss_artifacts": [
+  {
+   "id": 1001,
+   "name": "ar1_artifact_001",
+   "event": "abyss_ar1_artifactwar",
+   "teleport": "TeleportAbysscore_AR1_L_ARR_01",
+   "cost_item": "Teleport_Home_A_c_01a_b",
+   "cost_count": 1
+  },
+  {
+   "id": 1002,
+   "name": "ar1_artifact_002",
+   "event": "abyss_ar1_artifactwar",
+   "teleport": "TeleportAbysscore_AR1_L_STI_01",
+   "cost_item": "Teleport_Home_A_c_01a_b",
+   "cost_count": 1
+  },
+  {
+   "id": 1003,
+   "name": "ar1_artifact_003",
+   "event": "abyss_ar1_artifactwar",
+   "teleport": "TeleportAbysscore_AR1_L_WSA_01",
+   "cost_item": "Teleport_Home_A_c_01a_b",
+   "cost_count": 1
+  },
+  {
+   "id": 2001,
+   "name": "ar2_artifact_001",
+   "event": "abyss_ar2_artifactwar",
+   "teleport": "TeleportAbyssCore_AR3_RR_01",
+   "cost_item": "Teleport_Home_A_c_01a_b",
+   "cost_count": 1
+  },
+  {
+   "id": 2002,
+   "name": "ar2_artifact_002",
+   "event": "abyss_ar2_artifactwar",
+   "teleport": "TeleportAbyssCore_AR3_STI_01",
+   "cost_item": "Teleport_Home_A_c_01a_b",
+   "cost_count": 1
+  },
+  {
+   "id": 2003,
+   "name": "ar2_artifact_003",
+   "event": "abyss_ar2_artifactwar",
+   "teleport": "TeleportAbyssCore_AR3_WSA_01",
+   "cost_item": "Teleport_Home_A_c_01a_b",
+   "cost_count": 1
+  }
+ ],
+ "abyss_events": [
+  {
+   "id": 1001,
+   "name": "abyss_ar1_artifactwar",
+   "map": 20,
+   "pre_end_s": 600
+  },
+  {
+   "id": 2001,
+   "name": "abyss_ar2_artifactwar",
+   "map": 22,
+   "pre_end_s": 600
+  }
+ ],
+ "rifts": [
+  {
+   "id": 5000001,
+   "map": 1110,
+   "min_level": 1,
+   "max_level": 100,
+   "life_s": 30,
+   "costs": []
+  },
+  {
+   "id": 5000002,
+   "map": 1010,
+   "min_level": 1,
+   "max_level": 100,
+   "life_s": 6000,
+   "costs": []
+  },
+  {
+   "id": 5000003,
+   "map": 4,
+   "min_level": 1,
+   "max_level": 100,
+   "life_s": 6000,
+   "costs": []
+  },
+  {
+   "id": 5000004,
+   "map": 1110,
+   "min_level": 20,
+   "max_level": 100,
+   "life_s": 3600,
+   "costs": [
+    {
+     "item": "GoldCombined",
+     "count": 100
+    }
+   ]
+  },
+  {
+   "id": 5000010,
+   "map": 1010,
+   "min_level": 45,
+   "max_level": 100,
+   "life_s": 600,
+   "costs": []
+  },
+  {
+   "id": 5000011,
+   "map": 1110,
+   "min_level": 45,
+   "max_level": 100,
+   "life_s": 600,
+   "costs": []
+  },
+  {
+   "id": 5000012,
+   "map": 1010,
+   "min_level": 45,
+   "max_level": 100,
+   "life_s": 600,
+   "costs": []
+  },
+  {
+   "id": 5000013,
+   "map": 1110,
+   "min_level": 45,
+   "max_level": 100,
+   "life_s": 600,
+   "costs": []
+  },
+  {
+   "id": 5000014,
+   "map": 1010,
+   "min_level": 45,
+   "max_level": 100,
+   "life_s": 600,
+   "costs": []
+  },
+  {
+   "id": 5000015,
+   "map": 1110,
+   "min_level": 45,
+   "max_level": 100,
+   "life_s": 600,
+   "costs": []
+  },
+  {
+   "id": 5000016,
+   "map": 1010,
+   "min_level": 45,
+   "max_level": 100,
+   "life_s": 600,
+   "costs": []
+  },
+  {
+   "id": 5000017,
+   "map": 1110,
+   "min_level": 45,
+   "max_level": 100,
+   "life_s": 600,
+   "costs": []
+  },
+  {
+   "id": 5000018,
+   "map": 1011,
+   "min_level": 45,
+   "max_level": 100,
+   "life_s": 600,
+   "costs": []
+  },
+  {
+   "id": 5000019,
+   "map": 1111,
+   "min_level": 45,
+   "max_level": 100,
+   "life_s": 600,
+   "costs": []
+  },
+  {
+   "id": 5000020,
+   "map": 1011,
+   "min_level": 45,
+   "max_level": 100,
+   "life_s": 600,
+   "costs": []
+  },
+  {
+   "id": 5000021,
+   "map": 1111,
+   "min_level": 45,
+   "max_level": 100,
+   "life_s": 600,
+   "costs": []
+  }
+ ],
+ "season_ranking": [
+  {
+   "id": 1,
+   "contents": "BossChallenge",
+   "min_point": 1,
+   "update_s": 60
+  },
+  {
+   "id": 2,
+   "contents": "PartyChallenge",
+   "min_point": 1,
+   "update_s": 60
+  },
+  {
+   "id": 3,
+   "contents": "Abyss",
+   "min_point": 1500,
+   "update_s": 60
+  },
+  {
+   "id": 4,
+   "contents": "ArenaSingle",
+   "min_point": 1,
+   "update_s": 60
+  },
+  {
+   "id": 5,
+   "contents": "ArenaTeam",
+   "min_point": 1,
+   "update_s": 60
+  },
+  {
+   "id": 6,
+   "contents": "Awaken",
+   "min_point": 1,
+   "update_s": 60
+  },
+  {
+   "id": 7,
+   "contents": "Conqueror",
+   "min_point": 1,
+   "update_s": 60
+  },
+  {
+   "id": 8,
+   "contents": "Suppression",
+   "min_point": 1,
+   "update_s": 60
+  }
+ ],
+ "posts": [
+  {
+   "id": 3,
+   "contents": "MonsterCube_PartyDungeon",
+   "tab": "Reward",
+   "params": []
+  },
+  {
+   "id": 4,
+   "contents": "MonsterCube_PartyDungeon",
+   "tab": "Reward",
+   "params": []
+  },
+  {
+   "id": 5,
+   "contents": "MonsterCube_PartyDungeon",
+   "tab": "Reward",
+   "params": []
+  },
+  {
+   "id": 16,
+   "contents": "Dungeon",
+   "tab": "Reward",
+   "params": []
+  },
+  {
+   "id": 17,
+   "contents": "None",
+   "tab": "System",
+   "params": [
+    "subzone"
+   ]
+  },
+  {
+   "id": 18,
+   "contents": "None",
+   "tab": "Reward",
+   "params": []
+  },
+  {
+   "id": 19,
+   "contents": "MonsterCube_PartyDungeon",
+   "tab": "Reward",
+   "params": [
+    "Dungeon",
+    "num"
+   ]
+  },
+  {
+   "id": 20,
+   "contents": "MonsterCube_FieldEvent",
+   "tab": "Reward",
+   "params": [
+    "FieldEvent",
+    "num"
+   ]
+  },
+  {
+   "id": 25,
+   "contents": "None",
+   "tab": "Reward",
+   "params": []
+  },
+  {
+   "id": 26,
+   "contents": "None",
+   "tab": "Reward",
+   "params": []
+  },
+  {
+   "id": 30,
+   "contents": "None",
+   "tab": "Reward",
+   "params": []
+  },
+  {
+   "id": 31,
+   "contents": "None",
+   "tab": "System",
+   "params": []
+  },
+  {
+   "id": 32,
+   "contents": "None",
+   "tab": "System",
+   "params": []
+  },
+  {
+   "id": 33,
+   "contents": "None",
+   "tab": "Reward",
+   "params": []
+  },
+  {
+   "id": 101,
+   "contents": "None",
+   "tab": "System",
+   "params": []
+  },
+  {
+   "id": 102,
+   "contents": "None",
+   "tab": "System",
+   "params": []
+  },
+  {
+   "id": 103,
+   "contents": "None",
+   "tab": "System",
+   "params": []
+  },
+  {
+   "id": 104,
+   "contents": "None",
+   "tab": "System",
+   "params": []
+  },
+  {
+   "id": 105,
+   "contents": "None",
+   "tab": "System",
+   "params": []
+  },
+  {
+   "id": 106,
+   "contents": "None",
+   "tab": "System",
+   "params": []
+  },
+  {
+   "id": 107,
+   "contents": "None",
+   "tab": "System",
+   "params": []
+  },
+  {
+   "id": 108,
+   "contents": "None",
+   "tab": "System",
+   "params": []
+  },
+  {
+   "id": 109,
+   "contents": "None",
+   "tab": "System",
+   "params": []
+  },
+  {
+   "id": 110,
+   "contents": "None",
+   "tab": "System",
+   "params": []
+  },
+  {
+   "id": 111,
+   "contents": "None",
+   "tab": "System",
+   "params": []
+  },
+  {
+   "id": 10110101,
+   "contents": "MonsterCube_FieldEvent",
+   "tab": "Reward",
+   "params": []
+  },
+  {
+   "id": 10110201,
+   "contents": "MonsterCube_FieldEvent",
+   "tab": "Reward",
+   "params": []
+  },
+  {
+   "id": 10110301,
+   "contents": "MonsterCube_FieldEvent",
+   "tab": "Reward",
+   "params": []
+  },
+  {
+   "id": 10110401,
+   "contents": "MonsterCube_FieldEvent",
+   "tab": "Reward",
+   "params": []
+  },
+  {
+   "id": 10110501,
+   "contents": "MonsterCube_FieldEvent",
+   "tab": "Reward",
+   "params": []
+  },
+  {
+   "id": 10110601,
+   "contents": "MonsterCube_FieldEvent",
+   "tab": "Reward",
+   "params": []
+  },
+  {
+   "id": 10110701,
+   "contents": "MonsterCube_FieldEvent",
+   "tab": "Reward",
+   "params": []
+  },
+  {
+   "id": 10110801,
+   "contents": "MonsterCube_FieldEvent",
+   "tab": "Reward",
+   "params": []
+  },
+  {
+   "id": 10110901,
+   "contents": "MonsterCube_FieldEvent",
+   "tab": "Reward",
+   "params": []
+  },
+  {
+   "id": 10111101,
+   "contents": "MonsterCube_FieldEvent",
+   "tab": "Reward",
+   "params": []
+  },
+  {
+   "id": 10120101,
+   "contents": "MonsterCube_FieldEvent",
+   "tab": "Reward",
+   "params": []
+  },
+  {
+   "id": 10120201,
+   "contents": "MonsterCube_FieldEvent",
+   "tab": "Reward",
+   "params": []
+  },
+  {
+   "id": 10120301,
+   "contents": "MonsterCube_FieldEvent",
+   "tab": "Reward",
+   "params": []
+  },
+  {
+   "id": 10210101,
+   "contents": "MonsterCube_FieldEvent",
+   "tab": "Reward",
+   "params": []
+  },
+  {
+   "id": 10210201,
+   "contents": "MonsterCube_FieldEvent",
+   "tab": "Reward",
+   "params": []
+  },
+  {
+   "id": 10210301,
+   "contents": "MonsterCube_FieldEvent",
+   "tab": "Reward",
+   "params": []
+  },
+  {
+   "id": 10210401,
+   "contents": "MonsterCube_FieldEvent",
+   "tab": "Reward",
+   "params": []
+  },
+  {
+   "id": 10210501,
+   "contents": "MonsterCube_FieldEvent",
+   "tab": "Reward",
+   "params": []
+  },
+  {
+   "id": 10210601,
+   "contents": "MonsterCube_FieldEvent",
+   "tab": "Reward",
+   "params": []
+  },
+  {
+   "id": 10210701,
+   "contents": "MonsterCube_FieldEvent",
+   "tab": "Reward",
+   "params": []
+  },
+  {
+   "id": 10210801,
+   "contents": "MonsterCube_FieldEvent",
+   "tab": "Reward",
+   "params": []
+  },
+  {
+   "id": 10210901,
+   "contents": "MonsterCube_FieldEvent",
+   "tab": "Reward",
+   "params": []
+  },
+  {
+   "id": 10211001,
+   "contents": "MonsterCube_FieldEvent",
+   "tab": "Reward",
+   "params": []
+  },
+  {
+   "id": 10220101,
+   "contents": "MonsterCube_FieldEvent",
+   "tab": "Reward",
+   "params": []
+  },
+  {
+   "id": 10220201,
+   "contents": "MonsterCube_FieldEvent",
+   "tab": "Reward",
+   "params": []
+  },
+  {
+   "id": 10220301,
+   "contents": "MonsterCube_FieldEvent",
+   "tab": "Reward",
+   "params": []
+  },
+  {
+   "id": 11120101,
+   "contents": "MonsterCube_FieldEvent",
+   "tab": "Reward",
+   "params": []
+  },
+  {
+   "id": 21120101,
+   "contents": "MonsterCube_FieldEvent",
+   "tab": "Reward",
+   "params": []
+  }
+ ],
+ "item_ids": {
+  "Teleport_Home_A_c_01a_b": 530560001,
+  "AbyssPoint": 930100003,
+  "Medal2": 930100013,
+  "GoldCombined": 930100030
+ }
+}

@@ -24,19 +24,61 @@ public sealed class SharedWorld(GameData data)
     public WorldLock Lock { get; } = new();
     public GameData Data => data;
 
-    public int AllocateKey() => FirstPlayerKey + Interlocked.Increment(ref lastKey);
+    /// <summary>Player keys run from <see cref="FirstPlayerKey"/> below the staff monsters' keys (600000).</summary>
+    const int PlayerKeySpan = 500_000;
+    /// <summary>Keys resumed players brought from the previous process (gateway resume): never handed out again.</summary>
+    readonly ConcurrentDictionary<int, byte> reservedKeys = new();
+
+    public int AllocateKey()
+    {
+        while (true)
+        {
+            var key = FirstPlayerKey + (int)((uint)Interlocked.Increment(ref lastKey) % PlayerKeySpan);
+            if (!reservedKeys.ContainsKey(key)) return key;
+        }
+    }
+
+    /// <summary>A resumed player keeps the key its client knows (gateway resume after a restart).</summary>
+    public int ReserveKey(int key)
+    {
+        reservedKeys[key] = 0;
+        return key;
+    }
+
+    /// <summary>With the gateway, a new process starts its keys away from the previous one's (whose players come back with theirs).</summary>
+    public SharedWorld StartKeysAt(int offset)
+    {
+        int current;
+        do
+        {
+            current = lastKey;
+            if (current >= offset) return this;
+        } while (Interlocked.CompareExchange(ref lastKey, offset, current) != current);
+        return this;
+    }
 
     /// <summary>
     /// The shared instance of a map, or with <paramref name="instance"/> (the owner's key) a private copy of an instance
     /// layer (created with its MapData NPCs on first use). Call under the gate.
+    /// <paramref name="layer"/> (four worlds, <see cref="WorldCatalog.LayerOf"/>): the world pair's own copy of a shared map;
+    /// 0 is the copy every world shared before (and still shares on the inter-server maps). Private copies ignore it.
     /// </summary>
-    public MapInstance Map(int mapId, int instance = 0)
+    public MapInstance Map(int mapId, int instance = 0, int layer = 0)
     {
-        var key = (long)instance << 32 | (uint)mapId;
+        if (layer is < 0 or >= MaxLayers) throw new ArgumentOutOfRangeException(nameof(layer));
+        var key = instance != 0 || layer == 0 ? (long)instance << 32 | (uint)mapId : (long)(LayerKeyBase + layer) << 32 | (uint)mapId;
         if (!maps.TryGetValue(key, out var map))
-            maps[key] = map = new MapInstance(mapId, Combat.MapTargets(data, mapId), new NpcAi(new Random(), data)) { Instance = instance };
+        {
+            maps[key] = map = new MapInstance(mapId, Combat.MapTargets(data, mapId), new NpcAi(new Random(), data)) { Instance = instance, Layer = instance == 0 ? layer : 0 };
+            // Field bosses not up (killed, or a period boss off its time) wait hidden for their time (GameSession.FieldBosses.cs).
+            if (instance == 0) GameSession.PrepareFieldBosses(mapId, map.Targets, map.RespawnAt, FieldBossKills, Clock());
+        }
         return map;
     }
+
+    /// <summary>World layers (pairs of worlds) a map may have; their copies are keyed above every player and room key.</summary>
+    public const int MaxLayers = 16;
+    const int LayerKeyBase = 0x7FFF_0000;
 
     /// <summary>Drops a private copy nobody is in any more. Call under the gate.</summary>
     public void Drop(MapInstance map)
@@ -59,6 +101,14 @@ public sealed class SharedWorld(GameData data)
 
     /// <summary>Parties, invitations, trades and duels (use under the gate).</summary>
     public SocialState Social { get; } = new();
+
+    /// <summary>The season ranking lists as of their last hourly update, and the fallen Abyss rankers (thread-safe; RankTables.cs).</summary>
+    public SeasonRankingCache Rankings { get; } = new();
+
+    /// <summary>The field bosses' kills and respawn times on this host (FieldBosses.cs; stored in game.field_boss_kills).</summary>
+    public FieldBossState FieldBossKills { get; } = new();
+    /// <summary>The clock new maps place their field bosses by (Unix ms; checks set their own).</summary>
+    public Func<long> Clock { get; set; } = () => DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 
     /// <summary>Every player in the world on this host (any map), by entity key. Use under the gate.</summary>
     public Dictionary<int, WorldPlayer> Online { get; } = [];
@@ -107,6 +157,8 @@ public sealed partial class MapInstance(int mapId, Dictionary<int, Target> targe
     public int MapId { get; } = mapId;
     /// <summary>The owner's key for a private instance-layer copy; 0 for the shared map.</summary>
     public int Instance { get; init; }
+    /// <summary>The world pair whose copy of a shared map this is (four worlds; 0 = the first pair and the inter-server maps).</summary>
+    public int Layer { get; init; }
     public Dictionary<int, Target> Targets { get; } = targets;
     public NpcAi Ai { get; } = ai;
     public Dictionary<int, long> RespawnAt { get; } = [];
@@ -196,5 +248,5 @@ public sealed partial class MapInstance(int mapId, Dictionary<int, Target> targe
 
     /// <summary>Players the NPCs consider: in the map and not hidden.</summary>
     public List<(int Key, Vector3d Position)> NpcVictims() =>
-        Players.Values.Where(p => !p.Hidden && !p.Session.Dead).Select(p => (p.Key, p.Position)).ToList();
+        Players.Values.Where(p => !p.Hidden && !p.Session.Dead).SelectMany(p => p.Session.SummonVictims().Prepend((p.Key, p.Position))).ToList();
 }

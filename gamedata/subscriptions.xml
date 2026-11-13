@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Subscriptions (memberships). The client unlocks a benefit when SubscribeList_NT 0xe33b lists its ESubscribeType with a
+     membership (data id) and a start/end time; the server checks the same list where it runs the feature.
+     OBSERVED (official recordings 2026-11-06/07, the user's account): Special Quai Membership (data 4) = FastQueue,
+     RemoteStorage2, TradeExPanded2, TradeExchangeOpen2, Shop2, OdenergyCube2, OdenergyCharge2, FieldEventRankCount2;
+     the pet Auto-Loot Voucher (data 8) = ItemAutoLooting.
+     PROVISIONAL: Wind Breeze (data 2) and Tsenka (data 3) benefits (never active in a recording; given the first-generation
+     types), and every membership's length (item descriptions say only the 1/2-day extensions and the 30-day voucher).
+     The switch is server-rules.xml subscription/free (staff panel: Server > Subscription), live without a restart. -->
+<subscriptions>
+	<membership data="2" name="Wind Breeze Membership" days="30" provisional="true" types="RemoteStorage Exchange TradeExPanded TradeExchangeOpen Shop"/>
+	<membership data="3" name="Tsenka Membership" days="30" provisional="true" types="OdenergyCube OdenergyCharge FieldEventRankCount DailyDungeonUse AbyssUse ChatRace Gather"/>
+	<membership data="4" name="Special Quai Membership" days="30" types="FastQueue RemoteStorage2 TradeExPanded2 TradeExchangeOpen2 Shop2 OdenergyCube2 OdenergyCharge2 FieldEventRankCount2"/>
+	<membership data="5" name="Special Quai Membership" days="30" same_as="4"/>
+	<membership data="6" name="Special Quai Membership +2 days" days="2" same_as="4"/>
+	<membership data="7" name="Special Quai Membership +1 day" days="1" same_as="4"/>
+	<membership data="8" name="Pet Auto-Loot" days="30" types="ItemAutoLooting"/>
+	<!-- Benefits no observed membership grants; given in free mode so the client shows everything unlocked (data 4). -->
+	<free_only data="4" types="Exchange2 AbyssUse2"/>
+</subscriptions>

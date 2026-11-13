@@ -11,7 +11,9 @@ param(
     [switch]$MultiLayer,
     [switch]$InGame,
     [ValidateRange(64, 4096)][int]$MaxSizeMb = 128,
-    [switch]$PlanOnly
+    [switch]$PlanOnly,
+    # Used by tools/auto_record.ps1: end early when the game closes or moves to a game server outside the trace filter.
+    [switch]$AutoStop
 )
 
 $ErrorActionPreference = 'Stop'
@@ -138,7 +140,19 @@ try {
     Write-Output 'Keep this window open until conversion finishes.'
     $timer = [Diagnostics.Stopwatch]::StartNew()
     $cueIndex = 0
+    $nextAutoCheck = 5
     while ($timer.Elapsed.TotalSeconds -lt $DurationSeconds) {
+        if ($AutoStop -and $timer.Elapsed.TotalSeconds -ge $nextAutoCheck) {
+            $nextAutoCheck = $timer.Elapsed.TotalSeconds + 5
+            if (-not (Get-Process -Name AION2 -ErrorAction SilentlyContinue)) {
+                $metadata.auto_stop = 'game_closed'; Write-Output 'AION2 closed: ending this recording.'; break
+            }
+            $outside = @(Get-GamePeers 13328 | Where-Object { $_ -notin $captureAddresses })
+            if ($outside.Count -gt 0) {
+                $metadata.auto_stop = 'server_changed'; $metadata.next_server = $outside -join ','
+                Write-Output "Game server changed to $($outside -join ','): ending this recording."; break
+            }
+        }
         while ($cueIndex -lt $movementSchedule.Count -and $timer.Elapsed.TotalSeconds -ge $movementSchedule[$cueIndex].at_seconds) {
             $cue = $movementSchedule[$cueIndex]
             $cueRecord = [ordered]@{ kind = 'manual_action_cue'; action = $cue.action

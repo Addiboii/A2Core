@@ -57,69 +57,15 @@ public sealed class WingTables
     }
 }
 
-// Wings. The equipped wing is the stored choice (migration 073) when it is still owned, else the race's default wing for
-// staff and ascended characters (implied, never stored), else none. Owned = registered (game.character_wings) or that
-// implied default, and of the character's race (Wing.dat PcRace). Packets: WingList_NT 0x5672, WingChange_RQ/RS/NT
-// 0x5674-0x5676 (usmap DevPacketData_GameServer_WingChange_RQ {_is_wing_skin bool, _wing_id int}, _RS {_result, _is_wing_skin,
-// _wing_id}, _NT {_key, _is_wing_skin, _wing_id}; the RQ OBSERVED 7 bytes live 2026-10-15, the replies CANDIDATE layouts).
+// Wings (merge 2026-11-13): the worn wing and the wing skin are the Dell version's saved setting "wing" [wing, skin]
+// (GameSession.Settings.cs) and its WingChange handler (GameSession.cs); game.character_wing_equips (migration 073) is kept but
+// not used by the session. Wing.dat's tables above stay for the data checks.
 public sealed partial class GameSession
 {
     static WingTables WingData => WingTables.Embedded;
 
-    /// <summary>The stored wing choice (0: the default rule).</summary>
-    int equippedWing;
-
-    /// <summary>Staff and ascended characters (grade 2+) own their race's default wing without a stored row.</summary>
-    bool DefaultWingImplied => IsAdmin || (selected?.Ascension ?? 1) >= 2;
-
-    bool OwnsWing(int id) => WingData.Of(id) is { } wing && wing.Race == profileRace
-        && (registeredWings.Contains(id) || DefaultWingImplied && id == GamePackets.DefaultWing(profileRace));
-
-    /// <summary>The wing worn after a map load: the stored one while owned, else the default rule.</summary>
-    int WingAtLoad() => equippedWing != 0 && OwnsWing(equippedWing) ? equippedWing
-        : DefaultWingImplied ? GamePackets.DefaultWing(profileRace) : 0;
-
-    /// <summary>A stat from the worn wing. Enchant level 0: no wing of build 26262663 has an EnchantGroup (Wing.dat), so none can be enchanted.</summary>
-    int WingStat(string stat) => wingId == 0 ? 0 : WingData.Stat(wingId, 0, stat);
-
-    /// <summary>
-    /// 0x5674 WingChange_RQ: an owned wing becomes the worn one (stored; the default wing clears the stored row) -> 0x5675
-    /// result 0, 0x5676 to the player and those nearby (OURS: as TitleChange_NT), the stats. Not owned, or not stored: 0x5675 result 1. A skin request
-    /// (is_wing_skin) is answered as before and changes neither the worn wing nor the store.
-    /// </summary>
-    async Task<List<byte[]>> WingChangeAsync(byte[] plain, CancellationToken ct)
-    {
-        var skin = (plain[2] & 1) != 0;
-        var wanted = BitConverter.ToInt32(plain, 3);
-        if (!OwnsWing(wanted)) return [GamePackets.WingChangeReply(wanted, skin, 1)];
-        if (skin) return [GamePackets.WingChangeReply(wanted, skin), GamePackets.WingChangeNotice(playerKey, wanted, skin)];
-        var stored = registeredWings.Contains(wanted) ? wanted : 0;
-        if (Store is { } store && CharacterId is { } character)
-        {
-            var saved = await Stored(async () => await store.SetWingAsync(character, stored, ct) ? [[]] : []);
-            if (saved.Count == 0) return [GamePackets.WingChangeReply(wanted, skin, 1)];
-        }
-        equippedWing = stored;
-        wingId = wanted;
-        var notice = GamePackets.WingChangeNotice(playerKey, wanted, skin);
-        worldPlayer?.Map?.Broadcast(worldPlayer, [notice]);
-        return [GamePackets.WingChangeReply(wanted, skin), notice, .. RefreshStats()];
-    }
-
-    /// <summary>
-    /// A wing item (Item.dat UseEffect GetWing [Wing.dat id]): used up, the wing registered (stored), then WingAcquire_NT 0x5673
-    /// (OBSERVED order: 0x5619, then 0x5673; no new 0x5672 list). Refused for a wing of the other race or one already registered
-    /// (CANDIDATE: the item stays).
-    /// </summary>
-    async Task<List<byte[]>?> UseWingItemAsync(INativeCharacterStore store, Guid character, ItemState row, int wing, bool reply, CancellationToken ct)
-    {
-        if (WingData.Of(wing) is not { } info || info.Race != profileRace || OwnsWing(wing)) return null;
-        var used = await Stored(async () => await store.UseWingItemAsync(character, row.InstanceId, row.Revision, wing, ct) ? [[]] : []);
-        if (used.Count == 0) return null;
-        registeredWings.Add(wing);
-        var replies = Used(row, reply);
-        replies.Add(GamePackets.WingAcquire(playerKey, wing));
-        replies.AddRange(await InventoryChangesAsync(ct, 0, DecreaseItemUse));
-        return replies;
-    }
+    /// <summary>The wing worn after a map load: the saved one while still registered, else the race's default wing for staff
+    /// and ascended characters (grade 2+), else none.</summary>
+    int WingAtLoad() => IsAdmin || (selected?.Ascension ?? 1) >= 2
+        ? equippedWing != 0 && registeredWings.Contains(equippedWing) ? equippedWing : GamePackets.DefaultWing(profileRace) : 0;
 }

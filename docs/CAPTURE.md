@@ -53,6 +53,32 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./tools/capture_mark.ps1
 
 The note's time is when you typed it, not when the thing happened, so treat it as a cue.
 
+## Automatic recording
+
+`tools/auto_record.ps1` does the above by itself whenever you play on the official server: it waits for the game to
+enter an official game server (your own A2Core server on the LAN is skipped), records it, starts a new recording when
+a map change moves you to another game server, stops when the game closes, deletes the `.etl` once the `.pcapng` is
+written and decodes each recording in the background (needs Python on PATH). The oldest recordings are deleted once
+they pass 30 GB (`-KeepGb`). Install it once, in Administrator PowerShell in the repository folder:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./tools/auto_record.ps1 -Install
+```
+
+It then runs hidden at every logon (a scheduled task, "A2Core auto recorder"); `-Uninstall` removes it. What it did is
+in `research/local/auto-record.log`. Windows needs a few minutes to finish each recording, so the first minutes after a
+map change can be missing.
+
+## Game tables
+
+`tools/dump_tables.ps1` exports every gameplay table of your installed client (enchanting, costs, shops, ...) to
+`research/local/tables-<date>/`, one JSON per table, for the table builders in `tools/`. It needs the .NET 10 SDK and
+the archive key you provide yourself (see README, Game data):
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./tools/dump_tables.ps1
+```
+
 ## Decode
 
 ```powershell

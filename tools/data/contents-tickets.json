@@ -1,0 +1,1859 @@
+{
+ "entrances": {
+  "160000": [
+   [
+    201,
+    1,
+    0,
+    true
+   ]
+  ],
+  "160001": [
+   [
+    202,
+    1,
+    0,
+    true
+   ]
+  ],
+  "160002": [
+   [
+    201,
+    1,
+    0,
+    true
+   ]
+  ],
+  "160003": [
+   [
+    201,
+    1,
+    0,
+    true
+   ]
+  ],
+  "160004": [
+   [
+    202,
+    1,
+    0,
+    true
+   ]
+  ],
+  "160005": [
+   [
+    202,
+    1,
+    0,
+    true
+   ]
+  ],
+  "21": [
+   [
+    3,
+    1,
+    0,
+    true
+   ]
+  ],
+  "23": [
+   [
+    9,
+    1,
+    0,
+    true
+   ]
+  ],
+  "24": [
+   [
+    13,
+    1,
+    0,
+    true
+   ]
+  ],
+  "503001": [
+   [
+    10000002,
+    1,
+    1,
+    true
+   ]
+  ],
+  "503002": [
+   [
+    10000003,
+    1,
+    1,
+    true
+   ]
+  ],
+  "503003": [
+   [
+    10000001,
+    1,
+    1,
+    true
+   ]
+  ],
+  "503004": [
+   [
+    10000004,
+    1,
+    1,
+    true
+   ]
+  ],
+  "503005": [
+   [
+    10000005,
+    1,
+    1,
+    true
+   ]
+  ],
+  "503006": [
+   [
+    10000006,
+    1,
+    1,
+    true
+   ]
+  ],
+  "504001": [
+   [
+    10000002,
+    1,
+    1,
+    true
+   ]
+  ],
+  "504002": [
+   [
+    10000003,
+    1,
+    1,
+    true
+   ]
+  ],
+  "504003": [
+   [
+    10000001,
+    1,
+    1,
+    true
+   ]
+  ],
+  "504004": [
+   [
+    10000004,
+    1,
+    1,
+    true
+   ]
+  ],
+  "504005": [
+   [
+    10000005,
+    1,
+    1,
+    true
+   ]
+  ],
+  "504006": [
+   [
+    10000006,
+    1,
+    1,
+    true
+   ]
+  ],
+  "600001": [
+   [
+    60000009,
+    1,
+    3,
+    true
+   ]
+  ],
+  "600004": [
+   [
+    60000009,
+    1,
+    3,
+    true
+   ]
+  ],
+  "600012": [
+   [
+    60000009,
+    1,
+    3,
+    true
+   ]
+  ],
+  "600013": [
+   [
+    60000009,
+    1,
+    3,
+    true
+   ]
+  ],
+  "600022": [
+   [
+    60000009,
+    1,
+    3,
+    true
+   ]
+  ],
+  "600023": [
+   [
+    60000009,
+    1,
+    3,
+    true
+   ]
+  ],
+  "600032": [
+   [
+    60000009,
+    1,
+    3,
+    true
+   ]
+  ],
+  "600033": [
+   [
+    60000009,
+    1,
+    3,
+    true
+   ]
+  ],
+  "600042": [
+   [
+    60000009,
+    1,
+    3,
+    true
+   ]
+  ],
+  "600053": [
+   [
+    60000009,
+    1,
+    3,
+    true
+   ]
+  ],
+  "600055": [
+   [
+    60000009,
+    1,
+    3,
+    true
+   ]
+  ],
+  "600058": [
+   [
+    60000009,
+    1,
+    3,
+    true
+   ]
+  ],
+  "600063": [
+   [
+    60000009,
+    1,
+    3,
+    true
+   ]
+  ],
+  "600065": [
+   [
+    60000009,
+    1,
+    3,
+    true
+   ]
+  ],
+  "600068": [
+   [
+    60000009,
+    1,
+    3,
+    true
+   ]
+  ],
+  "600072": [
+   [
+    60000009,
+    1,
+    3,
+    true
+   ]
+  ],
+  "600073": [
+   [
+    60000009,
+    1,
+    3,
+    true
+   ]
+  ],
+  "600082": [
+   [
+    90000002,
+    1,
+    2,
+    true
+   ]
+  ],
+  "600092": [
+   [
+    60000009,
+    1,
+    3,
+    true
+   ]
+  ],
+  "600093": [
+   [
+    60000009,
+    1,
+    3,
+    true
+   ]
+  ],
+  "600122": [
+   [
+    60000009,
+    1,
+    3,
+    true
+   ]
+  ],
+  "600123": [
+   [
+    60000009,
+    1,
+    3,
+    true
+   ]
+  ],
+  "600132": [
+   [
+    60000009,
+    1,
+    3,
+    true
+   ]
+  ],
+  "600133": [
+   [
+    60000009,
+    1,
+    3,
+    true
+   ]
+  ],
+  "600142": [
+   [
+    60000009,
+    1,
+    3,
+    true
+   ]
+  ],
+  "600143": [
+   [
+    60000009,
+    1,
+    3,
+    true
+   ]
+  ],
+  "600152": [
+   [
+    60000009,
+    1,
+    3,
+    true
+   ]
+  ],
+  "600153": [
+   [
+    60000009,
+    1,
+    3,
+    true
+   ]
+  ],
+  "610010": [
+   [
+    60000009,
+    1,
+    3,
+    true
+   ]
+  ],
+  "610011": [
+   [
+    60000009,
+    1,
+    3,
+    true
+   ]
+  ],
+  "610012": [
+   [
+    60000009,
+    1,
+    3,
+    true
+   ]
+  ],
+  "610013": [
+   [
+    60000009,
+    1,
+    3,
+    true
+   ]
+  ],
+  "610020": [
+   [
+    60000009,
+    1,
+    3,
+    true
+   ]
+  ],
+  "610021": [
+   [
+    60000009,
+    1,
+    3,
+    true
+   ]
+  ],
+  "610022": [
+   [
+    60000009,
+    1,
+    3,
+    true
+   ]
+  ],
+  "610023": [
+   [
+    60000009,
+    1,
+    3,
+    true
+   ]
+  ],
+  "610044": [
+   [
+    60000009,
+    1,
+    3,
+    true
+   ]
+  ],
+  "610052": [
+   [
+    60000009,
+    1,
+    3,
+    true
+   ]
+  ],
+  "610062": [
+   [
+    60000009,
+    1,
+    3,
+    true
+   ]
+  ],
+  "610070": [
+   [
+    60000009,
+    1,
+    3,
+    true
+   ]
+  ],
+  "610071": [
+   [
+    60000009,
+    1,
+    3,
+    true
+   ]
+  ],
+  "610072": [
+   [
+    60000009,
+    1,
+    3,
+    true
+   ]
+  ],
+  "610073": [
+   [
+    60000009,
+    1,
+    3,
+    true
+   ]
+  ],
+  "620011": [
+   [
+    90000004,
+    1,
+    2,
+    true
+   ]
+  ],
+  "620021": [
+   [
+    90000006,
+    1,
+    2,
+    true
+   ]
+  ],
+  "620022": [
+   [
+    90000006,
+    1,
+    2,
+    true
+   ]
+  ],
+  "690001": [
+   [
+    70000001,
+    1,
+    2,
+    true
+   ]
+  ],
+  "690002": [
+   [
+    70000001,
+    1,
+    2,
+    true
+   ]
+  ],
+  "690003": [
+   [
+    70000001,
+    1,
+    2,
+    true
+   ]
+  ],
+  "690011": [
+   [
+    70000001,
+    1,
+    2,
+    true
+   ]
+  ],
+  "690012": [
+   [
+    70000001,
+    1,
+    2,
+    true
+   ]
+  ],
+  "690013": [
+   [
+    70000001,
+    1,
+    2,
+    true
+   ]
+  ],
+  "690031": [
+   [
+    70000001,
+    1,
+    2,
+    true
+   ]
+  ],
+  "690032": [
+   [
+    70000001,
+    1,
+    2,
+    true
+   ]
+  ],
+  "690033": [
+   [
+    70000001,
+    1,
+    2,
+    true
+   ]
+  ],
+  "690034": [
+   [
+    70000001,
+    1,
+    2,
+    true
+   ]
+  ],
+  "690035": [
+   [
+    70000001,
+    1,
+    2,
+    true
+   ]
+  ],
+  "690036": [
+   [
+    70000001,
+    1,
+    2,
+    true
+   ]
+  ],
+  "690041": [
+   [
+    70000001,
+    1,
+    2,
+    true
+   ]
+  ],
+  "690042": [
+   [
+    70000001,
+    1,
+    2,
+    true
+   ]
+  ],
+  "690043": [
+   [
+    70000001,
+    1,
+    2,
+    true
+   ]
+  ],
+  "690044": [
+   [
+    70000001,
+    1,
+    2,
+    true
+   ]
+  ],
+  "690045": [
+   [
+    70000001,
+    1,
+    2,
+    true
+   ]
+  ],
+  "690046": [
+   [
+    70000001,
+    1,
+    2,
+    true
+   ]
+  ],
+  "900001": [
+   [
+    101,
+    1,
+    1,
+    true
+   ]
+  ],
+  "900002": [
+   [
+    101,
+    1,
+    1,
+    true
+   ]
+  ],
+  "900003": [
+   [
+    101,
+    1,
+    1,
+    true
+   ]
+  ],
+  "910011": [
+   [
+    80000001,
+    1,
+    1,
+    true
+   ]
+  ],
+  "910012": [
+   [
+    80000001,
+    1,
+    1,
+    true
+   ]
+  ],
+  "910013": [
+   [
+    80000001,
+    1,
+    1,
+    true
+   ]
+  ],
+  "910014": [
+   [
+    80000001,
+    1,
+    1,
+    true
+   ]
+  ],
+  "910015": [
+   [
+    80000001,
+    1,
+    1,
+    true
+   ]
+  ],
+  "910016": [
+   [
+    80000001,
+    1,
+    1,
+    true
+   ]
+  ],
+  "910021": [
+   [
+    80000001,
+    1,
+    1,
+    true
+   ]
+  ],
+  "910022": [
+   [
+    80000001,
+    1,
+    1,
+    true
+   ]
+  ],
+  "910023": [
+   [
+    80000001,
+    1,
+    1,
+    true
+   ]
+  ],
+  "910024": [
+   [
+    80000001,
+    1,
+    1,
+    true
+   ]
+  ],
+  "910025": [
+   [
+    80000001,
+    1,
+    1,
+    true
+   ]
+  ],
+  "910026": [
+   [
+    80000001,
+    1,
+    1,
+    true
+   ]
+  ],
+  "910031": [
+   [
+    80000001,
+    1,
+    1,
+    true
+   ]
+  ],
+  "910032": [
+   [
+    80000001,
+    1,
+    1,
+    true
+   ]
+  ],
+  "910033": [
+   [
+    80000001,
+    1,
+    1,
+    true
+   ]
+  ],
+  "910034": [
+   [
+    80000001,
+    1,
+    1,
+    true
+   ]
+  ],
+  "910035": [
+   [
+    80000001,
+    1,
+    1,
+    true
+   ]
+  ],
+  "910036": [
+   [
+    80000001,
+    1,
+    1,
+    true
+   ]
+  ],
+  "910041": [
+   [
+    80000001,
+    1,
+    1,
+    true
+   ]
+  ],
+  "910042": [
+   [
+    80000001,
+    1,
+    1,
+    true
+   ]
+  ],
+  "910043": [
+   [
+    80000001,
+    1,
+    1,
+    true
+   ]
+  ],
+  "910044": [
+   [
+    80000001,
+    1,
+    1,
+    true
+   ]
+  ],
+  "910045": [
+   [
+    80000001,
+    1,
+    1,
+    true
+   ]
+  ],
+  "910046": [
+   [
+    80000001,
+    1,
+    1,
+    true
+   ]
+  ],
+  "910051": [
+   [
+    80000001,
+    1,
+    1,
+    true
+   ]
+  ],
+  "910052": [
+   [
+    80000001,
+    1,
+    1,
+    true
+   ]
+  ],
+  "910053": [
+   [
+    80000001,
+    1,
+    1,
+    true
+   ]
+  ],
+  "910054": [
+   [
+    80000001,
+    1,
+    1,
+    true
+   ]
+  ],
+  "910055": [
+   [
+    80000001,
+    1,
+    1,
+    true
+   ]
+  ],
+  "910056": [
+   [
+    80000001,
+    1,
+    1,
+    true
+   ]
+  ],
+  "910057": [
+   [
+    80000001,
+    1,
+    1,
+    true
+   ]
+  ],
+  "910061": [
+   [
+    80000001,
+    1,
+    1,
+    true
+   ]
+  ],
+  "910062": [
+   [
+    80000001,
+    1,
+    1,
+    true
+   ]
+  ],
+  "910063": [
+   [
+    80000001,
+    1,
+    1,
+    true
+   ]
+  ],
+  "910064": [
+   [
+    80000001,
+    1,
+    1,
+    true
+   ]
+  ],
+  "910065": [
+   [
+    80000001,
+    1,
+    1,
+    true
+   ]
+  ],
+  "910066": [
+   [
+    80000001,
+    1,
+    1,
+    true
+   ]
+  ],
+  "910067": [
+   [
+    80000001,
+    1,
+    1,
+    true
+   ]
+  ]
+ },
+ "party_groups": {
+  "600053": "DeusCenter_G_Group",
+  "600055": "DeusCenter_G_Group",
+  "600058": "DeusCenter_G_Group",
+  "600063": "Arkanis_G_Group",
+  "600065": "Arkanis_G_Group",
+  "600068": "Arkanis_G_Group",
+  "610010": "SunkenTemple_G_Group",
+  "610011": "SunkenTemple_G_Group",
+  "610012": "SunkenTemple_G_Group",
+  "610013": "SunkenTemple_G_Group",
+  "610020": "MirrorHeart_G_Group",
+  "610021": "MirrorHeart_G_Group",
+  "610022": "MirrorHeart_G_Group",
+  "610023": "MirrorHeart_G_Group",
+  "610052": "DeusCenter_G_Group",
+  "610062": "Arkanis_G_Group",
+  "610070": "FafniteGully_G_Group",
+  "610071": "FafniteGully_G_Group",
+  "610072": "FafniteGully_G_Group",
+  "610073": "FafniteGully_G_Group"
+ },
+ "party_levels": {
+  "Arkanis_G_Group": {
+   "1": [
+    600063,
+    1600
+   ],
+   "2": [
+    600065,
+    1900
+   ],
+   "3": [
+    600068,
+    2200
+   ],
+   "4": [
+    610062,
+    2500
+   ]
+  },
+  "DeusCenter_G_Group": {
+   "1": [
+    600053,
+    1600
+   ],
+   "2": [
+    600055,
+    1900
+   ],
+   "3": [
+    600058,
+    2200
+   ],
+   "4": [
+    610052,
+    2500
+   ]
+  },
+  "FafniteGully_G_Group": {
+   "1": [
+    610070,
+    3800
+   ],
+   "2": [
+    610071,
+    4100
+   ],
+   "3": [
+    610072,
+    4500
+   ],
+   "4": [
+    610073,
+    4800
+   ]
+  },
+  "MirrorHeart_G_Group": {
+   "1": [
+    610020,
+    3200
+   ],
+   "2": [
+    610021,
+    3500
+   ],
+   "3": [
+    610022,
+    3800
+   ],
+   "4": [
+    610023,
+    4000
+   ]
+  },
+  "SunkenTemple_G_Group": {
+   "1": [
+    610010,
+    2400
+   ],
+   "2": [
+    610011,
+    2800
+   ],
+   "3": [
+    610012,
+    3200
+   ],
+   "4": [
+    610013,
+    3500
+   ]
+  }
+ },
+ "source": "ContentsTicket.dat, MapEntrance.dat ContentsTicketList, Dungeon.dat, PartyDungeonLevel.dat (tables-20261109-023531)",
+ "tickets": {
+  "1": {
+   "daily": 3,
+   "daily_time_s": 57600,
+   "max": 12,
+   "name": "Contents_Ticket_FieldEvent",
+   "owner": "Server",
+   "type": "Count",
+   "weekly": 0,
+   "weekly_day": 0
+  },
+  "10": {
+   "daily": 2,
+   "daily_time_s": 57600,
+   "max": 14,
+   "name": "Contents_Ticket_ChargeTest_001",
+   "owner": "Character",
+   "type": "Count",
+   "weekly": 0,
+   "weekly_day": 0
+  },
+  "10000001": {
+   "daily": 0,
+   "daily_time_s": 0,
+   "max": 0,
+   "name": "Contents_Ticket_ArtifactDungeon_001",
+   "owner": "Character",
+   "type": "Time",
+   "weekly": 0,
+   "weekly_day": 0
+  },
+  "10000002": {
+   "daily": 0,
+   "daily_time_s": 0,
+   "max": 0,
+   "name": "Contents_Ticket_ArtifactDungeon_002",
+   "owner": "Character",
+   "type": "Time",
+   "weekly": 0,
+   "weekly_day": 0
+  },
+  "10000003": {
+   "daily": 0,
+   "daily_time_s": 0,
+   "max": 0,
+   "name": "Contents_Ticket_ArtifactDungeon_003",
+   "owner": "Character",
+   "type": "Time",
+   "weekly": 0,
+   "weekly_day": 0
+  },
+  "10000004": {
+   "daily": 0,
+   "daily_time_s": 0,
+   "max": 0,
+   "name": "Contents_Ticket_ArtifactDungeon_004",
+   "owner": "Character",
+   "type": "Time",
+   "weekly": 0,
+   "weekly_day": 0
+  },
+  "10000005": {
+   "daily": 0,
+   "daily_time_s": 0,
+   "max": 0,
+   "name": "Contents_Ticket_ArtifactDungeon_005",
+   "owner": "Character",
+   "type": "Time",
+   "weekly": 0,
+   "weekly_day": 0
+  },
+  "10000006": {
+   "daily": 0,
+   "daily_time_s": 0,
+   "max": 0,
+   "name": "Contents_Ticket_ArtifactDungeon_006",
+   "owner": "Character",
+   "type": "Time",
+   "weekly": 0,
+   "weekly_day": 0
+  },
+  "10000007": {
+   "daily": 0,
+   "daily_time_s": 0,
+   "max": 0,
+   "name": "Contents_Ticket_ArtifactDungoen_101",
+   "owner": "Character",
+   "type": "Time",
+   "weekly": 0,
+   "weekly_day": 0
+  },
+  "10000008": {
+   "daily": 0,
+   "daily_time_s": 0,
+   "max": 0,
+   "name": "Contents_Ticket_ArtifactDungoen_102",
+   "owner": "Character",
+   "type": "Time",
+   "weekly": 0,
+   "weekly_day": 0
+  },
+  "10000009": {
+   "daily": 0,
+   "daily_time_s": 0,
+   "max": 0,
+   "name": "Contents_Ticket_ArtifactDungoen_103",
+   "owner": "Character",
+   "type": "Time",
+   "weekly": 0,
+   "weekly_day": 0
+  },
+  "10000010": {
+   "daily": 0,
+   "daily_time_s": 0,
+   "max": 0,
+   "name": "Contents_Ticket_ArtifactDungoen_201",
+   "owner": "Character",
+   "type": "Time",
+   "weekly": 0,
+   "weekly_day": 0
+  },
+  "10000011": {
+   "daily": 0,
+   "daily_time_s": 0,
+   "max": 0,
+   "name": "Contents_Ticket_ArtifactDungoen_202",
+   "owner": "Character",
+   "type": "Time",
+   "weekly": 0,
+   "weekly_day": 0
+  },
+  "10000012": {
+   "daily": 0,
+   "daily_time_s": 0,
+   "max": 0,
+   "name": "Contents_Ticket_ArtifactDungoen_203",
+   "owner": "Character",
+   "type": "Time",
+   "weekly": 0,
+   "weekly_day": 0
+  },
+  "101": {
+   "daily": 0,
+   "daily_time_s": 0,
+   "max": 14,
+   "name": "Contents_Ticket_DailyDungeon_001",
+   "owner": "Server",
+   "type": "Count",
+   "weekly": 14,
+   "weekly_day": 3
+  },
+  "102": {
+   "daily": 1,
+   "daily_time_s": 57600,
+   "max": 7,
+   "name": "Contents_Ticket_DailyDungeon_002",
+   "owner": "Character",
+   "type": "Count",
+   "weekly": 0,
+   "weekly_day": 0
+  },
+  "103": {
+   "daily": 1,
+   "daily_time_s": 57600,
+   "max": 7,
+   "name": "Contents_Ticket_DailyDungeon_003",
+   "owner": "Character",
+   "type": "Count",
+   "weekly": 0,
+   "weekly_day": 0
+  },
+  "11": {
+   "daily": 2,
+   "daily_time_s": 57600,
+   "max": 14,
+   "name": "Contents_Ticket_ChargeTest_002",
+   "owner": "Character",
+   "type": "Count",
+   "weekly": 0,
+   "weekly_day": 0
+  },
+  "12": {
+   "daily": 2,
+   "daily_time_s": 57600,
+   "max": 14,
+   "name": "Contents_Ticket_ChargeTest_003",
+   "owner": "Character",
+   "type": "Count",
+   "weekly": 0,
+   "weekly_day": 0
+  },
+  "13": {
+   "daily": 0,
+   "daily_time_s": 0,
+   "max": 0,
+   "name": "Contents_Ticket_Abyss_Reshanta_D",
+   "owner": "Character",
+   "type": "Time",
+   "weekly": 0,
+   "weekly_day": 3
+  },
+  "14": {
+   "daily": 0,
+   "daily_time_s": 0,
+   "max": 14,
+   "name": "Contents_Ticket_Mentor_Dungeon_Reward",
+   "owner": "Character",
+   "type": "Count",
+   "weekly": 14,
+   "weekly_day": 3
+  },
+  "15": {
+   "daily": 0,
+   "daily_time_s": 0,
+   "max": 14,
+   "name": "Contents_Ticket_Mentor_Dungeon_Reward_Server",
+   "owner": "Server",
+   "type": "Count",
+   "weekly": 14,
+   "weekly_day": 3
+  },
+  "201": {
+   "daily": 0,
+   "daily_time_s": 0,
+   "max": 0,
+   "name": "Contents_Ticket_GrowthDungeon_001",
+   "owner": "Character",
+   "type": "Time",
+   "weekly": 0,
+   "weekly_day": 3
+  },
+  "202": {
+   "daily": 0,
+   "daily_time_s": 0,
+   "max": 0,
+   "name": "Contents_Ticket_GrowthDungeon_002",
+   "owner": "Character",
+   "type": "Time",
+   "weekly": 0,
+   "weekly_day": 3
+  },
+  "203": {
+   "daily": 0,
+   "daily_time_s": 0,
+   "max": 0,
+   "name": "Contents_Ticket_GrowthDungeon_003",
+   "owner": "Character",
+   "type": "Time",
+   "weekly": 0,
+   "weekly_day": 3
+  },
+  "204": {
+   "daily": 0,
+   "daily_time_s": 0,
+   "max": 0,
+   "name": "Contents_Ticket_GrowthDungeon_004",
+   "owner": "Character",
+   "type": "Time",
+   "weekly": 0,
+   "weekly_day": 3
+  },
+  "205": {
+   "daily": 0,
+   "daily_time_s": 0,
+   "max": 0,
+   "name": "Contents_Ticket_GrowthDungeon_005",
+   "owner": "Character",
+   "type": "Time",
+   "weekly": 0,
+   "weekly_day": 3
+  },
+  "206": {
+   "daily": 0,
+   "daily_time_s": 0,
+   "max": 0,
+   "name": "Contents_Ticket_GrowthDungeon_006",
+   "owner": "Character",
+   "type": "Time",
+   "weekly": 0,
+   "weekly_day": 3
+  },
+  "3": {
+   "daily": 0,
+   "daily_time_s": 0,
+   "max": 0,
+   "name": "Contents_Ticket_Abyss",
+   "owner": "Character",
+   "type": "Time",
+   "weekly": 0,
+   "weekly_day": 3
+  },
+  "4": {
+   "daily": 2,
+   "daily_time_s": 57600,
+   "max": 14,
+   "name": "Contents_Ticket_BossChallenge",
+   "owner": "Character",
+   "type": "Count",
+   "weekly": 0,
+   "weekly_day": 0
+  },
+  "6": {
+   "daily": 0,
+   "daily_time_s": 0,
+   "max": 0,
+   "name": "Contents_Ticket_Rift_Time",
+   "owner": "Character",
+   "type": "Time",
+   "weekly": 0,
+   "weekly_day": 0
+  },
+  "60000001": {
+   "daily": 0,
+   "daily_time_s": 0,
+   "max": 560,
+   "name": "reward_ticket_PartyDungeon_Common",
+   "owner": "Character",
+   "type": "Count",
+   "weekly": 0,
+   "weekly_day": 0
+  },
+  "60000002": {
+   "daily": 0,
+   "daily_time_s": 0,
+   "max": 14,
+   "name": "Contents_Ticket_Party_Dungeon_Hard",
+   "owner": "Character",
+   "type": "Count",
+   "weekly": 0,
+   "weekly_day": 0
+  },
+  "60000003": {
+   "daily": 2,
+   "daily_time_s": 57600,
+   "max": 14,
+   "name": "Contents_Ticket_Party_Dungeon_Normal1",
+   "owner": "Character",
+   "type": "Count",
+   "weekly": 0,
+   "weekly_day": 0
+  },
+  "60000004": {
+   "daily": 2,
+   "daily_time_s": 57600,
+   "max": 14,
+   "name": "Contents_Ticket_Party_Dungeon_Normal2",
+   "owner": "Character",
+   "type": "Count",
+   "weekly": 0,
+   "weekly_day": 0
+  },
+  "60000005": {
+   "daily": 2,
+   "daily_time_s": 57600,
+   "max": 14,
+   "name": "Contents_Ticket_Party_Dungeon_Normal3",
+   "owner": "Character",
+   "type": "Count",
+   "weekly": 0,
+   "weekly_day": 0
+  },
+  "60000006": {
+   "daily": 0,
+   "daily_time_s": 0,
+   "max": 21,
+   "name": "Contents_Ticket_Party_Dungeon_Normal",
+   "owner": "Character",
+   "type": "Count",
+   "weekly": 0,
+   "weekly_day": 0
+  },
+  "60000007": {
+   "daily": 0,
+   "daily_time_s": 0,
+   "max": 35,
+   "name": "Contents_Ticket_Party_Dungeon_Normal_Clear",
+   "owner": "Character",
+   "type": "Count",
+   "weekly": 35,
+   "weekly_day": 3
+  },
+  "60000008": {
+   "daily": 0,
+   "daily_time_s": 0,
+   "max": 28,
+   "name": "Contents_Ticket_Party_Dungeon_Hard_Clear",
+   "owner": "Character",
+   "type": "Count",
+   "weekly": 28,
+   "weekly_day": 3
+  },
+  "60000009": {
+   "daily": 0,
+   "daily_time_s": 0,
+   "max": 10,
+   "name": "Contents_Ticket_Party_Dungeon_Unclaimed_01",
+   "owner": "Server",
+   "type": "Count",
+   "weekly": 10,
+   "weekly_day": 3
+  },
+  "60000010": {
+   "daily": 0,
+   "daily_time_s": 0,
+   "max": 7,
+   "name": "Contents_Ticket_Party_Dungeon_Unclaimed_02",
+   "owner": "Character",
+   "type": "Count",
+   "weekly": 7,
+   "weekly_day": 3
+  },
+  "60000101": {
+   "daily": 2,
+   "daily_time_s": 57600,
+   "max": 14,
+   "name": "Contents_Ticket_Party_KraoCave_Normal",
+   "owner": "Character",
+   "type": "Count",
+   "weekly": 0,
+   "weekly_day": 0
+  },
+  "60000201": {
+   "daily": 0,
+   "daily_time_s": 0,
+   "max": 7,
+   "name": "Contents_Ticket_Party_KraoCave_Easy",
+   "owner": "Character",
+   "type": "Count",
+   "weekly": 7,
+   "weekly_day": 3
+  },
+  "60001101": {
+   "daily": 0,
+   "daily_time_s": 0,
+   "max": 7,
+   "name": "Contents_Ticket_Party_UruguguCanyon_Easy",
+   "owner": "Character",
+   "type": "Count",
+   "weekly": 7,
+   "weekly_day": 3
+  },
+  "60001201": {
+   "daily": 2,
+   "daily_time_s": 57600,
+   "max": 14,
+   "name": "Contents_Ticket_Party_UruguguCanyon_Normal",
+   "owner": "Character",
+   "type": "Count",
+   "weekly": 0,
+   "weekly_day": 0
+  },
+  "60002101": {
+   "daily": 0,
+   "daily_time_s": 0,
+   "max": 7,
+   "name": "Contents_Ticket_Party_FireTemple_Easy",
+   "owner": "Character",
+   "type": "Count",
+   "weekly": 7,
+   "weekly_day": 3
+  },
+  "60002201": {
+   "daily": 2,
+   "daily_time_s": 57600,
+   "max": 14,
+   "name": "Contents_Ticket_Party_FireTemple_Normal",
+   "owner": "Character",
+   "type": "Count",
+   "weekly": 0,
+   "weekly_day": 0
+  },
+  "60003101": {
+   "daily": 0,
+   "daily_time_s": 0,
+   "max": 7,
+   "name": "Contents_Ticket_Party_Draupnir_Easy",
+   "owner": "Character",
+   "type": "Count",
+   "weekly": 7,
+   "weekly_day": 3
+  },
+  "60003201": {
+   "daily": 2,
+   "daily_time_s": 57600,
+   "max": 14,
+   "name": "Contents_Ticket_Party_Draupnir_Normal",
+   "owner": "Character",
+   "type": "Count",
+   "weekly": 0,
+   "weekly_day": 0
+  },
+  "60004101": {
+   "daily": 0,
+   "daily_time_s": 0,
+   "max": 7,
+   "name": "Contents_Ticket_Party_DeadDramataNest_Easy",
+   "owner": "Character",
+   "type": "Count",
+   "weekly": 7,
+   "weekly_day": 3
+  },
+  "60004201": {
+   "daily": 0,
+   "daily_time_s": 0,
+   "max": 7,
+   "name": "Contents_Ticket_Party_DeadDramataNest_Normal",
+   "owner": "Character",
+   "type": "Count",
+   "weekly": 7,
+   "weekly_day": 3
+  },
+  "60005301": {
+   "daily": 2,
+   "daily_time_s": 57600,
+   "max": 4,
+   "name": "Contents_Ticket_Party_DeusCenter_Grade",
+   "owner": "Character",
+   "type": "Count",
+   "weekly": 0,
+   "weekly_day": 0
+  },
+  "60006301": {
+   "daily": 2,
+   "daily_time_s": 57600,
+   "max": 4,
+   "name": "Contents_Ticket_Party_Arkanis_Grade",
+   "owner": "Character",
+   "type": "Count",
+   "weekly": 0,
+   "weekly_day": 0
+  },
+  "60007101": {
+   "daily": 0,
+   "daily_time_s": 0,
+   "max": 7,
+   "name": "Contents_Ticket_Party_BakronIsland_Easy",
+   "owner": "Character",
+   "type": "Count",
+   "weekly": 7,
+   "weekly_day": 3
+  },
+  "60007201": {
+   "daily": 2,
+   "daily_time_s": 57600,
+   "max": 14,
+   "name": "Contents_Ticket_Party_BakronIsland_Normal",
+   "owner": "Character",
+   "type": "Count",
+   "weekly": 0,
+   "weekly_day": 0
+  },
+  "60009101": {
+   "daily": 0,
+   "daily_time_s": 0,
+   "max": 7,
+   "name": "Contents_Ticket_Party_BlackClawMine_Easy",
+   "owner": "Character",
+   "type": "Count",
+   "weekly": 7,
+   "weekly_day": 3
+  },
+  "60009201": {
+   "daily": 2,
+   "daily_time_s": 57600,
+   "max": 14,
+   "name": "Contents_Ticket_Party_BlackClawMine_Normal",
+   "owner": "Character",
+   "type": "Count",
+   "weekly": 0,
+   "weekly_day": 0
+  },
+  "60012101": {
+   "daily": 0,
+   "daily_time_s": 0,
+   "max": 7,
+   "name": "Contents_Ticket_Party_CradleNihility_Easy",
+   "owner": "Character",
+   "type": "Count",
+   "weekly": 7,
+   "weekly_day": 3
+  },
+  "60012201": {
+   "daily": 0,
+   "daily_time_s": 0,
+   "max": 7,
+   "name": "Contents_Ticket_Party_CradleNihility_Normal",
+   "owner": "Character",
+   "type": "Count",
+   "weekly": 7,
+   "weekly_day": 3
+  },
+  "60013101": {
+   "daily": 0,
+   "daily_time_s": 0,
+   "max": 7,
+   "name": "Contents_Ticket_Party_PhantomsHall_Easy",
+   "owner": "Character",
+   "type": "Count",
+   "weekly": 7,
+   "weekly_day": 3
+  },
+  "60014101": {
+   "daily": 0,
+   "daily_time_s": 0,
+   "max": 7,
+   "name": "Contents_Ticket_Party_BlueBreathIsle_Easy",
+   "owner": "Character",
+   "type": "Count",
+   "weekly": 7,
+   "weekly_day": 3
+  },
+  "60015101": {
+   "daily": 0,
+   "daily_time_s": 0,
+   "max": 7,
+   "name": "Contents_Ticket_Party_Dungeon_Trial_01",
+   "owner": "Character",
+   "type": "Count",
+   "weekly": 7,
+   "weekly_day": 3
+  },
+  "7": {
+   "daily": 4,
+   "daily_time_s": 57600,
+   "max": 28,
+   "name": "Contents_Key_FieldEvent",
+   "owner": "Character",
+   "type": "Count",
+   "weekly": 0,
+   "weekly_day": 0
+  },
+  "70000001": {
+   "daily": 0,
+   "daily_time_s": 0,
+   "max": 3,
+   "name": "Contents_Ticket_Suppression",
+   "owner": "Character",
+   "type": "Count",
+   "weekly": 3,
+   "weekly_day": 3
+  },
+  "8": {
+   "daily": 1,
+   "daily_time_s": 57600,
+   "max": 7,
+   "name": "Contents_Ticket_Invasion",
+   "owner": "Server",
+   "type": "Count",
+   "weekly": 0,
+   "weekly_day": 0
+  },
+  "80000001": {
+   "daily": 0,
+   "daily_time_s": 0,
+   "max": 3,
+   "name": "Contents_Ticket_Awaken",
+   "owner": "Character",
+   "type": "Count",
+   "weekly": 3,
+   "weekly_day": 3
+  },
+  "9": {
+   "daily": 0,
+   "daily_time_s": 0,
+   "max": 0,
+   "name": "Contents_Ticket_Abyss_Reshanta_B",
+   "owner": "Character",
+   "type": "Time",
+   "weekly": 0,
+   "weekly_day": 3
+  },
+  "90000001": {
+   "daily": 0,
+   "daily_time_s": 0,
+   "max": 4,
+   "name": "Contents_Ticket_ReforgedAbyss",
+   "owner": "Character",
+   "type": "Count",
+   "weekly": 4,
+   "weekly_day": 3
+  },
+  "90000002": {
+   "daily": 0,
+   "daily_time_s": 0,
+   "max": 1,
+   "name": "Contents_Ticket_ReforgedAbyss_Clear",
+   "owner": "Character",
+   "type": "Count",
+   "weekly": 1,
+   "weekly_day": 3
+  },
+  "90000003": {
+   "daily": 0,
+   "daily_time_s": 0,
+   "max": 4,
+   "name": "Contents_Ticket_ErosionPurifier",
+   "owner": "Character",
+   "type": "Count",
+   "weekly": 4,
+   "weekly_day": 3
+  },
+  "90000004": {
+   "daily": 0,
+   "daily_time_s": 0,
+   "max": 2,
+   "name": "Contents_Ticket_ErosionPurifier_Clear",
+   "owner": "Character",
+   "type": "Count",
+   "weekly": 2,
+   "weekly_day": 3
+  },
+  "90000005": {
+   "daily": 0,
+   "daily_time_s": 0,
+   "max": 4,
+   "name": "Contents_Ticket_MusphelHolyGrail",
+   "owner": "Character",
+   "type": "Count",
+   "weekly": 4,
+   "weekly_day": 3
+  },
+  "90000006": {
+   "daily": 0,
+   "daily_time_s": 0,
+   "max": 2,
+   "name": "Contents_Ticket_MusphelHolyGrail_Clear",
+   "owner": "Character",
+   "type": "Count",
+   "weekly": 2,
+   "weekly_day": 3
+  }
+ }
+}

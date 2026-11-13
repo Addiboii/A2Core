@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Aion.Application.Gameplay;
 using Aion.Core.Characters;
 using Aion.Protocol.Native;
@@ -79,14 +80,98 @@ public sealed partial class GameSession
         catch (ProtocolException) { return []; }
         byte[] Reply(int result) => PacketWriter.Opcode(CharRenameRs).U16(result).Varint(key).String(name)
             .I32(NameChangeVoucher).I64(result == 0 ? 1 : 0).ToArray();
-        if (Store is not { } store || selected is not null) return [Reply(2)];
-        if (CharacterNames.IsStaffStyle(name) && !StaffAccount || name.Length is < 1 or > 12) return [Reply(2)];
+        if (Store is not { } store || selected is not null) return [Reply(EResult.CharChangeName_ErrorInternal)];
+        if (CharacterNames.IsStaffStyle(name) && !StaffAccount || name.Length is < 1 or > 12) return [Reply(EResult.CharChangeName_InvalidCharName)];
         CharacterState? state = null;
         await Stored(async () => (state = await LobbyCharacterAsync(store, key, ct)) is null ? [] : [[]]);
-        if (state is null) return [Reply(2)];
+        if (state is null) return [Reply(EResult.CharChangeName_NotExist)];
         string outcome = "invalid";
         await Stored(async () => { outcome = await store.RenameCharacterAsync(state.Summary.CharacterId, name, ct); return []; });
         // The client's EResult codes for a rename (usmap kCharChangeName_*): a taken name is the invalid-name code (no duplicate code exists).
         return [Reply(outcome switch { "ok" => 0, "taken" => 8235, "voucher" => 8236, "locked" => 8237, _ => 8232 })];
+    }
+
+    // ---------- The character list (LobbyCharDesc in Login_RS 0x3615 and Lobby_RS 0x3626) ----------
+    // What the lobby shows per character (client L10N UI_LOBBY_SELECTCHARACTER_*): name, "Lv. {0}", class, the legion as "<{0}>",
+    // the location (the _zone_id subzone's name, "No Online Record" without a logout time), the item level, "Last Login Date"
+    // (_logout_time), "Character Creation Date" (_reg_time), the "Deleted in {0}" countdown, and the 3D model (appearance,
+    // equipment with skins, wing). OBSERVED values (9 official records in 6 lists, 2026-11-06/07, decoded field by field; the
+    // byte checks rebuild one list and both CharCreate_RS samples): _combat_level 1 and _combat_exp 0 at every level (1..45),
+    // _conqueror_level 0, _block_end_time = server time - 24 h, the real subzone of the last spot, the equipped wing and wing skin,
+    // the combat power, every worn item with godstones [0,0,0] and fx 14 on the weapon only, _item_count_list empty.
+
+    /// <summary>Character setting "lobby": what the list shows that only the world knows (combat power, the shown wing).</summary>
+    public const string LobbySetting = "lobby";
+
+    sealed record LobbyView(long Cp, int Wing, int WingSkin);
+    (Guid Character, LobbyView View)? savedLobbyView;
+
+    /// <summary>
+    /// Saves the combat power and the shown wing (and its skin) for the character list, when they changed: at every forced
+    /// checkpoint (Logout_RQ, Lobby_RQ, disconnect). The lobby then lists them as official without loading the character.
+    /// </summary>
+    async Task SaveLobbyViewAsync(CancellationToken ct)
+    {
+        if (Store is null || CharacterId is not { } character || resources is null) return;
+        LobbyView view;
+        try { view = new LobbyView(CombatPower(), wingId, wingId != 0 && wingSkin != 0 ? wingSkin : 0); }
+        catch (Exception error) when (error is ArgumentException or InvalidOperationException or KeyNotFoundException) { return; }
+        if (savedLobbyView is { } saved && saved.Character == character && saved.View == view) return;
+        await SaveSettingAsync(LobbySetting, new { cp = view.Cp, wing = view.Wing, wing_skin = view.WingSkin }, ct);
+        savedLobbyView = (character, view);
+    }
+
+    static LobbyView ReadLobbyView(IReadOnlyDictionary<string, JsonElement> settings)
+    {
+        if (!settings.TryGetValue(LobbySetting, out var value) || value.ValueKind != JsonValueKind.Object) return new LobbyView(0, 0, 0);
+        long Number(string name) => value.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.Number && v.TryGetInt64(out var n) ? n : 0;
+        return new LobbyView(Math.Clamp(Number("cp"), 0, 2_000_000_000), (int)Number("wing"), (int)Number("wing_skin"));
+    }
+
+    /// <summary>
+    /// The worn items as the lobby draws them (visual slot order, equipped skins, godstones [0,0,0] on items as official) and their
+    /// item level (the item's level plus its enchant's, as the character window's EquipItemLevel). The weapon's fx bit is 14 in the
+    /// official lists and 0 in CharCreate_RS; every other slot 0.
+    /// </summary>
+    async Task<(List<EquipBroad> Equips, int ItemLevel)> LobbyEquipsAsync(INativeCharacterStore store, Guid character, int weaponFx, CancellationToken ct)
+    {
+        var worn = (await store.WornItemsAsync(character, ct)).Where(i => i.Location == "equipment" && i.Slot is { } s && VisualSlot.ContainsKey(s))
+            .OrderBy(i => VisualSlot[i.Slot!.Value]).ToList();
+        // With the equipped skins (the lobby drew every character without them, live 2026-11-09).
+        var skins = new Dictionary<int, int>();
+        foreach (var (skinSlot, skinId) in (await store.ExtrasAsync(character, ct)).SkinEquips) skins[skinSlot] = skinId;
+        var equips = SkinnedEquips(worn.ToDictionary(i => VisualSlot[i.Slot!.Value], i => i.TemplateId),
+                worn.ToDictionary(i => VisualSlot[i.Slot!.Value], i => (byte)Math.Clamp(EnchantOf(i), 0, 255)), skins, all: false, godstones: true)
+            .Select(e => e with { FxBit = e.VisualSlot == 1 ? weaponFx : 0 }).ToList();
+        var itemLevel = worn.Sum(i => data.ItemLevel(i.TemplateId) + Enchants.Effect(i.TemplateId, EnchantOf(i)).ItemLevel);
+        return (equips, itemLevel);
+    }
+
+    /// <summary>One character of the list, from the stored state, items, legion and the saved lobby view.</summary>
+    async Task<LobbyCharacter> LobbyRecordAsync(INativeCharacterStore store, CharacterState state, long now,
+        IReadOnlyDictionary<Guid, DateTimeOffset> deletions, IReadOnlyDictionary<Guid, DateTimeOffset> renames, CancellationToken ct)
+    {
+        var id = state.Summary.CharacterId;
+        var profile = StoredProfile(state);
+        var (equips, itemLevel) = await LobbyEquipsAsync(store, id, weaponFx: 14, ct);
+        var view = ReadLobbyView(await store.CharacterSettingsAsync(id, ct));
+        var position = StoredCharacters.Position(state);
+        return new LobbyCharacter
+        {
+            Key = state.WireId, DbId = state.WireId, Nickname = state.Summary.Name, PcId = profile.PcId,
+            Race = state.Race, Gender = state.Gender, Level = state.Progress.Level, CombatLevel = 1,   // 1 at every level (OBSERVED)
+            Experience = state.Progress.Experience, EquipItemLevel = itemLevel,
+            GuildName = (await store.GuildOfAsync(id, ct))?.Name ?? "",
+            // The last online time (the last save, the logout's included); 0 made the lobby show "No Online Record".
+            LogoutTime = state.LastOnline?.ToUnixTimeMilliseconds() ?? 0,
+            Position = position, ZoneId = LobbyZones.ZoneOf(state.Progress.MapId, position, state.Race),
+            RegTime = state.Created?.ToUnixTimeMilliseconds() ?? 0,
+            PendingDeleteTime = deletions.TryGetValue(id, out var deleteAt) ? deleteAt.ToUnixTimeMilliseconds() : 0,
+            Equips = equips, BlockEndTime = GamePackets.UnblockedSince(now), WingId = view.Wing, WingSkinId = view.Wing != 0 ? view.WingSkin : 0,
+            CustomizingData = state.Appearance, VoiceType = state.VoiceType,
+            LastNicknameChangeTime = renames.TryGetValue(id, out var renamedAt) ? renamedAt.ToUnixTimeMilliseconds() : 0,
+            SlotNo = state.LobbySlot ?? throw new ArgumentException("Character has no assigned lobby slot"),
+            CombatPower = view.Cp,
+        };
     }
 }

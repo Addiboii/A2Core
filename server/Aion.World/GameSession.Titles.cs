@@ -62,12 +62,16 @@ public sealed partial class GameSession
     }
 
     /// <summary>0x5679 TitleList_NT: the owned ids, then the equipped map {category u8, title i32} (the shown title under 0).</summary>
+    internal byte[] TitleListForChecks() => TitleList();
     byte[] TitleList()
     {
         var w = PacketWriter.Opcode(TitleListNt).Varint(titles.Count);
         foreach (var id in titles) w.I32(id);
-        w.Varint(titleEquips.Count);
-        foreach (var (category, id) in titleEquips.OrderBy(p => p.Key)) w.U8((byte)category).I32(id);
+        // Only the three equip slots (ETitleEquipCategory 1-3): OBSERVED official lists `03 01 .. 02 .. 03 ..` and never a 0
+        // entry; the shown title goes with the appearance (live 2026-11-07: our extra 0 entry, the title window did not take an equip).
+        var equipped = titleEquips.Where(p => p.Key is >= 1 and <= 3).OrderBy(p => p.Key).ToList();
+        w.Varint(equipped.Count);
+        foreach (var (category, id) in equipped) w.U8((byte)category).I32(id);
         return w.ToArray();
     }
 
@@ -123,6 +127,9 @@ public sealed partial class GameSession
         worldPlayer?.Map?.Broadcast(worldPlayer, [shown]);
         return [Reply(0), shown];
     }
+
+    /// <summary>0x5681 TitleEquipChange_NT {ETitleEquipCategory u8, title i32}.</summary>
+    public static byte[] TitleEquipChange(int category, int titleId) => PacketWriter.Opcode(TitleEquipChangeNt).U8((byte)category).I32(titleId).ToArray();
 
     async Task<bool> SaveTitleAsync(int category, int titleId, CancellationToken ct)
     {

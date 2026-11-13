@@ -12,18 +12,19 @@ public sealed partial class PostgresCharacterRepository(NpgsqlDataSource dataSou
 {
     private const string SummaryColumns = "c.character_id,c.account_id,c.world_id,c.name,c.level";
     private const string StateColumns = SummaryColumns +
-        ",c.creation_id,c.race,c.gender,c.appearance,c.experience,c.map_id,c.position::text,c.resources::text,c.revision,c.wire_id,c.voice_type,c.lobby_slot,c.ascension::int,c.staff";
+        ",c.creation_id,c.race,c.gender,c.appearance,c.experience,c.map_id,c.position::text,c.resources::text,c.revision,c.wire_id,c.voice_type,c.lobby_slot,c.ascension::int,c.staff,c.updated_at,c.created_at,c.home_server_id";
 
     public async Task<IReadOnlyList<CharacterSummary>> ListOwnedAsync(Guid accountId, CancellationToken cancellationToken)
     {
         await using var command = dataSource.CreateCommand($"""
-            SELECT {SummaryColumns},c.race FROM game.characters c JOIN auth.accounts a USING(account_id)
+            SELECT {SummaryColumns},c.race,c.home_server_id FROM game.characters c JOIN auth.accounts a USING(account_id)
             WHERE c.account_id=$1 AND a.disabled_at IS NULL ORDER BY c.created_at,c.character_id
             """);
         command.Parameters.AddWithValue(accountId);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         var result = new List<CharacterSummary>();
-        while (await reader.ReadAsync(cancellationToken)) result.Add(ReadSummary(reader) with { Race = reader.GetInt32(5) });
+        while (await reader.ReadAsync(cancellationToken))
+            result.Add(ReadSummary(reader) with { Race = reader.GetInt32(5), HomeServerId = reader.IsDBNull(6) ? null : reader.GetInt32(6) });
         return result;
     }
 
@@ -118,5 +119,11 @@ public sealed partial class PostgresCharacterRepository(NpgsqlDataSource dataSou
                 reader.IsDBNull(10) ? null : reader.GetInt32(10),
                 JsonSerializer.Deserialize<JsonElement>(reader.GetString(11)),
                 JsonSerializer.Deserialize<JsonElement>(reader.GetString(12))), reader.GetInt64(13),
-                reader.GetInt32(14),reader.GetInt32(15),reader.IsDBNull(16)?null:reader.GetInt32(16),reader.GetInt32(17),reader.GetBoolean(18));
+                reader.GetInt32(14),reader.GetInt32(15),reader.IsDBNull(16)?null:reader.GetInt32(16),reader.GetInt32(17),reader.GetBoolean(18),
+                // updated_at: the trigger sets it on every save, the logout's position save included (the lobby's last online time).
+                reader.GetFieldValue<DateTimeOffset>(19),
+                // created_at: the lobby's character creation date (LobbyCharDesc _reg_time).
+                reader.GetFieldValue<DateTimeOffset>(20))
+            // home_server_id: the character's world (four worlds, migration 093).
+            { HomeServerId = reader.IsDBNull(21) ? null : reader.GetInt32(21) };
 }

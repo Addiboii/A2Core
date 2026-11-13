@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Poses (looping social actions) and standing abnormals of placed NPCs that our MapData export does not carry, OBSERVED in the
+     official NpcAppear_NT 0x3641 (mask 0x0c00: the social action, its start). Read once at start-up; matched by map, spawner
+     name and NPC template.
+     Brigade base after the bombing (capture-13700-20261107-014953, the re-entry after Cutscene_L_A_Seq_1300): the injured
+     commander lies wounded (1075), the fallen Legion soldiers lie dead (1161-1163 by template) with abnormal 12000071 (no end). -->
+<poses>
+	<pose map="100002" spawner="L_Starter_InstanceLayer_2_Commander_1" npc="2970141" social="1075"/>
+	<pose map="100002" spawner="L_Starter_InstanceLayer_2_Multi_LegionNpcCorpse_1" npc="2970142" social="1161" abnormal="12000071"/>
+	<pose map="100002" spawner="L_Starter_InstanceLayer_2_Multi_LegionNpcCorpse_1" npc="2970143" social="1163" abnormal="12000071"/>
+	<pose map="100002" spawner="L_Starter_InstanceLayer_2_Multi_LegionNpcCorpse_1" npc="2970144" social="1161" abnormal="12000071"/>
+	<pose map="100002" spawner="L_Starter_InstanceLayer_2_Multi_LegionNpcCorpse_1" npc="2970145" social="1162" abnormal="12000071"/>
+	<!-- Drakana Heist (map 100013, capture-13700-20261107-013918 #16010-#16030, #17882): the floor bombs, the hidden floor traps and the
+	     Draco bombs appear with abnormal 10000001 (permanent, uid 1, caster themselves) as the official NpcAppear_NT carries it. -->
+	<pose map="100013" spawner="M_L0_Starter_HQ004_Bomb_05_Mulit_1" npc="2290018" abnormal="10000001"/>
+	<pose map="100013" spawner="M_L0_Starter_HQ004_Bomb_Muti_01_001" npc="2290018" abnormal="10000001"/>
+	<pose map="100013" spawner="M_L0_Starter_HQ004_Bomb_Muti_02_001" npc="2290018" abnormal="10000001"/>
+	<pose map="100013" spawner="M_L0_Starter_HQ004_Bomb_Muti_03_001" npc="2290018" abnormal="10000001"/>
+	<pose map="100013" spawner="M_L0_Starter_HQ004_Bomb_Muti_up_1" npc="2290014" abnormal="10000001"/>
+	<pose map="100013" spawner="M_L0_Starter_HQ004_Bomb_Muti_up_2" npc="2290013" abnormal="10000001"/>
+	<!-- Hit gauges: objects destroyed by a number of hits, not by damage (each hit takes one point), with their relationship and
+	     standing abnormal. OBSERVED: the Light HQ001 totem M_L0_HQ_DraTotemA_01_01 (2290017, capture 20261107-011529) appears with
+	     HP 7/7, relationship 6 (Monster), abnormal 10000001. The Asmodian HQ001 totem (2590052) keeps its NpcData relationship 4
+	     (NPC_Dark: not a target for Asmodians) until the script's stage 2 step 8 ChangeRelationshipEntity Monster_AntiCompanion, right
+	     before Elvida's "Destroy that Watchstone!" (step 9). As Monster (6) from its spawn the player broke it during step 8 and the
+	     step 9 kill never counted (live 2026-11-13 "spirit"). Hits and abnormal PROVISIONAL (no Asmodian recording). -->
+	<gauge npc="2290017" hits="7" relationship="6" abnormal="10000001"/>
+	<gauge npc="2590052" hits="7" relationship="4" abnormal="10000001" provisional="true"/>
+</poses>

@@ -25,6 +25,8 @@ ProtectSystem=strict
 ProtectHome=true
 PrivateTmp=true
 ReadWritePaths=/var/lib/aion
+# Client message traces (optional; the leading - ignores the folder when it does not exist).
+ReadWritePaths=-/var/log/aion
 LimitNOFILE=65536
 
 [Install]

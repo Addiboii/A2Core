@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- MP gained by the player's hits (PROVISIONAL, measured in the official recordings 2026-11-06/07, no client table found):
+     a damaging cast of a skill that costs no MP (the class's basic fixed-slot skill and its chains: Sorcerer Flame Arrow,
+     Burst, Ranger Snipe, Rapid Fire) restores MP once per cast, sent as a single MP point (0x8d00 point 1) as official.
+     Sorcerer +150 per cast (Flame Arrow, Burst; Pyroclasm +180), Ranger +180 (Snipe; Rapid Fire 3 x 60). Other classes: the
+     default until recorded. regen_per_second: the natural MP recovery (official about +30 steps). -->
+<mp_gain default="150" regen_per_second="30">
+	<class name="Sorcerer" per_cast="150"/>
+	<class name="Ranger" per_cast="180"/>
+</mp_gain>

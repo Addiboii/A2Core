@@ -39,6 +39,17 @@ public interface IStaffTools
     /// <summary>Admins only.</summary>
     Task<MaintenanceState> SetMaintenanceAsync(VerifiedAccount actor, bool enabled, string message, CancellationToken ct = default);
 
+    /// <summary>The Black Cloud market settings (server setting "premium_shop", JSON text) with when and by whom; null JSON when never set.</summary>
+    Task<(string? Json, DateTimeOffset? Since, string? By)> PremiumShopSettingsAsync(CancellationToken ct = default) =>
+        Task.FromResult<(string?, DateTimeOffset?, string?)>((null, null, null));
+    /// <summary>Admins only: stores the market settings (JSON checked by the caller; null clears them back to server-rules.xml), audited.</summary>
+    Task SetPremiumShopSettingsAsync(VerifiedAccount actor, string? json, CancellationToken ct = default) => Task.CompletedTask;
+    /// <summary>The Black Cloud Merchants settings (server setting "random_shop", JSON text) with when and by whom; null JSON when never set.</summary>
+    Task<(string? Json, DateTimeOffset? Since, string? By)> RandomShopSettingsAsync(CancellationToken ct = default) =>
+        Task.FromResult<(string?, DateTimeOffset?, string?)>((null, null, null));
+    /// <summary>Admins only: stores the Black Cloud Merchants settings (JSON checked by the caller; null clears them), audited.</summary>
+    Task SetRandomShopSettingsAsync(VerifiedAccount actor, string? json, CancellationToken ct = default) => Task.CompletedTask;
+
     /// <summary>Every sanction not revoked and not expired (the host caches them for login and chat checks).</summary>
     Task<IReadOnlyList<Sanction>> ActiveSanctionsAsync(CancellationToken ct = default);
     Task<IReadOnlyList<Sanction>> SanctionsAsync(VerifiedAccount actor, bool includeEnded, CancellationToken ct = default);

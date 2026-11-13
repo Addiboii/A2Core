@@ -125,6 +125,8 @@ STAFF_PATH="$(grep -s '^Aion__Web__StaffPath=' $CONFIG/aion.env | cut -d= -f2- |
 TOTP_KEY="$(grep -s '^Aion__Totp__EncryptionKey=' $CONFIG/aion.env | cut -d= -f2- || true)"
 [[ -n "$TOTP_KEY" ]] && TLS_ARGS+=(--totp-key "$TOTP_KEY")
 [[ $OPEN_REGISTRATION -eq 1 ]] && TLS_ARGS+=(--open-registration)
+# Client message traces for research (tools/feature_gaps.py) when the folder exists (setup-auto-redeploy.sh makes it).
+[[ -d /var/log/aion/traces ]] && TLS_ARGS+=(--trace-directory /var/log/aion/traces)
 as_aion python3 $SRC/tools/server_env.py --public-address "$PUBLIC_ADDRESS" --data $DATA --state $STATE "${TLS_ARGS[@]}" > $CONFIG/aion.env.new
 chown root:aion $CONFIG/aion.env.new && chmod 640 $CONFIG/aion.env.new && mv $CONFIG/aion.env.new $CONFIG/aion.env
 # Operator settings that survive updates (aion.env is rewritten each run): created once, never overwritten.

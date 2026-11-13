@@ -123,9 +123,107 @@ public sealed class NavMesh
     /// Waypoints from <paramref name="from"/> to <paramref name="to"/> on the mesh (excluding the
     /// start), or null when either end is off the mesh or no path exists within maxNodes polygons.
     /// </summary>
-    public List<Vector3d>? FindPath(Vector3d from, Vector3d to, int maxNodes = 4096)
+    /// <summary>
+    /// Line of sight along the floor: every stepCm (25) along the straight line from <paramref name="from"/> to <paramref name="to"/>
+    /// stays on the mesh, the floor never stepping more than MaxStepCm (walls and obstacles are holes or cliffs in the mesh).
+    /// True when an end is off the mesh (no data there: not blocked).
+    /// </summary>
+    public bool LineOfSight(Vector3d from, Vector3d to, double stepCm = 25, double maxStepCm = 120)
     {
-        if (Locate(from.X, from.Y, from.Z) is not { } start || Locate(to.X, to.Y, to.Z) is not { } goal) return null;
+        if (Locate(from.X, from.Y, from.Z) is not { } start || Locate(to.X, to.Y, to.Z) is null) return true;
+        double dx = to.X - from.X, dy = to.Y - from.Y;
+        var length = Math.Sqrt(dx * dx + dy * dy);
+        var steps = (int)Math.Ceiling(length / stepCm);
+        var z = start.Z;
+        for (var i = 1; i < steps; i++)
+        {
+            var t = i / (double)steps;
+            if (Locate(from.X + dx * t, from.Y + dy * t, z, maxStepCm) is not { } here) return false;
+            z = here.Z;
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// The farthest point from <paramref name="from"/> towards <paramref name="to"/> along the floor (Detour's moveAlongSurface,
+    /// simplified): the straight line is walked every stepCm and stops before the first wall, hole or cliff (a floor step over
+    /// maxStepCm). The result stands on the floor. <paramref name="to"/> unchanged when <paramref name="from"/> is off the mesh.
+    /// </summary>
+    public Vector3d MoveAlong(Vector3d from, Vector3d to, double stepCm = 25, double maxStepCm = 120)
+    {
+        if (Locate(from.X, from.Y, from.Z) is not { } start) return to;
+        double dx = to.X - from.X, dy = to.Y - from.Y;
+        var steps = Math.Max(1, (int)Math.Ceiling(Math.Sqrt(dx * dx + dy * dy) / stepCm));
+        var last = new Vector3d(from.X, from.Y, start.Z);
+        for (var i = 1; i <= steps; i++)
+        {
+            var t = i / (double)steps;
+            double x = from.X + dx * t, y = from.Y + dy * t;
+            if (Locate(x, y, last.Z, maxStepCm) is not { } here) break;
+            last = new Vector3d(x, y, here.Z);
+        }
+        return last;
+    }
+
+    /// <summary>
+    /// Where a jump from <paramref name="from"/> towards <paramref name="toward"/> lands: the farthest floor point on that line between
+    /// minDistance and maxDistance whose height is at most maxUp above and maxDown below the start (the far side of a gap, a ledge or a
+    /// low obstacle). Null when there is none or the start is off the mesh.
+    /// </summary>
+    public Vector3d? JumpTarget(Vector3d from, Vector3d toward, double minDistance, double maxDistance, double maxUp, double maxDown, double stepCm = 25)
+    {
+        if (Locate(from.X, from.Y, from.Z) is not { } start) return null;
+        double dx = toward.X - from.X, dy = toward.Y - from.Y;
+        var length = Math.Sqrt(dx * dx + dy * dy);
+        if (length < 1) return null;
+        double ux = dx / length, uy = dy / length;
+        for (var d = Math.Min(maxDistance, length); d >= minDistance; d -= stepCm)
+        {
+            double x = from.X + ux * d, y = from.Y + uy * d;
+            if (Locate(x, y, start.Z, Math.Max(maxUp, maxDown)) is { } floor && floor.Z - start.Z <= maxUp && start.Z - floor.Z <= maxDown)
+                return new Vector3d(x, y, floor.Z);
+        }
+        return null;
+    }
+
+    /// <summary>The point of polygon p nearest to (x, y) in the ground plane: (x, y) itself when inside.</summary>
+    (double X, double Y) ClosestPoint(int p, double x, double y)
+    {
+        var n = vertStart[p + 1] - vertStart[p];
+        bool inside = true, anyLeft = false, anyRight = false;
+        (double X, double Y) best = (x, y);
+        var bestD = double.MaxValue;
+        for (var i = 0; i < n; i++)
+        {
+            var a = (vertStart[p] + i) * 3;
+            var b = (vertStart[p] + (i + 1) % n) * 3;
+            double ax = verts[a], ay = verts[a + 1], bx = verts[b], by = verts[b + 1];
+            var side = (bx - ax) * (y - ay) - (by - ay) * (x - ax);
+            if (side > 1e-9) anyLeft = true; else if (side < -1e-9) anyRight = true;
+            double ex = bx - ax, ey = by - ay, len = ex * ex + ey * ey;
+            var t = len > 0 ? Math.Clamp(((x - ax) * ex + (y - ay) * ey) / len, 0, 1) : 0;
+            double cx = ax + ex * t, cy = ay + ey * t, d = (cx - x) * (cx - x) + (cy - y) * (cy - y);
+            if (d < bestD) { bestD = d; best = (cx, cy); }
+        }
+        inside = !(anyLeft && anyRight);   // convex polygon: the point is on one side of every edge
+        return inside ? (x, y) : best;
+    }
+
+    public List<Vector3d>? FindPath(Vector3d from, Vector3d to, int maxNodes = 4096) => FindPath(from, to, maxNodes, partial: false);
+
+    /// <summary>
+    /// Like <see cref="FindPath(Vector3d, Vector3d, int)"/>, but when the goal is off the mesh (a player on a rock), on an
+    /// unconnected island or beyond maxNodes, the path leads to the reachable spot nearest the goal instead of null (Detour's
+    /// partial path), so a monster goes as close as it can instead of straight through the wall. Null only off the mesh at the start.
+    /// </summary>
+    public List<Vector3d>? FindPathPartial(Vector3d from, Vector3d to, int maxNodes = 4096) => FindPath(from, to, maxNodes, partial: true);
+
+    List<Vector3d>? FindPath(Vector3d from, Vector3d to, int maxNodes, bool partial)
+    {
+        if (Locate(from.X, from.Y, from.Z) is not { } start) return null;
+        var goalHit = Locate(to.X, to.Y, to.Z);
+        if (goalHit is null && !partial) return null;
+        var goal = (Poly: goalHit?.Poly ?? -1, Z: goalHit?.Z ?? to.Z);
         var end = new Vector3d(to.X, to.Y, goal.Z);
         if (start.Poly == goal.Poly) return [end];
         // A* over polygons; a node's position is where the path enters it (the portal midpoint).
@@ -136,11 +234,20 @@ public sealed class NavMesh
         var open = new PriorityQueue<int, double>();
         open.Enqueue(start.Poly, 0);
         var found = false;
+        // Partial: the explored polygon nearest the goal (where the path ends when the goal cannot be reached).
+        var nearest = start.Poly;
+        var nearestD = double.MaxValue;
         while (open.TryDequeue(out var current, out _))
         {
             if (current == goal.Poly) { found = true; break; }
             if (!closed.Add(current)) continue;
-            if (closed.Count > maxNodes) return null;
+            if (partial)
+            {
+                var c = ClosestPoint(current, to.X, to.Y);
+                var d = (c.X - to.X) * (c.X - to.X) + (c.Y - to.Y) * (c.Y - to.Y);
+                if (d < nearestD) { nearestD = d; nearest = current; }
+            }
+            if (closed.Count > maxNodes) { if (!partial) return null; break; }
             var at = entry[current];
             for (var l = linkStart[current]; l < linkStart[current + 1]; l++)
             {
@@ -154,7 +261,16 @@ public sealed class NavMesh
                 open.Enqueue(next, g + Dist(mid, (end.X, end.Y, end.Z)));
             }
         }
-        if (!found) return null;
+        if (!found)
+        {
+            if (!partial) return null;
+            // End at the reachable spot nearest the goal: the nearest point of the nearest explored polygon, on its floor.
+            var spot = ClosestPoint(nearest, to.X, to.Y);
+            var spotZ = SurfaceZ(nearest, spot.X, spot.Y) ?? entry[nearest].Z;
+            goal = (nearest, spotZ);
+            end = new Vector3d(spot.X, spot.Y, spotZ);
+            if (nearest == start.Poly) return [end];
+        }
         // Portals along the corridor, oriented left/right of the direction of travel.
         var chain = new List<(int Poly, int Link)>();
         for (var p = goal.Poly; p != start.Poly; p = parent[p].Poly) chain.Add(parent[p]);

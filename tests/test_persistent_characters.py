@@ -29,7 +29,7 @@ class PersistentCharacterTests(unittest.TestCase):
         second=PersistentCharacters(self.store,self.account).create(self.creation(),now_ms=1)
         self.assertEqual(request,self.store.create.call_args.args[0])
         self.assertEqual(first,second)
-        self.assertEqual(int.from_bytes(first[6:10],'little'),123)
+        self.assertEqual(int.from_bytes(first[4:8],'little'),123)
         self.assertEqual(self.store.create.call_args.kwargs,dict(voice_type=4,lobby_slot=2))
         self.store.create.side_effect=ValueError('database unavailable')
         with self.assertRaises(ValueError): self.adapter.create(self.creation())

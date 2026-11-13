@@ -38,6 +38,9 @@ public sealed class WorldLoadReporter(SharedWorld world, WorldPresence presence,
                 WorldBusy = Math.Round(w.ExclusiveBusy, 4), MapBusy = Math.Round(w.SharedBusy, 4),
                 WorldWaitMs = Math.Round(w.AverageExclusiveWaitMs, 2), MapWaitMs = Math.Round(w.AverageSharedWaitMs, 2),
                 WindowSeconds = Math.Round(w.Seconds, 1), RestartAt = restartAt,
+                // Protection / anti-cheat (user 2026-11-08): connection floods blocked, IPs on cooldown, speed-hack snap-backs now online.
+                RefusedConnections = NetworkMetrics.RefusedConnections, BlockedIps = NetworkMetrics.BlockedIps,
+                SpeedRejects = players.All.Sum(e => e.Session.SpeedRejects),
             };
         }
     }

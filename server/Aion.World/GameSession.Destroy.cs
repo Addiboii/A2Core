@@ -22,6 +22,8 @@ public sealed partial class GameSession
 
     /// <summary>CANDIDATE: a broken object's despawn after its break (OBSERVED 6150 ms in 2 of 4, 4649 and 4754 in the others).</summary>
     public const long BrokenDespawnMs = 6150;
+    /// <summary>ERelationshipEntity EnvObj_Destroy.</summary>
+    public const int EnvObjDestroyRelationship = 15;
 
     public static byte[] EnvObjHitCount(int key, int casts) => PacketWriter.Opcode(0x8d93).Varint(key).I32(casts).ToArray();
 

@@ -39,6 +39,13 @@ public sealed class DungeonCopy(GameSession host, int dungeonId, long now)
     public Dictionary<string, int> Revives { get; } = [];
     /// <summary>Treasure boxes opened in this run: (character key as for <see cref="Revives"/>, object index).</summary>
     public HashSet<(string Who, int Index)> ChestsOpened { get; } = [];
+    /// <summary>A daily dungeon run's points so far (DungeonPoint.dat; GameSession.DailyDungeons.cs).</summary>
+    public int Points { get; set; }
+    /// <summary>The buffs the run offers (slot, DungeonBuff row; GameSession.DungeonBuffs.cs) and the slot chosen.</summary>
+    public List<(int Slot, DungeonBuffRow Buff)>? BuffOffer { get; set; }
+    public int? BuffChosen { get; set; }
+    /// <summary>A Shugo festival event map's game (GameSession.FestivalGames.cs), shared by everyone in the run.</summary>
+    public FestivalRun? Festival { get; set; }
     /// <summary>The final boss's cube reward each player took (player key → items), once per run.</summary>
     public Dictionary<int, List<(int ItemId, long Count)>> CubeTaken { get; } = [];
 }
@@ -73,9 +80,30 @@ public sealed partial class GameSession
         var id = MapEventData.DungeonIdOfMap(mapId);
         DungeonCopy Fresh()
         {
-            var limit = room.Limit > 0 ? room.Limit : room.Progress;
-            var fresh = new DungeonCopy(this, id, now) { DeadlineMs = limit > 0 && Timed(room) ? now + (room.Ready + limit) * 1000L : 0 };
-            if (room.Ready > 0) { fresh.Phase = "Prepare"; fresh.ProcessAtMs = now + room.Ready * 1000L; }
+            // A daily dungeon's time and ready phase are not in Dungeon.dat (ProcessStateHoldingTime 0): daily-dungeons.json (CANDIDATE).
+            var daily = Dailies.Of(id);
+            var limit = room.Limit > 0 ? room.Limit : room.Progress > 0 ? room.Progress : daily?.LimitS ?? 0;
+            var ready = room.Ready > 0 ? room.Ready : daily?.ReadyS ?? 0;
+            var fresh = new DungeonCopy(this, id, now) { DeadlineMs = limit > 0 && Timed(room) ? now + (ready + limit) * 1000L : 0 };
+            if (ready > 0) { fresh.Phase = "Prepare"; fresh.ProcessAtMs = now + ready * 1000L; }
+            // A scheduled festival event's map: its ready time and its end are the schedule's (EventSchedule.dat), not counted
+            // from this entry (CANDIDATE: the official DungeonState inside an event map is unrecorded).
+            if (room.Type == "FieldEvent" && FieldEventOfMap(mapId) is { } fieldEvent
+                && FieldEventState(fieldEvent, now) is { State: FieldEventPrepare or FieldEventProgress } run)
+            {
+                fresh.DeadlineMs = run.End;
+                if (run.State == FieldEventPrepare) { fresh.Phase = "Prepare"; fresh.ProcessAtMs = run.Start; }
+                else fresh.Phase = "Process";
+                fresh.Festival = NewFestivalRun(mapId, run.Start, run.End);
+            }
+            // Staff in an event map outside its hours (a test run, OURS): 10 s of Prepare, then the game for its ProgressTime.
+            else if (room.Type == "FieldEvent" && Festivals.OfMap(mapId) is { } test)
+            {
+                fresh.Phase = "Prepare";
+                fresh.ProcessAtMs = now + 10_000;
+                fresh.DeadlineMs = fresh.ProcessAtMs + test.ProgressS * 1000L;
+                fresh.Festival = NewFestivalRun(mapId, fresh.ProcessAtMs, fresh.DeadlineMs);
+            }
             return fresh;
         }
         if (sharedMap is not null) copy = sharedMap.Dungeon ??= Fresh();
@@ -94,6 +122,8 @@ public sealed partial class GameSession
         if (copy is not { Phase: "Prepare" } c || c.Host != this || now < c.ProcessAtMs) return [];
         c.Phase = "Process";
         var replies = new List<byte[]> { DungeonState(c.DungeonId, DungeonStateProcess, now, c.DeadlineMs) };
+        // A daily run's point counter starts with the run, as at an entry while it runs (CANDIDATE, DungeonStateAtEntry).
+        if (Dailies.Of(c.DungeonId) is not null) replies.Add(DailyDungeons.DungeonPoint(c.DungeonId, c.Points));
         replies.AddRange(StartEligibleEvents(now));
         return replies;
     }
@@ -140,11 +170,11 @@ public sealed partial class GameSession
     /// </summary>
     internal static IEnumerable<byte[]> DungeonLimitsAtEntry(int deaths = 0) =>
         [PacketWriter.Opcode(DungeonDeathLimitNt).I32(deaths).ToArray(), PacketWriter.Opcode(DungeonClearKillNpcNt).U8(0).ToArray()];
-
     /// <summary>The host's tick: the Complete state's hold ended, End (4) runs 600 s from there (OBSERVED 234912 #45201).</summary>
     void DungeonEndTick(long now)
     {
-        if (copy is not { Cleared: true, EndSent: false } c || c.Host != this || now < c.CompleteEndsMs) return;
+        // Only a clear through the map event (ClearedMs set); daily dungeons and festival games send their own Complete and End.
+        if (copy is not { Cleared: true, EndSent: false } c || c.Host != this || c.ClearedMs == 0 || now < c.CompleteEndsMs) return;
         c.EndSent = true;
         mapEventOut.Add(DungeonState(c.DungeonId, DungeonStateEnd, c.CompleteEndsMs, c.CompleteEndsMs + DungeonEndStateMs));
     }
@@ -156,10 +186,13 @@ public sealed partial class GameSession
         // An instance layer (the story): running since the entry, no deadline (OBSERVED at the HQ001 entry).
         if (!Timed(room)) return c.Cleared ? [] : [DungeonState(c.DungeonId, DungeonStateProcess, c.StartedMs, 0), .. DungeonLimitsAtEntry(c.Deaths)];
         if (c.Failed) return [];
-        if (c.Phase == "Prepare") return [DungeonState(c.DungeonId, DungeonStatePrepare, c.StartedMs, c.ProcessAtMs)];
+        if (c.Phase == "Prepare") return [DungeonState(c.DungeonId, DungeonStatePrepare, c.StartedMs, c.ProcessAtMs), .. DungeonBuffsAtEntry(now)];
         // After the clear: Complete (3) for the hold, then End (4) for 600 s (OBSERVED 2026-11-06 234912 #44953, #45201).
         if (c.Cleared) return [c.EndSent ? DungeonState(c.DungeonId, DungeonStateEnd, c.CompleteEndsMs, c.CompleteEndsMs + DungeonEndStateMs)
             : DungeonState(c.DungeonId, DungeonStateComplete, c.ClearedMs, c.CompleteEndsMs)];
+        // A daily dungeon's point counter starts with the run (DungeonPoint_NT, CANDIDATE: Dungeon.dat ShowDungeonPoint).
+        if (Dailies.Of(c.DungeonId) is not null)
+            return [DungeonState(c.DungeonId, DungeonStateProcess, ProcessStart(c), c.DeadlineMs), .. DungeonLimitsAtEntry(c.Deaths), DailyDungeons.DungeonPoint(c.DungeonId, c.Points)];
         return [DungeonState(c.DungeonId, DungeonStateProcess, c.StartedMs, c.DeadlineMs), .. DungeonLimitsAtEntry(c.Deaths)];
     }
 
@@ -167,6 +200,9 @@ public sealed partial class GameSession
     void DungeonTimeLimit(long now)
     {
         if (copy is not { } c || c.Host != this || c.DeadlineMs == 0 || c.Cleared || c.Failed || now < c.DeadlineMs) return;
+        if (Dailies.Of(c.DungeonId) is not null) return;   // a daily run ends with its points at the deadline (DailyTick)
+        // A festival game ends at the event's end as a finished game, not a failed run (GameSession.FestivalGames.cs).
+        if (c.Festival is { } festival) { FestivalFinish(festival, now); return; }
         c.Failed = true;
         Note($"dungeon {c.DungeonId}: the time limit passed");
         mapEventOut.Add(DungeonState(c.DungeonId, DungeonStateEnd, c.StartedMs, now));
@@ -189,6 +225,9 @@ public sealed partial class GameSession
         next.startedSpawners.UnionWith(startedSpawners);
         next.removedObjects.UnionWith(removedObjects);
         next.pendingSpawns.AddRange(pendingSpawns);
+        next.routeDespawns.AddRange(routeDespawns);
+        next.pendingWalks.AddRange(pendingWalks);
+        foreach (var (key, until) in gettingUp) next.gettingUp[key] = until;
         foreach (var (target, buffs) in npcBuffs) next.npcBuffs[target] = buffs;
         next.pendingExit ??= pendingExit;
         next.mapEventsMap = worldMap;
@@ -199,6 +238,9 @@ public sealed partial class GameSession
         startedSpawners.Clear();
         removedObjects.Clear();
         pendingSpawns.Clear();
+        routeDespawns.Clear();
+        pendingWalks.Clear();
+        gettingUp.Clear();
         npcBuffs.Clear();
         mapEventOut.Clear();
         pendingExit = null;
@@ -232,14 +274,18 @@ public sealed partial class GameSession
         (room.Cube ?? []).Keys.Select(k => int.Parse(k, System.Globalization.CultureInfo.InvariantCulture))
             .Where(id => id != room.CubeBoss && c.CubeBossesKilled.Contains(id)).Order().ToList();
 
-    /// <summary>Each table entry is an independent chance of 1e8 with a count range (as LootTables).</summary>
-    static List<(int ItemId, long Count)> RollRewards(long[][] table, Random rng)
+    /// <summary>
+    /// Each table entry is an independent chance of 1e8 with a count range (as LootTables), for a character of a race: an item of
+    /// the other faction is its twin or never hits (FactionRewards.cs; the chance is still rolled so the other entries keep their odds).
+    /// </summary>
+    static List<(int ItemId, long Count)> RollRewards(long[][] table, Random rng, int race)
     {
         var items = new List<(int, long)>();
         foreach (var entry in table)
         {
             if (entry.Length < 4 || rng.NextInt64(100_000_000) >= entry[1]) continue;
-            items.Add(((int)entry[0], entry[2] + rng.NextInt64(entry[3] - entry[2] + 1)));
+            var count = entry[2] + rng.NextInt64(entry[3] - entry[2] + 1);
+            if (FactionRewards.Embedded.ForRace((int)entry[0], race) is { } item) items.Add((item, count));
         }
         return items;
     }
@@ -276,17 +322,15 @@ public sealed partial class GameSession
             return plain is null ? [] : [PacketWriter.Opcode(CubeRewardRs).U16(1).U8(0).Varint(0).ToArray()];
         if (!c.CubeTaken.TryGetValue(playerKey, out var items))
         {
-            if (!PayCubeTicket(room!, now)) return plain is null ? [] : [PacketWriter.Opcode(CubeRewardRs).U16(1).U8(0).Varint(0).ToArray()];
-            items = RollRewards(table, rng);
+            items = RollRewards(table, rng, profileRace);
             foreach (var mid in KilledMidBosses(c, room!))
                 if (room!.Cube!.GetValueOrDefault(mid.ToString(System.Globalization.CultureInfo.InvariantCulture)) is { } midTable)
-                    items.AddRange(RollRewards(midTable, rng));
+                    items.AddRange(RollRewards(midTable, rng, profileRace));
             items = items.GroupBy(i => i.ItemId).Select(g => (g.Key, g.Sum(i => i.Count))).ToList();
             c.CubeTaken[playerKey] = items;
             pendingRewards.Add(items);
         }
-        var replies = ContentTicketUpdates();   // the energy first (OBSERVED 0x610c before the items: 090856 #142335-#142341)
-        replies.AddRange(await GrantPendingRewardsAsync(ct));
+        var replies = await GrantPendingRewardsAsync(ct);
         var writer = PacketWriter.Opcode(CubeRewardRs).U16(0).U8(1).Varint((uint)items.Count);
         foreach (var (item, count) in items) writer.I32(item).I32((int)Math.Min(count, int.MaxValue));
         return [.. replies, writer.ToArray()];

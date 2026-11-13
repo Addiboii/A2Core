@@ -121,7 +121,35 @@ public sealed record NpcSpawn(
     [property: JsonPropertyName("skills")] int[]? Skills = null,
     [property: JsonPropertyName("height")] int Height = 0,
     [property: JsonPropertyName("no_rotation")] bool NoRotation = false,
-    uint UniqueKey = 0, int SocialAction = 0, NpcRoute? Route = null, string SubType = "NormalMonster", int Grade = 3, bool Air = false, int HpMax = 0);
+    uint UniqueKey = 0, int SocialAction = 0, NpcRoute? Route = null, string SubType = "NormalMonster", int Grade = 3, bool Air = false, int HpMax = 0,
+    int SpawnAbnormal = 0);
+
+/// <summary>Poses and standing abnormals of placed NPCs (gamedata/spawn-poses.xml, OBSERVED official appears), by map, spawner and template.</summary>
+public static class SpawnPoses
+{
+    static readonly Lazy<Dictionary<(int Map, string Spawner, int Npc), (int Social, int Abnormal)>> poses = new(() =>
+    {
+        using var stream = typeof(SpawnPoses).Assembly.GetManifestResourceStream("spawn-poses.xml")
+            ?? throw new InvalidOperationException("Missing embedded game data spawn-poses.xml");
+        int I(System.Xml.Linq.XElement e, string name) => int.Parse((string?)e.Attribute(name) ?? "0", System.Globalization.CultureInfo.InvariantCulture);
+        return System.Xml.Linq.XDocument.Load(stream).Root!.Elements("pose").ToDictionary(
+            e => (I(e, "map"), (string?)e.Attribute("spawner") ?? throw new InvalidDataException("spawn-poses.xml: pose without spawner"), I(e, "npc")),
+            e => (I(e, "social"), I(e, "abnormal")));
+    });
+
+    public static (int Social, int Abnormal) Of(int map, string spawner, int npc) => poses.Value.GetValueOrDefault((map, spawner, npc));
+
+    static readonly Lazy<Dictionary<int, (int Hits, int Relationship, int Abnormal)>> gauges = new(() =>
+    {
+        using var stream = typeof(SpawnPoses).Assembly.GetManifestResourceStream("spawn-poses.xml")
+            ?? throw new InvalidOperationException("Missing embedded game data spawn-poses.xml");
+        int I(System.Xml.Linq.XElement e, string name) => int.Parse((string?)e.Attribute(name) ?? "0", System.Globalization.CultureInfo.InvariantCulture);
+        return System.Xml.Linq.XDocument.Load(stream).Root!.Elements("gauge").ToDictionary(e => I(e, "npc"), e => (I(e, "hits"), I(e, "relationship"), I(e, "abnormal")));
+    });
+
+    /// <summary>A hit-gauge object (destroyed by a number of hits), or null.</summary>
+    public static (int Hits, int Relationship, int Abnormal)? Gauge(int npc) => gauges.Value.TryGetValue(npc, out var g) ? g : null;
+}
 
 /// <summary>
 /// A MapData waypoint set an NPC walks (tools/world_npcs.py routes): points, Circular / TwoWay / OneWay, walk or run.
@@ -131,7 +159,8 @@ public sealed record NpcRoute(
     [property: JsonPropertyName("name")] string Name,
     [property: JsonPropertyName("points")] double[][] Points,
     [property: JsonPropertyName("traverse")] string Traverse,
-    [property: JsonPropertyName("run")] bool Run);
+    [property: JsonPropertyName("run")] bool Run,
+    [property: JsonPropertyName("boost")] int Boost = 0);
 
 /// <summary>NpcAggroData: Circle, or ArcCircle (Angle degrees centred on the facing, plus an all-round InnerRadius); Height above the NPC.</summary>
 public sealed record AggroShape(
@@ -314,10 +343,10 @@ public sealed class GameData
         return known.Select(k => (k.Key, k.Value)).ToList();
     }
 
-    /// <summary>Cast data of a class skill (class-skills.json), else of a stigma skill (stigmas.json), else of a specialisation child
-    /// (specialized-skills.json); all the same Skill.dat reading.</summary>
+    /// <summary>A skill's cast data: the class kit's (class-skills.json), else a stigma skill's (stigmas.json), else a specialisation
+    /// child's (specialized-skills.json), else the client table's (skill-behaviour.json: chain follow-ups, auto-load skills).</summary>
     public SkillDefinition? Skill(int skillId) => classes.Skills.GetValueOrDefault(skillId.ToString(System.Globalization.CultureInfo.InvariantCulture))
-        ?? StigmaTables.Embedded.Skill(skillId) ?? SpecializedSkillTables.Embedded.Skill(skillId);
+        ?? StigmaTables.Embedded.Skill(skillId) ?? SpecializedSkillTables.Embedded.Skill(skillId) ?? SkillBehaviour.Embedded.Definition(skillId);
     /// <summary>The SkillCharge.dat row of a charge id (Skill.dat ChargeId), else null.</summary>
     public ChargeRow? Charge(int chargeId) => classes.Charges?.GetValueOrDefault(chargeId.ToString(System.Globalization.CultureInfo.InvariantCulture));
     /// <summary>SkillProjectile.dat Speed of a projectile a class or stigma skill fires (0: unknown).</summary>
@@ -353,6 +382,10 @@ public sealed class GameData
             ? stats : new Dictionary<string, int>();
 
     /// <summary>A damaging NPC skill, or null (unknown, or no damage effect).</summary>
+    /// <summary>An NPC skill whatever its effect: also the no-damage ones (a boss's roar or mechanic, cast for its animation).</summary>
+    public NpcSkill? NpcAnySkill(int skillId) =>
+        npcs.Skills?.GetValueOrDefault(skillId.ToString(System.Globalization.CultureInfo.InvariantCulture)) is { Cooldown: > 0 } skill ? skill : null;
+
     /// <summary>
     /// The hits of an NPC skill in order (world-npcs.json skill_hits, read from Skill.dat SkillEffectTimeDataList by
     /// tools/world_npcs.py): the damage effect and the projectile (0: none) of each; one hit with no projectile when unknown.
@@ -373,7 +406,11 @@ public sealed class GameData
                 x.t.Skills, x.t.Height, x.t.NoRotation,
                 x.s.Length > 6 ? (uint)x.s[6].GetInt64() : 0, x.s.Length > 7 ? x.s[7].GetInt32() : 0,
                 x.s.Length > 8 && x.s[8].GetInt32() is >= 0 and var route && npcs.Routes?.GetValueOrDefault(id.ToString(System.Globalization.CultureInfo.InvariantCulture)) is { } routes
-                    && route < routes.Length ? routes[route] : null, x.t.SubType, x.t.Grade, x.t.Air, x.t.HpMax)).ToList());
+                    && route < routes.Length ? routes[route] : null, x.t.SubType, x.t.Grade, x.t.Air, x.t.HpMax))
+            .Select(s => SpawnPoses.Of(id, s.Name, s.NpcId) is { Social: var social, Abnormal: var abnormal } && (social != 0 || abnormal != 0)
+                ? s with { SocialAction = s.SocialAction != 0 ? s.SocialAction : social, SpawnAbnormal = abnormal } : s)
+            .Select(s => SpawnPoses.Gauge(s.NpcId) is { } g
+                ? s with { HpMax = g.Hits, Relationship = g.Relationship != 0 ? g.Relationship : s.Relationship, SpawnAbnormal = g.Abnormal } : s).ToList());
 
     readonly System.Collections.Concurrent.ConcurrentDictionary<int, IReadOnlyList<NpcSpawn>> spawnsByMap = new();
 

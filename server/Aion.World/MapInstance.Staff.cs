@@ -75,11 +75,11 @@ public sealed partial class MapInstance
                 Key = key, Name = template.Name, Hp = hp, HpMax = hp, Position = at with { X = at.X + Math.Cos(angle) * offset, Y = at.Y + Math.Sin(angle) * offset },
                 NpcId = template.NpcId, Level = template.Level, Grade = template.Grade, Direction = 0, Relationship = template.Relationship, Aggressive = template.Aggressive,
                 WalkSpeed = template.WalkSpeed, RunSpeed = template.RunSpeed, Radius = template.Radius, Function = template.Function,
-                Aggro = template.Aggro, Skills = template.Skills ?? [], NoRotation = template.NoRotation, Air = template.Air, AirMonster = template.Air && template.SubType.EndsWith("Monster", StringComparison.Ordinal), DamageScale = Combat.DamageScale(template.SubType, template.Grade),
+                Aggro = template.Aggro, Skills = template.Skills ?? [], NoRotation = template.NoRotation, Air = template.Air, AirMonster = template.Air && template.SubType.EndsWith("Monster", StringComparison.Ordinal), DamageScale = Combat.DamageScale(template.SubType, template.Grade), Rank = NpcTactics.RankOf(template.SubType),
             };
             Targets[key] = target;
             keys.Add(key);
-            packets.AddRange(Stagger.WithGuard(GamePackets.NpcAppear(target.Appearance()), target));
+            packets.Add(GamePackets.NpcAppear(target.Appearance()));
         }
         // Small maps show every NPC; streaming maps show the new ones at the next visibility check (within a second).
         BroadcastAll(packets);

@@ -187,7 +187,7 @@ class GameServerReplyTests(unittest.TestCase):
         self.assertEqual(len(replies), 1)
         reply = replies[0]
         self.assertEqual(reply[:2], b"\x1c\x36")
-        self.assertEqual(int.from_bytes(reply[2:6], "little", signed=True), 0)
+        self.assertEqual(int.from_bytes(reply[2:4], "little"), 0)   # _result u16 (official)
 
     def test_lobby_char_desc_round_trips_name_and_pos(self):
         record = _lobby_char_desc(key=1, nickname="Player1", pc_id=7,
@@ -215,10 +215,10 @@ class GameServerReplyTests(unittest.TestCase):
         body = build_character_created("Player1", gender=1, now_ms=1791465861099,
                                        customizing_data=b"\xaa\xbb")
         self.assertEqual(body[:2], b"\x1c\x36")
-        self.assertEqual(int.from_bytes(body[2:6], "little", signed=True), 0)
-        # nickname follows the character's _key int32 at offset 6
-        self.assertEqual(body[10], 7)
-        self.assertEqual(body[11:18], b"Player1")
+        # _result u16 as the official samples (2026-11-07), then the character's _key int32 at offset 4
+        self.assertEqual(int.from_bytes(body[2:4], "little"), 0)
+        self.assertEqual(body[8], 7)
+        self.assertEqual(body[9:16], b"Player1")
 
     def test_select_character_request_parses_observed_layout(self):
         # Live 0x361f body: tag u16 | LEB128 key 0x80 0x80 0x04 (65536)
