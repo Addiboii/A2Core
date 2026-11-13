@@ -17,7 +17,7 @@ namespace Aion.World;
 public sealed partial class GameSession
 {
     public const ushort ContentsTicketsNt = 0x610b, ContentsTicketUpdateNt = 0x610c;
-    const byte TicketSpent = 3;
+    const byte TicketSpent = 3, TicketRecharged = 2;   // ETicketReason Use, Recharge
     readonly List<byte[]> contentTicketOut = [];
     static ContentTicketTables ContentTickets => ContentTicketTables.Embedded;
 
@@ -94,6 +94,24 @@ public sealed partial class GameSession
         var w = PacketWriter.Opcode(ContentsTicketsNt).Varint((uint)all.Count);
         foreach (var ticket in all) WriteTicket(w, ticket, now);
         return w.ToArray();
+    }
+
+    long ticketCycleCheckedAt;
+
+    /// <summary>
+    /// A ticket's TimeRechargeCycle boundary passed: 0x610c {00, the ticket, reason 2 Recharge}, also when it was full. OBSERVED
+    /// (our recordings 2026-10-19 to 11-06): 26 updates of the 600 s tickets 10 and 12, each 0-60 s after a ten-minute mark of
+    /// the clock, 24 of them at their maximum 14; some marks in play show none. CANDIDATE: every cycle (the 3-hour 60000001's
+    /// one recorded reason-2 update was not on a boundary), sent at the boundary.
+    /// </summary>
+    void ContentTicketRechargeTick(long now)
+    {
+        var from = ticketCycleCheckedAt;
+        ticketCycleCheckedAt = now;
+        if (from == 0 || now <= from) return;
+        foreach (var ticket in ContentTickets.All)
+            if (ticket.Counted && ticket.Cycle is [var seconds, > 0] && seconds > 0 && now / (seconds * 1000L) > from / (seconds * 1000L))
+                contentTicketOut.Add(WriteTicket(PacketWriter.Opcode(ContentsTicketUpdateNt).U8(0), ticket, now).U8(TicketRecharged).ToArray());
     }
 
     /// <summary>The 0x610c updates queued since the last call.</summary>

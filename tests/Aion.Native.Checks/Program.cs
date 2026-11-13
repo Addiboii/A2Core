@@ -2658,6 +2658,16 @@ var alice = await WorldSession();
 var bob = await WorldSession();
 Check(alice.PlayerKey >= SharedWorld.FirstPlayerKey && bob.PlayerKey == alice.PlayerKey + 1, "each player gets a unique entity key (not 1)");
 Check(ReferenceEquals(alice.Targets, bob.Targets), "players on the same map share its NPCs");
+// At a ten-minute mark of the clock the 600 s tickets (10, 12) send 0x610c reason 2 Recharge, full ones too (our recordings: 26).
+var tix = await WorldSession("Tix");
+var tenMinutes = (Now / 600_000 + 1) * 600_000;
+var beforeMark = await tix.TickAsync(tenMinutes - 1000);
+var atMark = await tix.TickAsync(tenMinutes + 1000);
+var recharges = atMark.Where(b => Op(b) == GameSession.ContentsTicketUpdateNt).ToList();
+Check(!beforeMark.Any(b => Op(b) == GameSession.ContentsTicketUpdateNt)
+      && recharges.Any(b => Convert.ToHexStringLower(b) == "0c6100040a0000000e02") && recharges.Any(b => Convert.ToHexStringLower(b) == "0c6100040c0000000e02"),
+      "a ten-minute mark: 0x610c {00, ticket 10/12 count 14, reason 2} (as recorded 2026-11-04 21:50)");
+tix.ExitSharedWorld();
 var aliceSees = await alice.TickAsync(Now);
 var bobSees = await bob.TickAsync(Now);
 Check(aliceSees.Any(b => Op(b) == 0x3645 && KeyOf(b) == bob.PlayerKey) && bobSees.Any(b => Op(b) == 0x3645 && KeyOf(b) == alice.PlayerKey),
