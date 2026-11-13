@@ -1918,11 +1918,11 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         }
         // The class passives (weapon equip permission) right after the appearance, as the official world entry has them.
         replies.InsertRange(replies.FindIndex(b => b[0] == 0x46 && b[1] == 0x36) + 1, PassiveAbnormals(resend: true));
-        // The entry protection after the appearance and the passives, before the stats (OBSERVED 10002, 5000 ms: 234912 #56805-56811
-        // 0x3633, 0x3646, 0x382a, .., 0x382a 10002, 0x364a; GameSession.LogoutState.cs).
-        if ((fresh && !shortLoad || revivedLoad) && replies.FindIndex(b => b[0] == 0x4a && b[1] == 0x36) is >= 0 and var appeared && EntryProtection(now) is { } protection)
+        // The entry protection after the appearance and the passives, before the stats, on every load (OBSERVED 10002, 5000 ms:
+        // 234912 #56805-56811 0x3633, 0x3646, 0x382a, .., 0x382a 10002, 0x364a; and all 61 loads with 0x3633 in our recordings,
+        // world entries, layer moves (reason 12), teleports (2) and revives (4); GameSession.LogoutState.cs).
+        if (replies.FindIndex(b => b[0] == 0x4a && b[1] == 0x36) is >= 0 and var appeared && EntryProtection(now) is { } protection)
             replies.Insert(appeared, protection);
-        revivedLoad = false;
         replies.InsertRange(0, sameLevelRemovals);   // the same level's old entities go before the load reply (OBSERVED)
         sameLevelRemovals = [];
         if (shortLoad)
@@ -2451,9 +2451,8 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
     /// with a map load at the map's respawn point (else its start, else here). In a dungeon whose revives are used up the player
     /// revives outside instead (the dungeon's way out, as leaving). OBSERVED 2026-11-06 090856 (reports/combat.md 7): 10003 for
     /// 3000 ms both ways (#96732, #104115-#104165). At the respawn point (#104115-#104156): the own 0x3647 reason 4 effect 0x4f,
-    /// 0x3621 with reason 4 and effect 0x4f, 10003, the HP update; after the load's own appearance 0x3646, abnormal 10002 for
-    /// 5000 ms before 0x364a, as at a world entry (the community fork recorded the same order). CANDIDATE: what 10003
-    /// and 10002 do (not in our tables: icon only).
+    /// 0x3621 with reason 4 and effect 0x4f, 10003, the HP update; the load then has abnormal 10002 as every load (the
+    /// community fork recorded the same order). CANDIDATE: what 10003 does (not in our tables: icon only).
     /// </summary>
     List<byte[]> Revive(long now, bool inPlace = false, bool counted = true)
     {
@@ -2480,7 +2479,6 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             ?? data.MapStart(worldMap)?.Position ?? position ?? spawn?.Position ?? GamePackets.SpawnPosition;
         var load = Teleport(worldMap, respawn, now, ReviveReason, ReviveEffect);
         AddBuff(ReviveAbnormal, ReviveAbnormalMs, 0, now, revival);
-        revivedLoad = true;
         return [PlayerPackets.CharDisappear(playerKey, ReviveReason, ReviveEffect), .. load, .. revival.Where(b => b[0] == 0x2a && b[1] == 0x38).Take(1), resources.Update()];
     }
 
@@ -2488,8 +2486,6 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
     const int ReviveAbnormal = 10003, ReviveAbnormalMs = 3000;
     /// <summary>The respawn-point revive's EAppearReasonType and TeleportEffect id (OBSERVED 090856 #104116, #104118: 4 and 0x4f).</summary>
     const byte ReviveReason = 4, ReviveEffect = 0x4f;
-    /// <summary>The next load follows a respawn-point revive: it gets the entry protection 10002 too (OBSERVED #104155).</summary>
-    bool revivedLoad;
 
     // ---------- Stats ----------
 

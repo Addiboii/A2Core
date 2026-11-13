@@ -2777,6 +2777,14 @@ Check(groupKey > 0 && keyedDone.Take(3).Select(Op).SequenceEqual([(ushort)0xe335
       && keyedDone[1].SequenceEqual(GamePackets.GroupRequestProgressed(groupKey, jo.PlayerKey))
       && (await jo.HandleAsync(keyedEnd, Now + 29)).All(b => Op(b) is not (0xe002 or 0xe004)),
       "a map event's cutscene carries a group key; its completion gets 0xe335, 0xe002, 0xe004, a second one 0xe335 alone");
+var mover = await WorldSession("Kim");
+await mover.TickAsync(Now + 9_000);   // the entry's own 10002 has run out
+mover.Teleport(mover.MapId!.Value, GamePackets.SpawnPosition, Now + 10_000);
+var movedEntry = await mover.HandleAsync(new PacketWriter().U16(0x3622).I32(1).ToArray(), Now + 10_100);
+var movedProtection = movedEntry.FindIndex(b => Op(b) == 0x382a && b.AsSpan().IndexOf(Convert.FromHexString("1227000088130000")) > 0);
+Check(movedProtection > movedEntry.FindIndex(b => Op(b) == 0x3646) && movedProtection < movedEntry.FindIndex(b => Op(b) == 0x364a),
+      "every map load (here a teleport) gets 10002 after the own appearance (OBSERVED: all 61 loads in our recordings)");
+mover.ExitSharedWorld();
 jo.DevelopmentQuestLog().Set(new QuestRecord("HQ1101020", 1101020, 80, QuestLog.Incomplete, 2, new int[6]));   // the cave cleared: "Arrive in Ascension Subspace"
 var subspace = await jo.HandleAsync(new PacketWriter().U16(0x3622).I32(1).ToArray(), Now + 30);
 Check(jo.MapId == 200005 && jo.InstanceKey == jo.PlayerKey, "Dungeon_0005_StartPoint: the move into the Ascension dungeon's own copy (map 200005)");

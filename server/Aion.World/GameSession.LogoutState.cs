@@ -8,7 +8,8 @@ namespace Aion.World;
 // - timed buffs come back with the time they had left, and that time does not run while logged out (234912 #56805: 22101051
 //   of 300000 ms with 113585 ms left after at least 14 minutes offline; 084658 #64328: three buffs with 78-84 s of 300 s);
 // - the flight gauge comes back as it was (FP 549067 of 650567 at #56821);
-// - abnormal 10002 for 5000 ms right after every world-entry 0x3633 (084658 #64332, 090856 #1392, 234912 #56810).
+// - abnormal 10002 for 5000 ms right after every world-entry 0x3633 (084658 #64332, 090856 #1392, 234912 #56810); it comes
+//   with every other map load too (all 61 loads in our recordings; GameSession.cs).
 // Stored in the character's settings ("logout_state", as seal_stone and presets), written by the forced checkpoints (logout,
 // lobby, disconnect). Not restored (yet): the in-air state (the character comes back in flight with abnormal 100000002 in
 // those recordings; the abnormal is ours since GameSession.Flight.cs, but the air state is not saved); HP/MP (not settled: full in every recording). CANDIDATE: what 10002 does
