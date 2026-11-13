@@ -13,7 +13,7 @@ Outputs (compact JSON in tools/data):
   slots per weapon (Item.dat GodStoneSlotCount), settings.
 - exceed-enchant.json: items -> exceed group (Item.dat ExceedEnchantGroup), groups (ExceedEnchant rows per level:
   success, fail correction, fail penalty, Kina, costs, stats of that level from AdditionalStat.dat).
-- item-rules.json: broker categories (Item.dat TradeCategory), legion storage permission (CanGuildStorage) and the
+- item-rules.json: currencies (Item.dat ItemType Currency), broker categories (Item.dat TradeCategory), legion storage permission (CanGuildStorage) and the
   items bound on acquisition (ExchangeType SoulBind_Acquire) or never exchangeable (NonExchangeable).
 - guild.json: legion levels (GuildData), grade authority flags (GuildMemberGradeAuthority), storage extensions
   (GuildStorageExtension) and the legion settings.
@@ -125,9 +125,11 @@ def exceed_enchant(tables):
 
 
 def item_rules(tables):
-    trade, guild, bound, closed = {}, [], [], []
+    trade, guild, bound, closed, currencies = {}, [], [], [], []
     for r in tables.rows('Item'):
         item = _value(r['ID'])
+        if _short(r.get('ItemType')) == 'Currency':
+            currencies.append(item)
         exchange = _short(r.get('ExchangeType'))
         category = _short(r.get('TradeCategory'))
         if category != 'None' and exchange in ('Exchangeable', 'SoulBind'):
@@ -138,8 +140,9 @@ def item_rules(tables):
             bound.append(item)
         elif exchange == 'NonExchangeable':
             closed.append(item)
-    return {'source': 'Item.dat TradeCategory/ExchangeType/CanGuildStorage (26262663, tools/economy_data.py)',
-            'trade': trade, 'guild_storage': sorted(guild), 'bind_on_acquire': sorted(bound), 'non_exchangeable': sorted(closed)}
+    return {'source': 'Item.dat TradeCategory/ExchangeType/CanGuildStorage/ItemType (26262663, tools/economy_data.py)',
+            'trade': trade, 'guild_storage': sorted(guild), 'bind_on_acquire': sorted(bound), 'non_exchangeable': sorted(closed),
+            'currencies': sorted(currencies)}
 
 
 def guild(tables, settings):
