@@ -26,6 +26,16 @@ class MigrationTests(unittest.TestCase):
         self.assertIn('\\if :apply', script)
         self.assertTrue(script.endswith('COMMIT;'))
 
+    def test_tools_run_untranslated_and_decode_tolerantly(self):
+        from unittest import mock
+        from tools import postgres_dev
+        done = postgres_dev.subprocess.CompletedProcess([], 0, '', '')
+        with mock.patch.object(postgres_dev.subprocess, 'run', return_value=done) as run:
+            postgres_dev.run('psql', ['-c', 'SELECT 1'], check=False)
+        kwargs = run.call_args.kwargs
+        self.assertEqual(kwargs['env']['LC_MESSAGES'], 'C')
+        self.assertEqual(kwargs['errors'], 'replace')
+
     def test_line_endings_do_not_count_as_a_change(self):
         # A Windows checkout (autocrlf) has CRLF where the migration may have been applied from LF, and the other way round.
         import hashlib

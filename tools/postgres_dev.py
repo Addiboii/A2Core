@@ -66,19 +66,22 @@ def run(binary, args=(), *, text=None, role='aion_admin', database=None, check=T
         credentials = json.loads((HOME / 'credentials.json').read_text())
         env.update(PGHOST='127.0.0.1', PGPORT=str(PORT), PGUSER=role,
                    PGPASSWORD=credentials[role], PGDATABASE=database, PGCONNECT_TIMEOUT='5')
+    # Untranslated tool messages: localized ones (e.g. pg_ctl on a German Windows) come in the ANSI code page, not UTF-8, and
+    # stopped setup with a UnicodeDecodeError (the community fork's report, 2026-11-09).
+    env['LC_MESSAGES'] = 'C'
     command = [str(BIN / (binary + ('.exe' if WINDOWS else ''))), *map(str, args)]
     flags = getattr(subprocess, 'CREATE_NO_WINDOW', 0)
     if binary == 'pg_ctl':
         # A detached Windows postgres may inherit pipes and keep communicate()
         # waiting after pg_ctl exits. Use a file and DEVNULL for lifecycle calls.
-        with (HOME / 'lifecycle.log').open('w+', encoding='utf-8') as log:
+        with (HOME / 'lifecycle.log').open('w+', encoding='utf-8', errors='replace') as log:
             process = subprocess.run(command, stdin=subprocess.DEVNULL, stdout=log,
                                      stderr=subprocess.STDOUT, env=env,
                                      creationflags=flags, timeout=45)
             log.seek(0)
             result = subprocess.CompletedProcess(command, process.returncode, '', log.read())
     else:
-        result = subprocess.run(command, input=text, encoding='utf-8', capture_output=True,
+        result = subprocess.run(command, input=text, encoding='utf-8', errors='replace', capture_output=True,
                                 env=env, creationflags=flags, timeout=timeout)
     if check and result.returncode:
         # SQL errors can contain input; redact generated credentials before printing.
