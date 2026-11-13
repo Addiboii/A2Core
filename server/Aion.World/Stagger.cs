@@ -16,7 +16,9 @@ namespace Aion.World;
 /// GroggyTime after the break (mask 03 state 01 energy = max, 5.10-5.15 s for GroggyTime 5000: #60729 -> #61540, #33384 -> #35162)
 /// and drains again; at the break the NPC gets abnormal 10000002 for GroggyTime from itself (#60737, after the 0xe005).
 /// Not sent yet: the NPC's running cast stopped (0x380c #60739), its system skills 1000009/1001450 and 10000099 on the players.
-/// The 0xe005 sent right after the boss's 0x3641 (20261019 #30737) is not sent either.
+/// At the appear (0x3641) of a guarded NPC of grade 5 and up, its guard follows (AppearInfo). OBSERVED (our recordings
+/// 2026-10-19 to 11-06): 4 of 5 such appears (2701034 #30737, 2310812 three times; 2310171 in the wave dungeon did not), and
+/// none for the 18 appears of guarded grade 1-4 NPCs. CANDIDATE: the grade is the rule.
 /// </summary>
 public static class Stagger
 {
@@ -77,6 +79,22 @@ public static class Stagger
 
     /// <summary>The guard's maximum energy of an NPC (RecordedGuardMax, else GuardMax).</summary>
     public static int MaxOf(int npcId) => RecordedGuardMax.GetValueOrDefault(npcId, GuardMax);
+
+    /// <summary>The lowest NPC grade whose guard is shown at its appear (CANDIDATE, see above).</summary>
+    public const int AppearGrade = 5;
+
+    /// <summary>The guard sent right after a guarded boss's 0x3641 (holding with the energy left, or broken), else null.</summary>
+    public static byte[]? AppearInfo(Target target)
+    {
+        if (target.Dead || target.Grade < AppearGrade || !HasGuard(target.NpcId)) return null;
+        if (target.GroggyEnergy == 0) return GamePackets.UpdateGroggyInfo(target.Key, GuardBroken, null, null);
+        var max = MaxOf(target.NpcId);
+        return GamePackets.UpdateGroggyInfo(target.Key, GuardHolding, max, target.GroggyEnergy ?? max);
+    }
+
+    /// <summary>An NPC's 0x3641 and, for a guarded boss, its guard right after it (AppearInfo).</summary>
+    public static IEnumerable<byte[]> WithGuard(byte[] appear, Target target) =>
+        AppearInfo(target) is { } guard ? [appear, guard] : [appear];
 
     /// <summary>A broken guard whose GroggyTime has passed refills: 0xe005 mask 03 state 01 energy = max (OBSERVED #61540), else null.</summary>
     public static byte[]? Refill(Target target, long now)

@@ -79,7 +79,7 @@ public sealed partial class MapInstance
             };
             Targets[key] = target;
             keys.Add(key);
-            packets.Add(GamePackets.NpcAppear(target.Appearance()));
+            packets.AddRange(Stagger.WithGuard(GamePackets.NpcAppear(target.Appearance()), target));
         }
         // Small maps show every NPC; streaming maps show the new ones at the next visibility check (within a second).
         BroadcastAll(packets);

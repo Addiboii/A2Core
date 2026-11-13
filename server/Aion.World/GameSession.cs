@@ -2266,7 +2266,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             target.Hp = target.HpMax;
             target.GroggyEnergy = null;   // a respawn brings its groggy guard back full (OURS)
             target.CorpseRemoved = false;
-            replies.Add(GamePackets.NpcAppear(target.Appearance()));
+            replies.AddRange(Stagger.WithGuard(GamePackets.NpcAppear(target.Appearance()), target));
         }
         return replies;
     }

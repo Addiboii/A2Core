@@ -500,7 +500,7 @@ public sealed partial class GameSession : IMapEventHost
             respawnAt.Remove(t.Key);
             if (ai.Brains.TryGetValue(t.Key, out var brain)) t.Position = brain.Home;
             seenNpcs.Add(t.Key);
-            mapEventOut.Add(GamePackets.NpcAppear(SpawnAppearance(t)));
+            mapEventOut.AddRange(Stagger.WithGuard(GamePackets.NpcAppear(SpawnAppearance(t)), t));
         }
         foreach (var (index, o) in SpawnerObjects(spawner))
         {
@@ -570,7 +570,7 @@ public sealed partial class GameSession : IMapEventHost
             t.GroggyEnergy = null;   // the guard comes back full with the spawn (OURS)
             t.CorpseRemoved = false;
             seenNpcs.Add(t.Key);
-            mapEventOut.Add(GamePackets.NpcAppear(t.Appearance()));
+            mapEventOut.AddRange(Stagger.WithGuard(GamePackets.NpcAppear(t.Appearance()), t));
         }
         startedSpawners.Add(spawner);
     }

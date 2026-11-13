@@ -855,6 +855,12 @@ var arrowLands = archerAi.Tick(archerMap, near, NpcAi.HitDelayMs + 650, _ => [])
 Check(arrowLands.Count >= 2 && arrowLands[0].SequenceEqual(GamePackets.ProjectileCollision(2006, 1, 1000200, 1, 10002001, near, 1, destroyed: true, near))
       && Op(arrowLands[1]) == 0x3804, "50 ms after the announced flight: 0x380e collision, then the hit (our recordings' order)");
 Check(archerAi.Tick(archerMap, near, NpcAi.HitDelayMs + 650 + NpcAi.EndAfterHitMs, _ => []).Any(b => Op(b) == 0x3806), "the skill ends 500 ms after the landing");
+// A guarded boss (grade 5) shows its guard right after its appear; a guarded grade-4 NPC does not (our recordings: 4 of 5, 0 of 18).
+var caveBoss = new Target { Key = 30114, NpcId = 2701034, Grade = 5, Name = "boss", Hp = 3000, HpMax = 3000, Position = Vector3d.Zero };
+var bossAppear = Stagger.WithGuard(GamePackets.NpcAppear(caveBoss.Appearance()), caveBoss).ToList();
+Check(bossAppear.Count == 2 && Op(bossAppear[0]) == 0x3641 && Convert.ToHexStringLower(bossAppear[1]) == "05e0a2eb010301320000003200000002"
+      && Stagger.AppearInfo(new Target { Key = 5, NpcId = 2310810, Grade = 4, Name = "elite", Hp = 1, HpMax = 1 }) is null,
+      "a guarded boss's 0x3641 is followed by its 0xe005 (2701034, 20261019-231752 #30737); grade 4 guards are not shown");
 // Official NPC skill messages rebuild byte for byte (capture 20261013-144836: #5246 the cast of 1220590, #15131 / #15144 a
 // projectile 10002101 of skill 1000210 fired and destroyed).
 Check(Convert.ToHexStringLower(GamePackets.SkillCastingStart(47494, 1220590, 5646, -112.99501037597656,

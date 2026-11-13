@@ -27,7 +27,7 @@ public sealed partial class GameSession
         {
             seenNpcs.UnionWith(targets.Keys);
             // A removed corpse stays out of sight until its respawn (0x3641 then).
-            return targets.Values.Where(t => !t.CorpseRemoved).Select(t => GamePackets.NpcAppear(Grounded(t).Appearance())).ToList();
+            return targets.Values.Where(t => !t.CorpseRemoved).SelectMany(t => Stagger.WithGuard(GamePackets.NpcAppear(Grounded(t).Appearance()), t)).ToList();
         }
         return NpcVisibility(at);
     }
@@ -64,7 +64,7 @@ public sealed partial class GameSession
             if (!seen && !t.CorpseRemoved && d2 <= NpcViewRange * NpcViewRange)
             {
                 seenNpcs.Add(t.Key);
-                replies.Add(GamePackets.NpcAppear(Grounded(t).Appearance()));
+                replies.AddRange(Stagger.WithGuard(GamePackets.NpcAppear(Grounded(t).Appearance()), t));
             }
             else if (seen && d2 > NpcForgetRange * NpcForgetRange)
             {
