@@ -698,14 +698,18 @@ public static class GamePackets
     /// <summary>
     /// 0x3804 with switch 06: an NPC's skill hits a player (17 official hits, capture
     /// 20261013-144836): target, 06 00, attacker, skill, action seq, kind 2, 00 00 02, effect ID,
-    /// u32 1, attack speed, damage, 01 00. The 00 00 02 bytes vary rarely (02 00 02, 00 00 01);
-    /// their meaning is unknown and the common form is sent.
+    /// effect seq u32, attack speed, damage, effect seq u8, 00. The 00 00 02 bytes vary rarely (02 00 02, 00 00 01);
+    /// their meaning is unknown and the common form is sent. OBSERVED (our recordings 2026-10-13 to 11-06, 7460 NPC hits):
+    /// both effect seq fields agree in 7422, and a skill's hits number 1, 2, ... as its skill_hits rows (2 rows: 1, 2 in 77
+    /// uses; 4 rows: 1-4 in 15).
     /// </summary>
-    public static byte[] NpcSkillHit(int targetKey, int actorKey, int skillId, int actionSeq, int effectId, int damage, int attackSpeed = 10000)
+    public static byte[] NpcSkillHit(int targetKey, int actorKey, int skillId, int actionSeq, int effectId, int damage, int attackSpeed = 10000,
+        int effectSeq = 1)
     {
         if (actionSeq is < 0 or > 255) throw new ArgumentException("Action sequence must fit one byte");
+        if (effectSeq is < 1 or > 255) throw new ArgumentException("Effect sequence must fit one byte");
         return PacketWriter.Opcode(0x3804).Varint(targetKey).U8(6).U8(0).Varint(actorKey).U32((uint)skillId).U8(actionSeq)
-            .Varint(2).U8(0).U8(0).U8(2).U32((uint)effectId).U32(1).Varint(attackSpeed).Varint(damage).U8(1).U8(0).ToArray();
+            .Varint(2).U8(0).U8(0).U8(2).U32((uint)effectId).U32((uint)effectSeq).Varint(attackSpeed).Varint(damage).U8((byte)effectSeq).U8(0).ToArray();
     }
 
     public static int HeadingU16(double degrees) => (int)Math.Round(PyMod(degrees, 360) / 360 * 65536) & 0xFFFF;
@@ -1242,6 +1246,39 @@ public static class GamePackets
 
     /// <summary>0x3806 skill end: key, skill, action uid, u8 0 (OBSERVED 200 ms after every official dodge and sprint dash, before the abnormal's 0x382c).</summary>
     public static byte[] SkillEnd(int key, int skill, int actionUid) => PacketWriter.Opcode(0x3806).Varint(key).I32(skill).U8((byte)actionUid).U8(0).ToArray();
+
+    /// <summary>
+    /// 0x3809 SkillCastingStart_NT: an NPC's cast bar before a skill with a casting time: key, mask 00, skill, 01, 02, target key,
+    /// yaw f32, the caster's position, casting time varint, 01. OBSERVED (our recordings 2026-10-13 to 11-06, 1463 NPC casts):
+    /// 1190 in this form; 272 with mask 02 add a varint after the last byte (10000: CANDIDATE attack speed) and are not sent.
+    /// The 0x3802 follows when the cast ends (median 2 ms off the casting time) with the same target and position.
+    /// </summary>
+    public static byte[] SkillCastingStart(int actorKey, int skill, int targetKey, double yaw, Vector3d location, int castMs) =>
+        PacketWriter.Opcode(0x3809).Varint(actorKey).U8(0).I32(skill).U8(1).U8(2).Varint(targetKey).F32(yaw).Vec3(location)
+            .Varint(castMs).U8(1).ToArray();
+
+    /// <summary>
+    /// 0x3803 SkillFireProjectile_NT: caster, 00, target, skill, action uid, projectile id varint (the skill_hits ProjectileId),
+    /// target position, remaining flight ms varint, effect seq i32, effect seq varint, 00. OBSERVED: every NPC 0x3803 of our
+    /// recordings (2022) parses in this form; the remaining flight is 100-1300 ms, median 250.
+    /// </summary>
+    public static byte[] FireProjectile(int casterKey, int targetKey, int skill, int actionUid, int projectile, Vector3d targetPos, int remainMs, int effectSeq) =>
+        PacketWriter.Opcode(0x3803).Varint(casterKey).U8(0).Varint(targetKey).I32(skill).U8((byte)actionUid).Varint(projectile).Vec3(targetPos)
+            .Varint(remainMs).I32(effectSeq).Varint(effectSeq).U8(0).ToArray();
+
+    /// <summary>
+    /// 0x380e SkillProjectileCollision_NT: caster, mask (02: destroyed), target hit (0: none), skill, action uid, projectile id
+    /// varint, collision position, effect seq i32, effect seq varint, 00, [01 when destroyed], the projectile's position.
+    /// OBSERVED: all 402 NPC 0x380e of our recordings parse in this form (359 destroyed); the collision comes ~50 ms before the hit.
+    /// </summary>
+    public static byte[] ProjectileCollision(int casterKey, int targetKey, int skill, int actionUid, int projectile, Vector3d at, int effectSeq,
+        bool destroyed, Vector3d projectilePos)
+    {
+        var w = PacketWriter.Opcode(0x380e).Varint(casterKey).U8(destroyed ? 2 : 0).Varint(targetKey).I32(skill).U8((byte)actionUid).Varint(projectile)
+            .Vec3(at).I32(effectSeq).Varint(effectSeq).U8(0);
+        if (destroyed) w.U8(1);
+        return w.Vec3(projectilePos).ToArray();
+    }
 
     // ---------- NPC movement (official 0x371a-c) ----------
 

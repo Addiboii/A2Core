@@ -824,12 +824,40 @@ var landed = fighter.Tick(agrintMap, near, 600, HitPlayer);
 Check(hits.Count == 1 && hits[0] is >= 45 and <= 55 && landed[0].SequenceEqual(GamePackets.NpcSkillHit(1, 2002, 1220560, 1, 122056011, hits[0])) && landed[1][0] == 0x00 && landed[1][1] == 0x8d,
       "~600 ms later: 0x3804 switch 06 with ~7.5% of level HP (90-110%), then the player's HP");
 Check(fighter.Tick(agrintMap, near, 900, HitPlayer).Count == 0, "cooldown before the next attack");
-Check(fighter.Tick(agrintMap, near, 1000, HitPlayer).Any(b => b.SequenceEqual(GamePackets.SkillStart(1220560, 2, 0, Vector3d.Zero, targetKey: 1, actorKey: 2002, cooldown: 1000))),
-      "basic attack again after its 1 s cooldown; the special waits for its own");
+Check(fighter.Tick(agrintMap, near, 1000, HitPlayer).Count == 0, "no new skill before the last one's end");
+var npcAgain = fighter.Tick(agrintMap, near, 600 + NpcAi.EndAfterHitMs, HitPlayer);
+Check(npcAgain.FindIndex(b => b.SequenceEqual(GamePackets.SkillEnd(2002, 1220560, 1))) is >= 0 and var npcEnded
+      && npcAgain.FindIndex(b => b.SequenceEqual(GamePackets.SkillStart(1220560, 2, 0, Vector3d.Zero, targetKey: 1, actorKey: 2002, cooldown: 1000))) > npcEnded,
+      "the skill ends (0x3806) 500 ms after its hit, then the basic attack again; the special waits for its own");
 fighter.Tick(agrintMap, near, 1600, HitPlayer);
-var special = Enumerable.Range(0, 80).SelectMany(i => fighter.Tick(agrintMap, near, 1650 + i * 100, HitPlayer)).ToList();
-Check(special.Any(b => b.SequenceEqual(GamePackets.SkillStart(1220590, special.Count(x => x[0] == 0x02 && x[1] == 0x38 && BitConverter.ToInt32(x, 5) == 1220560) + 3, 0, Vector3d.Zero, targetKey: 1, actorKey: 2002, cooldown: 8000)))
-      || special.Any(b => b[0] == 0x02 && b[1] == 0x38 && BitConverter.ToInt32(b, 5) == 1220590), "the special (1220590, 8 s cooldown) fires once ready");
+var special = Enumerable.Range(0, 120).SelectMany(i => fighter.Tick(agrintMap, near, 1650 + i * 100, HitPlayer)).ToList();
+bool IsSpecial(byte[] b, int op) => Op(b) == op && BitConverter.ToInt32(b, 5) == 1220590;   // key 2002 (2 bytes), 00, skill
+Check(special.FindIndex(b => IsSpecial(b, 0x3809)) is >= 0 and var castAt && special.FindIndex(b => IsSpecial(b, 0x3802)) > castAt,
+      "the special (1220590, 8 s cooldown, CastingTime 870) fires once ready: its cast bar (0x3809), then its start");
+// 1220590 names two damage rows (skill_hits): two hits numbered 1 and 2, then its end.
+var specialHits = special.Where(b => Op(b) == 0x3804 && b.AsSpan().IndexOf(BitConverter.GetBytes(1220590)) > 0).ToList();
+Check(specialHits.Count >= 2 && specialHits[0][^2] == 1 && specialHits[1][^2] == 2
+      && special.Any(b => Op(b) == 0x3806 && BitConverter.ToInt32(b, 4) == 1220590), "a skill with two damage rows hits twice (effect seq 1, 2), then ends");
+// A ranged skill (1000200: skill_hits names projectile 10002001) sends the fire and the collision before its hit.
+var archer = new Target { Key = 2006, Name = "archer", Hp = 665, HpMax = 665, Level = 7, Position = Vector3d.Zero, Aggressive = true,
+    WalkSpeed = 100, RunSpeed = 200, Radius = 120, Aggro = circle, Skills = [1000200] };
+var archerAi = new NpcAi(new Random(8), data);
+var archerMap = new Dictionary<int, Target> { [archer.Key] = archer };
+archerAi.Tick(archerMap, near, 0, _ => []);
+var arrow = archerAi.Tick(archerMap, near, NpcAi.HitDelayMs, _ => []);
+Check(arrow.Count >= 3 && arrow[0].SequenceEqual(GamePackets.FireProjectile(2006, 1, 1000200, 1, 10002001, near, NpcAi.ProjectileFlightMs, 1))
+      && arrow[1].SequenceEqual(GamePackets.ProjectileCollision(2006, 1, 1000200, 1, 10002001, near, 1, destroyed: true, near)) && Op(arrow[2]) == 0x3804,
+      "a projectile skill's hit: 0x3803 fire, 0x380e collision, then 0x3804 (our recordings' order)");
+// Official NPC skill messages rebuild byte for byte (capture 20261013-144836: #5246 the cast of 1220590, #15131 / #15144 a
+// projectile 10002101 of skill 1000210 fired and destroyed).
+Check(Convert.ToHexStringLower(GamePackets.SkillCastingStart(47494, 1220590, 5646, -112.99501037597656,
+          new Vector3d(-4269.20458984375, -25738.599609375, 20762.140625), 870)) == "093886f30200ee9f120001028e2c72fde1c2a36985c53315c9c64834a246e60601",
+      "official 0x3809 SkillCastingStart_NT");
+Check(Convert.ToHexStringLower(GamePackets.FireProjectile(24539, 64034, 1000210, 1, 10002101, new Vector3d(-22984.22265625, -25251.962890625, 19396.0), 600, 1))
+      == "0338dbbf0100a2f40312430f0001b5bde2047290b3c6ed47c5c600889746d804010000000100", "official 0x3803 SkillFireProjectile_NT");
+Check(Convert.ToHexStringLower(GamePackets.ProjectileCollision(24539, 64034, 1000210, 1, 10002101, new Vector3d(-21276.931640625, -25904.66015625, 19396.0), 1,
+          destroyed: true, new Vector3d(-21209.494140625, -25930.443359375, 19396.0)))
+      == "0e38dbbf0102a2f40312430f0001b5bde204dd39a6c65261cac60088974601000000010001fdb2a5c6e394cac600889746", "official 0x380e SkillProjectileCollision_NT");
 
 var dodger = new Target { Key = 2004, Name = "agrint2", Hp = 665, HpMax = 665, Level = 7, Position = Vector3d.Zero, Aggressive = true,
     WalkSpeed = 100, RunSpeed = 200, Radius = 120, Aggro = circle, Skills = [1220560] };

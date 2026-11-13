@@ -181,7 +181,8 @@ public sealed class GameData
     sealed record NpcFile([property: JsonPropertyName("maps")] Dictionary<string, JsonElement[][]> Maps,
         [property: JsonPropertyName("templates")] Dictionary<string, NpcTemplate> Templates,
         [property: JsonPropertyName("npc_skills")] Dictionary<string, NpcSkill>? Skills = null,
-        [property: JsonPropertyName("routes")] Dictionary<string, NpcRoute[]>? Routes = null);
+        [property: JsonPropertyName("routes")] Dictionary<string, NpcRoute[]>? Routes = null,
+        [property: JsonPropertyName("skill_hits")] Dictionary<string, int[][]>? SkillHits = null);
 
     readonly Dictionary<string, StarterProfile> profiles;
     readonly ClassFile classes;
@@ -340,6 +341,15 @@ public sealed class GameData
             ? stats : new Dictionary<string, int>();
 
     /// <summary>A damaging NPC skill, or null (unknown, or no damage effect).</summary>
+    /// <summary>
+    /// The hits of an NPC skill in order (world-npcs.json skill_hits, read from Skill.dat SkillEffectTimeDataList by
+    /// tools/world_npcs.py): the damage effect and the projectile (0: none) of each; one hit with no projectile when unknown.
+    /// </summary>
+    public IReadOnlyList<(int Effect, int Projectile)> NpcSkillHits(int skillId, int effect) =>
+        npcs.SkillHits?.GetValueOrDefault(skillId.ToString(System.Globalization.CultureInfo.InvariantCulture)) is { Length: > 0 } hits
+            ? hits.Select(h => (h.Length > 0 && h[0] > 0 ? h[0] : effect, h.Length > 1 ? h[1] : 0)).ToList()
+            : [(effect, 0)];
+
     public NpcSkill? NpcSkill(int skillId) =>
         npcs.Skills?.GetValueOrDefault(skillId.ToString(System.Globalization.CultureInfo.InvariantCulture)) is { Effect: > 0 } skill ? skill : null;
 

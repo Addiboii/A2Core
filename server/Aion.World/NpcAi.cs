@@ -55,7 +55,31 @@ public sealed class NpcAi(Random rng, GameData? data = null)
     /// <summary>A patrol turns toward the next waypoint this close to the current one (official: ~15-20 before each point).</summary>
     public const double ArriveRadius = 18.0;
 
-    public sealed record PendingHit(int SkillId, NpcSkill Skill, int ActionSeq, long DueMs);
+    /// <summary>
+    /// A skill in use, advanced at DueMs: its cast (0x3809 sent) until the start (0x3802), then its hits (0x3804 numbered 1..n,
+    /// the skill_hits rows), then its end (0x3806). The NPC chooses no other skill until the end.
+    /// </summary>
+    public sealed class PendingHit(int skillId, NpcSkill skill, IReadOnlyList<(int Effect, int Projectile)> hits, int actionSeq, int targetKey,
+        double yaw, long dueMs, bool started)
+    {
+        public int SkillId { get; } = skillId;
+        public NpcSkill Skill { get; } = skill;
+        public IReadOnlyList<(int Effect, int Projectile)> Hits { get; } = hits;
+        public int ActionSeq { get; } = actionSeq;
+        public int TargetKey { get; } = targetKey;
+        public double Yaw { get; } = yaw;
+        public bool Started { get; set; } = started;
+        /// <summary>The hits done (landed or missed) so far.</summary>
+        public int Done { get; set; }
+        public long DueMs { get; set; } = dueMs;
+    }
+
+    /// <summary>The spacing of a multi-hit skill's hits (CANDIDATE: our recordings' consecutive NPC hits, 718: median 173 ms, 80 % 0-299).</summary>
+    public const int HitSpacingMs = 175;
+    /// <summary>The skill end (0x3806) after the last hit (CANDIDATE: our recordings, 840 ends: median 484 ms).</summary>
+    public const int EndAfterHitMs = 500;
+    /// <summary>The remaining flight announced in 0x3803 (CANDIDATE: our recordings' median, 250 ms); the fire is sent with the hit.</summary>
+    public const int ProjectileFlightMs = 250;
 
     public sealed class Brain(Vector3d home, double homeHeading)
     {
@@ -77,7 +101,6 @@ public sealed class NpcAi(Random rng, GameData? data = null)
         public long UpdateAtMs { get; set; }
         public long WanderAtMs { get; set; }
         public bool Engaged { get; set; }
-        public long NextAttackMs { get; set; }
         public Dictionary<int, long> Cooldowns { get; } = [];
         public int ActionSeq { get; set; }
         public PendingHit? Pending { get; set; }
@@ -629,7 +652,7 @@ public sealed class NpcAi(Random rng, GameData? data = null)
     /// </summary>
     (int Id, NpcSkill Skill)? Choose(Target target, Brain brain, double distance, long now)
     {
-        if (data is null || brain.Pending is not null || now < brain.NextAttackMs) return null;
+        if (data is null || brain.Pending is not null) return null;
         var basic = Basic(target);
         foreach (var id in target.Skills)
         {
@@ -646,20 +669,33 @@ public sealed class NpcAi(Random rng, GameData? data = null)
         return basic is { } ready && now >= brain.Cooldowns.GetValueOrDefault(ready.Id) && distance <= AttackRange(target, ready.Skill) ? ready : null;
     }
 
-    /// <summary>Official order: a stop facing the player, then the skill start; the hit follows the cast and animation.</summary>
+    /// <summary>
+    /// Official order: a stop facing the player, then the skill start; a skill with a casting time first shows its cast bar
+    /// (0x3809) and starts when it ends (OBSERVED: our recordings' 0x3802 median 2 ms off the 0x3809's casting time).
+    /// </summary>
     List<byte[]> Attack(Target target, Brain brain, (int Id, NpcSkill Skill) skill, double facing, long now)
     {
         var replies = new List<byte[]>();
         if (!target.NoRotation) replies.AddRange(Stop(target, brain, facing, now));
         else brain.Moving = false;
         brain.ActionSeq = brain.ActionSeq % 255 + 1;
-        var lands = now + skill.Skill.Cast + HitDelayMs;
-        brain.Pending = new PendingHit(skill.Id, skill.Skill, brain.ActionSeq, lands);
-        brain.Cooldowns[skill.Id] = now + Math.Max(skill.Skill.Cooldown, skill.Skill.Cast + HitDelayMs);
-        brain.NextAttackMs = lands;
-        replies.Add(GamePackets.SkillStart(skill.Id, brain.ActionSeq, target.NoRotation ? brain.Heading : facing, target.Position,
-            targetKey: Victim(brain), actorKey: target.Key, cooldown: skill.Skill.Cooldown));
+        var cast = Math.Max(0, skill.Skill.Cast);
+        var yaw = target.NoRotation ? brain.Heading : facing;
+        var pending = brain.Pending = new PendingHit(skill.Id, skill.Skill, data!.NpcSkillHits(skill.Id, skill.Skill.Effect), brain.ActionSeq,
+            Victim(brain), yaw, now + cast, started: false);
+        brain.Cooldowns[skill.Id] = now + Math.Max(skill.Skill.Cooldown, cast + HitDelayMs);
+        if (cast > 0) replies.Add(GamePackets.SkillCastingStart(target.Key, skill.Id, pending.TargetKey, yaw, target.Position, cast));
+        else replies.AddRange(StartSkill(target, pending, now));
         return replies;
+    }
+
+    /// <summary>The skill's start (0x3802); its first hit follows the animation.</summary>
+    static List<byte[]> StartSkill(Target target, PendingHit pending, long now)
+    {
+        pending.Started = true;
+        pending.DueMs = now + HitDelayMs;
+        return [GamePackets.SkillStart(pending.SkillId, pending.ActionSeq, pending.Yaw, target.Position, targetKey: pending.TargetKey,
+            actorKey: target.Key, cooldown: pending.Skill.Cooldown)];
     }
 
     /// <summary>Centre distance at which the NPC's skill reaches the player.</summary>
@@ -676,11 +712,41 @@ public sealed class NpcAi(Random rng, GameData? data = null)
         return Math.Max(1, (int)Math.Round(Combat.HpForLevel(target.Level) * DamagePerHp * target.DamageScale * factor));
     }
 
-    /// <summary>A due hit lands when the player is still within reach plus the skill's follow range.</summary>
+    /// <summary>
+    /// The skill in use advances: the start after its cast, each due hit (it lands when the player is still within reach plus
+    /// the skill's follow range), then the end (0x3806; OBSERVED after every NPC skill, 15437 in our recordings), after which
+    /// the NPC may choose its next skill.
+    /// </summary>
     List<byte[]> Resolve(Target target, Brain brain, Vector3d? player, long now, Func<int, List<byte[]>>? hitPlayer)
     {
-        if (brain.Pending is not { } hit || now < hit.DueMs) return [];
-        brain.Pending = null;
+        var replies = new List<byte[]>();
+        while (brain.Pending is { } pending && now >= pending.DueMs)
+        {
+            if (!pending.Started)
+            {
+                replies.AddRange(StartSkill(target, pending, pending.DueMs));
+                continue;
+            }
+            if (pending.Done < pending.Hits.Count)
+            {
+                pending.Done++;
+                pending.DueMs += pending.Done < pending.Hits.Count ? HitSpacingMs : EndAfterHitMs;
+                replies.AddRange(Hit(target, brain, pending, player, hitPlayer));
+                continue;
+            }
+            brain.Pending = null;
+            replies.Add(GamePackets.SkillEnd(target.Key, pending.SkillId, pending.ActionSeq));
+        }
+        return replies;
+    }
+
+    /// <summary>
+    /// One hit of the skill in use, numbered in its effect seq. A projectile hit sends the fire (0x3803) and the collision
+    /// (0x380e, destroyed at the victim) first (OBSERVED order: 616 of 664 projectile-skill hits follow the caster's 0x3803;
+    /// the collision ~50 ms before the hit). CANDIDATE: both with the hit, as the server does not fly projectiles.
+    /// </summary>
+    List<byte[]> Hit(Target target, Brain brain, PendingHit hit, Vector3d? player, Func<int, List<byte[]>>? hitPlayer)
+    {
         if (player is not { } p || hitPlayer is null) return [];
         if (Distance(target.Position, Flat(p)) > AttackRange(target, hit.Skill) + hit.Skill.Follow) return [];
         var victim = Victim(brain);
@@ -689,7 +755,13 @@ public sealed class NpcAi(Random rng, GameData? data = null)
         var damage = Math.Max(1, (int)Math.Round(Damage(target, hit.Skill) * 1000.0 / (1000 + Math.Max(0, defense))));
         LastAttacker = target.Key;
         LastAttackSkill = hit.SkillId;
-        return [GamePackets.NpcSkillHit(victim, target.Key, hit.SkillId, hit.ActionSeq, hit.Skill.Effect, damage), .. hitPlayer(damage)];
+        var (effect, projectile) = hit.Hits[hit.Done - 1];
+        List<byte[]> flight = projectile == 0 ? [] :
+        [
+            GamePackets.FireProjectile(target.Key, victim, hit.SkillId, hit.ActionSeq, projectile, p, ProjectileFlightMs, hit.Done),
+            GamePackets.ProjectileCollision(target.Key, victim, hit.SkillId, hit.ActionSeq, projectile, p, hit.Done, destroyed: true, p),
+        ];
+        return [.. flight, GamePackets.NpcSkillHit(victim, target.Key, hit.SkillId, hit.ActionSeq, effect, damage, effectSeq: hit.Done), .. hitPlayer(damage)];
     }
 
     static int Victim(Brain brain) => brain.VictimKey != 0 ? brain.VictimKey : PlayerKey;
