@@ -951,6 +951,42 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
 
     // ---------- Kibelisks (teleport artifacts) ----------
 
+    /// <summary>The Kibelisk teleport whose reply waits for the arrival's load (UseTeleportArtifact_RQ).</summary>
+    int? artifactArrival;
+    /// <summary>A Kibelisk teleport's EAppearReasonType (OBSERVED 2026-10-19 231752 #42092-#42093: own 0x3647 and 0x3621 reason 2, effect 0).</summary>
+    const byte ArtifactReason = 2;
+    /// <summary>The farthest a MapData TeleportArtifact_* point may be from its Kibelisk to count as its arrival (CANDIDATE).</summary>
+    const double ArtifactPointRange = 3000;
+
+    /// <summary>
+    /// UseTeleportArtifact: to a bound Kibelisk. OBSERVED (231752 #42092-#42429, the Poeta Kibelisk, artifact 1051035): the own
+    /// 0x3647 reason 2, 0x3621 reason 2 to map 1000, and after the load's own appearance and 10002 UseTeleportArtifact_RS 0x9237
+    /// {result u16 0, id i32} (`3792 0000 9b091000`), then 0x364a. The arrival there was MapData point TeleportArtifact_Poeta_Region_03_1
+    /// (Teleport.dat 100004) moved by (+204, -52) on the ground; CANDIDATE: the Kibelisk's arrival is the nearest TeleportArtifact_*
+    /// point of its map within 3000 (the table linking the two is not extracted; the fork used 200 in front of the Kibelisk, our
+    /// fallback), without the offset. Not bound or unknown: result 1 (CANDIDATE). Found by the community fork.
+    /// </summary>
+    List<byte[]> UseTeleportArtifact(int artifactId, long now)
+    {
+        if (!engraved.Contains(artifactId) || Kibelisks.ByArtifact(artifactId) is not { } target || dead || resources is null)
+            return [PacketWriter.Opcode(UseTeleportArtifactRs).U16(1).I32(artifactId).ToArray()];
+        artifactArrival = artifactId;
+        return [PlayerPackets.CharDisappear(playerKey, ArtifactReason), .. Teleport(target.Map, ArtifactArrival(target.Map, target.Placement), now, ArtifactReason)];
+    }
+
+    /// <summary>Where a Kibelisk teleport arrives (see UseTeleportArtifact).</summary>
+    public Vector3d ArtifactArrival(int mapId, KibeliskPlacement k)
+    {
+        var at = new Vector3d(k.Position[0], k.Position[1], k.Position[2]);
+        var point = data.MapPoints(mapId).Where(p => p.Key.StartsWith("TeleportArtifact", StringComparison.Ordinal))
+            .Select(p => new Vector3d(p.Value[0], p.Value[1], p.Value[2]))
+            .OrderBy(p => (p.X - at.X) * (p.X - at.X) + (p.Y - at.Y) * (p.Y - at.Y)).Cast<Vector3d?>().FirstOrDefault();
+        if (point is { } found && (found.X - at.X) * (found.X - at.X) + (found.Y - at.Y) * (found.Y - at.Y) <= ArtifactPointRange * ArtifactPointRange)
+            return found;
+        var yaw = k.Yaw * Math.PI / 180;
+        return at with { X = at.X + Math.Cos(yaw) * 200, Y = at.Y + Math.Sin(yaw) * 200 };
+    }
+
     /// <summary>TeleportArtifact ids the character has bound to (stored; per connection on development logins).</summary>
     readonly List<int> engraved = [];
     public IReadOnlyList<int> Engraved => engraved;
@@ -1923,6 +1959,10 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         // world entries, layer moves (reason 12), teleports (2) and revives (4); GameSession.LogoutState.cs).
         if (replies.FindIndex(b => b[0] == 0x4a && b[1] == 0x36) is >= 0 and var appeared && EntryProtection(now) is { } protection)
             replies.Insert(appeared, protection);
+        // A Kibelisk teleport's reply after the appearance and 10002, before 0x364a (OBSERVED 231752 #42425-#42429).
+        if (artifactArrival is { } artifactId && replies.FindIndex(b => b[0] == 0x4a && b[1] == 0x36) is >= 0 and var appearDone)
+            replies.Insert(appearDone, PacketWriter.Opcode(UseTeleportArtifactRs).U16(0).I32(artifactId).ToArray());
+        artifactArrival = null;
         replies.InsertRange(0, sameLevelRemovals);   // the same level's old entities go before the load reply (OBSERVED)
         sameLevelRemovals = [];
         if (shortLoad)

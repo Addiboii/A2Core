@@ -12,7 +12,8 @@ public sealed partial class GameSession
         PushRewardInfoRq = 0xe348, PushRewardInfoRs = 0xe349,
         MessageCardBlockListRq = 0xe212, MessageCardBlockListRs = 0xe213, SkinDecoInstanceListRq = 0x8d68, SkinDecoInstanceListRs = 0x8d69,
         AbyssArtifactEventInfoRq = 0xe306, AbyssArtifactEventInfoRs = 0xe307, MySeasonRankingRq = 0x8d56, MySeasonRankingRs = 0x8d57,
-        CoinShopOpenRq = 0x8c06, CoinShopOpenRs = 0x8c07, QuickSlotContextSkillRq = 0x5607, QuickSlotContextSkillRs = 0x5608;
+        CoinShopOpenRq = 0x8c06, CoinShopOpenRs = 0x8c07, QuickSlotContextSkillRq = 0x5607, QuickSlotContextSkillRs = 0x5608,
+        UseTeleportArtifactRq = 0x9236, UseTeleportArtifactRs = 0x9237;
 
     /// <summary>
     /// Client packets that expect no reply: ClientTime_RT 0x3601 (i64 client ms), UpdateVisibleLen_RQ 0x3651 (f32 view
@@ -67,6 +68,10 @@ public sealed partial class GameSession
             // RetrievePushRewardInfo_RQ (no body): no push rewards; ask again in an hour (OBSERVED form 0000 | i64 next | list).
             case PushRewardInfoRq when plain.Length == 2:
                 return [PacketWriter.Opcode(PushRewardInfoRs).U16(0).I64(now + 3_600_000).Varint(0).ToArray()];
+            // UseTeleportArtifact_RQ {teleport artifact id i32} (usmap; CANDIDATE: the request was not captured, c2s): teleport to a
+            // bound Kibelisk (GameSession.cs UseTeleportArtifact).
+            case UseTeleportArtifactRq when plain.Length >= 6:
+                return UseTeleportArtifact(BitConverter.ToInt32(plain, 2), now);
             // Reports without a reply (SilentRequests).
             case 0x3651 or 0x3601 or 0xe350 or 0xe259 or 0xffa0 or 0xffa1:
                 return [];

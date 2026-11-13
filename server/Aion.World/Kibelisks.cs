@@ -34,4 +34,9 @@ public static class Kibelisks
 
     public static IReadOnlyList<KibeliskPlacement> OnMap(int mapId) =>
         maps.Value.GetValueOrDefault(mapId.ToString(System.Globalization.CultureInfo.InvariantCulture)) ?? [];
+
+    /// <summary>The map and placement of the Kibelisk that engraves this TeleportArtifact id, or null.</summary>
+    public static (int Map, KibeliskPlacement Placement)? ByArtifact(int artifactId) =>
+        maps.Value.SelectMany(m => m.Value.Select(k => (Map: int.Parse(m.Key, System.Globalization.CultureInfo.InvariantCulture), Placement: k)))
+            .Where(x => x.Placement.ArtifactId == artifactId).Select(x => ((int, KibeliskPlacement)?)x).FirstOrDefault();
 }

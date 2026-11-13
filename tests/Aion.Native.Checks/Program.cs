@@ -2489,6 +2489,24 @@ Check(liveBind.Count >= 3 && liveBind[0].SequenceEqual(GamePackets.InteractEnvOb
 var unknownObject = await staffSession.HandleAsync(new PacketWriter().U16(0x3636).U8(1).Varint(123_456).I64(0).I32(0).ToArray(), Now);
 Check(unknownObject.Single().SequenceEqual(GamePackets.InteractEnvObjReply(123_456, 1)), "an unknown object is refused (0x3637 result 1), so the client is not left waiting");
 Check(Kibelisks.OnMap(1000).Single().ArtifactId == 1051035, "the Poeta Kibelisk is placed (TeleportArtifact_1051035)");
+// UseTeleportArtifact 0x9236 to a bound Kibelisk (OBSERVED 231752 #42092-#42429): own 0x3647 reason 2, 0x3621 reason 2, and
+// after the arrival's appearance and 10002 the reply 0x9237 `3792 0000 9b091000`, then 0x364a.
+Check(staffSession.ArtifactArrival(1000, Kibelisks.OnMap(1000).Single()) == new Vector3d(-6193.1, -15954.6, 20301.2),   // map-points.json (0.1 cm)
+      "the Poeta Kibelisk's arrival is MapData TeleportArtifact_Poeta_Region_03_1 (the recorded arrival is it moved by +204, -52)");
+await staffSession.TickAsync(Now + 630_000);
+var artifactUse = await staffSession.HandleAsync(new PacketWriter().U16(0x9236).I32(firstKibelisk).ToArray(), Now + 630_000);
+var artifactLoad = artifactUse.FindIndex(b => Op(b) == 0x3621);
+Check(artifactUse[0].SequenceEqual(PlayerPackets.CharDisappear(staffSession.PlayerKey, 2)) && artifactLoad == 1 && artifactUse[artifactLoad][34] == 2
+      && !artifactUse.Any(b => Op(b) == 0x9237), "a Kibelisk teleport: own 0x3647 reason 2, then 0x3621 reason 2, no reply yet");
+var artifactArrived = await staffSession.HandleAsync(new PacketWriter().U16(0x3622).I32(1).ToArray(), Now + 630_100);
+var artifactReply = artifactArrived.FindIndex(b => Op(b) == 0x9237);
+Check(artifactReply > artifactArrived.FindIndex(b => Op(b) == 0x382a && b.AsSpan().IndexOf(Convert.FromHexString("1227000088130000")) > 0)
+      && artifactReply > artifactArrived.FindIndex(b => Op(b) == 0x3646) && artifactReply == artifactArrived.FindIndex(b => Op(b) == 0x364a) - 1
+      && (firstKibelisk != 1051035 || artifactArrived[artifactReply].SequenceEqual(Convert.FromHexString("379200009b091000")))
+      && artifactArrived[artifactReply].AsSpan(2, 2).SequenceEqual(new byte[2]),
+      "the reply 0x9237 {0, id} after the arrival's appearance and 10002, right before 0x364a");
+Check((await staffSession.HandleAsync(new PacketWriter().U16(0x9236).I32(1_099_999).ToArray(), Now + 630_200)).Single()
+      .SequenceEqual(PacketWriter.Opcode(0x9237).U16(1).I32(1_099_999).ToArray()), "an unbound Kibelisk: 0x9237 result 1 and no move");
 Check(Kibelisks.OnMap(1000).Single().Relationship == 8 && Kibelisks.OnMap(1100).All(k => k.Relationship == 9),
       "Kibelisks spawn with their race's relationship (Poeta EnvObj_Light 8, Ishalgen EnvObj_Dark 9)");
 // Field-event treasure boxes (E_L1_FE_TH_S2_TreasureBox_01, env 1100312, linked by name to
