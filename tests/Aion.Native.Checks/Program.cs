@@ -2668,6 +2668,9 @@ Check((await bob.HandleAsync([0x06, 0xe3], Now)).Single().SequenceEqual(new byte
 var ranking = (await bob.HandleAsync([0x56, 0x8d, 0x02, 0x03], Now)).Single();
 Check(ranking.Length == 2 + 66 && ranking[0] == 0x57 && ranking[1] == 0x8d && ranking[2] == 0x40 && ranking[3] == 0x3e && ranking[4] == 2 && ranking[5] == 3
       && BitConverter.ToInt64(ranking, 60) == Now + 3_600_000, "my season ranking: the official empty reply with the request's type and class (0x8d57)");
+Check((await bob.HandleAsync(new PacketWriter().U16(0x8d8e).U8(1).ToArray(), Now)).Single().SequenceEqual(Convert.FromHexString("8f8d000001000000"))
+      && (await bob.HandleAsync(new PacketWriter().U16(0x8d8e).U8(0).ToArray(), Now)).Single().SequenceEqual(Convert.FromHexString("8f8d000000000000")),
+      "ConversionLimitList: result 0, the flag echoed, three empty lists (byte-exact to the recorded `8f8d 0000 01 00 00 00`)");
 Check((await bob.HandleAsync(new PacketWriter().U16(0x8c06).I32(7).ToArray(), Now)).Single().SequenceEqual(new PacketWriter().U16(0x8c07).U16(1).I32(7).Varint(0).I64(0).ToArray()),
       "a coin shop does not open (0x8c07 result 1)");
 Check((await bob.HandleAsync(new PacketWriter().U16(0x5607).U8(3).U8(1).I32(11010000).ToArray(), Now)).Single()

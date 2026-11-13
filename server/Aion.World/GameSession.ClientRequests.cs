@@ -13,7 +13,7 @@ public sealed partial class GameSession
         MessageCardBlockListRq = 0xe212, MessageCardBlockListRs = 0xe213, SkinDecoInstanceListRq = 0x8d68, SkinDecoInstanceListRs = 0x8d69,
         AbyssArtifactEventInfoRq = 0xe306, AbyssArtifactEventInfoRs = 0xe307, MySeasonRankingRq = 0x8d56, MySeasonRankingRs = 0x8d57,
         CoinShopOpenRq = 0x8c06, CoinShopOpenRs = 0x8c07, QuickSlotContextSkillRq = 0x5607, QuickSlotContextSkillRs = 0x5608,
-        UseTeleportArtifactRq = 0x9236, UseTeleportArtifactRs = 0x9237;
+        UseTeleportArtifactRq = 0x9236, UseTeleportArtifactRs = 0x9237, ConversionLimitListRq = 0x8d8e, ConversionLimitListRs = 0x8d8f;
 
     /// <summary>
     /// Client packets that expect no reply: ClientTime_RT 0x3601 (i64 client ms), UpdateVisibleLen_RQ 0x3651 (f32 view
@@ -68,6 +68,12 @@ public sealed partial class GameSession
             // RetrievePushRewardInfo_RQ (no body): no push rewards; ask again in an hour (OBSERVED form 0000 | i64 next | list).
             case PushRewardInfoRq when plain.Length == 2:
                 return [PacketWriter.Opcode(PushRewardInfoRs).U16(0).I64(now + 3_600_000).Varint(0).ToArray()];
+            // ConversionLimitList_RQ {server limit only bool} -> ConversionLimitList_RS {result u16, the flag echoed, made counts of the
+            // limited conversion recipes for the server, account and character ({recipe i32, made i32} each)}. OBSERVED (ours,
+            // 2026-11-04 to 06): `8f8d 0000 01 00 00 00` twice with the flag set, and once without it 12 server entries. We keep no
+            // conversion limits, so all three lists are empty (CANDIDATE). Found by the community fork.
+            case ConversionLimitListRq when plain.Length >= 3:
+                return [PacketWriter.Opcode(ConversionLimitListRs).U16(0).Bool(plain[2] != 0).Varint(0).Varint(0).Varint(0).ToArray()];
             // UseTeleportArtifact_RQ {teleport artifact id i32} (usmap; CANDIDATE: the request was not captured, c2s): teleport to a
             // bound Kibelisk (GameSession.cs UseTeleportArtifact).
             case UseTeleportArtifactRq when plain.Length >= 6:
