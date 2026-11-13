@@ -48,6 +48,10 @@ public sealed partial class GameSession
             replies.AddRange(one);
             used++;
         }
-        return used == 0 ? [Reply(1, 0)] : [Reply(0, used), .. replies];
+        // OBSERVED order (2026-11-05 190825 #1132, 2026-11-06 234912 #46426, #47692): the item update 0x561b, the reply, then
+        // the use's effects (0x3811, 0xe22f, 0x610c).
+        if (used == 0) return [Reply(1, 0)];
+        var updates = replies.Where(b => b[0] == 0x1b && b[1] == 0x56).ToList();
+        return [.. updates, Reply(0, used), .. replies.Where(b => !(b[0] == 0x1b && b[1] == 0x56))];
     }
 }
