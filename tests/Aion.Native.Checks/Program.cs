@@ -2722,8 +2722,10 @@ Check(ranking.Length == 2 + 66 && ranking[0] == 0x57 && ranking[1] == 0x8d && ra
 Check((await bob.HandleAsync(new PacketWriter().U16(0x8d8e).U8(1).ToArray(), Now)).Single().SequenceEqual(Convert.FromHexString("8f8d000001000000"))
       && (await bob.HandleAsync(new PacketWriter().U16(0x8d8e).U8(0).ToArray(), Now)).Single().SequenceEqual(Convert.FromHexString("8f8d000000000000")),
       "ConversionLimitList: result 0, the flag echoed, three empty lists (byte-exact to the recorded `8f8d 0000 01 00 00 00`)");
-Check((await bob.HandleAsync(new PacketWriter().U16(0x8c06).I32(7).ToArray(), Now)).Single().SequenceEqual(new PacketWriter().U16(0x8c07).U16(1).I32(7).Varint(0).I64(0).ToArray()),
-      "a coin shop does not open (0x8c07 result 1)");
+Check((await bob.HandleAsync(new PacketWriter().U16(0x8c06).I32(990007).ToArray(), Now)).Single().SequenceEqual(new PacketWriter().U16(0x8c07).U16(0).I32(990007).Varint(0).I64(Now).ToArray()),
+      "a coin shop opens (0x8c07 result 0, the id, no purchases, the server time; the fork's recordings)");
+Check((await bob.HandleAsync(new PacketWriter().U16(0x8c08).I32(990007).Varint(1).I32(5).I32(1).ToArray(), Now)).Single().SequenceEqual(new PacketWriter().U16(0x8c09).U16(1).I32(990007).Varint(0).ToArray()),
+      "a coin shop purchase is refused (0x8c09 result 1) until a goods table exists");
 Check((await bob.HandleAsync(new PacketWriter().U16(0x5607).U8(3).U8(1).I32(11010000).ToArray(), Now)).Single()
       .SequenceEqual(new PacketWriter().U16(0x5608).U8(0).U16(0).U8(3).U8(1).I32(11010000).ToArray()), "a hotbar context skill is accepted (0x5608, the official masked layout)");
 Check(GameSession.SilentRequests.Contains(0x3601) && GameSession.SilentRequests.Contains(0xffa1) && (await bob.HandleAsync(new PacketWriter().U16(0x3601).I64(5).ToArray(), Now)).Count == 0,

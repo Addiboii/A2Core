@@ -13,7 +13,8 @@ public sealed partial class GameSession
         MessageCardBlockListRq = 0xe212, MessageCardBlockListRs = 0xe213, SkinDecoInstanceListRq = 0x8d68, SkinDecoInstanceListRs = 0x8d69,
         AbyssArtifactEventInfoRq = 0xe306, AbyssArtifactEventInfoRs = 0xe307, MySeasonRankingRq = 0x8d56, MySeasonRankingRs = 0x8d57,
         CoinShopOpenRq = 0x8c06, CoinShopOpenRs = 0x8c07, QuickSlotContextSkillRq = 0x5607, QuickSlotContextSkillRs = 0x5608,
-        UseTeleportArtifactRq = 0x9236, UseTeleportArtifactRs = 0x9237, ConversionLimitListRq = 0x8d8e, ConversionLimitListRs = 0x8d8f;
+        UseTeleportArtifactRq = 0x9236, UseTeleportArtifactRs = 0x9237, ConversionLimitListRq = 0x8d8e, ConversionLimitListRs = 0x8d8f,
+        CoinShopBuyRq = 0x8c08, CoinShopBuyRs = 0x8c09;
 
     /// <summary>
     /// Client packets that expect no reply: ClientTime_RT 0x3601 (i64 client ms), UpdateVisibleLen_RQ 0x3651 (f32 view
@@ -52,9 +53,15 @@ public sealed partial class GameSession
                 body[3] = plain[3];
                 return [PacketWriter.Opcode(MySeasonRankingRs).Raw(body).I64(now + 3_600_000).ToArray()];
             }
-            // CoinShopOpen_RQ {coin shop id i32}: coin shops are not served (result 1; usmap fields: id, purchased map, open time). CANDIDATE.
+            // CoinShopOpen_RQ {coin shop id i32}: CoinShopOpen_RS {result u16, id, purchased limited goods map, open time i64}. OBSERVED
+            // in the community fork's recordings (6 replies, 2026-10-30 to 11-07, coin shops 990003-990007): result 0, the id,
+            // an empty map, the server time; none in ours. The client lists the goods from its own CoinShop table. CANDIDATE: ms.
             case CoinShopOpenRq when plain.Length >= 6:
-                return [PacketWriter.Opcode(CoinShopOpenRs).U16(1).I32(BitConverter.ToInt32(plain, 2)).Varint(0).I64(0).ToArray()];
+                return [PacketWriter.Opcode(CoinShopOpenRs).U16(0).I32(BitConverter.ToInt32(plain, 2)).Varint(0).I64(now).ToArray()];
+            // CoinShopBuyGoods_RQ {coin shop id i32, goods}: refused (result 1, the id, no goods) until a CoinShop goods table is
+            // built, instead of left unanswered. Never recorded: the usmap's layout (CANDIDATE).
+            case CoinShopBuyRq when plain.Length >= 6:
+                return [PacketWriter.Opcode(CoinShopBuyRs).U16(1).I32(BitConverter.ToInt32(plain, 2)).Varint(0).ToArray()];
             // LockOnTarget_RQ: 00 | target varint (as SetMainTarget_RQ; no request sample, CANDIDATE). The reply is the
             // OBSERVED form 0000 | target varint | 0000 (target 0 = unlock); others see 0x3832 key | 00 | target varint.
             case LockOnTargetRq when plain.Length >= 3:
