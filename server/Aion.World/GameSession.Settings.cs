@@ -60,6 +60,7 @@ public sealed partial class GameSession
         presets = Read<PresetSetting>("presets") ?? new([], []);
         LoadLogoutState(settings);   // GameSession.LogoutState.cs
         restoreCounts = Read<Dictionary<int, RestoreCount>>("item_restores") ?? [];
+        bookmarks = Read<List<BookmarkEntry>>("bookmarks") ?? [];
     }
 
     async Task SaveSettingAsync(string name, object value, CancellationToken ct)

@@ -2472,6 +2472,13 @@ Check(craftEntry.Any(b => b.SequenceEqual(Convert.FromHexString("79560000"))) &&
 Check(craftEntry.Single(b => Op(b) == GameSession.ContentsTicketsNt) is var ticketList
       && Convert.ToHexStringLower(ticketList).StartsWith("0b614904010000000c0103000000808580010000000004040000000e000600000004070000001c04080000000701090000008085800100000000040a0000000e"),
       "world entry lists the 73 content tickets (0x610b; tickets 1-10 byte-exact to 2026-11-06 084658 #1129: counts, full Time tickets, 6 empty)");
+Check(craftEntry.FindIndex(b => Op(b) == GameSession.BookmarkListNt) is >= 0 and var bookmarkAt && Convert.ToHexStringLower(craftEntry[bookmarkAt]) == "309300"
+      && Op(craftEntry[bookmarkAt + 1]) == GameSession.ContentsTicketsNt, "world entry: BookmarkedContentList 0x9330 (empty: 309300) right before 0x610b, as recorded");
+var marked = await staffSession.HandleAsync(new PacketWriter().U16(GameSession.BookmarkRq).U8(4).I32(132).Bool(true).ToArray(), Now);
+Check(marked.Single().SequenceEqual(new PacketWriter().U16(GameSession.BookmarkRs).U16(0).U8(4).I32(132).Bool(true).I64(Now).ToArray())
+      && staffSession.Bookmarks.Single() == new GameSession.BookmarkEntry(4, 132, Now), "Bookmark_RQ quest 132: 0x932f {0, 04, 84000000, 01, time} (the fork's recorded form), kept");
+Check((await staffSession.HandleAsync(new PacketWriter().U16(GameSession.BookmarkRq).U8(4).I32(132).Bool(false).ToArray(), Now)).Single()[2] == 0
+      && staffSession.Bookmarks.Count == 0, "removing the bookmark");
 var titled = await staffSession.AcquireTitleAsync(11010002, default);
 Check(titled.Count > 0 && titled[0].SequenceEqual(Convert.FromHexString("7D56" + "D2FFA700")) && staffSession.OwnedTitles.Contains(11010002) && staffSession.TitleStat("Critical") == 5
       && staffStore.Titles.Contains(11010002), "AcquireTitle 11010002: TitleAcquire_NT 0x567d, owned (saved), its StatList (Critical 5) applies");

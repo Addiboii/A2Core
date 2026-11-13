@@ -296,6 +296,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             case CharDeleteRq when plain.Length >= 3: return await DeleteCharacterAsync(plain, now, ct);
             case CharDeleteCancelRq when plain.Length >= 3: return await CancelDeleteAsync(plain, ct);
             case CharRenameRq when plain.Length >= 4: return await RenameCharacterAsync(plain, ct);
+            case BookmarkRq when plain.Length >= 8 && resources is not null: return await BookmarkAsync(plain, now, ct);
         }
         if (InWorld && await EconomyRequestAsync(plain, now, ct) is { } economyReplies) return economyReplies;
         if (InWorld && ClientRequest(plain, now) is { } clientReplies) return clientReplies;
@@ -1984,6 +1985,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             replies.Add(BossChallengeList());
             replies.AddRange(EntryConstants(now));
             replies.AddRange(EconomyAtEntry());
+            replies.Add(BookmarkList());   // 0x9330 right before 0x610b (OBSERVED 34 of 34; GameSession.Bookmarks.cs)
             if (Store is not null) replies.Add(ContentTicketList(now));   // 0x610b (GameSession.ContentTickets.cs)
             replies.AddRange(AchieveSet("EquipItemLevel", EquipItemLevel(), now: now));
             if (fresh) { replies.AddRange(Achieve("LoginCharacter", now: now)); elapsedAchieveAt = now + 60_000; }
