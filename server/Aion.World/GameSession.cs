@@ -346,6 +346,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             {
                 var cast = CastReplies(plain, now);
                 if (worldPlayer?.Map is { } castMap) castMap.Broadcast(worldPlayer, cast.Where(SharedCastPacket));
+                cast.AddRange(await BreakObjectsAsync(now, ct));   // GameSession.Destroy.cs
                 cast.AddRange(await QuestKillsAsync(ct));
                 cast.AddRange(await KillExperienceAsync(ct));
                 cast.AddRange(await SpendSealStonesAsync(ct));
@@ -356,6 +357,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             {
                 var release = ChargeEnd(plain, now);
                 if (worldPlayer?.Map is { } releaseMap) releaseMap.Broadcast(worldPlayer, release.Where(SharedCastPacket));
+                release.AddRange(await BreakObjectsAsync(now, ct));
                 release.AddRange(await QuestKillsAsync(ct));
                 release.AddRange(await KillExperienceAsync(ct));
                 release.AddRange(await SpendSealStonesAsync(ct));
@@ -2052,6 +2054,9 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         shownObjects.Clear();
         shownTriggers.Clear();
         usedObjects.Clear();
+        objectHits.Clear();
+        brokenObjects.Clear();
+        breakRemovals.Clear();
         pendingUse = null;
         replies.AddRange(ObjectVisibility(at, now));
         replies.AddRange(MapEventsStart(now));   // the layer's events join (0x922e) and run their first directives
@@ -2293,6 +2298,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             if (pvp.Count == 0) pvp = FactionHits(skill, request.TargetKey, now);
             replies.AddRange(pvp);
         }
+        if (data.Skill(skill)?.Damage is { Length: > 0 }) replies.AddRange(ObjectHits(skill, request, actionUid));   // GameSession.Destroy.cs
         if (targets is null || targets.Count == 0 || data.Skill(skill)?.Damage is not { Length: > 0 }) return replies;
         IEnumerable<Target> chosen = targets.TryGetValue(request.TargetKey, out var direct) ? [direct]
             : request.TargetKey == playerKey ? targets.Values.Where(t => t.Position.DistanceSquared(request.Location) <= AreaRange * AreaRange)
@@ -3110,6 +3116,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         var replies = new List<byte[]>();
         while (posted.TryDequeue(out var item)) replies.AddRange(await item.Run(now));
         replies.AddRange(ObjectRemovalTick(now));   // used-up objects die and despawn on their timing
+        replies.AddRange(BreakRemovalTick(now));    // broken objects despawn (GameSession.Destroy.cs)
         if (arrivalCheckDue && !reloading && position is { } arrivedAt)
         {
             // The arrival is a position too: event triggers, the area objectives (an EnterSubZone at the map's start: live

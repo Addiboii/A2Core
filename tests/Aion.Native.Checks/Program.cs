@@ -2643,6 +2643,39 @@ var chestReloaded = await staffSession.HandleAsync(new PacketWriter().U16(0x3636
 Check(chestReloaded.Single().SequenceEqual(GamePackets.InteractEnvObjReply(chestKey, 1)), "after a map reload the opened box stays refused");
 staffSession.Teleport(chestBackMap, chestBackAt, Now + 706_300);
 await staffSession.HandleAsync(new PacketWriter().U16(0x3622).I32(1).ToArray(), Now + 706_300);
+// Destroyable objects (GameSession.Destroy.cs): HQ1102675 step 2 wants three poison lumps (EnvObj 1201126, EnvObj_Destroy, HitLimit 7)
+// destroyed. OBSERVED in ours for the Bakron wall (HitLimit 5): per cast the hits as 0x3804 switch 00 and ONE 0x8d93 {key, casts}
+// (a two-hit skill counts once), 0x8d6d with the last, the UseEnvObj objective at once, the despawn 0x3635 {3, 1} later, no EnvObjDie.
+Check(Convert.ToHexStringLower(GameSession.EnvObjHitCount(25753, 5)) == "938d99c90105000000", "0x8d93 as recorded (2026-11-04 162208 #10960)");
+var lumpNodes = WorldObjects.ObjectsOn(1010);
+var lumpIndex = lumpNodes.Select((o, i) => (o, i)).First(x => x.o.Env == 1201126).i;
+var lump = lumpNodes[lumpIndex];
+var lumpKey = WorldObjects.FirstKey + lumpIndex;
+var lumpAt = Now + 800_000;
+staffSession.Quests!.Set(QuestLog.New("HQ1102675", QuestBook.Embedded.Find("HQ1102675")!) with { Step = 2, Uid = 9601 });
+staffSession.Teleport(1010, lump.At with { X = lump.At.X + 80 }, lumpAt);
+await staffSession.HandleAsync(new PacketWriter().U16(0x3622).I32(1).ToArray(), lumpAt);
+Check(lump is { Destructible: true, HitsToBreak: 7 }, "the poison lump is an EnvObj_Destroy object with HitLimit 7");
+var lumpHits = new List<byte[]>();
+var lumpCasts = 0;
+for (; lumpCasts < 12 && !lumpHits.Any(b => Op(b) == 0x8d6d); lumpCasts++)
+    lumpHits.AddRange(await staffSession.HandleAsync(Cast(basic, lumpKey, lump.At), lumpAt += 60_000));
+var lumpCounts = lumpHits.Where(b => Op(b) == 0x8d93).Select(b => BitConverter.ToInt32(b, 2 + NativeVarint.Encode(lumpKey).Length)).ToList();
+Check(lumpCasts == 7 && lumpCounts.SequenceEqual([1, 2, 3, 4, 5, 6, 7])
+      && lumpHits.Count(b => Op(b) == 0x3804 && b.AsSpan(2).StartsWith(NativeVarint.Encode(lumpKey)) && b[2 + NativeVarint.Encode(lumpKey).Length] == 0) >= 7,
+      "each cast on the lump: its hits as 0x3804 switch 00, one 0x8d93 counting 1..7");
+var lumpBreak = lumpHits.FindIndex(b => b.SequenceEqual(GamePackets.InteractEnvObjFinishState(lumpKey)));
+Check(lumpBreak > lumpHits.FindLastIndex(b => Op(b) == 0x8d93) - 1 && lumpHits.FindIndex(b => Op(b) == 0x8d10) > lumpBreak
+      && staffSession.Quests.Get("HQ1102675") is { Step: 2 } lumpQuest && lumpQuest.Goals[0] == 1 && !lumpHits.Any(b => Op(b) is 0x8d05 or 0x3635),
+      "the seventh cast breaks it: 0x8d6d, then the quest's UseEnvObj count (0x8d10); no EnvObjDie, still shown");
+Check(!(await staffSession.HandleAsync(Cast(basic, lumpKey, lump.At), lumpAt += 60_000)).Any(b => Op(b) == 0x8d93), "a broken object takes no more hits");
+var lumpSoon = await staffSession.TickAsync(lumpAt - 60_000 + GameSession.BrokenDespawnMs - 100);
+var lumpGone = await staffSession.TickAsync(lumpAt - 60_000 + GameSession.BrokenDespawnMs);
+Check(!lumpSoon.Any(b => Op(b) == 0x3635) && lumpGone.Any(b => b.SequenceEqual(GamePackets.EnvObjDespawn(lumpKey, 3, 1))) && !lumpGone.Any(b => Op(b) == 0x8d05),
+      "it despawns 6150 ms after the break with state 3 reason 1 (as recorded)");
+staffSession.Quests.Remove("HQ1102675");
+staffSession.Teleport(chestBackMap, chestBackAt, lumpAt + 10_000);
+await staffSession.HandleAsync(new PacketWriter().U16(0x3622).I32(1).ToArray(), lumpAt + 10_000);
 var devDepot = await (await BarSession()).HandleAsync([0x10, 0x56], Now);
 Check(devDepot[0].SequenceEqual(GamePackets.ItemDepotList([new InventoryItem(1, 110160001, 1, InventoryItem.Equipped, 1, new EquipDetail(1, 1))])),
       "development: the starter weapon in the official inventory format");
