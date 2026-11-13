@@ -1,0 +1,173 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Server rules that are ours, not official (staff may change them; the server reads this file once at start-up).
+     dismantle/skin_chance_percent: the chance (0-100) that dismantling an item also adds its appearance (the item's
+     <skin> in gamedata/items) to the character's wardrobe. User rule 2026-11-06: 25-30 %. -->
+<rules>
+	<dismantle skin_chance_percent="27"/>
+	<!-- instances/remove_barriers: barrier objects (EnvObj names with "Barrier", the golden walls of story instances) are never
+	     placed inside instance copies, so the player can always pass. User rule 2026-11-06. -->
+	<instances remove_barriers="true"/>
+	<!-- subscription/free: true = every subscription benefit is free for everyone (the client shows them active), false = as
+	     official, benefits need an active membership (items "Subscription: ..."). Staff can switch it live (staff panel); the
+	     panel's choice is kept in the database and wins over this default. User rule 2026-11-07. -->
+	<subscription free="true"/>
+	<!-- premium_shop: the Black Cloud market (the client's BM shop, table BMShopGoods: skins, wings, pets, emotes, boxes, tickets,
+	     the membership) is free to play (user 2026-11-09): what officially costs Quna or real money is bought with Kina.
+	     kina_per_quna: Kina for one Quna. 1000 because the game prices both ways itself: a Resurrection Stone is 100 Quna in the
+	       Quna tab and 100,000 Kina in the Special tab (weekly limit); a paid battle pass line is 1,000-1,500 Quna, the Kina-only
+	       pass lines 1,000,000-2,000,000 Kina. So a skin set (2,200 Quna) costs 2,200,000 Kina, an emote (300 Quna) 300,000.
+	     cash_per_quna: real-money prices (KRW) are first turned into Quna at the official top-up (1,000 Quna for 21,500 KRW), so a
+	       43,500 KRW outfit is 2,024 Quna = 2,024,000 Kina. mileage_per_quna: Mileage prices likewise (the Mileage tab asks about
+	       40 Mileage per Quna of the Quna tab: Resurrection Stone 4,000 vs 100).
+	     Quna an account already has (staff "Give Quna") is spent first, Kina pays the rest. Kina goods keep their Kina price.
+	     mirror_quna: the client checks the Quna balance itself before it asks to buy, so the Quna it is shown is the account's Quna
+	       plus the bag's Kina / kina_per_quna (rounded down); only the shown number changes, nothing is stored.
+	     category / goods: switch a market tab (CategoryLight name, the Asmodian D_ name counts too) or one goods (BMShopGoods ID) off,
+	       or give a goods its own Kina price (kina="..."). The Quna top-up packs (Daily_RechargeQuna) are off: Kina already pays.
+	     Purchase limits (per character / per account, daily, weekly from Wednesday, monthly; resets 07:00 UTC), levels, races and
+	     the sale windows are the client table's. The staff panel (Server page) can change enabled, kina_per_quna and every goods
+	     live; its choice is kept in the database and wins over this file. -->
+	<!-- sell_off_sale: goods the client table switched off (bOnSale false) or outside their sale window are sold too (user
+	     2026-11-10 "show them all"; the client itself decides what it lists). A2 Mileage (account currency 6): Mileage goods spend
+	     the account's Mileage first, Kina for the rest; quna_per_mileage / random_shop_kina_per_mileage = Mileage earned per Quna
+	     value of a Quna/real-money goods and per Kina of a Black Cloud Merchants goods (GlobalSetting bmshop_mileage_accrue_ratio 10,
+	     random_shop_mileage_accrue_ratio 200; reading them as "per 1 Mileage" is CANDIDATE; 0 = none earned); mirror_mileage shows
+	     the bag's Kina as Mileage too (Kina / 25 at 1000 Kina per Quna and 40 Mileage per Quna) so the client lets a player buy. -->
+	<premium_shop enabled="true" kina_per_quna="1000" cash_per_quna="21.5" mileage_per_quna="40" mirror_quna="true"
+	              sell_off_sale="true" mirror_mileage="true" quna_per_mileage="10" random_shop_kina_per_mileage="200">
+		<category name="Daily_RechargeQuna" enabled="false"/>
+	</premium_shop>
+	<!-- random_shop: the Black Cloud Merchants (the client's random shop: RandomShop, RandomShopGoods; an "All" list of skins, pets and
+	     theostones, a skin list and a pet list per race). OBSERVED in the official recordings (2026-11-06, 6 lists): 10 goods
+	     (slots), all discounted, Kina only, the list renews at the next full hour (refresh_minutes 60: CANDIDATE, 120 would fit too);
+	     discount percents 90/80/70/50; price = item SellPrice x price_factor (skin 100, pet 50, theostone 200: exact for all 59 goods).
+	     CANDIDATE (estimated from those goods): discount weights, kind shares in the "All" list and the per-item weight by grade
+	     (grades = Common, Rare, Legend, Unique, Epic; skins 90/27/3 give the 52/37/11 % white/green/blue seen). The staff panel
+	     (Server page) can change all of it live; its choice is kept in the database and wins over this file. -->
+	<random_shop enabled="true" slots="10" refresh_minutes="60">
+		<discount percent="90" weight="32"/>
+		<discount percent="80" weight="41"/>
+		<discount percent="70" weight="24"/>
+		<discount percent="50" weight="3"/>
+		<kind name="skin" share="35" price_factor="100" grades="90,27,3,1,1"/>
+		<kind name="pet" share="35" price_factor="50" grades="1,1,1,1,1"/>
+		<kind name="theostone" share="25" price_factor="200" grades="60,60,40,40,40"/>
+	</random_shop>
+	<!-- helpers/damage_percent: a helper NPC's (Function Companion: Elvida, Robin) damage against monsters, in percent, and its hits
+	     never count on hit gauges (totems). PROVISIONAL, user rule 2026-11-07: helpers assist, the player does most of the work. -->
+	<helpers damage_percent="25" provisional="true"/>
+	<!-- points: at most this many skill points (skill_cap) and stigma points (stigma_cap) are available at a time. Points over the cap
+	     (Wisdom Stones, stigma shards) are never lost: they stay saved and come in as the available ones are spent. User rule
+	     2026-11-07 (a character with 30110 saved points showed -14 in the skill window). -->
+	<points skill_cap="1000" stigma_cap="1000"/>
+	<!-- monsters/leash_no_hit_ms: a chasing monster that has not been able to hit its target for this long gives up, runs back
+	     to its spawn and resets (full HP, aggro cleared). User rule 2026-11-07 (N4), PROVISIONAL 10 s. -->
+	<!-- chase_min_cm / chase_max_cm: a monster that was pulled follows its target this far from where the chase began (a random
+	     distance between the two for each chase); if it has not landed a hit by then it gives up. chase_after_hit_cm: once it
+	     has hit its target it may follow this much further. Then it runs back to its spawn return_speed_percent faster than
+	     normal and resets. Ranged monsters too; bosses (Hero rank) keep the long leash. User rule 2026-11-08: 10-15 m, +5 m. -->
+	<monsters leash_no_hit_ms="10000" chase_min_cm="1000" chase_max_cm="1500" chase_after_hit_cm="500" return_speed_percent="50"
+	          boss_leash_no_hit_ms="30000" boss_lost_grace_ms="15000" provisional="true"/>
+	<!-- boss_leash_no_hit_ms: a boss (Hero rank) gives up only after this long without landing a hit (normal monsters:
+	     leash_no_hit_ms). boss_lost_grace_ms: a boss that loses its target (stealth, invisible, out of sight) waits this long in
+	     the fight before it resets. Time spent stunned or held never counts. User 2026-11-08: bosses reset on a stun. -->
+	<!-- falls: no damage for a fall up to safe_cm, then percent_per_m of max HP per metre above it, death from death_cm.
+	     Gliding, flying, wind paths and water take none. PROVISIONAL (user request 2026-11-07; one official fall did 360
+	     damage, about 6-7 percent of max HP, its height unknown). -->
+	<falls safe_cm="1000" percent_per_m="2" death_cm="6000" provisional="true"/>
+	<!-- enchant/breakable: what a FAILED enchant does to the items whose client Enchant row has FailPenalty -1. Only the rune
+	     groups have it (Rune_PvE_Unique / Rune_PvP_Unique, +1..+9: the Clash Rune 310900001; chances 80 %, 66, 50, 33, 25, 20, 15,
+	     12, 10 %). Official: the rune is destroyed (result 836, seen in the official recordings). Every other item (weapons, armour,
+	     accessories, belts, amulets, amplification, Enhance Potential) only ever keeps its level on a failure.
+	       safe     = these items never fail (100 %, nothing lost)  - default, coordinator request 2026-11-11 ("class rune 100 % safe")
+	       keep     = they fail at the table chance, but the item and its level are kept
+	       official = they fail at the table chance and the item is destroyed, as the official server -->
+	<enchant breakable="official"/>
+	<!-- season/current: the running season's tag in the achievement group names (Group_Season_G1_L_Unlock, ..._Abyss): the world
+	     entry lists only that season's season-mission and unlock achievements. OBSERVED 2026-11-07: G1 (official list, 113 + 65);
+	     change it when the official season changes. -->
+	<season current="G1"/>
+	<!-- gather/specialized_from_level: the Essence Extraction mastery level at which the first Specialty skill point (needed for the
+	     Ore/Gem/Log/Herb/Ingredient/Odyle seekers) is given. OFFICIAL = 10: the client table GatherMastery gives the first
+	     BonusSpecializedPoint on its Level 10 row (then 20, 30, 40, 50 x2, 60, 70, 80 x2, 90 x2, 100 x2 = 14), and the client tooltip
+	     says "Reach Novice Lv. 10 to acquire Specialty Skill Point(s): 1"; levels 2-9 give Common skill points only (for Proficient
+	     Handling, Delicate Touch, Lady Luck). A lower value gives that first point earlier (user request 2026-11-12: from level 6);
+	     every later point and the total stay official. 0 or 10 = official. OURS when not 10. -->
+	<gather specialized_from_level="6" skin_bag_percent="5"/>
+	<!-- bots/count: headless bot players on the shared world, half Elyos and half Asmodians, each on its own bot account (provider
+	     'bot'); they log in like a client and play (stage 1: walk around their spot). 0 = no bots. User 2026-11-08: 100. -->
+	<bots count="100"/>
+	<!-- bosses (Hero rank), user 2026-11-08 - no endless stun-lock by a big group:
+	     cc_*: each stun/hold a player puts on a boss within cc_window_ms lasts half as long as the one before; after cc_max of them
+	       the boss is immune to stuns for cc_immune_ms.
+	     stagger_*: every stun attempt (immune or not) fills the stagger gauge by stagger_per_cc (it drains stagger_decay_per_s);
+	       full (100) the boss collapses for stagger_ms and takes stagger_damage_percent more damage, then cannot be staggered for
+	       stagger_immune_ms. PROVISIONAL, OURS. -->
+	<bosses cc_window_ms="15000" cc_max="3" cc_immune_ms="10000"
+	        stagger_per_cc="25" stagger_decay_per_s="5" stagger_ms="5000" stagger_immune_ms="20000" stagger_damage_percent="50" provisional="true"/>
+	<!-- monster_ai: who fights by our invented tactics (NpcTactics, OURS: user 2026-11-07 "smarter than official") and who fights as
+	     official. User decision 2026-11-13: "keep the bosses as official, rest of monsters sounds fun".
+	     A BOSS is, by the client's NpcData (tables 2026-11-09): NpcSubType HeroMonster or LegendMonster (every named monster,
+	       bNamed, is one of these), or any NPC with a boss stagger gauge (NpcGroggyType GroggyGuard / GroggyAttack: also the
+	       EliteMonster bosses such as M_Dungeon_D_0023_Boss_01 / MiddleBoss_01), or with bUseBossBerserk. That is 1376 NPC
+	       types: 1356 HeroMonster (field / world / dungeon bosses, Boss Challenge Nightmare bosses), 1 LegendMonster,
+	       19 EliteMonster with a stagger gauge (NpcTactics.IsBoss).
+	     boss_official="true": bosses use ONLY what comes from the client data or the map events: their ActiveSkillList (in
+	       boss-ai.xml rotation order where recorded) with the client cooldowns / casts / ranges, the recorded boss-ai.xml HP
+	       phases, the berserk timer (bUseBossBerserk), the map events (HpRemaining), their summons and mechanics. Switched off for
+	       them: the random target switch, the generic 75/50/25 % phases, the enrage below 30 %, call for help, flee / kite, the
+	       catch-up speed, aiming ahead, the scored random skill pick. They still turn on whoever hurts them most (hate table).
+	       false = bosses use our tactics as well (before 2026-11-13).
+	     fun_monsters="true": every other monster keeps our tactics (call for help, run for help at low HP, kite, catch-up speed,
+	       aiming ahead, the scored random skill pick, elites' phases and enrage); false = they fight as official too. -->
+	<monster_ai boss_official="true" fun_monsters="true"/>
+	<!-- primary_stats: what each point of the primary stats (STR, DEX, INT, CON, AGI, WIS) and the Empyrean Lord stats (Justice
+	     [Nezekan] .. Space [Israphel]) gives. OFFICIAL: the client table PcStatSecond (Stat 1..1000, linear; this is its row 1,
+	     the server caps the points at 1000), checked against the 56 official 0x3649 stat sheets (2026-11-09). Replaces the
+	     provisional STR -> PhysicDamage, DEX -> Accuracy/Critical, AGI -> Evasion/Block, CON -> HPMax, WIS -> MPMax of 2026-11-08. -->
+	<primary_stats>
+		<convert from="STR" to="DamageRatio" per_point="10"/>
+		<convert from="DEX" to="EvasionRatio" per_point="10"/>
+		<convert from="DEX" to="BlockRatio" per_point="10"/>
+		<convert from="DEX" to="CriticalResistRatio" per_point="10"/>
+		<convert from="INT" to="AbnormalAccuracy" per_point="10"/>
+		<convert from="CON" to="MaxHPRatio" per_point="10"/>
+		<convert from="AGI" to="AccuracyRatio" per_point="10"/>
+		<convert from="AGI" to="CriticalRatio" per_point="10"/>
+		<convert from="WIS" to="AbnormalResistance" per_point="10"/>
+		<convert from="Justice" to="DefenseRatio" per_point="10"/>
+		<convert from="Justice" to="Perfect" per_point="10"/>
+		<convert from="Destruction" to="DamageRatio" per_point="10"/>
+		<convert from="Destruction" to="PerfectResist" per_point="10"/>
+		<convert from="Freedom" to="AccuracyRatio" per_point="10"/>
+		<convert from="Freedom" to="EvasionRatio" per_point="10"/>
+		<convert from="Death" to="CriticalRatio" per_point="10"/>
+		<convert from="Death" to="IgnoreRestoration" per_point="10"/>
+		<convert from="Illusion" to="CoolTimeIncrease" per_point="-10"/>
+		<convert from="Illusion" to="IgnoreIronWall" per_point="10"/>
+		<convert from="Wisdom" to="MPUseIncrease" per_point="-10"/>
+		<convert from="Wisdom" to="HardHit" per_point="10"/>
+		<convert from="Life" to="MaxHPRatio" per_point="10"/>
+		<convert from="Life" to="Restoration" per_point="10"/>
+		<convert from="Destiny" to="MaxMPRatio" per_point="10"/>
+		<convert from="Destiny" to="IronWall" per_point="10"/>
+		<convert from="Time" to="CombatSpeed" per_point="10"/>
+		<convert from="Time" to="HardHitResist" per_point="10"/>
+		<convert from="Space" to="MoveSpeed" per_point="10"/>
+		<convert from="Space" to="BlockRatio" per_point="10"/>
+	</primary_stats>
+	<!-- rifts (Spacetime Rifts; OURS, user 2026-11-13: one faction per world, so a rift leads into a world of the other faction):
+	     mode: which of the other faction's two worlds a rift user arrives in.
+	       auto = when that faction is busy (one of its worlds at busy_percent of the world capacity, players at home plus rift
+	              visitors) spread the rift users over both of its worlds (the emptier first); when it is quiet send them all to its
+	              most populated world (none there: the player's match world);
+	       spread = always the emptier world; populated = always the fuller world; pair = always the match world (before the rule).
+	     visit_minutes: a visit lasts this long, then the player is sent back to the rift they came through, in their own world
+	       (OFFICIAL 60: GlobalSetting rift_contentsticket_default_time 3600000 ms; the ticket's recharges are not modelled).
+	     announce: "A Spacetime Rift has appeared." (MSG_RIFT_SPAWN) to everyone in the world when the rifts open.
+	     The schedule (every 3 h from 02:00 KST, open 10 min, 400 uses, level 45+) is the client's (PeriodSpawn, RiftData). -->
+	<rifts mode="auto" busy_percent="60" visit_minutes="60" announce="true"/>
+	<!-- hidden_cubes/respawn_minutes: an opened hidden cube (or Altgard treasure box) comes back this long after at a random free
+	     position of its MapData pool (two up per pool, the pool's own two ids). CANDIDATE: no respawn time in the data or recordings. -->
+	<hidden_cubes respawn_minutes="15"/>
+</rules>

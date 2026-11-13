@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Cutscenes that play when a quest is added (EventFuncAction_NT 0x8d15 Cutscene, no wait, right after QuestAdd_NT 0x8d11).
+     The client's quest tables (on the Windows side) hold the real link; until it is extracted, each row is an official
+     observation. -->
+<quest_cutscenes>
+	<!-- OBSERVED capture 20261107-014953 01:54:29.721: right after the Brigade ending's move to map 1010, QuestAdd HQ1102010
+	     then Cutscene_L_A_Seq_1010 (the wake-up). -->
+	<quest code="HQ1102010" cutscene="Cutscene_L_A_Seq_1010"/>
+</quest_cutscenes>

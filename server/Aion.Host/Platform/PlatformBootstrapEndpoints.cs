@@ -327,6 +327,10 @@ public sealed class LaunchPairing(TimeProvider clock)
 
 public static partial class PlatformBootstrapEndpoints
 {
+    /// <summary>The hand-made platform answers' folder (Aion:ApiOverridesPath, default &lt;data dir&gt;/api-overrides).</summary>
+    public static string ApiOverridesDirectory { get; set; } = OperatingSystem.IsWindows()
+        ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "A2Core", "api-overrides") : "/var/lib/aion/api-overrides";
+
     static readonly byte[] NotReady = """{"local_probe":true,"ready":false}"""u8.ToArray();
     static readonly string[] Known = ["/MobileAppConfigSdk/app/key", "/MobileAppConfigSdk/app/policy", "/local-api-gate", "/local-login-web", "/local-login-api"];
 
@@ -341,7 +345,15 @@ public static partial class PlatformBootstrapEndpoints
     private static partial Regex CodePrefix();
 
     /// <summary>Answers every request on the bootstrap port in its own branch (no static files or other routes there).</summary>
-    public static void UsePlatformBootstrap(this WebApplication app, int port, PlatformResponses responses, string? requestLog)
+    /// <summary>
+    /// The platform requests nothing answers (503 under /local-api-gate/): method, path, query, content type, header NAMES and
+    /// the first 4 KB of the body (none for auth/session/login paths), one JSON line each in <paramref name="unansweredLog"/>.
+    /// Why (cash-shop agent 2026-11-11): the game's BM shop takes its goods, balances and storage from the NC platform store
+    /// (usmap BMShopExportGoods/Limit, NcPaymentV2API, BMShop_WarehouseServerLoadComplete), never recorded (TLS to NC); official
+    /// clients ask the game server for 0x568d limits after it loads, ours never did in 123 traces. One shop visit with this log
+    /// shows which routes the client calls. Bounded at 20 MB.
+    /// </summary>
+    public static void UsePlatformBootstrap(this WebApplication app, int port, PlatformResponses responses, string? requestLog, string? unansweredLog = null)
     {
         var issuedSession = responses.SessionId is { } id ? "/local-api-gate/sessions/v1.0/" + Uri.EscapeDataString(id) : null;
         // A launch authorization becomes a game ticket (12 h within the account session, like the launch itself). Repeated
@@ -417,11 +429,25 @@ public static partial class PlatformBootstrapEndpoints
             else if (method == "GET" && gatePath == "/mission/v1.0/me/events") reply = (200, PlatformShop.NoEvents);
             else if (method == "GET" && gatePath == "/virtual_currency/v2.0/me/balances")
             {
-                var launch = code ?? responses.LaunchAuthorization;
-                var wallet = launch is not null && launchAccounts.TryGetValue(launch, out var owner) ? Aion.World.PremiumWallets.Of(owner) : (0, 0);
-                reply = (200, PlatformShop.Balances(request.Query["currency_group_id"], wallet.Item1, wallet.Item2));
+                // The game's own Quna is an account currency (the Dell version's premium shop, GameSession.PremiumShop.cs); the
+                // platform balances answer none (CANDIDATE).
+                reply = (200, PlatformShop.Balances(request.Query["currency_group_id"], 0, 0));
             }
             else if (method == "GET" && responses.Session is { } session && (path == issuedSession || SessionPath().IsMatch(path))) reply = (200, session);
+            // Hand-made answers for the platform services we do not implement yet (shop goods, balances, events, trade,
+            // warehouse...): /var/lib/aion/api-overrides/<METHOD>_<path with / as __>.json is sent with 200 when it exists,
+            // read on every request so a reply can be changed without a restart (shape probing, Windows side 2026-11-07).
+            if (reply.Status == 503 && path.StartsWith("/local-api-gate/", StringComparison.Ordinal))
+            {
+                var name = method + "_" + path["/local-api-gate/".Length..].Replace("/", "__").Replace(";", "_") + ".json";
+                var file = Path.Combine(ApiOverridesDirectory, name);
+                if (name.IndexOfAny(Path.GetInvalidFileNameChars()) < 0 && !name.Contains("..") && File.Exists(file))
+                    reply = (200, await File.ReadAllBytesAsync(file));
+            }
+            // Built-in answers (event missions: an empty list clears the client's red dots; Aion.World.PlatformDefaults).
+            if (reply.Status == 503 && Aion.World.PlatformDefaults.Answer(method, path) is { } builtIn) reply = (200, builtIn);
+            if (reply.Status == 503 && unansweredLog is not null && path.StartsWith("/local-api-gate/", StringComparison.Ordinal))
+                await LogUnansweredAsync(context, path, unansweredLog, logLock);
             if (requestLog is not null)
             {
                 var family = Known.Skip(2).FirstOrDefault(prefix => path == prefix || path.StartsWith(prefix + "/", StringComparison.Ordinal));
@@ -439,5 +465,38 @@ public static partial class PlatformBootstrapEndpoints
             context.Response.ContentLength = reply.Body.Length;
             if (method != "HEAD") await context.Response.Body.WriteAsync(reply.Body);
         }));
+    }
+
+    const long UnansweredLogLimit = 20 << 20;
+
+    /// <summary>One line of <see cref="UsePlatformBootstrap"/>'s unanswered-request log (see there); never fails the request.</summary>
+    internal static async Task LogUnansweredAsync(HttpContext context, string path, string file, object logLock)
+    {
+        try
+        {
+            var request = context.Request;
+            string? body = null;
+            var secret = path.Contains("auth", StringComparison.OrdinalIgnoreCase) || path.Contains("session", StringComparison.OrdinalIgnoreCase)
+                || path.Contains("login", StringComparison.OrdinalIgnoreCase) || path.Contains("token", StringComparison.OrdinalIgnoreCase);
+            if (!secret && request.ContentLength is > 0 || !secret && request.ContentLength is null && request.Method is "POST" or "PUT" or "PATCH")
+            {
+                var buffer = new byte[4096];
+                var read = 0;
+                while (read < buffer.Length && await request.Body.ReadAsync(buffer.AsMemory(read), context.RequestAborted) is var n and > 0) read += n;
+                body = Encoding.UTF8.GetString(buffer, 0, read);
+            }
+            var line = JsonSerializer.Serialize(new
+            {
+                utc = DateTimeOffset.UtcNow, method = request.Method, path, query = request.QueryString.Value,
+                contentType = request.ContentType, length = request.ContentLength, headers = request.Headers.Keys.Order(StringComparer.OrdinalIgnoreCase).ToArray(),
+                body,
+            }, PlatformResponses.Plain) + "\n";
+            lock (logLock)
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(file))!);
+                if (!File.Exists(file) || new FileInfo(file).Length < UnansweredLogLimit) File.AppendAllText(file, line);
+            }
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or OperationCanceledException or BadHttpRequestException) { }
     }
 }

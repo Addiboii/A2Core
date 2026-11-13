@@ -1,0 +1,14 @@
+[Unit]
+Description=Refresh the A2Core feature-gap report every 6 hours
+# Enable (as your user, no sudo):
+#   mkdir -p ~/.config/systemd/user && cp ~/aion/A2Core/deploy/linux/user/aion-feature-gaps.* ~/.config/systemd/user/
+#   systemctl --user daemon-reload && systemctl --user enable --now aion-feature-gaps.timer
+# Disable: systemctl --user disable --now aion-feature-gaps.timer
+
+[Timer]
+OnBootSec=10min
+OnUnitActiveSec=6h
+Persistent=true
+
+[Install]
+WantedBy=timers.target

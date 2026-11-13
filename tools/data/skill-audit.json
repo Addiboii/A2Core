@@ -1,0 +1,1539 @@
+{
+ "gaps_by_cause": {
+  "damage": [
+   "13310000",
+   "13730000",
+   "17150000",
+   "16280000",
+   "11330000",
+   "15080000",
+   "15270000"
+  ],
+  "buff": [
+   "13370000",
+   "13390000",
+   "13710000",
+   "13720000",
+   "13740000",
+   "13750000",
+   "13760000",
+   "13790000",
+   "18290000",
+   "18420000",
+   "18710000",
+   "18720000",
+   "18740000",
+   "18750000",
+   "18760000",
+   "18790000",
+   "18800000",
+   "17710000",
+   "17720000",
+   "17730000",
+   "17740000",
+   "17750000",
+   "17770000",
+   "17780000",
+   "17790000",
+   "16710000",
+   "16720000",
+   "16740000",
+   "16760000",
+   "16770000",
+   "16790000",
+   "11230000",
+   "11250000",
+   "11390000",
+   "11400000",
+   "11710000",
+   "11720000",
+   "11740000",
+   "11750000",
+   "11760000",
+   "11790000",
+   "11800000",
+   "14220000",
+   "14310000",
+   "14350000",
+   "14710000",
+   "14740000",
+   "14750000",
+   "14760000",
+   "14790000",
+   "15230000",
+   "15310000",
+   "15400000",
+   "15740000",
+   "15750000",
+   "15770000",
+   "15780000",
+   "15790000",
+   "12250000",
+   "12710000",
+   "12720000",
+   "12730000",
+   "12740000",
+   "12760000",
+   "12790000"
+  ],
+  "heal": [
+   "13710000",
+   "13730000",
+   "18120000",
+   "18160000",
+   "18170000",
+   "18710000",
+   "18720000",
+   "17100000",
+   "17120000",
+   "17160000",
+   "17290000",
+   "17300000",
+   "17720000",
+   "17740000",
+   "17760000",
+   "17770000",
+   "17800000",
+   "16120000",
+   "16270000",
+   "16750000",
+   "11080000",
+   "11720000",
+   "11730000",
+   "14050000",
+   "14710000",
+   "12350000",
+   "12710000",
+   "12720000"
+  ],
+  "summon": [
+   "13720000",
+   "17150000",
+   "17440000",
+   "16100000",
+   "16110000",
+   "16120000",
+   "16130000",
+   "16160000",
+   "16170000",
+   "16180000",
+   "16250000",
+   "16270000",
+   "16290000",
+   "16310000",
+   "16730000",
+   "16750000",
+   "14380000",
+   "15200000",
+   "15280000",
+   "15390000"
+  ],
+  "debuff": [
+   "13720000",
+   "17070000",
+   "17080000",
+   "16140000",
+   "16150000",
+   "16220000",
+   "16800000",
+   "11410000",
+   "14050000",
+   "14060000",
+   "14720000",
+   "15020000",
+   "15390000"
+  ],
+  "weakness": [
+   "18250000",
+   "14210000"
+  ],
+  "charge-aoe": [
+   "17060000",
+   "15060000",
+   "12090000"
+  ],
+  "charge": [
+   "17060000",
+   "14010000",
+   "15060000",
+   "12090000"
+  ],
+  "aoe": [
+   "17390000"
+  ],
+  "lifesteal": [
+   "11120000"
+  ]
+ },
+ "per_skill": {
+  "13310000": {
+   "class": "assassin",
+   "name": "Illusive Clone",
+   "want": [
+    "damage"
+   ],
+   "missing": [
+    "damage"
+   ]
+  },
+  "13370000": {
+   "class": "assassin",
+   "name": "Evasion Contract",
+   "want": [
+    "buff"
+   ],
+   "missing": [
+    "buff"
+   ]
+  },
+  "13390000": {
+   "class": "assassin",
+   "name": "Swift Contract",
+   "want": [
+    "buff"
+   ],
+   "missing": [
+    "buff"
+   ]
+  },
+  "13710000": {
+   "class": "assassin",
+   "name": "Heightened Sixth Sense",
+   "want": [
+    "buff",
+    "heal"
+   ],
+   "missing": [
+    "buff",
+    "heal"
+   ]
+  },
+  "13720000": {
+   "class": "assassin",
+   "name": "Exploit Weakness",
+   "want": [
+    "buff",
+    "damage",
+    "debuff",
+    "summon"
+   ],
+   "missing": [
+    "buff",
+    "debuff",
+    "summon"
+   ]
+  },
+  "13730000": {
+   "class": "assassin",
+   "name": "Apply Poison",
+   "want": [
+    "damage",
+    "debuff",
+    "dot",
+    "heal",
+    "weakness"
+   ],
+   "missing": [
+    "damage",
+    "heal"
+   ]
+  },
+  "13740000": {
+   "class": "assassin",
+   "name": "Rear Smite",
+   "want": [
+    "buff"
+   ],
+   "missing": [
+    "buff"
+   ]
+  },
+  "13750000": {
+   "class": "assassin",
+   "name": "Assault Stance",
+   "want": [
+    "buff"
+   ],
+   "missing": [
+    "buff"
+   ]
+  },
+  "13760000": {
+   "class": "assassin",
+   "name": "Impact Hit",
+   "want": [
+    "buff"
+   ],
+   "missing": [
+    "buff"
+   ]
+  },
+  "13790000": {
+   "class": "assassin",
+   "name": "Revitalization Contract",
+   "want": [
+    "buff"
+   ],
+   "missing": [
+    "buff"
+   ]
+  },
+  "18120000": {
+   "class": "chanter",
+   "name": "Recuperation",
+   "want": [
+    "heal"
+   ],
+   "missing": [
+    "heal"
+   ]
+  },
+  "18160000": {
+   "class": "chanter",
+   "name": "Sprint Mantra",
+   "want": [
+    "heal"
+   ],
+   "missing": [
+    "heal"
+   ]
+  },
+  "18170000": {
+   "class": "chanter",
+   "name": "Healing Touch",
+   "want": [
+    "heal"
+   ],
+   "missing": [
+    "heal"
+   ]
+  },
+  "18250000": {
+   "class": "chanter",
+   "name": "Power of the Storm",
+   "want": [
+    "weakness"
+   ],
+   "missing": [
+    "weakness"
+   ]
+  },
+  "18290000": {
+   "class": "chanter",
+   "name": "Spinning Strike",
+   "want": [
+    "aoe",
+    "buff",
+    "damage"
+   ],
+   "missing": [
+    "buff"
+   ]
+  },
+  "18420000": {
+   "class": "chanter",
+   "name": "Guardian Blessing",
+   "want": [
+    "buff"
+   ],
+   "missing": [
+    "buff"
+   ]
+  },
+  "18710000": {
+   "class": "chanter",
+   "name": "Blessing of Life",
+   "want": [
+    "buff",
+    "heal"
+   ],
+   "missing": [
+    "buff",
+    "heal"
+   ]
+  },
+  "18720000": {
+   "class": "chanter",
+   "name": "Crossguard",
+   "want": [
+    "buff",
+    "heal"
+   ],
+   "missing": [
+    "buff",
+    "heal"
+   ]
+  },
+  "18740000": {
+   "class": "chanter",
+   "name": "Inspiring Spell",
+   "want": [
+    "buff"
+   ],
+   "missing": [
+    "buff"
+   ]
+  },
+  "18750000": {
+   "class": "chanter",
+   "name": "Attack Preparation",
+   "want": [
+    "buff"
+   ],
+   "missing": [
+    "buff"
+   ]
+  },
+  "18760000": {
+   "class": "chanter",
+   "name": "Impact Hit",
+   "want": [
+    "buff"
+   ],
+   "missing": [
+    "buff"
+   ]
+  },
+  "18790000": {
+   "class": "chanter",
+   "name": "Survival Willpower",
+   "want": [
+    "buff"
+   ],
+   "missing": [
+    "buff"
+   ]
+  },
+  "18800000": {
+   "class": "chanter",
+   "name": "Wind's Promise",
+   "want": [
+    "buff",
+    "damage"
+   ],
+   "missing": [
+    "buff"
+   ]
+  },
+  "17060000": {
+   "class": "cleric",
+   "name": "Bolt",
+   "want": [
+    "aoe",
+    "charge",
+    "damage",
+    "element"
+   ],
+   "missing": [
+    "charge",
+    "charge-aoe"
+   ]
+  },
+  "17070000": {
+   "class": "cleric",
+   "name": "Chain of Torment",
+   "want": [
+    "aoe",
+    "damage",
+    "debuff",
+    "dot",
+    "element",
+    "weakness"
+   ],
+   "missing": [
+    "debuff"
+   ]
+  },
+  "17080000": {
+   "class": "cleric",
+   "name": "Debilitating Mark",
+   "want": [
+    "aoe",
+    "damage",
+    "debuff",
+    "dot",
+    "element"
+   ],
+   "missing": [
+    "debuff"
+   ]
+  },
+  "17100000": {
+   "class": "cleric",
+   "name": "Healing Light",
+   "want": [
+    "heal"
+   ],
+   "missing": [
+    "heal"
+   ]
+  },
+  "17120000": {
+   "class": "cleric",
+   "name": "Radiant Recovery",
+   "want": [
+    "heal"
+   ],
+   "missing": [
+    "heal"
+   ]
+  },
+  "17150000": {
+   "class": "cleric",
+   "name": "Divine Aura",
+   "want": [
+    "damage",
+    "element",
+    "summon"
+   ],
+   "missing": [
+    "damage",
+    "summon"
+   ]
+  },
+  "17160000": {
+   "class": "cleric",
+   "name": "Benevolence",
+   "want": [
+    "heal"
+   ],
+   "missing": [
+    "heal"
+   ]
+  },
+  "17290000": {
+   "class": "cleric",
+   "name": "Absolution",
+   "want": [
+    "heal"
+   ],
+   "missing": [
+    "heal"
+   ]
+  },
+  "17300000": {
+   "class": "cleric",
+   "name": "Voice of Doom",
+   "want": [
+    "aoe",
+    "damage",
+    "element",
+    "heal"
+   ],
+   "missing": [
+    "heal"
+   ]
+  },
+  "17390000": {
+   "class": "cleric",
+   "name": "Summon Resurrection",
+   "want": [
+    "aoe"
+   ],
+   "missing": [
+    "aoe"
+   ]
+  },
+  "17440000": {
+   "class": "cleric",
+   "name": "Noble Aura",
+   "want": [
+    "damage",
+    "summon"
+   ],
+   "missing": [
+    "summon"
+   ]
+  },
+  "17710000": {
+   "class": "cleric",
+   "name": "Warm Benediction",
+   "want": [
+    "buff"
+   ],
+   "missing": [
+    "buff"
+   ]
+  },
+  "17720000": {
+   "class": "cleric",
+   "name": "Empyrean Lords' Benediction",
+   "want": [
+    "buff",
+    "heal"
+   ],
+   "missing": [
+    "buff",
+    "heal"
+   ]
+  },
+  "17730000": {
+   "class": "cleric",
+   "name": "Empyrean Lord's Grace",
+   "want": [
+    "buff",
+    "damage"
+   ],
+   "missing": [
+    "buff"
+   ]
+  },
+  "17740000": {
+   "class": "cleric",
+   "name": "Healing Enhancement",
+   "want": [
+    "buff",
+    "heal"
+   ],
+   "missing": [
+    "buff",
+    "heal"
+   ]
+  },
+  "17750000": {
+   "class": "cleric",
+   "name": "Immortal Veil",
+   "want": [
+    "buff"
+   ],
+   "missing": [
+    "buff"
+   ]
+  },
+  "17760000": {
+   "class": "cleric",
+   "name": "Heal Block",
+   "want": [
+    "heal",
+    "weakness"
+   ],
+   "missing": [
+    "heal"
+   ]
+  },
+  "17770000": {
+   "class": "cleric",
+   "name": "Prayer of Concentration",
+   "want": [
+    "buff",
+    "heal"
+   ],
+   "missing": [
+    "buff",
+    "heal"
+   ]
+  },
+  "17780000": {
+   "class": "cleric",
+   "name": "Earth's Grace",
+   "want": [
+    "buff"
+   ],
+   "missing": [
+    "buff"
+   ]
+  },
+  "17790000": {
+   "class": "cleric",
+   "name": "Survival Willpower",
+   "want": [
+    "buff"
+   ],
+   "missing": [
+    "buff"
+   ]
+  },
+  "17800000": {
+   "class": "cleric",
+   "name": "Radiant Benediction",
+   "want": [
+    "heal"
+   ],
+   "missing": [
+    "heal"
+   ]
+  },
+  "16100000": {
+   "class": "elementalist",
+   "name": "Summon: Fire Spirit",
+   "want": [
+    "aoe",
+    "damage",
+    "summon"
+   ],
+   "missing": [
+    "summon"
+   ]
+  },
+  "16110000": {
+   "class": "elementalist",
+   "name": "Summon: Water Spirit",
+   "want": [
+    "damage",
+    "element",
+    "summon"
+   ],
+   "missing": [
+    "summon"
+   ]
+  },
+  "16120000": {
+   "class": "elementalist",
+   "name": "Summon: Wind Spirit",
+   "want": [
+    "aoe",
+    "damage",
+    "element",
+    "heal",
+    "summon"
+   ],
+   "missing": [
+    "heal",
+    "summon"
+   ]
+  },
+  "16130000": {
+   "class": "elementalist",
+   "name": "Summon: Earth Spirit",
+   "want": [
+    "damage",
+    "debuff",
+    "element",
+    "summon"
+   ],
+   "missing": [
+    "summon"
+   ]
+  },
+  "16140000": {
+   "class": "elementalist",
+   "name": "Jointstrike: Curse",
+   "want": [
+    "aoe",
+    "damage",
+    "debuff",
+    "dot",
+    "weakness"
+   ],
+   "missing": [
+    "debuff"
+   ]
+  },
+  "16150000": {
+   "class": "elementalist",
+   "name": "Jointstrike: Corrode",
+   "want": [
+    "aoe",
+    "damage",
+    "debuff",
+    "dot"
+   ],
+   "missing": [
+    "debuff"
+   ]
+  },
+  "16160000": {
+   "class": "elementalist",
+   "name": "Spirit Protection",
+   "want": [
+    "summon"
+   ],
+   "missing": [
+    "summon"
+   ]
+  },
+  "16170000": {
+   "class": "elementalist",
+   "name": "Command: Proxy",
+   "want": [
+    "summon"
+   ],
+   "missing": [
+    "summon"
+   ]
+  },
+  "16180000": {
+   "class": "elementalist",
+   "name": "Spirit Momentum",
+   "want": [
+    "summon"
+   ],
+   "missing": [
+    "summon"
+   ]
+  },
+  "16220000": {
+   "class": "elementalist",
+   "name": "Cursed Cloud",
+   "want": [
+    "aoe",
+    "damage",
+    "debuff",
+    "dot"
+   ],
+   "missing": [
+    "debuff"
+   ]
+  },
+  "16250000": {
+   "class": "elementalist",
+   "name": "Summon: Ancient Spirit",
+   "want": [
+    "aoe",
+    "damage",
+    "summon"
+   ],
+   "missing": [
+    "summon"
+   ]
+  },
+  "16270000": {
+   "class": "elementalist",
+   "name": "Elemental Replenishment",
+   "want": [
+    "heal",
+    "summon"
+   ],
+   "missing": [
+    "heal",
+    "summon"
+   ]
+  },
+  "16280000": {
+   "class": "elementalist",
+   "name": "Continuous Impact",
+   "want": [
+    "damage"
+   ],
+   "missing": [
+    "damage"
+   ]
+  },
+  "16290000": {
+   "class": "elementalist",
+   "name": "Dismiss: Fire Spirit",
+   "want": [
+    "aoe",
+    "damage",
+    "summon"
+   ],
+   "missing": [
+    "summon"
+   ]
+  },
+  "16310000": {
+   "class": "elementalist",
+   "name": "Extract Vitality",
+   "want": [
+    "damage",
+    "summon"
+   ],
+   "missing": [
+    "summon"
+   ]
+  },
+  "16710000": {
+   "class": "elementalist",
+   "name": "Spirit Strike",
+   "want": [
+    "buff"
+   ],
+   "missing": [
+    "buff"
+   ]
+  },
+  "16720000": {
+   "class": "elementalist",
+   "name": "Spirit Protection",
+   "want": [
+    "buff"
+   ],
+   "missing": [
+    "buff"
+   ]
+  },
+  "16730000": {
+   "class": "elementalist",
+   "name": "Spirit's Descent",
+   "want": [
+    "damage",
+    "summon"
+   ],
+   "missing": [
+    "summon"
+   ]
+  },
+  "16740000": {
+   "class": "elementalist",
+   "name": "Corrode",
+   "want": [
+    "buff",
+    "damage"
+   ],
+   "missing": [
+    "buff"
+   ]
+  },
+  "16750000": {
+   "class": "elementalist",
+   "name": "Spirit Revitalization",
+   "want": [
+    "heal",
+    "summon"
+   ],
+   "missing": [
+    "heal",
+    "summon"
+   ]
+  },
+  "16760000": {
+   "class": "elementalist",
+   "name": "Mental Focus",
+   "want": [
+    "buff"
+   ],
+   "missing": [
+    "buff"
+   ]
+  },
+  "16770000": {
+   "class": "elementalist",
+   "name": "Spirit Communion",
+   "want": [
+    "buff"
+   ],
+   "missing": [
+    "buff"
+   ]
+  },
+  "16790000": {
+   "class": "elementalist",
+   "name": "Revitalization Contract",
+   "want": [
+    "buff"
+   ],
+   "missing": [
+    "buff"
+   ]
+  },
+  "16800000": {
+   "class": "elementalist",
+   "name": "Consecutive Countercurrent",
+   "want": [
+    "damage",
+    "debuff",
+    "dot"
+   ],
+   "missing": [
+    "debuff"
+   ]
+  },
+  "11080000": {
+   "class": "gladiator",
+   "name": "Blade Toss",
+   "want": [
+    "damage",
+    "heal",
+    "weakness"
+   ],
+   "missing": [
+    "heal"
+   ]
+  },
+  "11120000": {
+   "class": "gladiator",
+   "name": "Blood Absorption",
+   "want": [
+    "lifesteal"
+   ],
+   "missing": [
+    "lifesteal"
+   ]
+  },
+  "11230000": {
+   "class": "gladiator",
+   "name": "Rush",
+   "want": [
+    "buff"
+   ],
+   "missing": [
+    "buff"
+   ]
+  },
+  "11250000": {
+   "class": "gladiator",
+   "name": "Zikel's Blessing",
+   "want": [
+    "buff"
+   ],
+   "missing": [
+    "buff"
+   ]
+  },
+  "11330000": {
+   "class": "gladiator",
+   "name": "Madness Blow",
+   "want": [
+    "damage"
+   ],
+   "missing": [
+    "damage"
+   ]
+  },
+  "11390000": {
+   "class": "gladiator",
+   "name": "Rage Burst",
+   "want": [
+    "buff",
+    "damage",
+    "weakness"
+   ],
+   "missing": [
+    "buff"
+   ]
+  },
+  "11400000": {
+   "class": "gladiator",
+   "name": "Lunge Stance",
+   "want": [
+    "buff"
+   ],
+   "missing": [
+    "buff"
+   ]
+  },
+  "11410000": {
+   "class": "gladiator",
+   "name": "Wave Armor",
+   "want": [
+    "aoe",
+    "damage",
+    "debuff",
+    "dot"
+   ],
+   "missing": [
+    "debuff"
+   ]
+  },
+  "11710000": {
+   "class": "gladiator",
+   "name": "Survival Stance",
+   "want": [
+    "buff"
+   ],
+   "missing": [
+    "buff"
+   ]
+  },
+  "11720000": {
+   "class": "gladiator",
+   "name": "Protection Armor",
+   "want": [
+    "buff",
+    "heal"
+   ],
+   "missing": [
+    "buff",
+    "heal"
+   ]
+  },
+  "11730000": {
+   "class": "gladiator",
+   "name": "Blood Absorption",
+   "want": [
+    "heal"
+   ],
+   "missing": [
+    "heal"
+   ]
+  },
+  "11740000": {
+   "class": "gladiator",
+   "name": "Identify Weakness",
+   "want": [
+    "buff"
+   ],
+   "missing": [
+    "buff"
+   ]
+  },
+  "11750000": {
+   "class": "gladiator",
+   "name": "Attack Preparation",
+   "want": [
+    "buff"
+   ],
+   "missing": [
+    "buff"
+   ]
+  },
+  "11760000": {
+   "class": "gladiator",
+   "name": "Impact Hit",
+   "want": [
+    "buff"
+   ],
+   "missing": [
+    "buff"
+   ]
+  },
+  "11790000": {
+   "class": "gladiator",
+   "name": "Survival Willpower",
+   "want": [
+    "buff"
+   ],
+   "missing": [
+    "buff"
+   ]
+  },
+  "11800000": {
+   "class": "gladiator",
+   "name": "Murderous Burst",
+   "want": [
+    "aoe",
+    "buff",
+    "damage"
+   ],
+   "missing": [
+    "buff"
+   ]
+  },
+  "14010000": {
+   "class": "ranger",
+   "name": "Deadshot",
+   "want": [
+    "charge",
+    "damage",
+    "element"
+   ],
+   "missing": [
+    "charge"
+   ]
+  },
+  "14050000": {
+   "class": "ranger",
+   "name": "Drill Dart",
+   "want": [
+    "aoe",
+    "damage",
+    "debuff",
+    "element",
+    "heal",
+    "mp"
+   ],
+   "missing": [
+    "debuff",
+    "heal"
+   ]
+  },
+  "14060000": {
+   "class": "ranger",
+   "name": "Griffon Arrow",
+   "want": [
+    "aoe",
+    "damage",
+    "debuff",
+    "dot",
+    "element"
+   ],
+   "missing": [
+    "debuff"
+   ]
+  },
+  "14210000": {
+   "class": "ranger",
+   "name": "Eye of Rapid Burst",
+   "want": [
+    "weakness"
+   ],
+   "missing": [
+    "weakness"
+   ]
+  },
+  "14220000": {
+   "class": "ranger",
+   "name": "Bow of Blessing",
+   "want": [
+    "buff"
+   ],
+   "missing": [
+    "buff"
+   ]
+  },
+  "14310000": {
+   "class": "ranger",
+   "name": "Vaizel's Authority",
+   "want": [
+    "buff"
+   ],
+   "missing": [
+    "buff"
+   ]
+  },
+  "14350000": {
+   "class": "ranger",
+   "name": "Mother Nature's Breath",
+   "want": [
+    "buff"
+   ],
+   "missing": [
+    "buff"
+   ]
+  },
+  "14380000": {
+   "class": "ranger",
+   "name": "Supporting Fire",
+   "want": [
+    "damage",
+    "element",
+    "lifesteal",
+    "summon"
+   ],
+   "missing": [
+    "summon"
+   ]
+  },
+  "14710000": {
+   "class": "ranger",
+   "name": "Vigilant Eye",
+   "want": [
+    "buff",
+    "heal"
+   ],
+   "missing": [
+    "buff",
+    "heal"
+   ]
+  },
+  "14720000": {
+   "class": "ranger",
+   "name": "Concentrated Fire",
+   "want": [
+    "damage",
+    "debuff",
+    "dot",
+    "element"
+   ],
+   "missing": [
+    "debuff"
+   ]
+  },
+  "14740000": {
+   "class": "ranger",
+   "name": "Focused Eye",
+   "want": [
+    "buff"
+   ],
+   "missing": [
+    "buff"
+   ]
+  },
+  "14750000": {
+   "class": "ranger",
+   "name": "Hunter's Resolve",
+   "want": [
+    "buff"
+   ],
+   "missing": [
+    "buff"
+   ]
+  },
+  "14760000": {
+   "class": "ranger",
+   "name": "Unyielding Resolve",
+   "want": [
+    "buff"
+   ],
+   "missing": [
+    "buff"
+   ]
+  },
+  "14790000": {
+   "class": "ranger",
+   "name": "Revitalization Contract",
+   "want": [
+    "buff"
+   ],
+   "missing": [
+    "buff"
+   ]
+  },
+  "15020000": {
+   "class": "sorcerer",
+   "name": "Firebomb",
+   "want": [
+    "damage",
+    "debuff",
+    "dot"
+   ],
+   "missing": [
+    "debuff"
+   ]
+  },
+  "15060000": {
+   "class": "sorcerer",
+   "name": "Hellfire",
+   "want": [
+    "aoe",
+    "charge",
+    "damage",
+    "element"
+   ],
+   "missing": [
+    "charge",
+    "charge-aoe"
+   ]
+  },
+  "15080000": {
+   "class": "sorcerer",
+   "name": "Cold Snap",
+   "want": [
+    "damage",
+    "element"
+   ],
+   "missing": [
+    "damage"
+   ]
+  },
+  "15200000": {
+   "class": "sorcerer",
+   "name": "Cold Storm",
+   "want": [
+    "aoe",
+    "damage",
+    "debuff",
+    "dot",
+    "element",
+    "summon"
+   ],
+   "missing": [
+    "summon"
+   ]
+  },
+  "15230000": {
+   "class": "sorcerer",
+   "name": "Arctic Armor",
+   "want": [
+    "buff",
+    "debuff"
+   ],
+   "missing": [
+    "buff"
+   ]
+  },
+  "15270000": {
+   "class": "sorcerer",
+   "name": "Summon Flame",
+   "want": [
+    "damage"
+   ],
+   "missing": [
+    "damage"
+   ]
+  },
+  "15280000": {
+   "class": "sorcerer",
+   "name": "Bittercold Wind",
+   "want": [
+    "aoe",
+    "damage",
+    "debuff",
+    "element",
+    "summon"
+   ],
+   "missing": [
+    "summon"
+   ]
+  },
+  "15310000": {
+   "class": "sorcerer",
+   "name": "Wish of Concentration",
+   "want": [
+    "buff"
+   ],
+   "missing": [
+    "buff"
+   ]
+  },
+  "15390000": {
+   "class": "sorcerer",
+   "name": "Fire Wall",
+   "want": [
+    "aoe",
+    "damage",
+    "debuff",
+    "dot",
+    "element",
+    "summon"
+   ],
+   "missing": [
+    "debuff",
+    "summon"
+   ]
+  },
+  "15400000": {
+   "class": "sorcerer",
+   "name": "Element Enhancement",
+   "want": [
+    "buff"
+   ],
+   "missing": [
+    "buff"
+   ]
+  },
+  "15740000": {
+   "class": "sorcerer",
+   "name": "Robe of Flame",
+   "want": [
+    "buff"
+   ],
+   "missing": [
+    "buff"
+   ]
+  },
+  "15750000": {
+   "class": "sorcerer",
+   "name": "Robe of Cold",
+   "want": [
+    "buff",
+    "debuff",
+    "weakness"
+   ],
+   "missing": [
+    "buff"
+   ]
+  },
+  "15770000": {
+   "class": "sorcerer",
+   "name": "Grace of Resistance",
+   "want": [
+    "buff"
+   ],
+   "missing": [
+    "buff"
+   ]
+  },
+  "15780000": {
+   "class": "sorcerer",
+   "name": "Grace of Enhancement",
+   "want": [
+    "buff",
+    "damage"
+   ],
+   "missing": [
+    "buff"
+   ]
+  },
+  "15790000": {
+   "class": "sorcerer",
+   "name": "Revitalization Contract",
+   "want": [
+    "buff"
+   ],
+   "missing": [
+    "buff"
+   ]
+  },
+  "12090000": {
+   "class": "templar",
+   "name": "Punishment",
+   "want": [
+    "aoe",
+    "charge",
+    "damage"
+   ],
+   "missing": [
+    "charge",
+    "charge-aoe"
+   ]
+  },
+  "12250000": {
+   "class": "templar",
+   "name": "Comrade in Arms",
+   "want": [
+    "buff"
+   ],
+   "missing": [
+    "buff"
+   ]
+  },
+  "12350000": {
+   "class": "templar",
+   "name": "Warding Strike",
+   "want": [
+    "aoe",
+    "damage",
+    "heal"
+   ],
+   "missing": [
+    "heal"
+   ]
+  },
+  "12710000": {
+   "class": "templar",
+   "name": "Enhance Health",
+   "want": [
+    "buff",
+    "heal"
+   ],
+   "missing": [
+    "buff",
+    "heal"
+   ]
+  },
+  "12720000": {
+   "class": "templar",
+   "name": "Warding Shield",
+   "want": [
+    "buff",
+    "heal"
+   ],
+   "missing": [
+    "buff",
+    "heal"
+   ]
+  },
+  "12730000": {
+   "class": "templar",
+   "name": "Punishing Benediction",
+   "want": [
+    "buff",
+    "damage"
+   ],
+   "missing": [
+    "buff"
+   ]
+  },
+  "12740000": {
+   "class": "templar",
+   "name": "Ironclad Defense",
+   "want": [
+    "buff"
+   ],
+   "missing": [
+    "buff"
+   ]
+  },
+  "12760000": {
+   "class": "templar",
+   "name": "Impact Hit",
+   "want": [
+    "buff"
+   ],
+   "missing": [
+    "buff"
+   ]
+  },
+  "12790000": {
+   "class": "templar",
+   "name": "Survival Willpower",
+   "want": [
+    "buff"
+   ],
+   "missing": [
+    "buff"
+   ]
+  }
+ }
+}

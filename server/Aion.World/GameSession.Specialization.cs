@@ -103,7 +103,7 @@ public sealed partial class GameSession
         var rootChild = SpecializedChild(root);
         if (rootChild == 0 || skill - parent != rootChild - root) return false;
         // A chain step's child is offered by the child before it (Skill.dat chain links: 11030340 after 11020340).
-        return parent == root || ChainStepReady(skill, now) || ChainStepReady(parent, now);
+        return parent == root || ChainOffered(skill, now) || ChainOffered(parent, now);
     }
 
     /// <summary>The skill whose cooldown a child shares: its parent (CANDIDATE), else the skill itself.</summary>

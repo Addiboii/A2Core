@@ -99,6 +99,72 @@ public sealed class PostgresStaffTools(NpgsqlDataSource source) : IStaffTools
         return await MaintenanceAsync(ct);
     }
 
+    // ---------- Black Cloud market (free to play) ----------
+
+    public async Task<(string? Json, DateTimeOffset? Since, string? By)> PremiumShopSettingsAsync(CancellationToken ct = default)
+    {
+        await using var c = await source.OpenConnectionAsync(ct);
+        await using var q = Query(c, null, "SELECT s.value::text,s.updated_at,a.subject FROM game.server_settings s LEFT JOIN auth.accounts a ON a.account_id=s.updated_by WHERE s.key='premium_shop'");
+        await using var r = await q.ExecuteReaderAsync(ct);
+        return await r.ReadAsync(ct) ? (r.GetString(0), (DateTimeOffset?)At(r, 1), TextOrNull(r, 2)) : (null, null, null);
+    }
+
+    public async Task SetPremiumShopSettingsAsync(VerifiedAccount actor, string? json, CancellationToken ct = default)
+    {
+        if (json is { Length: > 100_000 }) throw new GameplayException("invalid_settings");
+        await InTransaction(async (c, t) =>
+        {
+            await RequireStaff(c, t, actor, ct, admin: true);
+            if (json is null)
+            {
+                await using var d = Query(c, t, "DELETE FROM game.server_settings WHERE key='premium_shop'");
+                await d.ExecuteNonQueryAsync(ct);
+            }
+            else
+            {
+                await using var q = Query(c, t, """
+                    INSERT INTO game.server_settings(key,value,updated_at,updated_by) VALUES('premium_shop',$1::jsonb,now(),$2)
+                    ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value,updated_at=now(),updated_by=EXCLUDED.updated_by
+                    """, json, actor.AccountId);
+                await q.ExecuteNonQueryAsync(ct);
+            }
+            await Audit(c, t, actor, "staff_premium_shop", new { settings = json ?? "(server-rules.xml)" }, ct);
+            return true;
+        }, ct);
+    }
+
+    public async Task<(string? Json, DateTimeOffset? Since, string? By)> RandomShopSettingsAsync(CancellationToken ct = default)
+    {
+        await using var c = await source.OpenConnectionAsync(ct);
+        await using var q = Query(c, null, "SELECT s.value::text,s.updated_at,a.subject FROM game.server_settings s LEFT JOIN auth.accounts a ON a.account_id=s.updated_by WHERE s.key='random_shop'");
+        await using var r = await q.ExecuteReaderAsync(ct);
+        return await r.ReadAsync(ct) ? (r.GetString(0), (DateTimeOffset?)At(r, 1), TextOrNull(r, 2)) : (null, null, null);
+    }
+
+    public async Task SetRandomShopSettingsAsync(VerifiedAccount actor, string? json, CancellationToken ct = default)
+    {
+        if (json is { Length: > 100_000 }) throw new GameplayException("invalid_settings");
+        await InTransaction(async (c, t) =>
+        {
+            await RequireStaff(c, t, actor, ct, admin: true);
+            if (json is null)
+            {
+                await using var d = Query(c, t, "DELETE FROM game.server_settings WHERE key='random_shop'");
+                await d.ExecuteNonQueryAsync(ct);
+            }
+            else
+            {
+                await using var q = Query(c, t, """
+                    INSERT INTO game.server_settings(key,value,updated_at,updated_by) VALUES('random_shop',$1::jsonb,now(),$2)
+                    ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value,updated_at=now(),updated_by=EXCLUDED.updated_by
+                    """, json, actor.AccountId);
+                await q.ExecuteNonQueryAsync(ct);
+            }
+            await Audit(c, t, actor, "staff_random_shop", new { settings = json ?? "(server-rules.xml)" }, ct);
+            return true;
+        }, ct);
+    }
+
     // ---------- Sanctions ----------
 
     const string SanctionColumns = """

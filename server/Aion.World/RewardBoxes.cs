@@ -136,33 +136,59 @@ public sealed class RewardBoxes
         Ride(rideId)?.StatGroup is { } group && file.RideStats.TryGetValue(group, out var levels) && levels.TryGetValue(Key(level), out var stats)
             ? stats : new Dictionary<string, int>();
 
-    /// <summary>The most boxes of a group opened at once (BoxReward MultiUseMax), or 0 for an unknown group.</summary>
-    public int MaxOpen(string group) => file.Boxes.TryGetValue(group, out var box) ? box.Max : 0;
+    /// <summary>The most boxes of a group opened at once (BoxReward MultiUseMax of the opener's row), or 0 for an unknown group.</summary>
+    public int MaxOpen(string group, int race = 0) =>
+        FactionRewards.Embedded.Box(group, race) is { } row ? Math.Max(1, row.Max) : file.Boxes.TryGetValue(group, out var box) ? box.Max : 0;
 
-    /// <summary>The rewards of opening <paramref name="count"/> boxes of a group, merged by item; null for an unknown group.</summary>
-    public List<(int ItemId, long Count)>? Roll(string group, int selectIndex, int count, Random rng)
+    /// <summary>Whether the group is a box this server knows (its All row or race rows).</summary>
+    public bool Known(string group) => file.Boxes.ContainsKey(group) || FactionRewards.Embedded.Box(group, 1) is not null;
+
+    /// <summary>
+    /// The rewards of opening <paramref name="count"/> boxes of a group for a character of a race (1 Light, 2 Dark) and class,
+    /// merged by item; null for an unknown group or a selected item of the other faction without a twin (FactionRewards):
+    /// the opener's race row (BoxReward Race) instead of the All row, the opener's class rows (BoxClassReward) added, and every
+    /// candidate of the other faction swapped for its twin or left out before the roll (package weights renormalised).
+    /// </summary>
+    public List<(int ItemId, long Count)>? Roll(string group, int selectIndex, int count, Random rng, int race = 0, string? className = null)
     {
-        if (!file.Boxes.TryGetValue(group, out var box)) return null;
+        var faction = FactionRewards.Embedded;
+        var rows = new List<FactionRewards.BoxRow>();
+        if (faction.Box(group, race) is { } raceRow) rows.Add(raceRow);
+        else if (file.Boxes.TryGetValue(group, out var box)) rows.Add(new FactionRewards.BoxRow(box.Items, box.Select, box.Packages, box.Max));
+        else return null;
+        rows.AddRange(faction.ClassBoxes(group, race, className));
+        var fixedItems = faction.Filter(rows.SelectMany(r => r.Items).Where(i => i.Length >= 2).Select(i => (i[0], (long)i[1])), race);
+        var options = rows.SelectMany(r => r.Select).Where(i => i.Length >= 2).ToList();
+        (int ItemId, long Count)? chosen = null;
+        if (options.Count > 0)
+        {
+            var pick = options[Math.Clamp(selectIndex, 0, options.Count - 1)];
+            // A selected item of the other faction: its twin, else refused (the client lists the opener's row).
+            if (faction.ForRace(pick[0], race) is not { } item) return null;
+            chosen = (item, pick[1]);
+        }
+        var packages = rows.SelectMany(r => r.Packages).Select(p => (Name: p[0].GetString()!, Prob: p[1].GetInt32(), Times: p[2].GetInt32()))
+            .Select(p => (p.Prob, p.Times, Entries: faction.ForRace(faction.Package(p.Name) ?? Entries(p.Name), race)))
+            .ToList();
         var rewards = new Dictionary<int, long>();
         void Add(int item, long n) => rewards[item] = rewards.GetValueOrDefault(item) + n;
         for (var open = 0; open < count; open++)
         {
-            foreach (var item in box.Items) Add(item[0], item[1]);
-            if (box.Select.Length > 0) { var chosen = box.Select[Math.Clamp(selectIndex, 0, box.Select.Length - 1)]; Add(chosen[0], chosen[1]); }
-            foreach (var package in box.Packages)
+            foreach (var (item, n) in fixedItems) Add(item, n);
+            if (chosen is { } c) Add(c.ItemId, c.Count);
+            foreach (var (probability, times, entries) in packages)
             {
-                var name = package[0].GetString()!;
-                int probability = package[1].GetInt32(), times = package[2].GetInt32();
-                if (!file.Packages.TryGetValue(name, out var entries) || entries.Length == 0) continue;
+                if (entries.Count == 0) continue;
+                // The faction's candidates only: their own weights are the total (renormalised).
+                var total = entries.Sum(e => e.Weight);
                 for (var t = 0; t < times; t++)
                 {
-                    if (rng.Next(10_000) >= probability) continue;
-                    var total = entries.Sum(e => (long)e[1]);
+                    if (rng.Next(10_000) >= probability || total <= 0) continue;
                     var pick = (long)(rng.NextDouble() * total);
                     foreach (var e in entries)
                     {
-                        if ((pick -= e[1]) >= 0) continue;
-                        Add(e[0], rng.Next(e[2], Math.Max(e[2], e[3]) + 1));
+                        if ((pick -= e.Weight) >= 0) continue;
+                        Add(e.ItemId, rng.Next((int)e.Min, (int)Math.Max(e.Min, e.Max) + 1));
                         break;
                     }
                 }
@@ -170,4 +196,7 @@ public sealed class RewardBoxes
         }
         return rewards.Select(r => (r.Key, r.Value)).ToList();
     }
+
+    IEnumerable<long[]> Entries(string package) =>
+        file.Packages.TryGetValue(package, out var entries) ? entries.Select(e => e.Select(v => (long)v).ToArray()) : [];
 }

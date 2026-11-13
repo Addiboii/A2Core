@@ -21,7 +21,8 @@ public static class GameplayEndpoints
         {
             var account=await auth.AuthenticateAsync(Bearer(ctx),ct);
             if(account is null) return Results.Unauthorized();
-            var id=await game.CreateAsync(account,input,ct);
+            // The world is picked on the login port only (four worlds): web creations go to world 1 of the race.
+            var id=await game.CreateAsync(account,input with {HomeServerId=null},ct);
             return Results.Ok(new {characterId=id});
         });
         api.MapGet("/characters/{id:guid}/inventory",async(Guid id,HttpContext ctx,IAccountAuthentication auth,IGameplayStore game,CancellationToken ct) =>
@@ -59,16 +60,48 @@ public static class GameplayEndpoints
         admin.MapGet("/characters/{id:guid}",async(Guid id,HttpContext ctx,IAccountAuthentication auth,IGameplayStore game,CancellationToken ct) =>
         {
             var account=await auth.AuthenticateStaffAsync(Bearer(ctx),ct); if(account is null) return Results.Unauthorized();
-            var detail=await game.AdminCharacterAsync(account,id,ct); return detail is null ? Results.NotFound() : Results.Ok(detail);
+            var detail=await game.AdminCharacterAsync(account,id,ct); if(detail is null) return Results.NotFound();
+            // The item XML's display names, grades and categories for the inventory view (the wardrobe data covers equipment only).
+            var db=Aion.World.ItemDB.Embedded;
+            var itemInfo=detail.Inventory.Items.Select(i=>i.TemplateId).Distinct().Select(db.Of).OfType<Aion.World.ItemRecord>()
+                .ToDictionary(r=>r.Id.ToString(System.Globalization.CultureInfo.InvariantCulture),r=>new{r.Name,r.Grade,r.Category,r.Group,r.CanDelete});
+            return Results.Ok(new{detail.Character,detail.Inventory,detail.Appearance,detail.ClassName,detail.Classes,detail.Ascension,ItemInfo=itemInfo});
         });
-        admin.MapGet("/items",async(string? q,string? category,int? offset,int? limit,HttpContext ctx,IAccountAuthentication auth,IGameplayStore game,CancellationToken ct) =>
+        // Staff: delete items of a character (one, part of a stack, or many), audited and delivered live to an online player.
+        admin.MapPost("/characters/{id:guid}/items/delete",async(Guid id,DeleteItems input,HttpContext ctx,IAccountAuthentication auth,IGameplayStore game,CancellationToken ct) =>
         {
             var account=await auth.AuthenticateStaffAsync(Bearer(ctx),ct); if(account is null) return Results.Unauthorized();
-            return Results.Ok(await game.AdminCatalogAsync(account,q??"",category,offset??0,limit??120,ct));
+            if(input.Items is not { Count: > 0 } items || items.Any(i=>i.Quantity<1)) return Results.BadRequest(new{error="invalid_items"});
+            var removed=await game.AdminDeleteItemsAsync(account,id,items.Select(i=>(i.InstanceId,i.Quantity)).ToList(),ct);
+            return removed is null ? Results.NotFound() : Results.Ok(new{removed});
+        });
+        admin.MapGet("/items",async(string? q,string? category,string? race,int? offset,int? limit,HttpContext ctx,IAccountAuthentication auth,IGameplayStore game,CancellationToken ct) =>
+        {
+            var account=await auth.AuthenticateStaffAsync(Bearer(ctx),ct); if(account is null) return Results.Unauthorized();
+            return Results.Ok(await game.AdminCatalogAsync(account,q??"",category,offset??0,limit??120,ct,race));
+        });
+        // Staff: the full item record (the item XML the server loads) for the item info window.
+        admin.MapGet("/items/{id:int}",async(int id,HttpContext ctx,IAccountAuthentication auth,IGameplayStore game,CancellationToken ct) =>
+        {
+            var account=await auth.AuthenticateStaffAsync(Bearer(ctx),ct); if(account is null) return Results.Unauthorized();
+            await game.AdminProfileAsync(account,ct);   // staff only
+            if(Aion.World.ItemDB.RawOf(id) is not { } e) return Results.NotFound();
+            var fields=new List<object>(); var stats=new List<object>(); var random=new List<object>(); object? use=null;
+            foreach(var x in e.Elements())
+            {
+                var name=x.Name.LocalName;
+                if(name=="stat") stats.Add(new{name=(string?)x.Attribute("name"),value=(string?)x.Attribute("value")});
+                else if(name=="random_stat") random.Add(new{name=(string?)x.Attribute("name"),min=(string?)x.Attribute("min"),max=(string?)x.Attribute("max"),weight=(string?)x.Attribute("weight")});
+                else if(name=="use_action") use=x.Attributes().ToDictionary(a=>a.Name.LocalName,a=>a.Value);
+                else if(!x.HasElements) fields.Add(new{name,value=x.Value});
+            }
+            return Results.Ok(new{id,fields,stats,randomStats=random,use});
         });
         admin.MapPost("/commands",async(AdminCommand input,HttpContext ctx,IAccountAuthentication auth,IGameplayStore game,CancellationToken ct) =>
         {
             var account=await auth.AuthenticateStaffAsync(Bearer(ctx),ct); if(account is null) return Results.Unauthorized();
+            // Placeholder collection items (UseEffect None: nothing the client can learn or show) are not granted.
+            if(input.Command=="grant" && Aion.World.CollectionItems.IsPlaceholder(input.TemplateId)) return Results.BadRequest(new{error=Aion.World.CollectionItems.PlaceholderError});
             return Results.Ok(await game.AdminAsync(account,input,ct));
         });
         // Live overview: who is in the world now and where (in-memory, read under the world gate).
@@ -84,6 +117,7 @@ public static class GameplayEndpoints
             try { foreach(var e in entries) views.Add((e,e.Session.Live())); }
             finally { world?.Lock.ExitExclusive(); }
             var players=new List<object>();
+            var bots=services.GetServices<IHostedService>().OfType<Aion.Host.Native.BotService>().FirstOrDefault();
             foreach(var (e,v) in views.OrderBy(p => p.View.Name,StringComparer.OrdinalIgnoreCase))
             {
                 var stored=v.CharacterId is { } id ? (await game.AdminFindCharactersAsync(account,id.ToString(),ct)).FirstOrDefault() : null;
@@ -91,7 +125,7 @@ public static class GameplayEndpoints
                     v.Name, v.CharacterId, AccountName=stored?.AccountName, v.StaffRole, v.Level, v.ClassName, v.MapId, v.Area,
                     Position=v.Position is { } at ? new[]{Math.Round(at.X),Math.Round(at.Y),Math.Round(at.Z)} : null,
                     v.Hp, v.HpMax, v.Mp, v.MpMax, v.Invisible, v.PartyLeader, v.PartySize, InWorldSince=e.Since,
-                    Heading=Math.Round(v.Heading,1), v.Dead, v.SpeedRejects });
+                    Heading=Math.Round(v.Heading,1), v.Dead, v.SpeedRejects, Bot=bots?.IsBotAccount(e.AccountId) ?? false });
             }
             return Results.Ok(new {
                 ServerTime=DateTimeOffset.UtcNow,
@@ -114,6 +148,8 @@ public static class GameplayEndpoints
         api.MapPost("/admin/accounts/{id:guid}/roles",async(Guid id,StaffRoleChange input,HttpContext ctx,IAccountManagement management,CancellationToken ct) =>
             await management.SetStaffRoleAsync(Bearer(ctx),id,input.Role,input.Granted,ct) ? Results.NoContent() : Results.StatusCode(403));
     }
+    private sealed record DeleteItemEntry(Guid InstanceId,long Quantity);
+    private sealed record DeleteItems(IReadOnlyList<DeleteItemEntry>? Items);
     private static string Bearer(HttpContext context)
     { var h=context.Request.Headers.Authorization.ToString(); return h.StartsWith("Bearer ",StringComparison.OrdinalIgnoreCase)?h[7..]:""; }
 }

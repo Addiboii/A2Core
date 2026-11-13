@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- PROVISIONAL roll pools (2026-11-06): the client text only says the stat type and value are random, its pools are not in
+     the extracted data. These are sensible guesses per gear kind, to be corrected from official observations (the user's
+     soul binds on the official server). Manastones roll the client's ImprintMagicStoneProb table (tools/data/enhance.json). Values are client stat units (EStat names, tools/data/stat-ids.json);
+     each roll picks one stat of the kind's pool, then a value between min and max scaled by the item grade factor. -->
+<pools>
+	<grades Common="0.6" Rare="0.8" Legend="1.0" Unique="1.2" Epic="1.5" Special="1.0"/>
+	<soulbind kind="weapon">
+		<stat name="PvEAmplifyDamage" min="50" max="200"/>
+		<stat name="PvPAmplifyDamage" min="50" max="200"/>
+		<stat name="Accuracy" min="20" max="80"/>
+		<stat name="Critical" min="20" max="80"/>
+		<stat name="FixingDamage" min="10" max="40"/>
+		<stat name="BossNpcAmplifyDamage" min="50" max="200"/>
+	</soulbind>
+	<soulbind kind="armor">
+		<stat name="HPMax" min="100" max="400"/>
+		<stat name="Defense" min="20" max="80"/>
+		<stat name="Evasion" min="20" max="80"/>
+		<stat name="PvEDecreaseDamage" min="50" max="200"/>
+		<stat name="PvPDecreaseDamage" min="50" max="200"/>
+		<stat name="CriticalResist" min="20" max="80"/>
+	</soulbind>
+	<soulbind kind="accessory">
+		<stat name="HPMax" min="80" max="300"/>
+		<stat name="MPMax" min="50" max="200"/>
+		<stat name="Accuracy" min="15" max="60"/>
+		<stat name="Evasion" min="15" max="60"/>
+		<stat name="Critical" min="15" max="60"/>
+		<stat name="CriticalResist" min="15" max="60"/>
+	</soulbind>
+</pools>

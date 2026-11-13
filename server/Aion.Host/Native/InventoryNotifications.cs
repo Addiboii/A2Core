@@ -38,7 +38,13 @@ public sealed class InventoryNotifications(NpgsqlDataSource source, WorldPresenc
         if (!Guid.TryParse(payload, out var character) || presence.FindCharacter(character) is not { } entry) return;
         try
         {
-            await entry.Session.InvokeAsync(async _ => (true, await entry.Session.InventoryChangesAsync(ct)));
+            await entry.Session.InvokeAsync(async _ =>
+            {
+                // Items and the account currencies (a staff Quna grant arrives through the same notice).
+                var packets = await entry.Session.InventoryChangesAsync(ct);
+                packets.AddRange(await entry.Session.CurrencyChangesAsync(ct));
+                return (true, packets);
+            });
         }
         catch (Exception error) when (error is NpgsqlException or InvalidOperationException or OperationCanceledException)
         {

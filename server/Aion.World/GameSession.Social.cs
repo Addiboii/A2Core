@@ -11,7 +11,6 @@ namespace Aion.World;
 /// </summary>
 public sealed partial class GameSession
 {
-    const int ServerId = 1204;
     const int Failed = 1;   // OURS: the client's failure codes are unknown; 0 is success
     /// <summary>Trade partners must stand within this distance (cm). OURS.</summary>
     public const double ExchangeRange = 1500;
@@ -53,6 +52,8 @@ public sealed partial class GameSession
             SocialOpcodes.PartySetLeaderRq => PartySetLeader(plain),
             SocialOpcodes.PartyDisbandRq => PartyDisband(),
             SocialOpcodes.PartyRecentMemberRq => [SocialPackets.PartyRecentMembers(0, [])],
+            SocialOpcodes.PartyRecommendRq => PartyRecommend(plain),            // GameSession.Expedition.cs
+            SocialOpcodes.PartyInfoUpdateRq => PartyInfoUpdate(plain),
             SocialOpcodes.SetPartyFocusTargetRq => SetPartyFocusTarget(plain),
             SocialOpcodes.PartyLeaderScanTargetsRq => PartyLeaderScanTargets(plain),
             SocialOpcodes.ExchangeRequestRq => ExchangeRequest(plain, now),
@@ -74,8 +75,13 @@ public sealed partial class GameSession
         if (Store is { } store && CharacterId is { } character) social = [.. await store.SocialAsync(character, ct)];
     }
 
+    /// <summary>Another character's server id: its session's when online, else world 1 of its race (four worlds; CANDIDATE: the
+    /// stored relation has no world), else this host's.</summary>
+    int ServerOf(Guid character, int race) =>
+        World?.FindOnline(character)?.Session.ServerId ?? options.Worlds?.First(race).Id ?? ServerId;
+
     FriendInfo FriendEntry(SocialRelation r, FriendRelation relation) =>
-        new(ServerId, r.WireId, r.Name, (byte)r.Race, (byte)r.CreationId, r.Level, 0, relation, World?.FindOnline(r.CharacterId) is not null, 0, r.Memo);
+        new(ServerOf(r.CharacterId, r.Race), r.WireId, r.Name, (byte)r.Race, (byte)r.CreationId, r.Level, 0, relation, World?.FindOnline(r.CharacterId) is not null, 0, r.Memo);
 
     FriendInfo MyEntry(FriendRelation relation) =>
         new(ServerId, DbId, StoredName, (byte)(Profile()?.Race ?? 1), (byte)(character?.CreationId ?? 1), level, 0, relation, true);
@@ -89,7 +95,7 @@ public sealed partial class GameSession
     [
         SocialPackets.PersonalExchangeInfo(0),
         SocialPackets.FriendList(social.Where(r => r.Kind != "blocked").Select(r => FriendEntry(r, Relation(r.Kind))).ToList(),
-            social.Where(r => r.Kind == "blocked").Select(r => new FriendBlockInfo(ServerId, r.WireId, r.Name)).ToList()),
+            social.Where(r => r.Kind == "blocked").Select(r => new FriendBlockInfo(ServerOf(r.CharacterId, r.Race), r.WireId, r.Name)).ToList()),
     ];
 
     /// <summary>Online friends hear this character come online or go offline (FriendInfoUpdate_NT).</summary>
@@ -100,15 +106,36 @@ public sealed partial class GameSession
             world.FindOnline(friend.CharacterId)?.Send(SocialPackets.FriendInfoUpdate(MyUpdate(online)));
     }
 
+    /// <summary>GlobalSetting Community_friend_max_count / Community_friend_request_max_count / Community_friend_block_max_count.</summary>
+    static int FriendMax => (int)Systems2Tables.Embedded.Global("Community_friend_max_count");
+    static int FriendRequestMax => (int)Systems2Tables.Embedded.Global("Community_friend_request_max_count");
+    static int FriendBlockMax => (int)Systems2Tables.Embedded.Global("Community_friend_block_max_count");
+
+    /// <summary>The store's refusal of a friend request as the client's EResult (FriendRequest_*).</summary>
+    int FriendRequestResult(string? result, SocialRelation? other) => result switch
+    {
+        "blocked" => social.Any(r => r.Kind == "blocked" && r.CharacterId == other?.CharacterId) ? EResult.FriendRequest_InBlock : EResult.FriendRequest_TargetInBlock,
+        "already_friends" => EResult.FriendRequest_InFriend,
+        "already_requested" => EResult.FriendRequest_InSend,
+        "full" => EResult.FriendRequest_MaxCount,
+        _ => EResult.FriendRequest_NotFoundCharacter,
+    };
+
     WorldPlayer? OnlineBy(long wireId) => social.FirstOrDefault(r => r.WireId == wireId) is { } r ? World?.FindOnline(r.CharacterId) : null;
 
     async Task<List<byte[]>> FriendRequestAsync(byte[] plain, CancellationToken ct)
     {
         if (SocialRequests.ParseServerAndName(plain) is not { } target) return [];
         var name = CharacterNames.Stored(target.Name);
-        if (Store is not { } store || CharacterId is not { } me) return [SocialPackets.FriendRequestReply(Failed, ServerId, target.Name)];
+        if (Store is not { } store || CharacterId is not { } me) return [SocialPackets.FriendRequestReply(EResult.FriendRequest_NotFoundCharacter, ServerId, target.Name)];
+        // GlobalSetting Community_friend_max_count 50 / Community_friend_request_max_count 50; friends are of one race (FriendRequest_NotSameRace).
+        if (social.Count(r => r.Kind == "friend") >= FriendMax) return [SocialPackets.FriendRequestReply(EResult.FriendRequest_MaxCount, ServerId, target.Name)];
+        if (social.Count(r => r.Kind == "sent") >= FriendRequestMax) return [SocialPackets.FriendRequestReply(EResult.FriendRequest_MaxCount, ServerId, target.Name)];
+        if (World?.FindOnline(name) is { } seen && seen.Session.profileRace != profileRace)
+            return [SocialPackets.FriendRequestReply(EResult.FriendRequest_NotSameRace, ServerId, target.Name)];
         var (result, other) = await StoredValue(() => store.FriendRequestAsync(me, name, ct));
-        if (other is null || result is not ("requested" or "accepted")) return [SocialPackets.FriendRequestReply(Failed, ServerId, target.Name)];
+        if (other is null || result is not ("requested" or "accepted"))
+            return [SocialPackets.FriendRequestReply(FriendRequestResult(result, other), ServerId, target.Name)];
         await LoadSocialAsync(ct);
         var online = World?.FindOnline(other.CharacterId);
         if (result == "requested")
@@ -126,8 +153,10 @@ public sealed partial class GameSession
         await LoadSocialAsync(ct);
         byte[] Reply(int result) => accept ? SocialPackets.FriendRequestAcceptReply(result, dbId) : SocialPackets.FriendRequestRejectReply(result, dbId);
         if (Store is not { } store || CharacterId is not { } me || social.FirstOrDefault(r => r.WireId == dbId && r.Kind == "received") is not { } from)
-            return [Reply(Failed)];
-        if (!await StoredValue(() => store.FriendRespondAsync(me, from.CharacterId, accept, ct))) return [Reply(Failed)];
+            return [Reply(accept ? EResult.FriendAccept_NotFound : EResult.FriendReject_NotFound)];
+        if (accept && social.Count(r => r.Kind == "friend") >= FriendMax) return [Reply(EResult.FriendAccept_MaxFriendCount)];
+        if (!await StoredValue(() => store.FriendRespondAsync(me, from.CharacterId, accept, ct)))
+            return [Reply(accept ? EResult.FriendAccept_Target_MaxFriendCount : EResult.FriendReject_NotFound)];
         var online = World?.FindOnline(from.CharacterId);
         await LoadSocialAsync(ct);
         if (!accept)
@@ -145,9 +174,9 @@ public sealed partial class GameSession
         await LoadSocialAsync(ct);
         byte[] Reply(int result) => cancel ? SocialPackets.FriendRequestCancelReply(result, dbId) : SocialPackets.FriendDeleteReply(result, dbId);
         if (Store is not { } store || CharacterId is not { } me || social.FirstOrDefault(r => r.WireId == dbId && r.Kind == (cancel ? "sent" : "friend")) is not { } other)
-            return [Reply(Failed)];
+            return [Reply(cancel ? EResult.FriendCancelRequest_NotFound : EResult.FriendDelete_NotFound)];
         var done = await StoredValue(() => cancel ? store.FriendCancelAsync(me, other.CharacterId, ct) : store.FriendDeleteAsync(me, other.CharacterId, ct));
-        if (!done) return [Reply(Failed)];
+        if (!done) return [Reply(cancel ? EResult.FriendCancelRequest_NotFound : EResult.FriendDelete_NotFound)];
         World?.FindOnline(other.CharacterId)?.Send(SocialPackets.FriendInfoDelete(DbId));
         await LoadSocialAsync(ct);
         return [Reply(0), SocialPackets.FriendInfoDelete(dbId)];
@@ -156,10 +185,12 @@ public sealed partial class GameSession
     async Task<List<byte[]>> FriendBlockAsync(byte[] plain, CancellationToken ct)
     {
         if (SocialRequests.ParseServerAndName(plain) is not { } target) return [];
-        if (Store is not { } store || CharacterId is not { } me) return [SocialPackets.FriendBlockReply(Failed, ServerId, 0, target.Name)];
+        if (Store is not { } store || CharacterId is not { } me) return [SocialPackets.FriendBlockReply(EResult.FriendBlock_NotFoundCharacter, ServerId, 0, target.Name)];
         var wasFriend = social.FirstOrDefault(r => string.Equals(r.Name, CharacterNames.Stored(target.Name), StringComparison.OrdinalIgnoreCase));
+        if (wasFriend is { Kind: "blocked" }) return [SocialPackets.FriendBlockReply(EResult.FriendBlock_InBlock, ServerId, wasFriend.WireId, target.Name)];
+        if (social.Count(r => r.Kind == "blocked") >= FriendBlockMax) return [SocialPackets.FriendBlockReply(EResult.FriendBlock_MaxCount, ServerId, 0, target.Name)];
         if (await StoredValue(() => store.BlockAsync(me, CharacterNames.Stored(target.Name), ct)) is not { } blocked)
-            return [SocialPackets.FriendBlockReply(Failed, ServerId, 0, target.Name)];
+            return [SocialPackets.FriendBlockReply(EResult.FriendBlock_NotFoundCharacter, ServerId, 0, target.Name)];
         if (wasFriend is not null) World?.FindOnline(blocked.CharacterId)?.Send(SocialPackets.FriendInfoDelete(DbId));
         await LoadSocialAsync(ct);
         return [SocialPackets.FriendBlockReply(0, ServerId, blocked.WireId, blocked.Name)];
@@ -171,7 +202,7 @@ public sealed partial class GameSession
         await LoadSocialAsync(ct);
         if (Store is not { } store || CharacterId is not { } me || social.FirstOrDefault(r => r.WireId == info.CharDbId && r.Kind == "blocked") is not { } blocked
             || !await StoredValue(() => store.UnblockAsync(me, blocked.CharacterId, ct)))
-            return [SocialPackets.FriendBlockCancelReply(Failed, info)];
+            return [SocialPackets.FriendBlockCancelReply(EResult.FriendBlockCancel_NotFound, info)];
         await LoadSocialAsync(ct);
         return [SocialPackets.FriendBlockCancelReply(0, new FriendBlockInfo(ServerId, blocked.WireId, blocked.Name))];
     }
@@ -179,10 +210,11 @@ public sealed partial class GameSession
     async Task<List<byte[]>> FriendMemoAsync(byte[] plain, CancellationToken ct)
     {
         if (SocialRequests.ParseFriendMemo(plain) is not { } memo) return [];
+        if (memo.Memo.Length > 64) return [SocialPackets.FriendMemoReply(EResult.FriendMemo_LengthLimit, memo.FriendDbId, memo.Memo)];
         await LoadSocialAsync(ct);
         if (Store is not { } store || CharacterId is not { } me || social.FirstOrDefault(r => r.WireId == memo.FriendDbId && r.Kind == "friend") is not { } friend
             || !await StoredValue(() => store.FriendMemoAsync(me, friend.CharacterId, memo.Memo, ct)))
-            return [SocialPackets.FriendMemoReply(Failed, memo.FriendDbId, memo.Memo)];
+            return [SocialPackets.FriendMemoReply(EResult.FriendDelete_NotFound, memo.FriendDbId, memo.Memo)];
         await LoadSocialAsync(ct);
         return [SocialPackets.FriendMemoReply(0, memo.FriendDbId, memo.Memo)];
     }
@@ -202,7 +234,7 @@ public sealed partial class GameSession
 
     PartyMember MemberInfo(byte number) => new()
     {
-        Number = number, Key = playerKey, DbId = DbId, Nickname = StoredName, PcId = Profile()?.PcId ?? 1,
+        Number = number, Key = playerKey, BornServerId = ServerId, CurrentServerId = ServerId, DbId = DbId, Nickname = StoredName, PcId = Profile()?.PcId ?? 1,
         Hp = resources?.Hp ?? 1, HpMax = resources?.HpMax ?? 1, Mp = resources?.Mp ?? 0, MpMax = resources?.MpMax ?? 0,
         MapKey = worldMap, Position = position ?? default, Level = level,
     };
@@ -483,6 +515,18 @@ public sealed partial class GameSession
             e.Offers[side.playerKey].Select(o => side.storedItems.TryGetValue(o.Key, out var row) ? (row.InstanceId, o.Value) : (Guid.Empty, 0L)).ToList();
         var mine = Gives(this);
         var theirs = Gives(partner);
+        // Both bags need room for what they receive (GameSession.BagRoom.cs; the stacks given away whole free their slots).
+        List<(int, long)> Received(GameSession from) =>
+            e.Offers[from.playerKey].Select(o => from.storedItems.TryGetValue(o.Key, out var row) ? (row.TemplateId, o.Value) : (0, 0L)).Where(x => x.Item1 != 0).ToList();
+        int Freed(GameSession side) => side.SlotsFreedBy(e.Offers[side.playerKey]
+            .Select(o => side.storedItems.TryGetValue(o.Key, out var row) ? (row.InstanceId, row.Revision, (int)Math.Min(int.MaxValue, o.Value)) : (Guid.Empty, 0L, 0)));
+        var mineFull = !BagRoomFor(Received(partner), Freed(this));
+        if (mineFull || !partner.BagRoomFor(Received(this), Freed(partner)))
+        {
+            other.Send(SocialPackets.ExchangeCanceled(e.Id, 2));
+            return [SocialPackets.ExchangeConfirmReply(mineFull ? EResult.Exchange_Fail_NotEnoughSlotCountContainer : EResult.Exchange_Fail_PeerNotEnoughSlotCountContainer, e.Id),
+                SocialPackets.ExchangeCanceled(e.Id, 2)];
+        }
         var done = Store is { } store && CharacterId is { } me && partner.Store is { } otherStore && partner.CharacterId is { } them
             && mine.Concat(theirs).All(g => g.Item1 != Guid.Empty)
             && await StoredValue(() => store.ExchangeAsync(me, mine, otherStore, them, theirs, ct));
@@ -575,10 +619,10 @@ public sealed partial class GameSession
         var replies = new List<byte[]>();
         var seq = 0;
         // The opponent's defense counts as it does against NPC hits (it was ignored before).
-        foreach (var hit in Combat.SkillHits(data, skill, className, level, equippedWeapon, opponent.Session.Defense, rng, pvp: true))
+        foreach (var hit in PvpHits(opponent.Session, skill))
         {
             theirs.Hp = Math.Max(1, theirs.Hp - hit.Amount);
-            replies.Add(GamePackets.SkillHit(opponent.Key, playerKey, skill, hit.EffectId, hit.Amount, hit.Critical, ++seq));
+            replies.Add(GamePackets.SkillHit(opponent.Key, playerKey, skill, hit.EffectId, hit.Amount, hit.Critical, ++seq, AttackSpeed));
         }
         if (replies.Count == 0) return [];
         opponent.Send([.. replies, theirs.Update()]);

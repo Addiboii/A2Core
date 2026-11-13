@@ -19,6 +19,11 @@ public sealed record NativeOptions
     /// <summary>Game port the login redirect (0x390f) names (13328).</summary>
     public int? GamePort { get; init; }
     /// <summary>
+    /// Gateway mode: the Aion.Gateway service owns the public game port and relays to this local (loopback) port; the host then
+    /// does not listen on <see cref="GamePort"/> itself, and players survive host restarts (GatewayLink). Unset: direct connections.
+    /// </summary>
+    public int? GatewayPort { get; init; }
+    /// <summary>
     /// "accounts": tickets are checked and characters stored (needs the account databases).
     /// "development": any client is accepted with a local account; characters are not saved.
     /// </summary>
@@ -27,8 +32,6 @@ public sealed record NativeOptions
     /// <summary>Development only: seed the '$' placeholder so the client skips character creation.</summary>
     public bool IntroCharacter { get; init; }
     public int CharacterLevel { get; init; } = 1;
-    /// <summary>Refuse dungeon entries without their entry ticket (ContentsTicket.dat counts; default off: counted only).</summary>
-    public bool EnforceContentTickets { get; init; }
     /// <summary>Development logins only: the map characters enter at its start point (tools/load_test.py --map).</summary>
     public int? DevelopmentStartMap { get; init; }
     /// <summary>Development logins only: character names allowed to use the /gm chat commands.</summary>
@@ -42,6 +45,12 @@ public sealed record NativeOptions
     /// <summary>Research: write each game connection's client message trace here (ClientTrace); unset: off.</summary>
     public string? TraceDirectory { get; init; }
     public int MaxConnections { get; init; } = 16;
+    /// <summary>Anti-DDoS / anti-booting: most connections one source IP may hold at once (0 off). Loopback is never limited.</summary>
+    public int MaxConnectionsPerIp { get; init; } = 10;
+    /// <summary>Most new connections one source IP may open per minute before it is blocked (0 off).</summary>
+    public int MaxNewConnectionsPerMinutePerIp { get; init; } = 40;
+    /// <summary>How long a flooding IP is blocked, seconds.</summary>
+    public int ConnectionBlockSeconds { get; init; } = 60;
     /// <summary>
     /// A connection without client data for this long is closed. Dead peers are found by TCP keepalive (ServeAsync) well
     /// before it; the limit only drops a live client that stays silent, as one may on the character screen (live
@@ -65,6 +74,12 @@ public abstract class NativeListener(int port, ushort greetingTag, NativeOptions
     protected NativeOptions Options { get; } = options;
     protected ILogger Logger { get; } = logger;
     readonly SemaphoreSlim slots = new(options.MaxConnections, options.MaxConnections);
+    readonly ConnectionGuard guard = new(
+        options.MaxConnectionsPerIp > 0 ? options.MaxConnectionsPerIp : int.MaxValue,
+        options.MaxNewConnectionsPerMinutePerIp > 0 ? options.MaxNewConnectionsPerMinutePerIp : int.MaxValue,
+        Math.Max(1, options.ConnectionBlockSeconds) * 1000L);
+    /// <summary>Connection attempts refused by the per-IP guard (staff overview).</summary>
+    public long RefusedConnections => guard.Refused;
 
     protected abstract string Name { get; }
     /// <summary>This listener's counts and timings for the staff diagnostics API (no bodies); null when not registered.</summary>
@@ -78,13 +93,20 @@ public abstract class NativeListener(int port, ushort greetingTag, NativeOptions
     {
         var listener = new TcpListener(Options.Network.Bind, port);
         listener.Start();
+        NetworkMetrics.Register(guard);
         Logger.LogInformation("{Name} listening on {Address}:{Port}", Name, Options.Network.Bind, port);
         try
         {
             while (!stoppingToken.IsCancellationRequested)
             {
                 var client = await listener.AcceptTcpClientAsync(stoppingToken);
-                if (client.Client.RemoteEndPoint is not IPEndPoint { Address: var address } || (Options.Network.LoopbackOnly && !IPAddress.IsLoopback(address)))
+                if (client.Client.RemoteEndPoint is not IPEndPoint { Address: var address }
+                    || (Options.Network.LoopbackOnly && !IPAddress.IsLoopback(address)))
+                {
+                    client.Dispose();
+                    continue;
+                }
+                if (!guard.TryAccept(address, Environment.TickCount64))   // per-IP flood / booter protection
                 {
                     Stats?.Refused("address");
                     client.Dispose();
@@ -93,6 +115,7 @@ public abstract class NativeListener(int port, ushort greetingTag, NativeOptions
                 if (!await slots.WaitAsync(0, stoppingToken))
                 {
                     Stats?.Refused("capacity");
+                    guard.Release(address);
                     client.Dispose();
                     continue;
                 }
@@ -101,7 +124,7 @@ public abstract class NativeListener(int port, ushort greetingTag, NativeOptions
                 {
                     var ended = "error";
                     try { ended = await ServeAsync(client, stoppingToken); }
-                    finally { slots.Release(); client.Dispose(); Stats?.Ended(ended); }
+                    finally { slots.Release(); guard.Release(address); client.Dispose(); Stats?.Ended(ended); }
                 }, stoppingToken);
             }
         }
@@ -187,7 +210,9 @@ public abstract class NativeListener(int port, ushort greetingTag, NativeOptions
         if (list.Count == 0) return;
         if (list.Count == 1)
         {
-            await stream.WriteAsync(NativeFraming.Frame(list[0]), ct);
+            var single = NativeFraming.Frame(list[0]);
+            await stream.WriteAsync(single, ct);
+            ServerMetrics.Sent(1, single.Length);
             return;
         }
         var size = 0;
@@ -209,6 +234,7 @@ public abstract class NativeListener(int port, ushort greetingTag, NativeOptions
                 at += body.Length;
             }
             await stream.WriteAsync(buffer.AsMemory(0, size), ct);
+            ServerMetrics.Sent(list.Count, size);
         }
         finally { System.Buffers.ArrayPool<byte>.Shared.Return(buffer); }
     }
@@ -224,8 +250,16 @@ public sealed class NativeLoginListener(NativeOptions options, IServiceProvider 
 
     protected override async Task RunAsync(NetworkStream stream, Rc4 cipher, FrameBuffer buffer, CancellationToken ct)
     {
+        var worlds = services.GetService<WorldCatalog>();
+        var presence = services.GetService<WorldPresence>();
+        // Players in each world now (selected characters only), for the server list's congestion and Recommend tag.
+        Func<int, int> online = id => presence?.All.Count(e => e.Session.ServerId == id) ?? 0;
         var session = new LoginSession(new LoginSessionOptions
         {
+            Worlds = worlds?.Rows() ?? LoginPackets.DefaultWorlds,
+            Directory = worlds is null ? null : () => worlds.Rows(online),
+            ServerPicked = worlds is not null && services.GetService<WorldChoices>() is { } serverChoices ? serverChoices.PickServer : null,
+            LastPickedServer = worlds is not null && services.GetService<WorldChoices>() is { } lastChoices ? lastChoices.Server : null,
             RedirectHost = Options.Network.PublicAddress,
             RedirectPort = Options.GamePort ?? 13328,
             Characters = Options.Development && Options.IntroCharacter
@@ -273,9 +307,11 @@ public sealed class NativeLoginListener(NativeOptions options, IServiceProvider 
             return null;
         }
         // The login port's character list (0x390b) shows a per-server character count.
-        var owned = (await characters.ListAsync(new VerifiedAccount(grant.AccountId), ct)).Where(c => c.WorldId == grant.WorldId)
-            .Select(c => (c.Name, c.Level, c.Race)).ToList();
-        return new LoginGrant(grant.WireAccountId.ToString(System.Globalization.CultureInfo.InvariantCulture), grantId, owned);
+        var listed = (await characters.ListAsync(new VerifiedAccount(grant.AccountId), ct)).Where(c => c.WorldId == grant.WorldId).ToList();
+        var owned = listed.Select(c => (c.Name, c.Level, c.Race)).ToList();
+        // Four worlds: each character is listed on its own world (home_server_id).
+        return new LoginGrant(grant.WireAccountId.ToString(System.Globalization.CultureInfo.InvariantCulture), grantId, owned)
+            { Servers = listed.Select(c => c.HomeServerId).ToList() };
     }
 }
 
@@ -292,12 +328,120 @@ public sealed class NativeGameListener(NativeOptions options, IServiceProvider s
     protected override ListenerStats? Stats => services.GetService<ListenerDiagnostics>()?.Game;
     protected override byte[] HandshakeReply(RsaPublicKey key, byte[] sessionKey) => NativeHandshake.GameReply(key, sessionKey);
 
-    protected override async Task RunAsync(NetworkStream stream, Rc4 cipher, FrameBuffer buffer, CancellationToken ct)
+    protected override Task ExecuteAsync(CancellationToken stoppingToken) =>
+        Options.GatewayPort is { } gatewayPort ? GatewayLinksAsync(gatewayPort, stoppingToken) : base.ExecuteAsync(stoppingToken);
+
+    /// <summary>Gateway mode: the gateway's links on loopback, one per player connection (see GatewayLink).</summary>
+    async Task GatewayLinksAsync(int port, CancellationToken stoppingToken)
+    {
+        var listener = new TcpListener(IPAddress.Loopback, port);
+        listener.Start();
+        Logger.LogInformation("Native game: gateway links on 127.0.0.1:{Port}", port);
+        try
+        {
+            while (!stoppingToken.IsCancellationRequested)
+            {
+                var client = await listener.AcceptTcpClientAsync(stoppingToken);
+                _ = Task.Run(async () =>
+                {
+                    try { await ServeLinkAsync(client, stoppingToken); }
+                    finally { client.Dispose(); }
+                }, stoppingToken);
+            }
+        }
+        catch (OperationCanceledException) { }
+        finally { listener.Stop(); }
+    }
+
+    async Task ServeLinkAsync(TcpClient client, CancellationToken stoppingToken)
+    {
+        client.NoDelay = true;
+        using var connection = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
+        var stream = client.GetStream();
+        try
+        {
+            // The hello is the first frame; anything after it in the same read belongs to the session.
+            using var helloWindow = CancellationTokenSource.CreateLinkedTokenSource(connection.Token);
+            helloWindow.CancelAfter(TimeSpan.FromSeconds(5));
+            var received = new List<byte>();
+            var chunk = new byte[8192];
+            int helloEnd;
+            while (true)
+            {
+                var read = await stream.ReadAsync(chunk, helloWindow.Token);
+                if (read == 0) return;
+                received.AddRange(chunk.AsSpan(0, read).ToArray());
+                if (received.Count > 65536) throw new ProtocolException("Gateway hello too large");
+                var data = received.ToArray();
+                try
+                {
+                    var logical = NativeVarint.Read(data, 0, out var bodyStart);
+                    if (logical < 6 || logical > 65536) throw new ProtocolException("Gateway hello length");
+                    helloEnd = bodyStart + (int)logical - 4;
+                    if (helloEnd <= data.Length) break;
+                }
+                catch (IncompleteException) { }
+            }
+            var all = received.ToArray();
+            var helloBody = NativeFraming.Split(all.AsSpan(0, helloEnd), out _)[0];
+            var hello = GatewayLink.ParseHello(helloBody);
+            var buffer = new FrameBuffer();
+            buffer.Append(all.AsSpan(helloEnd));
+            await ServeGameAsync(stream, plain => plain, buffer, hello, connection.Token);
+        }
+        catch (Exception error) when (error is ProtocolException or IOException or SocketException or OperationCanceledException or ObjectDisposedException)
+        {
+            Logger.LogInformation("Native game (gateway) link ended: {Reason}", error.GetType().Name);
+        }
+        catch (Exception error)
+        {
+            Logger.LogWarning(error, "Native game (gateway) link ended by an unexpected error");
+        }
+    }
+
+    /// <summary>A resumed player's store from the world session the gateway kept (the token of the original login).</summary>
+    async Task<ServiceNativeCharacterStore?> ResumeStoreAsync(string token, CancellationToken ct)
+    {
+        var sessions = services.GetService<IWorldSessions>();
+        if (sessions is null) return null;
+        var who = await sessions.ValidateAsync(token, ct);
+        if (who is null) return null;
+        if (services.GetService<Aion.Host.Authentication.ServerControl>() is { } control && await control.LoginBlockedAsync(who.Account.AccountId, ct) is { } blocked)
+        {
+            Logger.LogInformation("Native game resume refused: {Reason}", blocked);
+            return null;
+        }
+        return new ServiceNativeCharacterStore(token, who, sessions, services.GetRequiredService<IWireCharacterRepository>(),
+            services.GetRequiredService<IGameplayStore>(), services.GetRequiredService<CharacterPersistenceService>());
+    }
+
+    protected override Task RunAsync(NetworkStream stream, Rc4 cipher, FrameBuffer buffer, CancellationToken ct) =>
+        ServeGameAsync(stream, body => cipher.Crypt(body), buffer, null, ct);
+
+    /// <summary>One game connection: direct (decrypting RC4 here) or through the gateway (plaintext, <paramref name="hello"/> set).</summary>
+    async Task ServeGameAsync(NetworkStream stream, Func<byte[], byte[]> decrypt, FrameBuffer buffer, GatewayLink.Hello? hello, CancellationToken ct)
     {
         var intro = Options.Development && Options.IntroCharacter
             ? LoginPackets.PreGeneratedIntro(LoginPackets.DefaultWorlds[0].Id, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()) : null;
         // Map event notes (unsupported directives, objectives finished by timeout) go to the host log.
-        GameSession.MapEventLog ??= text => Logger.LogInformation("Map event: {Text}", text);
+        // Players' session notes (refusals, quest moves, map events) also go to logs/session-notes.log next to the traces, where the
+        // development session reads them (the service log keeps only warnings; live 2026-11-09 the Airship Remnants refusal left no trace).
+        var notesFile = Path.GetFullPath(Path.Combine(Options.TraceDirectory is { Length: > 0 } traceRoot ? traceRoot : AppContext.BaseDirectory, "..", "logs", "session-notes.log"));
+        var notesLock = new object();
+        GameSession.MapEventLog ??= text =>
+        {
+            Logger.LogInformation("Map event: {Text}", text);
+            try
+            {
+                lock (notesLock)
+                {
+                    Directory.CreateDirectory(Path.GetDirectoryName(notesFile)!);
+                    if (File.Exists(notesFile) && new FileInfo(notesFile).Length > 50_000_000) File.Move(notesFile, notesFile + ".old", overwrite: true);
+                    File.AppendAllText(notesFile, DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss") + " " + text + Environment.NewLine);
+                }
+            }
+            catch (IOException) { }
+        };
         var session = new GameSession(GameData.Embedded, new GameSessionOptions
         {
             CharacterLevel = Options.CharacterLevel, IntroCharacter = intro, WorldId = Options.WorldId,
@@ -305,7 +449,9 @@ public sealed class NativeGameListener(NativeOptions options, IServiceProvider s
             Builder = services.GetService<BuilderCommands>(), Terrain = services.GetService<TerrainStore>(), Nav = services.GetService<NavMeshStore>(),
             World = services.GetService<SharedWorld>(), DevelopmentMap = Options.Development ? Options.DevelopmentStartMap : null,
             WorldRace = services.GetService<WorldChoices>() is { } choices ? choices.Race : null,
-            EnforceContentTickets = Options.EnforceContentTickets,
+            Worlds = services.GetService<WorldCatalog>(),
+            WorldServer = services.GetService<WorldCatalog>() is not null && services.GetService<WorldChoices>() is { } serverChoices ? serverChoices.Server : null,
+            PlayerKey = hello?.Resume?.PlayerKey,
         }, new Random());
         // With a shared world, sessions take turns (WorldTurn): world work alone, map work in parallel per map;
         // storage calls run outside the turn (TurnStore).
@@ -348,9 +494,40 @@ public sealed class NativeGameListener(NativeOptions options, IServiceProvider s
         // included). It went out here only while the connection was idle, which a client pinging every 50 ms never is; live
         // 2026-10-20 the client's own dash movement never ended without it.
         long clockAt = 0;
+        // Gateway: the store's world session and the last resume point sent (the gateway reconnects with it after a restart).
+        ServiceNativeCharacterStore? raw = null;
+        GatewayLink.ResumePoint? sentPoint = null;
+        async Task SendResumePointAsync()
+        {
+            if (hello is null || raw is null || session.ResumePoint is not { } point) return;
+            var next = new GatewayLink.ResumePoint(raw.WorldToken, point.WireId, session.PlayerKey, point.LoadTicket);
+            if (next == sentPoint) return;
+            sentPoint = next;
+            await SendAsync(stream, [GatewayLink.BuildResumePoint(next)], ct);
+        }
         presence.Connected();
         try
         {
+            // Back after a host restart: the gateway held the client; the character is loaded again and the map reloads where it was.
+            if (hello?.Resume is { } back && !Options.Development)
+            {
+                raw = await ResumeStoreAsync(back.Token, ct);
+                List<byte[]> resumed = [];
+                if (raw is not null)
+                {
+                    session.Store = turn is null ? raw : TurnStore.Wrap(raw, turn);
+                    authenticated = true;
+                    resumed = await InTurnAsync(() => session.ResumeAsync(back.WireId, back.LoadTicket, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), ct), () => false);
+                }
+                if (session.SelectedWireId is null)
+                {
+                    Logger.LogInformation("Native game resume refused ({Point})", back);
+                    return;
+                }
+                Logger.LogInformation("Native game resumed after a restart ({Point})", back);
+                if (trace is not null) foreach (var packet in resumed) trace.RecordReply(packet);
+                await SendAsync(stream, resumed, ct);
+            }
             while (true)
             {
                 // A shutdown ends the loop here: live 2026-10-19 a connected player's loop ran on through the host's whole 30 s
@@ -358,7 +535,9 @@ public sealed class NativeGameListener(NativeOptions options, IServiceProvider s
                 // the trace was not written and the character not saved.
                 ct.ThrowIfCancellationRequested();
                 var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                var tickStart = System.Diagnostics.Stopwatch.GetTimestamp();
                 var ticked = await InTurnAsync(() => session.TickAsync(now, ct), () => !session.NeedsWorldTick(now));
+                ServerMetrics.MapTick(session.MapId ?? 0, tickStart);   // health page
                 if (now - clockAt >= TickInterval.TotalMilliseconds && (authenticated || Options.Development))
                 {
                     clockAt = now;
@@ -366,6 +545,7 @@ public sealed class NativeGameListener(NativeOptions options, IServiceProvider s
                 }
                 if (trace is not null) foreach (var packet in ticked) trace.RecordReply(packet);
                 await SendAsync(stream, ticked, ct);
+                await SendResumePointAsync();
                 // The trace every minute as well as at the end: a live session can be read while the player is still in.
                 if (trace is not null && Environment.TickCount64 - traceWrittenAt > 60_000)
                 {
@@ -380,14 +560,16 @@ public sealed class NativeGameListener(NativeOptions options, IServiceProvider s
                 }
                 foreach (var body in buffer.Drain())
                 {
-                    var plain = cipher.Crypt(body);
+                    var plain = decrypt(body);
+                    if (hello is not null && GatewayLink.IsControl(plain)) continue;
                     var header = plain.Length >= 2 ? plain[0] | plain[1] << 8 : -1;
                     if (!Options.Development)
                     {
                         if (header == 0x3613)
                         {
                             if (authenticated) { Logger.LogInformation("Native game closed: replay_rejected"); Stats?.Refused("replay_rejected"); return; }
-                            session.Store = await AuthenticateAsync(plain, ct);
+                            raw = await AuthenticateAsync(plain, ct);
+                            session.Store = raw;
                             if (session.Store is { } opened && turn is not null) session.Store = TurnStore.Wrap(opened, turn);
                             if (session.Store is null) { Logger.LogInformation("Native game closed: rejected"); Stats?.Refused("rejected"); return; }
                             authenticated = true;
@@ -403,6 +585,7 @@ public sealed class NativeGameListener(NativeOptions options, IServiceProvider s
                     {
                         replies = await InTurnAsync(() => session.HandleAsync(plain, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), ct), () => mapRequest);
                         Stats?.Handled(header, System.Diagnostics.Stopwatch.GetTimestamp() - started);
+                        if (header >= 0) ServerMetrics.Request(header, started);
                     }
                     // A malformed body (short, out-of-range field) is that request's failure, not the connection's: it ended the
                     // session before (idea from A2Core PR #4). Logged so a handler bug does not go unseen.
@@ -413,11 +596,13 @@ public sealed class NativeGameListener(NativeOptions options, IServiceProvider s
                         replies = [];
                     }
                     // A request the store refused (constraint, missing row): which one and why (it was silent before).
+                    if (session.PersistenceErrors.Count > errorsBefore) ServerMetrics.StoreError(session.PersistenceErrors.Count - errorsBefore);
                     if (session.PersistenceErrors.Count > errorsBefore)
                         Logger.LogWarning("Native game request 0x{Opcode:x4} refused by the store: {Errors}", header,
                             string.Join(", ", session.PersistenceErrors.Skip(errorsBefore)));
                     if (trace is not null) foreach (var packet in replies) trace.RecordReply(packet);
                     await SendAsync(stream, replies, ct);
+                    await SendResumePointAsync();
                     if (header == session.EquipOpcode && unanswered.Add(-header))
                         Logger.LogInformation("Native game equip request opcode 0x{Opcode:x4} ({Length} bytes)", header, plain.Length);
                     if (header == 0x3613 && session.Store is not null)
@@ -437,7 +622,9 @@ public sealed class NativeGameListener(NativeOptions options, IServiceProvider s
                         Logger.LogInformation("Native game BuilderCmd_RQ ({Length} bytes): {Body}", plain.Length,
                             Convert.ToHexString(plain.AsSpan(0, Math.Min(plain.Length, 1024))));
                     else if (replies.Count == 0 && header >= 0 && !GameSession.SilentRequests.Contains(header) && GameSession.PositionReport(plain) is null && unanswered.Add(header))
-                        Logger.LogInformation("Native game unanswered opcode 0x{Opcode:x4} ({Length} bytes)", header, plain.Length);
+                        // The body sample (first 96 bytes) lets tools/feature_gaps.py check the request against the usmap layout.
+                        Logger.LogInformation("Native game unanswered opcode 0x{Opcode:x4} ({Length} bytes): {Body}", header, plain.Length,
+                            Convert.ToHexString(plain.AsSpan(0, Math.Min(plain.Length, 96))));
                     // In the world after 0x3622; out of it again on 0x3625 (back to character selection).
                     if (session.CharacterName != present)
                     {
@@ -448,7 +635,14 @@ public sealed class NativeGameListener(NativeOptions options, IServiceProvider s
                 }
                 pending ??= stream.ReadAsync(chunk, ct).AsTask();
                 wake ??= session.OutboxWaitAsync(ct);
-                var woken = await Task.WhenAny(pending, wake, Task.Delay(TickInterval, ct));
+                // Sleep until the next 50 ms clock or the session's earliest timer (a cast end, a kill's follow-up), whichever is first.
+                var wait = TickInterval;
+                if (session.NextTimerAt is { } timerAt)
+                {
+                    var untilTimer = TimeSpan.FromMilliseconds(Math.Max(0, timerAt - DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()));
+                    if (untilTimer < wait) wait = untilTimer;
+                }
+                var woken = await Task.WhenAny(pending, wake, Task.Delay(wait, ct));
                 if (woken == wake)
                 {
                     // Another session queued messages for this player: tick now (the tick drains the outbox) instead of in up to 50 ms.
@@ -464,11 +658,21 @@ public sealed class NativeGameListener(NativeOptions options, IServiceProvider s
                 pending = null;
                 if (read == 0) return;
                 lastData = DateTimeOffset.UtcNow;
+                ServerMetrics.Received(read);
                 buffer.Append(chunk.AsSpan(0, read));
             }
         }
         finally
         {
+            // Gateway: a host shutdown keeps the world session (the gateway brings the player back with it); any other end is final,
+            // and the gateway is told so it closes the client instead of waiting for a resume.
+            if (hello is not null)
+            {
+                if (ct.IsCancellationRequested) { if (raw is not null) raw.KeepWorldSession = true; }
+                else
+                    try { await stream.WriteAsync(NativeFraming.Frame(GatewayLink.BuildClose()), CancellationToken.None); }
+                    catch (Exception error) when (error is IOException or SocketException or ObjectDisposedException or NotSupportedException) { }
+            }
             presence.Disconnected();
             // The trace first: it is only a file, and a failure later in this block must not lose it (live 2026-10-19: no trace
             // was written at a logout or at the deploy restart, which took the host's whole 30 s shutdown timeout).
@@ -499,7 +703,7 @@ public sealed class NativeGameListener(NativeOptions options, IServiceProvider s
         }
     }
 
-    async Task<INativeCharacterStore?> AuthenticateAsync(byte[] plain, CancellationToken ct)
+    async Task<ServiceNativeCharacterStore?> AuthenticateAsync(byte[] plain, CancellationToken ct)
     {
         var sessions = services.GetService<IWorldSessions>();
         if (sessions is null) return null;

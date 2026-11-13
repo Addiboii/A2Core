@@ -12,6 +12,15 @@ public sealed record AbnormalWire(int Uid, int AbnormalId, long DurationMs, long
     int? MultiplyValue = null, Vector3d? RangeBase = null);
 
 /// <summary>
+/// DevPacketData_Common_CharGuildDesc as the official server sends it (0x3645 appear bit 1, 0x8a33 GuildDescUpdate_NT): guild id
+/// i64 (official: server id << 48 | number, e.g. 0x090c000000000008) | name | 18 bytes: emblem u16 (2 in all 1,936 official
+/// 0x8a33 and 384 0x3645 samples) | EGuildMemberGrade u8 (0 master, 1 officer, 2 member: 128 / 224 / 1,584 samples) | ranking i32 |
+/// union id i64 | union emblem u16 | union name (all 0 / empty officially). OFFICIAL total length; the u16 widths of the emblems
+/// are read from the bytes (usmap says i32) - CANDIDATE field split of the zero bytes.
+/// </summary>
+public sealed record GuildTag(long Id, string Name, int Emblem, byte Grade);
+
+/// <summary>
 /// Another player as the client draws it (0x3645 CharAppear_NT). Defaults are the values the
 /// official server sent for ordinary low-level players (capture 20261013-144836, 89 samples).
 /// Directions are degrees; HP is a varint, the other points i32.
@@ -57,6 +66,11 @@ public sealed record OtherCharacter
     public byte Relationship { get; init; } = 1;
     /// <summary>Equipped wing (state mask bit 12); 0 sends none.</summary>
     public int WingId { get; init; }
+    /// <summary>_wing_skin_id (state mask bit 14; 492 of 1,266 official samples, the wing look, equal to the wing when unchanged); 0 sends none.
+    /// The official server never sends _wing_level (bit 13).</summary>
+    public int WingSkinId { get; init; }
+    /// <summary>The player's guild (appear mask bit 1, 384 of 1,266 official samples); null sends none.</summary>
+    public GuildTag? Guild { get; init; }
     /// <summary>_title_id (state mask bit 15).</summary>
     public int TitleId { get; init; }
 
@@ -81,6 +95,16 @@ public sealed record OtherCharacter
     /// <summary>ECharacterVoiceType 0..3.</summary>
     public int VoiceType { get; init; }
     public int SealstoneItemId { get; init; }
+    /// <summary>
+    /// _default_ride_data_id, appear mask bit 23 (usmap order after _mimic_npc_data_id bit 22). OBSERVED 2026-11-06/07: set in
+    /// 95% of the official 0x3645 samples with per-player values 1004-1245 (ride ids, as 0x9009 CharRideAcquire); 0 sends none.
+    /// </summary>
+    public int DefaultRideDataId { get; init; }
+    /// <summary>
+    /// _abyss_ranking_grade, appear mask bit 24. OBSERVED: 19 for almost every official player (16 once, with sealstone
+    /// 533460006); 0 sends none. CANDIDATE: 19 = the lowest grade of a player without abyss points.
+    /// </summary>
+    public int AbyssRankingGrade { get; init; }
     public long CombatPower { get; init; }
     /// <summary>EPCDieType (0 None).</summary>
     public byte DieType { get; init; }
@@ -128,6 +152,10 @@ public static class PlayerPackets
         if (a.RangeBase is { } range) w.Vec3(range);
     }
 
+    /// <summary>CharGuildDesc (see <see cref="GuildTag"/>); null writes the empty tag (no guild).</summary>
+    public static PacketWriter WriteGuildDesc(PacketWriter w, GuildTag? g) =>
+        w.I64(g?.Id ?? 0).String(g?.Name ?? "").U16(g?.Emblem ?? 0).U8(g?.Grade ?? 0).I32(0).I64(0).U16(0).String("");
+
     internal static PacketWriter WriteAbnormals(PacketWriter w, IReadOnlyList<AbnormalWire> list)
     {
         w.Varint(list.Count);
@@ -144,17 +172,22 @@ public static class PlayerPackets
     /// op, op_max, fp, fp_max), [b6 combat u8], [b7 toggle i32], [b9 relationship u8], [b12 wing i32],
     /// [b15 title i32] | server id u16 (appear bit 0, always) | abnormals | equips (EquipBroad) |
     /// [b2 move_state u8] [b3 move_substate u8] [b4 sprinting bool] [b12 dead_reckoning bool]
-    /// [b13 reason u8] | dbid i64 | stats u8 count {u16, i32} | level i32 | conqueror i32 |
+    /// [b13 reason u8] | dbid i64 | stats varint count {u16, i32} | level i32 | conqueror i32 |
     /// equip item level i32 | [b17 teleport effect i32] | customizing (varint + bytes) |
-    /// [b18 voice u8] | [b21 sealstone item i32] | combat power i64 | die type u8 | peace_show_weapon bool.
+    /// [b18 voice u8] | [b21 sealstone item i32] | [b23 default ride i32] | [b24 abyss ranking grade i32] | combat power i64 | die type u8 | peace_show_weapon bool.
     /// Field names of bits 4/12 (sprinting vs dead reckoning) and 17 (teleport effect) are CANDIDATES
     /// from the optional-field order (bit 4 only with running, bit 12 with every moving state,
     /// bit 17 only with reasons 2/12 and matching the 0x3647 effect id); bit 21 is confirmed by
-    /// 0x8d4e BroadcastSealStoneChange carrying the same item. Guild desc (bit 1) is never sent.
+    /// 0x8d4e BroadcastSealStoneChange carrying the same item. Guild desc (bit 1) after the server id.
+    /// 2026-11-09 byte audit (recordings 20261106/07, current client): the official mask carries bits 21, 23 and 24 in 95% of
+    /// the samples (0x1a0xxxx); with the two i32 after the sealstone every such sample decodes to its last byte
+    /// (combat power, die type). Bit 1 guild desc and state bit 14 wing skin since the corrections of 2026-11-09; dyes (EquipBroad deco
+    /// slots, 66 official samples) wait for a dye feature (we keep none).
     /// </summary>
     public static byte[] CharAppear(OtherCharacter c)
     {
         var mask = 1u;
+        if (c.Guild is not null) mask |= 1 << 1;
         if (c.MoveState != 0) mask |= 1 << 2;
         if (c.MoveSubstate != 0) mask |= 1 << 3;
         if (c.Sprinting) mask |= 1 << 4;
@@ -163,11 +196,13 @@ public static class PlayerPackets
         if (c.TeleportEffectId != 0) mask |= 1 << 17;
         if (c.VoiceType != 0) mask |= 1 << 18;
         if (c.SealstoneItemId != 0) mask |= 1 << 21;
+        if (c.DefaultRideDataId != 0) mask |= 1 << 23;
+        if (c.AbyssRankingGrade != 0) mask |= 1 << 24;
 
         var w = PacketWriter.Opcode(0x3645).Varint(c.Key).U32(mask).U8(0x07).String(c.Name).I32(c.PcId).U8(c.Race).U8(c.Gender);
 
         var state = (c.Velocity is null ? 0 : 1 << 3) | (c.CombatState != 0 ? 1 << 6 : 0) | (c.ToggleFlags != 0 ? 1 << 7 : 0)
-            | (c.Relationship != 0 ? 1 << 9 : 0) | (c.WingId != 0 ? 1 << 12 : 0) | (c.TitleId != 0 ? 1 << 15 : 0);
+            | (c.Relationship != 0 ? 1 << 9 : 0) | (c.WingId != 0 ? 1 << 12 : 0) | (c.WingSkinId != 0 ? 1 << 14 : 0) | (c.TitleId != 0 ? 1 << 15 : 0);
         w.U16(state).Vec3(c.Position).F32(c.Direction).U16(U16Dir(c.MoveDirection ?? c.Direction));
         if (c.Velocity is { } velocity) w.Vec3(velocity);
         w.U8(c.Live).Varint(c.Hp).Varint(c.HpMax);
@@ -176,9 +211,11 @@ public static class PlayerPackets
         if (c.ToggleFlags != 0) w.I32(c.ToggleFlags);
         if (c.Relationship != 0) w.U8(c.Relationship);
         if (c.WingId != 0) w.I32(c.WingId);
+        if (c.WingSkinId != 0) w.I32(c.WingSkinId);
         if (c.TitleId != 0) w.I32(c.TitleId);
 
         w.U16(c.ServerId);
+        if (c.Guild is { } guild) WriteGuildDesc(w, guild);
         WriteAbnormals(w, c.Abnormals);
         w.Varint(c.Equips.Count);
         foreach (var e in c.Equips) GamePackets.WriteEquip(w, e);
@@ -188,13 +225,15 @@ public static class PlayerPackets
         if (c.Sprinting) w.Bool(true);
         if (c.DeadReckoning) w.Bool(true);
         if (c.Reason != 0) w.U8(c.Reason);
-        w.I64(c.DbId).U8(c.Stats.Count);
+        w.I64(c.DbId).Varint(c.Stats.Count);
         foreach (var (type, value) in c.Stats) GamePackets.Stat(w, type, value);
         w.I32(c.Level).I32(c.ConquerorLevel).I32(c.EquipItemLevel);
         if (c.TeleportEffectId != 0) w.I32(c.TeleportEffectId);
         w.Bytes(c.CustomizingData);
         if (c.VoiceType != 0) w.U8(c.VoiceType);
         if (c.SealstoneItemId != 0) w.I32(c.SealstoneItemId);
+        if (c.DefaultRideDataId != 0) w.I32(c.DefaultRideDataId);
+        if (c.AbyssRankingGrade != 0) w.I32(c.AbyssRankingGrade);
         return w.I64(c.CombatPower).U8(c.DieType).Bool(c.PeaceShowWeapon).ToArray();
     }
 
@@ -205,7 +244,7 @@ public static class PlayerPackets
     /// reason 12 and effect 65).
     /// </summary>
     public static byte[] CharDisappear(int key, byte reason = 1, int teleportEffectId = 0) =>
-        PacketWriter.Opcode(0x3647).Varint(key).U8(reason).Varint(teleportEffectId).ToArray();
+        new Generated.CharDisappearNT { Key = key, Reason = reason, TeleportEffectId = teleportEffectId }.ToArray();
 
     // ---------- Ground movement (0x371a-0x371d; same messages the NPCs use) ----------
 
@@ -300,7 +339,7 @@ public static class PlayerPackets
     }
 
     /// <summary>0x3721 CharMoveSprintOn_NT: key only (86 samples). The off notice 0x3722 is GamePackets.SprintOffNotice.</summary>
-    public static byte[] SprintOn(int key) => PacketWriter.Opcode(0x3721).Varint(key).ToArray();
+    public static byte[] SprintOn(int key) => new Generated.CharMoveSprintOffNT { Key = key }.ToArray(0x3721);
 
     // ---------- Parkour, forward-attack moves, rolling (official capture 20261013-144836) ----------
     // These directions travel as f32 in 1/65536 turns (rotU); the move direction as u16.
@@ -310,7 +349,7 @@ public static class PlayerPackets
     /// <summary>0x372b CharParkourStart_NT: key | mask (3, 7 with variation) | pos | n | points | move dir u16 | rotU | mode | [variation]. OBSERVED (18).</summary>
     public static byte[] ParkourStart(int key, Vector3d position, IReadOnlyList<Vector3d> points, int moveDir, double rotateDir, byte mode, byte? variation)
     {
-        var w = PacketWriter.Opcode(0x372b).Varint(key).U8(variation is null ? 3 : 7).Vec3(position).U8(points.Count);
+        var w = PacketWriter.Opcode(0x372b).Varint(key).U8(variation is null ? 3 : 7).Vec3(position).Varint(points.Count);
         foreach (var point in points) w.Vec3(point);
         w.U16(moveDir).F32(RotU(rotateDir)).U8(mode);
         if (variation is { } v) w.U8(v);
@@ -532,18 +571,6 @@ public static class PlayerPackets
     }
 
     /// <summary>
-    /// 0x382b AbnormalChange_NT: key | Common_Abnormal | show_msg (packed bool, it shares the abnormal's ready-to-remove byte).
-    /// OBSERVED (2.0.6, 20261019-231752 #1638: the dodge's abnormal 3015 applied again while on, same uid, byte 02 = show_msg).
-    /// Layout as A2Core PR #4 (Artezianec) wrote it.
-    /// </summary>
-    public static byte[] AbnormalChange(int key, AbnormalWire abnormal, bool showMsg = true)
-    {
-        var w = PacketWriter.Opcode(0x382b).Varint(key);
-        WriteAbnormal(w, abnormal);
-        return w.Bool(showMsg).ToArray();
-    }
-
-    /// <summary>
     /// 0x3803 SkillFireProjectile_NT: caster | presence u8 0 | target | skill i32 | action uid u8 (the 0x3802's) | projectile id varint
     /// (SkillProjectile.dat row; Skill.dat SkillEffectTimeDataList ProjectileId) | target position Vec3 | remaining flight ms varint |
     /// effect seq u32 | effect seq u8 | 00. OBSERVED (2.0.6: 20261013-144836 #15131, 43 samples; 20261019-231752 #31050, 114 samples,
@@ -588,6 +615,20 @@ public static class PlayerPackets
     public static byte[] AbnormalAdd(int key, IReadOnlyList<AbnormalWire> abnormals) =>
         WriteAbnormals(PacketWriter.Opcode(0x382a).Varint(key), abnormals).ToArray();
 
+    /// <summary>
+    /// 0x382b AbnormalChange_NT: key | Common_Abnormal | show_msg (packed bool, shares the abnormal's ready-to-remove byte).
+    /// OFFICIAL (32,294 samples of the 20 recordings 2026-11-06/07, all decode to the end): an abnormal the target already has is
+    /// applied again (same uid; new expire time = now + duration, new caster / skill / range base; a group replacement also a new
+    /// abnormal id). The official server never removes and re-adds (no 0x382c reason 4 in any recording). show_msg is 1 in 87%;
+    /// 0 for abnormals that only extend silently (e.g. 118000071, 187300011, 130000011).
+    /// </summary>
+    public static byte[] AbnormalChange(int key, AbnormalWire abnormal, bool showMsg = true)
+    {
+        var w = PacketWriter.Opcode(0x382b).Varint(key);
+        WriteAbnormal(w, abnormal);
+        return w.Bool(showMsg).ToArray();
+    }
+
     /// <summary>0x382c AbnormalRemoveList_NT: key | count | {u8 mask 0, uid varint, EAbnormalExpireReason u8}. OBSERVED (dispel fields never present).</summary>
     public static byte[] AbnormalRemove(int key, IReadOnlyList<(int Uid, byte Reason)> removed)
     {
@@ -603,18 +644,18 @@ public static class PlayerPackets
     public static byte[] MoveReject(ushort opcode, int key, Vector3d position, int reason = 1) =>
         PacketWriter.Opcode(opcode).Varint(key).U8(0).U8(0).Vec3(position).I32(reason).ToArray();
 
-    /// <summary>0x364b MoveSpeedUpdate_NT: key | u8 count | {u16 stat, i32 value} (stat 205 observed: 150, 1000, 1150, 0). OBSERVED.</summary>
+    /// <summary>0x364b MoveSpeedUpdate_NT: key | varint count (TArray) | {u16 stat, i32 value} (stat 205 observed: 150, 1000, 1150, 0). OBSERVED.</summary>
     public static byte[] MoveSpeedUpdate(int key, IReadOnlyList<(int Type, int Value)> stats)
     {
-        var w = PacketWriter.Opcode(0x364b).Varint(key).U8(stats.Count);
+        var w = PacketWriter.Opcode(0x364b).Varint(key).Varint(stats.Count);
         foreach (var (type, value) in stats) GamePackets.Stat(w, type, value);
         return w.ToArray();
     }
 
     /// <summary>0x8d91 BroadcastLevelUpdate_NT: key | level i32. OBSERVED.</summary>
-    public static byte[] LevelBroadcast(int key, int level) => PacketWriter.Opcode(0x8d91).Varint(key).I32(level).ToArray();
+    public static byte[] LevelBroadcast(int key, int level) => new Generated.BroadcastLevelUpdateNT { CharKey = key, CharLevel = level }.ToArray();
     /// <summary>0x8d4e BroadcastSealStoneChange_NT: key | item id i32 (the CharAppear bit-21 value). OBSERVED.</summary>
-    public static byte[] SealstoneChange(int key, int itemId) => PacketWriter.Opcode(0x8d4e).Varint(key).I32(itemId).ToArray();
+    public static byte[] SealstoneChange(int key, int itemId) => new Generated.BroadcastSealStoneChangeNT { CharKey = key, ItemId = itemId }.ToArray();
     /// <summary>0x8dac BroadcastClientDisplayChange_NT: key | peace_show_weapon (packed bool). OBSERVED (1).</summary>
     public static byte[] ClientDisplayChange(int key, bool peaceShowWeapon) => PacketWriter.Opcode(0x8dac).Varint(key).Bool(peaceShowWeapon).ToArray();
     /// <summary>0x3832 LockOnTarget_NT: key | 00 | target varint (0 clears). OBSERVED (7).</summary>

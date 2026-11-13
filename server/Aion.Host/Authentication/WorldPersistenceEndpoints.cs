@@ -42,7 +42,7 @@ public static class WorldPersistenceEndpoints
             return state is null?Results.NotFound():Results.Ok(state);
         });
         group.MapPost("/characters",async(CreatePlayer input,HttpContext ctx,IGameplayStore game,CancellationToken ct)=>
-        { var who=Identity(ctx); return Results.Ok(new {characterId=await game.CreateAsync(who.Account,input with {WorldId=who.WorldId},ct)}); });
+        { var who=Identity(ctx); return Results.Ok(new {characterId=await game.CreateAsync(who.Account,input with {WorldId=who.WorldId,HomeServerId=null},ct)}); });
         group.MapGet("/characters/{id:guid}",async(Guid id,HttpContext ctx,CharacterPersistenceService characters,CancellationToken ct)=>
         { var who=Identity(ctx); var state=await characters.LoadAsync(who.Account,id,ct); return state?.Summary.WorldId==who.WorldId ? Results.Ok(state) : Results.NotFound(); });
         group.MapGet("/characters/{id:guid}/inventory",async(Guid id,HttpContext ctx,CharacterService characters,IGameplayStore game,CancellationToken ct)=>

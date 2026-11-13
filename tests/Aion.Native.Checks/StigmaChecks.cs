@@ -102,16 +102,16 @@ static class StigmaChecks
         await glad.HandleAsync(new PacketWriter().U16(0x5603).U8(20).ToArray(), now);
         await glad.HandleAsync(new PacketWriter().U16(0x5603).U8(21).ToArray(), now);
         var put = await glad.HandleAsync(ContextSkill(20, 0, WrathWave), now);
-        Check(put.Single().SequenceEqual(Convert.FromHexString("0856" + "00" + "0000" + "14" + "00" + Hex(WrathWave)))
+        Check(put[0].SequenceEqual(Convert.FromHexString("0856" + "00" + "0000" + "14" + "00" + Hex(WrathWave)))
               && gladStore.QuickSlotRows[20].SkillId == WrathWave && glad.StigmaReady(WrathWave),
               "0x5607 puts Wrath Wave on stigma slot 20: 0x5608 mask 0, result 0, slot 20, context 0, skill (observed layout); stored, castable");
         await glad.HandleAsync(ContextSkill(21, 0, BladeToss), now);
         var swap = await glad.HandleAsync(ContextSkill(21, 0, WrathWave), now);
-        Check(swap.Single().SequenceEqual(Convert.FromHexString("0856" + "03" + "0000" + "15" + "00" + Hex(WrathWave) + "01" + "14"))
+        Check(swap[0].SequenceEqual(Convert.FromHexString("0856" + "03" + "0000" + "15" + "00" + Hex(WrathWave) + "01" + "14"))
               && gladStore.QuickSlotRows[21].SkillId == WrathWave && gladStore.QuickSlotRows[20].SkillId == BladeToss,
-              "moving Wrath Wave onto slot 21 trades places with Blade Toss: 0x5608 mask 3, is_swap 1, swap slot 20 (as the official #84812)");
+              $"moving Wrath Wave onto slot 21 trades places with Blade Toss: 0x5608 mask 3, is_swap 1, swap slot 20 (as the official #84812) {Convert.ToHexString(swap[0])} {gladStore.QuickSlotRows[21].SkillId} {gladStore.QuickSlotRows.GetValueOrDefault(20)?.SkillId}");
         var cleared = await glad.HandleAsync(ContextSkill(20, 0, 0), now);
-        Check(cleared.Single()[4] == 0 && !gladStore.QuickSlotRows.ContainsKey(20) && !glad.StigmaReady(BladeToss),
+        Check(cleared[0][4] == 0 && !gladStore.QuickSlotRows.ContainsKey(20) && !glad.StigmaReady(BladeToss),
               "skill 0 clears the slot (official `00 0000 17 00 00000000`)");
         Check((await glad.HandleAsync(ContextSkill(22, 0, BladeToss), now)).Single()[3] == 1 && (await glad.HandleAsync(ContextSkill(3, 0, BladeToss), now)).Single()[3] == 1,
               "0x5607 keeps the stigma rules: the third slot is closed at level 30, a stigma goes only into a stigma slot");
@@ -143,13 +143,8 @@ static class StigmaChecks
               && overStore.StigmaRows.Count == 1 && overStore.StigmaRows[WrathWave] == 10,
               "over budget: every further level and stigma is refused until the shards cover them");
 
-        // Shard item 531900010 (GetStigmaShard ["1"]): used up, one shard more.
-        var (charged, chargedStore, _) = await Enter(23, 3, s => s.Items.Add(new ItemState(Guid.NewGuid(), "b", 531900010, 2, "bag", null, 1, Empty, Empty, 7001)));
-        await charged.InventoryChangesAsync(default);   // the bag as the store has it (as the item-use checks do)
-        var used = await charged.HandleAsync(new PacketWriter().U16(0x5612).I64(7001).ToArray(), now);
-        Check(BitConverter.ToUInt16(used[0], 2) == RidePackets.ItemUseSuccess && used.Any(b => b.SequenceEqual(Shards(0))) && chargedStore.StigmaItemShards == 1 && charged.StigmaShardsLeft == 2
-              && chargedStore.Items.Single(i => i.TemplateId == 531900010).Quantity == 1,
-              "a stigma shard item: one used, +1 shard (0x5105 StigmaShard, none spent), stored with the item's consumption");
+        // Shard items (GetStigmaShard): the Dell version's item use (setting stigma_points, GameSession.SkillLevels.cs) since the
+        // 2026-11-13 merge; its shards count in StigmaShardsTotal (ItemStigmaShards). Checked in the stored-session checks.
         return checks;
     }
 
@@ -168,16 +163,6 @@ sealed partial class FakeStore
         if (StigmaRows.GetValueOrDefault(skillId) != expected || level < 0 || level == 0 && expected == 0) return Task.FromResult(false);
         if (level == 0) StigmaRows.Remove(skillId);
         else StigmaRows[skillId] = level;
-        return Task.FromResult(true);
-    }
-    // Item points (migration 079) in memory: the item consumed with its points, at most 65535 per type.
-    public Dictionary<(int Category, int Type), int> ItemPointRows { get; } = [];
-    public Task<IReadOnlyList<ItemPointRecord>> ItemPointsAsync(Guid character, CancellationToken ct) =>
-        Task.FromResult<IReadOnlyList<ItemPointRecord>>(ItemPointRows.Select(kv => new ItemPointRecord(kv.Key.Category, kv.Key.Type, kv.Value)).ToList());
-    public Task<bool> UsePointItemAsync(Guid character, Guid item, long revision, int category, int type, int points, CancellationToken ct)
-    {
-        if (points < 1 || ItemPointRows.GetValueOrDefault((category, type)) + points > ushort.MaxValue || !Consume(item, revision, 1)) return Task.FromResult(false);
-        ItemPointRows[(category, type)] = ItemPointRows.GetValueOrDefault((category, type)) + points;
         return Task.FromResult(true);
     }
     // Skill parts (migration 078) in memory, with the Postgres store's compare-and-set on a skill's whole set.

@@ -1,0 +1,300 @@
+{
+ "source": "official recordings 2026-11-06 and 2026-11-07 (11 unique captures) (capture-13700-*): median ms from SkillStart_NT 0x3802 to the caster's natural SkillEnd 0x3806 (not cut by the next cast) and to its first SkillEffect_NT 0x3804; end_tail = the usual last byte of each skill 0x3806 (12 on chain/combo skills); tools/skill_timing.py",
+ "default_end_ms": 253,
+ "skills": {
+  "1101": {
+   "end_ms": 499,
+   "samples": 2,
+   "end_tail": 0,
+   "effect_ms": 52
+  },
+  "4001": {
+   "end_ms": 200,
+   "samples": 13,
+   "end_tail": 0,
+   "effect_ms": 49
+  },
+  "9865": {
+   "end_ms": 449,
+   "samples": 6,
+   "end_tail": 0,
+   "effect_ms": 252
+  },
+  "9866": {
+   "end_ms": 499,
+   "samples": 5,
+   "end_tail": 0,
+   "effect_ms": 300
+  },
+  "9867": {
+   "end_ms": 573,
+   "samples": 2,
+   "end_tail": 0,
+   "effect_ms": 300
+  },
+  "9868": {
+   "end_ms": 650,
+   "samples": 7,
+   "end_tail": 0,
+   "effect_ms": 236
+  },
+  "9869": {
+   "end_ms": 550,
+   "samples": 8,
+   "end_tail": 0,
+   "effect_ms": 451
+  },
+  "11000100": {
+   "end_ms": 200,
+   "samples": 83,
+   "end_tail": 0,
+   "effect_ms": 50
+  },
+  "11010000": {
+   "end_ms": 549,
+   "samples": 109,
+   "end_tail": 0,
+   "effect_ms": 98
+  },
+  "11020000": {
+   "end_ms": 242,
+   "samples": 91,
+   "end_tail": 12,
+   "effect_ms": 200
+  },
+  "11030000": {
+   "end_ms": 201,
+   "samples": 75,
+   "end_tail": 12,
+   "effect_ms": 106
+  },
+  "11040000": {
+   "end_ms": 204,
+   "samples": 68,
+   "end_tail": 12,
+   "effect_ms": 246
+  },
+  "11050000": {
+   "end_ms": 803,
+   "samples": 4,
+   "end_tail": 0,
+   "effect_ms": 399
+  },
+  "11060000": {
+   "end_ms": 698,
+   "samples": 4,
+   "end_tail": 0,
+   "effect_ms": 250
+  },
+  "11100000": {
+   "end_ms": 446,
+   "samples": 2,
+   "end_tail": 12,
+   "effect_ms": 400
+  },
+  "11170000": {
+   "end_ms": 448,
+   "samples": 1,
+   "end_tail": 0,
+   "effect_ms": 151
+  },
+  "11190000": {
+   "end_ms": 697,
+   "samples": 8,
+   "end_tail": 12,
+   "effect_ms": 352
+  },
+  "11200000": {
+   "end_ms": 850,
+   "samples": 3,
+   "end_tail": 0,
+   "effect_ms": 299
+  },
+  "11300000": {
+   "end_ms": 849,
+   "samples": 1,
+   "end_tail": 12,
+   "effect_ms": 598
+  },
+  "11360000": {
+   "end_ms": 605,
+   "samples": 1,
+   "end_tail": 0,
+   "effect_ms": 196
+  },
+  "11420000": {
+   "end_ms": 550,
+   "samples": 79,
+   "end_tail": 0,
+   "effect_ms": 98
+  },
+  "14000100": {
+   "end_ms": 200,
+   "samples": 18,
+   "end_tail": 0,
+   "effect_ms": 50
+  },
+  "14020340": {
+   "end_ms": 195,
+   "samples": 30,
+   "end_tail": 12,
+   "effect_ms": 353
+  },
+  "14030340": {
+   "end_ms": 148,
+   "samples": 21,
+   "end_tail": 12,
+   "effect_ms": 252
+  },
+  "14040340": {
+   "end_ms": 199,
+   "samples": 24,
+   "end_tail": 12,
+   "effect_ms": 502
+  },
+  "14050340": {
+   "end_ms": 349,
+   "samples": 15,
+   "end_tail": 12,
+   "effect_ms": 402
+  },
+  "14060020": {
+   "end_ms": 377,
+   "samples": 2,
+   "end_tail": 12,
+   "effect_ms": 477
+  },
+  "14070030": {
+   "end_ms": 650,
+   "samples": 2,
+   "end_tail": 12,
+   "effect_ms": 551
+  },
+  "14080340": {
+   "end_ms": 504,
+   "samples": 1,
+   "end_tail": 12,
+   "effect_ms": 550
+  },
+  "14090240": {
+   "end_ms": 601,
+   "samples": 1,
+   "end_tail": 0,
+   "effect_ms": 574
+  },
+  "14110240": {
+   "end_ms": 400,
+   "samples": 4,
+   "end_tail": 12,
+   "effect_ms": 600
+  },
+  "14130240": {
+   "end_ms": 399,
+   "samples": 3,
+   "end_tail": 12,
+   "effect_ms": 550
+  },
+  "14140240": {
+   "end_ms": 501,
+   "samples": 1,
+   "end_tail": 12,
+   "effect_ms": 501
+  },
+  "14170340": {
+   "end_ms": 601,
+   "samples": 4,
+   "end_tail": 0,
+   "effect_ms": 250
+  },
+  "14220010": {
+   "end_ms": 549,
+   "samples": 2,
+   "end_tail": 12,
+   "effect_ms": 50
+  },
+  "14260000": {
+   "end_ms": 50,
+   "samples": 1,
+   "end_tail": 3,
+   "effect_ms": 50
+  },
+  "14310020": {
+   "end_ms": 245,
+   "samples": 2,
+   "end_tail": 12,
+   "effect_ms": 250
+  },
+  "14330340": {
+   "end_ms": 147,
+   "samples": 23,
+   "end_tail": 12,
+   "effect_ms": 250
+  },
+  "14340030": {
+   "end_ms": 153,
+   "samples": 39,
+   "end_tail": 12,
+   "effect_ms": 302
+  },
+  "15000100": {
+   "end_ms": 201,
+   "samples": 62,
+   "end_tail": 0,
+   "effect_ms": 50
+  },
+  "15030000": {
+   "end_ms": 199,
+   "samples": 38,
+   "end_tail": 12,
+   "effect_ms": 401
+  },
+  "15040000": {
+   "end_ms": 600,
+   "samples": 7,
+   "end_tail": 12,
+   "effect_ms": 601
+  },
+  "15050000": {
+   "end_ms": 425,
+   "samples": 2,
+   "end_tail": 12,
+   "effect_ms": 200
+  },
+  "15090000": {
+   "end_ms": 1199,
+   "samples": 63,
+   "end_tail": 0,
+   "effect_ms": 902
+  },
+  "15100000": {
+   "end_ms": 799,
+   "samples": 65,
+   "end_tail": 0,
+   "effect_ms": 353
+  },
+  "15150000": {
+   "end_ms": 551,
+   "samples": 5,
+   "end_tail": 0,
+   "effect_ms": 250
+  },
+  "15210000": {
+   "end_ms": 252,
+   "samples": 69,
+   "end_tail": 12,
+   "effect_ms": 451
+  },
+  "15250000": {
+   "end_ms": 200,
+   "samples": 20,
+   "end_tail": 12,
+   "effect_ms": 251
+  },
+  "15280000": {
+   "end_ms": 539,
+   "samples": 5,
+   "end_tail": 12,
+   "effect_ms": 446
+  }
+ }
+}

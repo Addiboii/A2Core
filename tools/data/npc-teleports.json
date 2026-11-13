@@ -1,0 +1,1349 @@
+{
+ "source": "Skill.dat Teleport_Caster rows (tools/npc_teleports.py)",
+ "skills": {
+  "1000670": [
+   "CasterLocation_CasterToTargetDirection",
+   400.0,
+   180.0,
+   400.0
+  ],
+  "1000850": [
+   "CasterLocation_CasterToTargetDirection",
+   400.0,
+   180.0,
+   300.0
+  ],
+  "1001080": [
+   "TargetLocation_CasterToTargetDirection",
+   50.0,
+   180.0,
+   200.0
+  ],
+  "1001086": [
+   "TargetLocation_CasterToTargetDirection",
+   50.0,
+   180.0,
+   200.0
+  ],
+  "1001190": [
+   "TargetLocation_TargetDirection",
+   100.0,
+   180.0,
+   50.0
+  ],
+  "1001260": [
+   "TargetLocation_CasterToTargetDirection",
+   70.0,
+   0.0,
+   100.0
+  ],
+  "1100040": [
+   "TargetLocation_CasterToTargetDirection",
+   100.0,
+   180.0,
+   200.0
+  ],
+  "1218630": [
+   "TargetLocation_TargetDirection",
+   100.0,
+   0.0,
+   0.0
+  ],
+  "1218920": [
+   "CasterLocation_CasterToTargetDirection",
+   1500.0,
+   0.0,
+   200.0
+  ],
+  "1219600": [
+   "TargetLocation_TargetDirection",
+   200.0,
+   180.0,
+   0.0
+  ],
+  "1219650": [
+   "TargetLocation_TargetDirection",
+   500.0,
+   180.0,
+   0.0
+  ],
+  "1219910": [
+   "TargetLocation_CasterToTargetDirection",
+   100.0,
+   180.0,
+   70.0
+  ],
+  "1219980": [
+   "TargetLocation_TargetDirection",
+   200.0,
+   180.0,
+   0.0
+  ],
+  "1220030": [
+   "TargetLocation_TargetDirection",
+   100.0,
+   180.0,
+   0.0
+  ],
+  "1220170": [
+   "TargetLocation_TargetDirection",
+   100.0,
+   180.0,
+   0.0
+  ],
+  "1220310": [
+   "TargetLocation_TargetDirection",
+   100.0,
+   180.0,
+   0.0
+  ],
+  "1220500": [
+   "TargetLocation_CasterToTargetDirection",
+   100.0,
+   180.0,
+   70.0
+  ],
+  "1221300": [
+   "TargetLocation_TargetDirection",
+   0.0,
+   0.0,
+   0.0
+  ],
+  "1221350": [
+   "TargetLocation_TargetDirection",
+   0.0,
+   180.0,
+   0.0
+  ],
+  "1221450": [
+   "CasterLocation_CasterToTargetDirection",
+   1000.0,
+   180.0,
+   0.0
+  ],
+  "1223790": [
+   "TargetLocation_CasterToTargetDirection",
+   100.0,
+   180.0,
+   150.0
+  ],
+  "1224950": [
+   "TargetLocation_TargetDirection",
+   50.0,
+   180.0,
+   0.0
+  ],
+  "1227210": [
+   "TargetLocation_CasterToTargetDirection",
+   0.0,
+   0.0,
+   0.0
+  ],
+  "1227215": [
+   "CasterLocation_CasterToTargetDirection",
+   900.0,
+   180.0,
+   0.0
+  ],
+  "1228650": [
+   "TargetLocation_TargetDirection",
+   100.0,
+   0.0,
+   50.0
+  ],
+  "1228660": [
+   "TargetLocation_TargetDirection",
+   100.0,
+   180.0,
+   50.0
+  ],
+  "1229320": [
+   "TargetLocation_CasterToTargetDirection",
+   800.0,
+   180.0,
+   0.0
+  ],
+  "1231500": [
+   "CasterLocation_CasterToTargetDirection",
+   1200.0,
+   0.0,
+   100.0
+  ],
+  "1232650": [
+   "CasterLocation_CasterToTargetDirection",
+   1500.0,
+   0.0,
+   200.0
+  ],
+  "1233990": [
+   "TargetLocation_TargetDirection",
+   50.0,
+   180.0,
+   0.0
+  ],
+  "1234310": [
+   "TargetLocation_TargetDirection",
+   500.0,
+   180.0,
+   0.0
+  ],
+  "1234490": [
+   "TargetLocation_CasterToTargetDirection",
+   100.0,
+   180.0,
+   340.0
+  ],
+  "1235240": [
+   "TargetLocation_CasterToTargetDirection",
+   10.0,
+   180.0,
+   500.0
+  ],
+  "1235320": [
+   "TargetLocation_CasterToTargetDirection",
+   10.0,
+   180.0,
+   300.0
+  ],
+  "1235740": [
+   "TargetLocation_TargetDirection",
+   50.0,
+   0.0,
+   200.0
+  ],
+  "1235940": [
+   "TargetLocation_TargetDirection",
+   200.0,
+   180.0,
+   0.0
+  ],
+  "1236290": [
+   "TargetLocation_CasterToTargetDirection",
+   0.0,
+   0.0,
+   0.0
+  ],
+  "1236295": [
+   "CasterLocation_CasterToTargetDirection",
+   1000.0,
+   180.0,
+   0.0
+  ],
+  "1236430": [
+   "TargetLocation_CasterToTargetDirection",
+   10.0,
+   180.0,
+   0.0
+  ],
+  "1236550": [
+   "TargetLocation_CasterToTargetDirection",
+   250.0,
+   0.0,
+   100.0
+  ],
+  "1236730": [
+   "TargetLocation_TargetDirection",
+   200.0,
+   180.0,
+   0.0
+  ],
+  "1236880": [
+   "TargetLocation_CasterToTargetDirection",
+   100.0,
+   180.0,
+   340.0
+  ],
+  "1237950": [
+   "TargetLocation_CasterToTargetDirection",
+   150.0,
+   180.0,
+   150.0
+  ],
+  "1238100": [
+   "TargetLocation_CasterToTargetDirection",
+   200.0,
+   180.0,
+   150.0
+  ],
+  "1238150": [
+   "TargetLocation_CasterToTargetDirection",
+   0.0,
+   180.0,
+   300.0
+  ],
+  "1238470": [
+   "TargetLocation_CasterToTargetDirection",
+   100.0,
+   180.0,
+   300.0
+  ],
+  "1238770": [
+   "TargetLocation_CasterToTargetDirection",
+   0.0,
+   180.0,
+   0.0
+  ],
+  "1238775": [
+   "CasterLocation_CasterToTargetDirection",
+   500.0,
+   180.0,
+   0.0
+  ],
+  "1239310": [
+   "TargetLocation_TargetDirection",
+   200.0,
+   180.0,
+   0.0
+  ],
+  "1240000": [
+   "TargetLocation_CasterToTargetDirection",
+   0.0,
+   180.0,
+   300.0
+  ],
+  "1240060": [
+   "TargetLocation_CasterToTargetDirection",
+   0.0,
+   180.0,
+   300.0
+  ],
+  "1240790": [
+   "TargetLocation_CasterToTargetDirection",
+   150.0,
+   180.0,
+   400.0
+  ],
+  "1241570": [
+   "TargetLocation_TargetDirection",
+   100.0,
+   180.0,
+   0.0
+  ],
+  "1241820": [
+   "TargetLocation_CasterToTargetDirection",
+   10.0,
+   180.0,
+   300.0
+  ],
+  "1241950": [
+   "TargetLocation_CasterToTargetDirection",
+   800.0,
+   180.0,
+   0.0
+  ],
+  "1242010": [
+   "TargetLocation_CasterToTargetDirection",
+   100.0,
+   180.0,
+   70.0
+  ],
+  "1242070": [
+   "TargetLocation_TargetDirection",
+   100.0,
+   180.0,
+   0.0
+  ],
+  "1242210": [
+   "TargetLocation_CasterToTargetDirection",
+   100.0,
+   180.0,
+   300.0
+  ],
+  "1242370": [
+   "TargetLocation_CasterToTargetDirection",
+   150.0,
+   180.0,
+   500.0
+  ],
+  "1243360": [
+   "TargetLocation_CasterToTargetDirection",
+   10.0,
+   180.0,
+   300.0
+  ],
+  "1244640": [
+   "TargetLocation_CasterToTargetDirection",
+   150.0,
+   180.0,
+   100.0
+  ],
+  "1244830": [
+   "TargetLocation_TargetDirection",
+   200.0,
+   180.0,
+   0.0
+  ],
+  "1244990": [
+   "TargetLocation_CasterToTargetDirection",
+   150.0,
+   0.0,
+   100.0
+  ],
+  "1246280": [
+   "TargetLocation_CasterToTargetDirection",
+   300.0,
+   180.0,
+   600.0
+  ],
+  "1502650": [
+   "TargetLocation_CasterToTargetDirection",
+   100.0,
+   180.0,
+   0.0
+  ],
+  "1502800": [
+   "TargetLocation_CasterToTargetDirection",
+   1600.0,
+   180.0,
+   0.0
+  ],
+  "1503100": [
+   "TargetLocation_CasterToTargetDirection",
+   100.0,
+   180.0,
+   100.0
+  ],
+  "1504300": [
+   "TargetLocation_TargetDirection",
+   100.0,
+   180.0,
+   0.0
+  ],
+  "1504305": [
+   "TargetLocation_TargetDirection",
+   800.0,
+   0.0,
+   0.0
+  ],
+  "1504330": [
+   "CasterLocation_CasterToTargetDirection",
+   2500.0,
+   0.0,
+   200.0
+  ],
+  "1504400": [
+   "TargetLocation_TargetDirection",
+   200.0,
+   0.0,
+   0.0
+  ],
+  "1600330": [
+   "TargetLocation_TargetDirection",
+   0.0,
+   0.0,
+   0.0
+  ],
+  "1600420": [
+   "CasterLocation_CasterToTargetDirection",
+   1200.0,
+   180.0,
+   0.0
+  ],
+  "1600423": [
+   "TargetLocation_CasterToTargetDirection",
+   0.0,
+   180.0,
+   0.0
+  ],
+  "1600600": [
+   "CasterLocation_CasterToTargetDirection",
+   2500.0,
+   0.0,
+   200.0
+  ],
+  "1600610": [
+   "TargetLocation_TargetDirection",
+   100.0,
+   0.0,
+   0.0
+  ],
+  "1600650": [
+   "MapLocation_MapDirection",
+   0.0,
+   0.0,
+   0.0,
+   9612.0,
+   -6763.0,
+   -2502.0
+  ],
+  "1600730": [
+   "CasterLocation_CasterToTargetDirection",
+   2350.0,
+   0.0,
+   300.0
+  ],
+  "1600820": [
+   "MapLocation_MapDirection",
+   0.0,
+   5.0,
+   0.0,
+   -410.0,
+   950.0,
+   3944.0
+  ],
+  "1600960": [
+   "TargetLocation_CasterToTargetDirection",
+   0.0,
+   180.0,
+   0.0
+  ],
+  "1600970": [
+   "CasterLocation_CasterToTargetDirection",
+   2500.0,
+   0.0,
+   200.0
+  ],
+  "1601030": [
+   "TargetLocation_CasterToTargetDirection",
+   0.0,
+   180.0,
+   50.0
+  ],
+  "1601035": [
+   "TargetLocation_CasterToTargetDirection",
+   0.0,
+   180.0,
+   50.0
+  ],
+  "1601040": [
+   "TargetLocation_CasterToTargetDirection",
+   0.0,
+   180.0,
+   200.0
+  ],
+  "1601110": [
+   "TargetLocation_CasterToTargetDirection",
+   0.0,
+   180.0,
+   0.0
+  ],
+  "1601120": [
+   "SpawnLocation_SpawnDirection",
+   0.0,
+   0.0,
+   0.0
+  ],
+  "1601290": [
+   "TargetLocation_CasterToTargetDirection",
+   0.0,
+   180.0,
+   400.0
+  ],
+  "1601370": [
+   "TargetLocation_CasterToTargetDirection",
+   0.0,
+   180.0,
+   0.0
+  ],
+  "1601490": [
+   "CasterLocation_CasterToTargetDirection",
+   1000.0,
+   180.0,
+   0.0
+  ],
+  "1601495": [
+   "TargetLocation_CasterToTargetDirection",
+   0.0,
+   180.0,
+   0.0
+  ],
+  "1601498": [
+   "MapLocation_MapDirection",
+   0.0,
+   5.0,
+   0.0,
+   1988.0,
+   1578.0,
+   -505.0
+  ],
+  "1601590": [
+   "TargetLocation_CasterToTargetDirection",
+   0.0,
+   180.0,
+   350.0
+  ],
+  "1601740": [
+   "CasterLocation_CasterToTargetDirection",
+   2500.0,
+   0.0,
+   200.0
+  ],
+  "1601853": [
+   "TargetLocation_CasterToTargetDirection",
+   0.0,
+   180.0,
+   0.0
+  ],
+  "1601880": [
+   "CasterLocation_CasterToTargetDirection",
+   1500.0,
+   0.0,
+   200.0
+  ],
+  "1601930": [
+   "TargetLocation_TargetDirection",
+   0.0,
+   0.0,
+   0.0
+  ],
+  "1602060": [
+   "CasterLocation_CasterToTargetDirection",
+   2300.0,
+   0.0,
+   200.0
+  ],
+  "1602070": [
+   "TargetLocation_TargetDirection",
+   0.0,
+   0.0,
+   0.0
+  ],
+  "1602260": [
+   "MapLocation_MapDirection",
+   0.0,
+   0.0,
+   700.0,
+   147.0,
+   -44.0,
+   2435.0
+  ],
+  "1602261": [
+   "MapLocation_MapDirection",
+   0.0,
+   0.0,
+   700.0,
+   147.0,
+   -44.0,
+   2435.0
+  ],
+  "1602269": [
+   "MapLocation_MapDirection",
+   0.0,
+   0.0,
+   700.0,
+   147.0,
+   -44.0,
+   2435.0
+  ],
+  "1602340": [
+   "TargetLocation_CasterToTargetDirection",
+   2500.0,
+   0.0,
+   270.0
+  ],
+  "1602560": [
+   "TargetLocation_CasterToTargetDirection",
+   200.0,
+   180.0,
+   300.0
+  ],
+  "1602830": [
+   "CasterLocation_CasterToTargetDirection",
+   2300.0,
+   0.0,
+   200.0
+  ],
+  "1603060": [
+   "TargetLocation_CasterToTargetDirection",
+   150.0,
+   0.0,
+   100.0
+  ],
+  "1603150": [
+   "TargetLocation_CasterToTargetDirection",
+   100.0,
+   180.0,
+   200.0
+  ],
+  "1603520": [
+   "TargetLocation_TargetDirection",
+   200.0,
+   180.0,
+   0.0
+  ],
+  "1603550": [
+   "TargetLocation_CasterToTargetDirection",
+   300.0,
+   0.0,
+   0.0
+  ],
+  "1603850": [
+   "CasterLocation_CasterToTargetDirection",
+   1000.0,
+   180.0,
+   450.0
+  ],
+  "1603851": [
+   "TargetLocation_CasterToTargetDirection",
+   200.0,
+   0.0,
+   450.0
+  ],
+  "1603852": [
+   "MapLocation_MapDirection",
+   0.0,
+   5.0,
+   450.0,
+   9232.0,
+   -7815.0,
+   64.0
+  ],
+  "1603910": [
+   "CasterLocation_CasterToTargetDirection",
+   1000.0,
+   180.0,
+   450.0
+  ],
+  "1604560": [
+   "TargetLocation_CasterToTargetDirection",
+   50.0,
+   180.0,
+   300.0
+  ],
+  "1604570": [
+   "TargetLocation_CasterToTargetDirection",
+   100.0,
+   180.0,
+   400.0
+  ],
+  "1604930": [
+   "TargetLocation_TargetDirection",
+   200.0,
+   180.0,
+   0.0
+  ],
+  "1605330": [
+   "TargetLocation_TargetDirection",
+   200.0,
+   180.0,
+   0.0
+  ],
+  "1605800": [
+   "TargetLocation_CasterToTargetDirection",
+   200.0,
+   180.0,
+   450.0
+  ],
+  "1605960": [
+   "TargetLocation_TargetDirection",
+   200.0,
+   180.0,
+   0.0
+  ],
+  "1606130": [
+   "TargetLocation_CasterToTargetDirection",
+   100.0,
+   180.0,
+   400.0
+  ],
+  "1606250": [
+   "TargetLocation_CasterToTargetDirection",
+   100.0,
+   180.0,
+   500.0
+  ],
+  "1606290": [
+   "CasterLocation_CasterToTargetDirection",
+   1000.0,
+   180.0,
+   700.0
+  ],
+  "1606300": [
+   "CasterLocation_CasterToTargetDirection",
+   800.0,
+   180.0,
+   1200.0
+  ],
+  "1606340": [
+   "TargetLocation_CasterToTargetDirection",
+   150.0,
+   0.0,
+   250.0
+  ],
+  "1606350": [
+   "TargetLocation_CasterToTargetDirection",
+   150.0,
+   0.0,
+   200.0
+  ],
+  "1606490": [
+   "TargetLocation_CasterToTargetDirection",
+   150.0,
+   0.0,
+   0.0
+  ],
+  "1606640": [
+   "TargetLocation_CasterToTargetDirection",
+   10.0,
+   180.0,
+   0.0
+  ],
+  "1606650": [
+   "MapLocation_MapDirection",
+   0.0,
+   0.0,
+   0.0,
+   9900.0,
+   -12612.0,
+   240.0
+  ],
+  "1606860": [
+   "CasterLocation_CasterToTargetDirection",
+   2500.0,
+   0.0,
+   600.0
+  ],
+  "1606900": [
+   "CasterLocation_CasterToTargetDirection",
+   2000.0,
+   0.0,
+   200.0
+  ],
+  "1606980": [
+   "TargetLocation_CasterToTargetDirection",
+   200.0,
+   180.0,
+   500.0
+  ],
+  "1607380": [
+   "TargetLocation_CasterToTargetDirection",
+   0.0,
+   0.0,
+   0.0
+  ],
+  "1607385": [
+   "CasterLocation_CasterToTargetDirection",
+   900.0,
+   180.0,
+   0.0
+  ],
+  "1607520": [
+   "TargetLocation_CasterToTargetDirection",
+   0.0,
+   180.0,
+   0.0
+  ],
+  "1607780": [
+   "TargetLocation_TargetDirection",
+   100.0,
+   0.0,
+   50.0
+  ],
+  "1607790": [
+   "TargetLocation_TargetDirection",
+   100.0,
+   180.0,
+   50.0
+  ],
+  "1607890": [
+   "TargetLocation_TargetDirection",
+   100.0,
+   0.0,
+   0.0
+  ],
+  "1607960": [
+   "TargetLocation_CasterToTargetDirection",
+   0.0,
+   180.0,
+   600.0
+  ],
+  "1608050": [
+   "TargetLocation_CasterToTargetDirection",
+   300.0,
+   0.0,
+   0.0
+  ],
+  "1608990": [
+   "TargetLocation_CasterToTargetDirection",
+   0.0,
+   180.0,
+   500.0
+  ],
+  "1609010": [
+   "TargetLocation_CasterToTargetDirection",
+   10.0,
+   180.0,
+   800.0
+  ],
+  "1609020": [
+   "CasterLocation_CasterToTargetDirection",
+   2500.0,
+   0.0,
+   200.0
+  ],
+  "1609260": [
+   "TargetLocation_CasterToTargetDirection",
+   200.0,
+   180.0,
+   300.0
+  ],
+  "1609430": [
+   "CasterLocation_CasterToTargetDirection",
+   2000.0,
+   0.0,
+   250.0
+  ],
+  "1609900": [
+   "TargetLocation_CasterToTargetDirection",
+   200.0,
+   180.0,
+   450.0
+  ],
+  "1609910": [
+   "TargetLocation_CasterToTargetDirection",
+   200.0,
+   180.0,
+   450.0
+  ],
+  "1800130": [
+   "TargetLocation_TargetDirection",
+   0.0,
+   0.0,
+   0.0
+  ],
+  "1800190": [
+   "TargetLocation_TargetDirection",
+   0.0,
+   0.0,
+   0.0
+  ],
+  "1801070": [
+   "TargetLocation_CasterToTargetDirection",
+   200.0,
+   180.0,
+   160.0
+  ],
+  "1801130": [
+   "TargetLocation_CasterToTargetDirection",
+   100.0,
+   180.0,
+   170.0
+  ],
+  "1801191": [
+   "MapLocation_CasterDirection",
+   0.0,
+   0.0,
+   500.0,
+   -15195.0,
+   15085.0,
+   3380.0
+  ],
+  "1801450": [
+   "TargetLocation_CasterToTargetDirection",
+   10.0,
+   180.0,
+   0.0
+  ],
+  "1801451": [
+   "TargetLocation_CasterToTargetDirection",
+   10.0,
+   180.0,
+   0.0
+  ],
+  "1801470": [
+   "CasterLocation_CasterToTargetDirection",
+   7000.0,
+   0.0,
+   300.0
+  ],
+  "1801480": [
+   "CasterLocation_CasterToTargetDirection",
+   5000.0,
+   0.0,
+   300.0
+  ],
+  "1801630": [
+   "CasterLocation_CasterToTargetDirection",
+   2700.0,
+   0.0,
+   300.0
+  ],
+  "1801660": [
+   "TargetLocation_CasterToTargetDirection",
+   10.0,
+   0.0,
+   0.0
+  ],
+  "1801790": [
+   "TargetLocation_CasterToTargetDirection",
+   10.0,
+   0.0,
+   0.0
+  ],
+  "1801860": [
+   "TargetLocation_CasterToTargetDirection",
+   400.0,
+   180.0,
+   300.0
+  ],
+  "1802011": [
+   "CasterLocation_CasterToTargetDirection",
+   1500.0,
+   180.0,
+   450.0
+  ],
+  "1802060": [
+   "CasterLocation_CasterToTargetDirection",
+   3000.0,
+   0.0,
+   100.0
+  ],
+  "1802330": [
+   "TargetLocation_CasterToTargetDirection",
+   10.0,
+   180.0,
+   0.0
+  ],
+  "1802340": [
+   "TargetLocation_CasterToTargetDirection",
+   2000.0,
+   180.0,
+   0.0
+  ],
+  "1802350": [
+   "SpawnLocation_CasterDirection",
+   0.0,
+   0.0,
+   0.0
+  ],
+  "1802500": [
+   "MapLocation_MapDirection",
+   0.0,
+   0.0,
+   700.0,
+   -3.0,
+   6.0,
+   74.0
+  ],
+  "1802800": [
+   "TargetLocation_CasterToTargetDirection",
+   10.0,
+   180.0,
+   0.0
+  ],
+  "1803510": [
+   "TargetLocation_CasterToTargetDirection",
+   300.0,
+   180.0,
+   600.0
+  ],
+  "1803770": [
+   "MapLocation_MapDirection",
+   0.0,
+   0.0,
+   0.0,
+   -23683.0,
+   35328.0,
+   5616.0
+  ],
+  "1804010": [
+   "TargetLocation_CasterToTargetDirection",
+   400.0,
+   180.0,
+   720.0
+  ],
+  "1804230": [
+   "TargetLocation_TargetDirection",
+   700.0,
+   180.0,
+   0.0
+  ],
+  "1804540": [
+   "TargetLocation_CasterToTargetDirection",
+   20.0,
+   180.0,
+   350.0
+  ],
+  "1804670": [
+   "TargetLocation_CasterToTargetDirection",
+   10.0,
+   180.0,
+   0.0
+  ],
+  "1804760": [
+   "TargetLocation_CasterToTargetDirection",
+   0.0,
+   180.0,
+   200.0
+  ],
+  "1804820": [
+   "TargetLocation_CasterToTargetDirection",
+   10.0,
+   180.0,
+   1400.0
+  ],
+  "1805070": [
+   "CasterLocation_CasterToTargetDirection",
+   2300.0,
+   0.0,
+   200.0
+  ],
+  "1805280": [
+   "CasterLocation_CasterToTargetDirection",
+   850.0,
+   180.0,
+   600.0
+  ],
+  "1805290": [
+   "CasterLocation_CasterToTargetDirection",
+   3000.0,
+   0.0,
+   300.0
+  ],
+  "1805300": [
+   "TargetLocation_CasterToTargetDirection",
+   100.0,
+   180.0,
+   0.0
+  ],
+  "1805340": [
+   "SpawnLocation_CasterDirection",
+   0.0,
+   0.0,
+   0.0
+  ],
+  "1805640": [
+   "TargetLocation_CasterToTargetDirection",
+   0.0,
+   180.0,
+   0.0
+  ],
+  "1806090": [
+   "TargetLocation_CasterToTargetDirection",
+   0.0,
+   180.0,
+   700.0
+  ],
+  "1806330": [
+   "TargetLocation_CasterToTargetDirection",
+   10.0,
+   180.0,
+   450.0
+  ],
+  "1806420": [
+   "TargetLocation_CasterToTargetDirection",
+   100.0,
+   180.0,
+   0.0
+  ],
+  "1806440": [
+   "TargetLocation_CasterToTargetDirection",
+   3000.0,
+   0.0,
+   270.0
+  ],
+  "1806550": [
+   "TargetLocation_CasterToTargetDirection",
+   200.0,
+   180.0,
+   0.0
+  ],
+  "1806820": [
+   "CasterLocation_CasterToTargetDirection",
+   1500.0,
+   0.0,
+   200.0
+  ],
+  "1806910": [
+   "TargetLocation_TargetDirection",
+   0.0,
+   0.0,
+   0.0
+  ],
+  "1806930": [
+   "TargetLocation_CasterToTargetDirection",
+   1000.0,
+   0.0,
+   700.0
+  ],
+  "1808030": [
+   "MapLocation_MapDirection",
+   0.0,
+   0.0,
+   0.0,
+   -1379.0,
+   -29720.0,
+   1890.0
+  ],
+  "1808280": [
+   "TargetLocation_CasterToTargetDirection",
+   2500.0,
+   0.0,
+   270.0
+  ],
+  "1808390": [
+   "CasterLocation_CasterToTargetDirection",
+   2300.0,
+   0.0,
+   200.0
+  ],
+  "1808400": [
+   "TargetLocation_TargetDirection",
+   0.0,
+   0.0,
+   0.0
+  ],
+  "1808465": [
+   "TargetLocation_TargetDirection",
+   0.0,
+   0.0,
+   800.0
+  ],
+  "1808511": [
+   "CasterLocation_CasterToTargetDirection",
+   1500.0,
+   180.0,
+   450.0
+  ],
+  "1808560": [
+   "CasterLocation_CasterToTargetDirection",
+   3000.0,
+   0.0,
+   100.0
+  ],
+  "1808820": [
+   "TargetLocation_CasterToTargetDirection",
+   400.0,
+   180.0,
+   650.0
+  ],
+  "1980250": [
+   "MapLocation_MapDirection",
+   0.0,
+   5.0,
+   0.0,
+   1988.0,
+   -210.0,
+   -505.0
+  ],
+  "1980251": [
+   "MapLocation_MapDirection",
+   0.0,
+   5.0,
+   0.0,
+   724.0,
+   301.0,
+   -505.0
+  ],
+  "1980252": [
+   "MapLocation_MapDirection",
+   0.0,
+   5.0,
+   0.0,
+   200.0,
+   1575.0,
+   -505.0
+  ],
+  "1980253": [
+   "MapLocation_MapDirection",
+   0.0,
+   5.0,
+   0.0,
+   724.0,
+   2868.0,
+   -505.0
+  ],
+  "1980254": [
+   "MapLocation_MapDirection",
+   0.0,
+   5.0,
+   0.0,
+   1988.0,
+   3366.0,
+   -505.0
+  ],
+  "1980255": [
+   "MapLocation_MapDirection",
+   0.0,
+   5.0,
+   0.0,
+   3255.0,
+   2869.0,
+   -505.0
+  ],
+  "1980256": [
+   "MapLocation_MapDirection",
+   0.0,
+   5.0,
+   0.0,
+   3776.0,
+   1575.0,
+   -505.0
+  ],
+  "1980257": [
+   "MapLocation_MapDirection",
+   0.0,
+   5.0,
+   0.0,
+   3255.0,
+   301.0,
+   -505.0
+  ],
+  "11100000": [
+   "TargetLocation_CasterToTargetDirection",
+   100.0,
+   180.0,
+   150.0
+  ],
+  "11360000": [
+   "TargetLocation_CasterToTargetDirection",
+   100.0,
+   180.0,
+   100.0
+  ],
+  "12430000": [
+   "TargetLocation_CasterToTargetDirection",
+   100.0,
+   180.0,
+   150.0
+  ],
+  "13050000": [
+   "TargetLocation_CasterToTargetDirection",
+   70.0,
+   0.0,
+   100.0
+  ],
+  "13070000": [
+   "TargetLocation_TargetDirection",
+   150.0,
+   180.0,
+   50.0
+  ],
+  "13220000": [
+   "TargetLocation_CasterToTargetDirection",
+   100.0,
+   180.0,
+   50.0
+  ],
+  "13280000": [
+   "TargetLocation_CasterToTargetDirection",
+   100.0,
+   180.0,
+   250.0
+  ],
+  "13360000": [
+   "TargetLocation_TargetDirection",
+   150.0,
+   180.0,
+   50.0
+  ],
+  "14090000": [
+   "CasterLocation_CasterToTargetDirection",
+   500.0,
+   315.0,
+   400.0
+  ],
+  "14120000": [
+   "CasterLocation_CasterToTargetDirection",
+   800.0,
+   180.0,
+   830.0
+  ],
+  "14320000": [
+   "CasterLocation_CasterToTargetDirection",
+   800.0,
+   180.0,
+   560.0
+  ]
+ }
+}

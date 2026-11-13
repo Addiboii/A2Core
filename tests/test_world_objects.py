@@ -114,6 +114,39 @@ class WorldObjectTests(unittest.TestCase):
         self.assertIn(1200530, [o['env'] for o in data['objects']])
         self.assertIn('Trigger_Q_Clione2', [t['name'] for t in data['triggers']])
 
+    def test_generated_empyrean_traces(self):
+        maps = json.loads((ROOT / 'tools/data/world-objects.json').read_text(encoding='utf-8'))['maps']
+        traces = [o for o in maps['1110']['objects'] if o['env'] in (1300865, 1300891, 1300892)]
+        self.assertEqual(len(traces), 559)   # Altgard: every placement of the client's MapData
+        self.assertTrue(all(o.get('achievement') for o in traces))
+        ground = next(o for o in traces if o['name'] == 'E_D1_GodFragment_01_Ground_129')
+        self.assertEqual((ground['achievement'], ground['unique_key']), (125010210, 757932965))   # as its official 0x3634
+        self.assertTrue(any(o.get('monolith') == [2001] for o in maps['1110']['objects']))
+
+    def test_add_rings_appends_missing_rings_once(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as folder:
+            tables = Path(folder)
+            (tables / 'Table_EnvObjData.json').write_text(json.dumps({'Properties': {'Data': [
+                {'ID': {'Value': 7}, 'Name': 'E_AR1_FlyCircle_001', 'Usage': 'EEnvObjectUsage::FlightRing', 'InteractRange': 150,
+                 'VisibleRangeType': 'EActorVisibleRangeType::LongRange'},
+                {'ID': {'Value': 8}, 'Name': 'Box', 'Usage': 'EEnvObjectUsage::Quest'}]}}), encoding='utf-8')
+            (tables / 'Map_A_MapData.json').write_text(json.dumps({'Properties': {'Data': {'MapId': 20, 'SpawnInfoList': [
+                {'Name': 'E_AR1_FlyCircle_001_1', 'UniqueKey': 3, 'EnvObjIdList': [{'Value': 7}],
+                 'Positions': [{'Location': {'X': 1, 'Y': 2, 'Z': 3}, 'Rotation': {'Yaw': 0}}]},
+                {'Name': 'box', 'EnvObjIdList': [{'Value': 8}], 'Positions': [{'Location': {'X': 0, 'Y': 0, 'Z': 0}, 'Rotation': {'Yaw': 0}}]}]}}}),
+                encoding='utf-8')
+            current = {'maps': {'20': {'objects': [{'env': 8, 'unique_key': 0, 'position': [0, 0, 0]}], 'triggers': []}}}
+            self.assertEqual(world_objects.add_rings(current, tables), {'20': 1})
+            self.assertEqual(world_objects.add_rings(current, tables), {})   # run again: nothing twice
+            ring = current['maps']['20']['objects'][1]   # appended: the object before keeps its index
+            self.assertEqual((ring['env'], ring['flight_ring'], ring['long_range']), (7, True, True))
+
+    def test_generated_abyss_rings(self):
+        maps = json.loads((ROOT / 'tools/data/world-objects.json').read_text(encoding='utf-8'))['maps']
+        counts = {m: sum(1 for o in maps[m]['objects'] if o.get('flight_ring')) for m in ('20', '23', '80')}
+        self.assertEqual(counts, {'20': 49, '23': 32, '80': 25})
+
 
 if __name__ == '__main__':
     unittest.main()

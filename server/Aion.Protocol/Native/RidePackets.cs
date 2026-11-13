@@ -36,7 +36,9 @@ public static class RidePackets
     /// <summary>ESoulCrystalIncreaseReason.</summary>
     public const byte CrystallizeReason = 1, ItemReason = 2;
     public const ushort ItemUseRq = 0x5612, ItemUseRs = 0x5613, ItemUseNt = 0x5616, ItemUseStartedNt = 0x5617, ItemUseInterruptedNt = 0x5618,
-        ItemUseCompletedNt = 0x5619, OpenBoxRq = 0x5646, OpenBoxRs = 0x5647;
+        ItemUseCompletedNt = 0x5619, OpenBoxRq = 0x5646, OpenBoxRs = 0x5647, ItemUseByIdRq = 0x5614, ItemUseByIdRs = 0x5615;
+    /// <summary>EResult Item_Use_Success, the result of every OBSERVED official 0x5613/0x5615 (bytes 04 03).</summary>
+    public const int ItemUseSuccess = 772;
 
     /// <summary>EGetOffRideReason.</summary>
     public const byte ByClient = 1, ByServer = 2, BySubzone = 3;
@@ -103,11 +105,13 @@ public static class RidePackets
 
 
     /// <summary>0x9002 CharGetOnRide_RS: key | result | ride | move state (EMoveStateModelType) | substate | sprinting.</summary>
-    public static byte[] GetOnReply(int key, int result, int rideId, byte moveState = 0, bool sprinting = false) =>
+    /// OBSERVED (official, 69 replies): a mount is answered with EResult CharGetOnRide_Success 15149 (2d3b) and move state 1;
+    /// result 0 made the client treat every mount as failed (live 2026-11-07: C never mounted, then "mount in cooldown").
+    public static byte[] GetOnReply(int key, int result, int rideId, byte moveState = 1, bool sprinting = false) =>
         PacketWriter.Opcode(GetOnRs).Varint(key).U16(result).I32(rideId).U8(moveState).U8(0).Bool(sprinting).ToArray();
 
     /// <summary>0x9003 CharGetOnRide_NT to others (and late viewers): as the RS without the result.</summary>
-    public static byte[] GetOnNotice(int key, int rideId, byte moveState = 0, bool sprinting = false) =>
+    public static byte[] GetOnNotice(int key, int rideId, byte moveState = 1, bool sprinting = false) =>
         PacketWriter.Opcode(GetOnNt).Varint(key).I32(rideId).U8(moveState).U8(0).Bool(sprinting).ToArray();
 
     /// <summary>0x9005 CharGetOffRide_RS: key | result | EGetOffRideReason.</summary>
@@ -204,12 +208,43 @@ public static class RidePackets
         return w.I32(skillId).ToArray();
     }
 
+    /// <summary>
+    /// 0x3805 SkillEffectByAbnormal_NT of a damage-over-time tick: target | mask (2 damage, 8 skill) | caster | abnormal uid |
+    /// effect id i32 (the SkillAbnormalEffect row, e.g. 1405000022 of abnormal 140500002) | [damage varint] | skill i32.
+    /// OFFICIAL (rec 115817 #177887: Ranger 14050340 ticks every 1000 ms, mask 0x0a; a tick of 0 damage omits it, mask 0x08).
+    /// Mask bits after the usmap order: 1 remain, 2 damage, 4 barrier list, 8 skill, 16/32 blocked-by-immune caster/skill.
+    /// </summary>
+    public static byte[] AbnormalDamage(int key, int casterKey, int uid, int effectId, int damage, int skillId)
+    {
+        var w = PacketWriter.Opcode(0x3805).Varint(key).U8(damage > 0 ? 0x0a : 0x08).Varint(casterKey).Varint(uid).I32(effectId);
+        if (damage > 0) w.Varint(damage);
+        return w.I32(skillId).ToArray();
+    }
+
+    /// <summary>
+    /// 0x3805 SkillEffectByAbnormal_NT with no optional field (mask 0): an abnormal's effect went off without damage, e.g. an
+    /// immunity that blocked a crowd control (OFFICIAL, rec 105448 #651: key | 00 | key | uid 2 | effect 100000141, then 0x382d).
+    /// </summary>
+    public static byte[] AbnormalTriggered(int key, int casterKey, int uid, int effectId) =>
+        PacketWriter.Opcode(0x3805).Varint(key).U8(0).Varint(casterKey).Varint(uid).I32(effectId).ToArray();
+
+    /// <summary>0x382d ImmuneAbnormal_NT: key | effect id list (the immunity effects that blocked it). OFFICIAL (965 samples).</summary>
+    public static byte[] ImmuneAbnormal(int key, IReadOnlyList<int> effectIds) =>
+        new Generated.ImmuneAbnormalNT { Key = key, AbnormalEffectIds = [.. effectIds] }.ToArray();
+
     /// <summary>EResult kItem_Use_Success / kItem_Use_Fail (success OBSERVED 2026-11-06 234912 i46566, 11 samples; fail read from the usmap of client 2.0.6).</summary>
-    public const int ItemUseSuccess = 0x0304, ItemUseFail = 0x0305;
+    public const int ItemUseFail = 0x0305;   // 772 (0x0304) ItemUseSuccess is declared above
 
     /// <summary>0x5613 ItemUse_RS: result | item uid i64 | item id i32. Result 0 is sent as ItemUseSuccess, 1 as ItemUseFail.</summary>
     public static byte[] ItemUseReply(int result, long uid, int itemId) =>
         PacketWriter.Opcode(ItemUseRs).U16(result switch { 0 => ItemUseSuccess, 1 => ItemUseFail, _ => result }).I64(uid).I32(itemId).ToArray();
+
+    /// <summary>
+    /// 0x5615 ItemUseByItemID_RS: result u16 | uid i64 | item id i32 | used count i64. OBSERVED (official recording
+    /// 20261106-115817 #74858: 772, a stack of 23 Daevanion items, after its 0x561b and before 0xe22f).
+    /// </summary>
+    public static byte[] ItemUseByIdReply(int result, long uid, int itemId, long count) =>
+        PacketWriter.Opcode(ItemUseByIdRs).U16(result).I64(uid).I32(itemId).I64(count).ToArray();
 
     /// <summary>0x5616 ItemUse_NT: item uid i64 | item id i32 (OBSERVED: Life Potion 530126003).</summary>
     public static byte[] ItemUsed(long uid, int itemId) => PacketWriter.Opcode(ItemUseNt).I64(uid).I32(itemId).ToArray();

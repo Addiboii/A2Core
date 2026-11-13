@@ -23,6 +23,10 @@ public static partial class StaffToolsEndpoints
     sealed record EventRequest(string? Kind, DateTimeOffset StartsAt, DateTimeOffset? EndsAt, int? RepeatMinutes, string? Text, decimal? Multiplier);
     sealed record RewardItem(int TemplateId, long Quantity);
     sealed record RewardRequest(string? Target, string? Character, RewardItem[]? Items, long Kina, string? Message);
+    sealed record GrantManyRequest(Guid CharacterId, RewardItem[]? Items);
+
+    /// <summary>The most items one multi-grant may carry (the item panel's "select all matching" of a whole category).</summary>
+    const int GrantManyLimit = 3000;
     sealed record AreaRequest(double X, double Y, double Radius);
     sealed record SpawnRequest(int NpcId, double X, double Y, double? Z, int Count = 1);
 
@@ -80,6 +84,60 @@ public static partial class StaffToolsEndpoints
             return Results.Ok(new { state, kicked });
         });
 
+        // ---------- Black Cloud market (free to play: everything for Kina) ----------
+        staff.MapGet("/premium-shop", async (HttpContext ctx, IAccountAuthentication auth, IStaffTools tools, CancellationToken ct) =>
+        {
+            if (await Signed(ctx, auth, ct) is not { } a) return Results.Unauthorized();
+            if ((await tools.RolesAsync(a, ct)).Count == 0) return Results.StatusCode(403);
+            var stored = await tools.PremiumShopSettingsAsync(ct);
+            return Results.Ok(PremiumShopView(stored.Json is not null, stored.Since, stored.By));
+        });
+        staff.MapPost("/premium-shop", async (PremiumShopSettings input, HttpContext ctx, IAccountAuthentication auth, IStaffTools tools, ServerControl control, CancellationToken ct) =>
+        {
+            if (await Signed(ctx, auth, ct) is not { } a) return Results.Unauthorized();
+            var json = System.Text.Json.JsonSerializer.Serialize(input);
+            try { PremiumShopSettings.Parse(json); }
+            catch (Exception error) when (error is InvalidDataException or System.Text.Json.JsonException or FormatException) { return Results.BadRequest(new { error = error.Message }); }
+            await tools.SetPremiumShopSettingsAsync(a, json, ct);
+            await control.RefreshAsync(ct);
+            var stored = await tools.PremiumShopSettingsAsync(ct);
+            return Results.Ok(PremiumShopView(stored.Json is not null, stored.Since, stored.By));
+        });
+        staff.MapDelete("/premium-shop", async (HttpContext ctx, IAccountAuthentication auth, IStaffTools tools, ServerControl control, CancellationToken ct) =>
+        {
+            if (await Signed(ctx, auth, ct) is not { } a) return Results.Unauthorized();
+            await tools.SetPremiumShopSettingsAsync(a, null, ct);
+            await control.RefreshAsync(ct);
+            return Results.Ok(PremiumShopView(false, null, null));
+        });
+
+        // ---------- Black Cloud Merchants (the random shop) ----------
+        staff.MapGet("/random-shop", async (HttpContext ctx, IAccountAuthentication auth, IStaffTools tools, CancellationToken ct) =>
+        {
+            if (await Signed(ctx, auth, ct) is not { } a) return Results.Unauthorized();
+            if ((await tools.RolesAsync(a, ct)).Count == 0) return Results.StatusCode(403);
+            var stored = await tools.RandomShopSettingsAsync(ct);
+            return Results.Ok(RandomShopView(stored.Json is not null, stored.Since, stored.By));
+        });
+        staff.MapPost("/random-shop", async (RandomShopSettings input, HttpContext ctx, IAccountAuthentication auth, IStaffTools tools, ServerControl control, CancellationToken ct) =>
+        {
+            if (await Signed(ctx, auth, ct) is not { } a) return Results.Unauthorized();
+            var json = System.Text.Json.JsonSerializer.Serialize(input);
+            try { RandomShopSettings.Parse(json); }
+            catch (Exception error) when (error is InvalidDataException or System.Text.Json.JsonException or FormatException or NullReferenceException) { return Results.BadRequest(new { error = error.Message }); }
+            await tools.SetRandomShopSettingsAsync(a, json, ct);
+            await control.RefreshAsync(ct);
+            var stored = await tools.RandomShopSettingsAsync(ct);
+            return Results.Ok(RandomShopView(stored.Json is not null, stored.Since, stored.By));
+        });
+        staff.MapDelete("/random-shop", async (HttpContext ctx, IAccountAuthentication auth, IStaffTools tools, ServerControl control, CancellationToken ct) =>
+        {
+            if (await Signed(ctx, auth, ct) is not { } a) return Results.Unauthorized();
+            await tools.SetRandomShopSettingsAsync(a, null, ct);
+            await control.RefreshAsync(ct);
+            return Results.Ok(RandomShopView(false, null, null));
+        });
+
         // ---------- Events and boosts ----------
         staff.MapGet("/events", async (HttpContext ctx, IAccountAuthentication auth, IStaffTools tools, ServerControl control, CancellationToken ct) =>
             await StaffSessions.StaffAsync(ctx, auth, ct) is { } a
@@ -132,6 +190,7 @@ public static partial class StaffToolsEndpoints
             if (input.Kina > 0) items.Add((KinaItemId, input.Kina));
             var message = (input.Message ?? "").Trim();
             if (items.Count is 0 or > 10 || items.Any(i => i.Quantity > 100_000_000) || message.Length > 200) return Results.BadRequest(new { error = "invalid_reward" });
+            if (items.Any(i => CollectionItems.IsPlaceholder(i.TemplateId))) return Results.BadRequest(new { error = CollectionItems.PlaceholderError });
             var presence = services.GetService<WorldPresence>();
             List<Guid> characters;
             switch (input.Target)
@@ -177,6 +236,44 @@ public static partial class StaffToolsEndpoints
             }
             await game.AdminRecordAsync(a, "staff_reward", null, new { input.Target, input.Character, items = items.Select(i => new[] { (long)i.TemplateId, i.Quantity }), characters = characters.Count, message }, ct);
             return Results.Ok(new { characters = characters.Count, granted, failed });
+        });
+
+        // ---------- Multi-grant: many catalogue items to one character in one request ----------
+        // The item panel's multi-select (user 2026-11-08: "grant all skins at once, there are hundreds"). One request instead of
+        // one per item, so the staff limit (120 requests a minute) is not hit. Every item goes through the same grant command as a
+        // single grant (role check, catalogue build, the player in the world receives it at once, its own audit row), plus one
+        // summary row. A failed item does not stop the rest; an unavailable character stops it. Collection items are applied in the
+        // game as they arrive (GameSession.StaffGrants.cs); placeholder ones (CollectionItems.IsPlaceholder) are refused per item.
+        staff.MapPost("/grant-many", async (GrantManyRequest input, HttpContext ctx, IAccountAuthentication auth, IGameplayStore game, CancellationToken ct) =>
+        {
+            if (await Signed(ctx, auth, ct) is not { } a) return Results.Unauthorized();
+            var profile = await game.AdminProfileAsync(a, ct);
+            if (profile.BuildId is not { } build) return Results.BadRequest(new { error = "no_catalogue" });
+            var items = (input.Items ?? []).Where(i => i.Quantity > 0).GroupBy(i => i.TemplateId).Select(g => (TemplateId: g.Key, Quantity: g.First().Quantity)).ToList();
+            if (input.CharacterId == Guid.Empty || items.Count is 0 or > GrantManyLimit || items.Any(i => i.Quantity > 1_000_000))
+                return Results.BadRequest(new { error = "invalid_grant" });
+            var granted = 0;
+            var failed = new List<object>();
+            var stopped = false;
+            foreach (var (template, quantity) in items)
+            {
+                // Placeholder collection items (UseEffect None: wings the client cannot learn or show) are refused, the rest go on.
+                if (CollectionItems.IsPlaceholder(template)) { failed.Add(new { templateId = template, error = CollectionItems.PlaceholderError }); continue; }
+                try
+                {
+                    await game.AdminAsync(a, new AdminCommand(Guid.NewGuid(), input.CharacterId, "grant", build, template, quantity), ct);
+                    granted++;
+                }
+                catch (GameplayException error) when (error.Code is "forbidden") { throw; }
+                catch (GameplayException error)
+                {
+                    failed.Add(new { templateId = template, error = error.Code });
+                    if (error.Code is "character_unavailable" or "unknown_character") { stopped = true; break; }
+                }
+            }
+            await game.AdminRecordAsync(a, "staff_grant_many", input.CharacterId,
+                new { items = items.Count, granted, failed = failed.Count, quantity = items.Select(i => i.Quantity).Distinct().Take(3) }, ct);
+            return Results.Ok(new { requested = items.Count, granted, failed, stopped });
         });
 
         // ---------- Monsters on the live map ----------
@@ -244,7 +341,8 @@ public static partial class StaffToolsEndpoints
             if (await StaffEndpoints.StaffAsync(ctx, auth, game, ct, admin: true) is null) return Results.Unauthorized();
             var dir = config["Aion:Backups:Directory"];
             var configured = dir is { Length: > 0 } && config["Aion:Backups:Tool"] is { Length: > 0 };
-            var files = configured && Directory.Exists(dir)
+            // The list also without the Linux backup tool: on Windows the nightly task (deploy/windows/backup.ps1) makes the dumps.
+            var files = dir is { Length: > 0 } && Directory.Exists(dir)
                 ? new DirectoryInfo(dir!).GetFiles("*.dump").OrderByDescending(f => f.LastWriteTimeUtc).Take(50)
                     .Select(f => new { f.Name, f.Length, At = new DateTimeOffset(f.LastWriteTimeUtc, TimeSpan.Zero) }).ToList<object>()
                 : [];
@@ -307,6 +405,84 @@ public static partial class StaffToolsEndpoints
         await world.Lock.EnterExclusiveAsync(ct);
         try { return world.LoadedMap(mapId) is { } map ? work(map) : default; }
         finally { world.Lock.ExitExclusive(); }
+    }
+
+    static readonly string[] PremiumCurrencies = ["Kina", "Quna", "Money (KRW)", "Mileage"];
+    static readonly string[] LimitTargets = ["", "per character", "per account"];
+    static readonly string[] LimitPeriods = ["", " a day", " a week", " a month"];
+
+    /// <summary>The market as the staff panel shows it: the rules in force and every goods with its official and Kina price.</summary>
+    static object PremiumShopView(bool custom, DateTimeOffset? since, string? by)
+    {
+        var rules = PremiumShop.Current;
+        var defaults = PremiumShop.Defaults;
+        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var tables = PremiumShopTables.Embedded;
+        return new
+        {
+            enabled = rules.Enabled, kinaPerQuna = rules.KinaPerQuna, cashPerQuna = rules.CashPerQuna, mileagePerQuna = rules.MileagePerQuna, mirrorQuna = rules.MirrorQuna,
+            sellOffSale = rules.SellOffSale, mirrorMileage = rules.MirrorMileage, qunaPerMileage = rules.QunaPerMileage, randomKinaPerMileage = rules.RandomKinaPerMileage,
+            defaults = new { enabled = defaults.Enabled, kinaPerQuna = defaults.KinaPerQuna, qunaPerMileage = defaults.QunaPerMileage, randomKinaPerMileage = defaults.RandomKinaPerMileage },
+            custom, since, by,
+            // The shop's tabs as the client groups them (BMShopCategory): name and goods per race. Storage (the bought goods'
+            // warehouse) and the platform-only goods are not in the client table, so they count 0 here.
+            tabs = tables.TabGroups.Select(group => new
+            {
+                group, name = tables.TabName(group),
+                elyos = tables.All.Count(g => tables.TabOf(g, 1) == tables.TabName(group)),
+                asmodians = tables.All.Count(g => tables.TabOf(g, 2) == tables.TabName(group)),
+            }),
+            goods = tables.All.Select(g => new
+            {
+                id = g.Id, name = g.Name, category = PremiumShopRules.Category(g.CategoryLight != "None" ? g.CategoryLight : g.CategoryDark),
+                tab = tables.TabOf(g, g.CategoryLight != "None" ? 1 : 2),
+                races = g.Races, item = g.ItemId, count = g.Count,
+                currency = PremiumCurrencies[Math.Clamp(g.Currency, 0, 3)], price = g.Price, quna = rules.QunaValue(g), kina = rules.KinaPrice(g),
+                ownKina = rules.KinaPrices.TryGetValue(g.Id, out var own) ? own : (long?)null,
+                enabled = rules.Sells(g), visible = PremiumShopTables.OnSaleFor(g, 1, now) || PremiumShopTables.OnSaleFor(g, 2, now), onSale = g.OnSale,
+                mileage = rules.MileageEarned(g, 1),
+                limit = g.LimitTarget > 0 && g.Limit > 0 ? $"{g.Limit} {LimitTargets[Math.Clamp(g.LimitTarget, 0, 2)]}{LimitPeriods[Math.Clamp(g.LimitPeriod, 0, 3)]}" : "",
+            }),
+        };
+    }
+
+    /// <summary>The Black Cloud Merchants as the staff panel shows it: the rules in force, and per shop its pool by kind and grade
+    /// with each group's chance of filling one slot and its price range (discount aside).</summary>
+    static object RandomShopView(bool custom, DateTimeOffset? since, string? by)
+    {
+        var rules = RandomShop.Current;
+        var tables = RandomShopTables.Embedded;
+        return new
+        {
+            enabled = rules.Enabled, slots = rules.Slots, refreshMinutes = rules.RefreshMinutes,
+            discounts = rules.Discounts, kinds = RandomShopTables.KindNames.Select((name, i) => new { name, rules.Kinds[i].Share, rules.Kinds[i].PriceFactor, rules.Kinds[i].Grades }),
+            grades = RandomShopTables.GradeNames, custom, since, by,
+            shops = tables.Shops.Select(shop =>
+            {
+                var pool = tables.Pool(shop.Group);
+                var kinds = pool.Select(g => g.Kind).Distinct().OrderBy(k => k).ToList();
+                var shareSum = kinds.Sum(k => (double)rules.KindOf(k).Share);
+                return new
+                {
+                    id = shop.Id, category = shop.Category, wire = shop.Wire, race = shop.Race, levels = $"{shop.LevelMin}-{shop.LevelMax}", goods = pool.Count,
+                    refreshCosts = tables.RefreshCosts(shop.RefreshGroup),
+                    groups = pool.GroupBy(g => (g.Kind, g.Grade)).OrderBy(x => x.Key).Select(x =>
+                    {
+                        var ofKind = pool.Where(g => g.Kind == x.Key.Kind).ToList();
+                        var grades = rules.KindOf(x.Key.Kind).Grades;
+                        double Weight(int grade) => grades[Math.Clamp(grade, 0, grades.Length - 1)];
+                        var kindWeight = ofKind.Sum(g => Weight(g.Grade));
+                        var kindChance = kinds.Count == 1 ? 1 : shareSum > 0 ? rules.KindOf(x.Key.Kind).Share / shareSum : 1.0 / kinds.Count;
+                        var chance = kindWeight > 0 ? kindChance * x.Count() * Weight(x.Key.Grade) / kindWeight : kindChance * x.Count() / ofKind.Count;
+                        return new
+                        {
+                            kind = RandomShopTables.KindNames[Math.Clamp(x.Key.Kind, 0, 3)], grade = RandomShopTables.GradeNames[Math.Clamp(x.Key.Grade, 0, 4)], count = x.Count(),
+                            percent = Math.Round(chance * 100, 1), minPrice = x.Min(g => rules.NormalPrice(g)), maxPrice = x.Max(g => rules.NormalPrice(g)),
+                        };
+                    }),
+                };
+            }),
+        };
     }
 
     static async Task<VerifiedAccount?> Signed(HttpContext ctx, IAccountAuthentication auth, CancellationToken ct)

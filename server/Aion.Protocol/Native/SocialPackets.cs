@@ -274,9 +274,8 @@ public static class SocialPackets
 
     /// <summary>Common_EquipItemDetail in the layout of the observed Common_Item detail (GamePackets.WriteItem).</summary>
     static void WriteEquipDetail(PacketWriter w, EquipDetail d) =>
-        GamePackets.DetailTail(w.U8(d.EnchantLevel).I32(0).I32(0).U8(0).I32(0).I32(d.ItemLevel).Bool(false).U8(d.EquipSlot)
-            .Varint(1).Zeros(7).I64(d.SoulBindOwner).U8(d.SoulBindCount)
-            .Varint(3).Zeros(12), d.SubStats);
+        d.WriteTail(d.WriteGodstones(d.WriteStones(w.U8(d.EnchantLevel).I32(0).I32(0).U8(d.SurpassLevel).I32(d.SurpassBonus).I32(d.ItemLevel).Bool(false).U8(d.EquipSlot))
+            .I64(d.SoulBindOwner).U8(d.SoulBindCount)));
 
     // ---------- Friends ----------
 

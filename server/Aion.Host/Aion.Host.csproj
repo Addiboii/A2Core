@@ -16,8 +16,14 @@
   <ItemGroup>
     <WebSource Include="../../web/src/**/*;../../web/*.html;../../web/package-lock.json;../../web/vite.config.ts;../../web/tsconfig.json" />
   </ItemGroup>
-  <Target Name="BuildWebPages" BeforeTargets="BeforeBuild" Inputs="@(WebSource)" Outputs="wwwroot/admin.html;wwwroot/index.html"
-          Condition="'$(AION_SKIP_WEB)' != '1' And Exists('../../web/package.json')">
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Message names for the staff health page's request table (Ops/OpsEndpoints.cs). -->
+    <EmbeddedResource Include="../../tools/data/opcode-names.json" LogicalName="opcode-names.json" />
+  </ItemGroup>
+  <Target Name="BuildWebPages" BeforeTargets="BeforeBuild" Inputs="@(WebSource)" Outputs="wwwroot/admin.html;wwwroot/index.html" Condition="'$(AION_SKIP_WEB)' != '1' And Exists('../../web/package.json')">
     <Exec Command="npm ci --no-audit --no-fund" WorkingDirectory="../../web" Condition="!Exists('../../web/node_modules')" />
     <Exec Command="npm run build" WorkingDirectory="../../web" />
   </Target>

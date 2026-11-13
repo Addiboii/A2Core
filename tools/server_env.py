@@ -81,6 +81,9 @@ def environment(args, credentials):
         env['Aion__Native__NavMeshDirectory'] = data / 'navmesh'
     # Player downloads (the launcher exe), served at /download/.
     env['Aion__Web__Downloads'] = args.state / 'downloads'
+    # The Windows server setup (tools/package_windows.sh) at /a2core/ and its one-time migration downloads.
+    env['Aion__Web__WindowsSetupDir'] = '/srv/a2core-dist'
+    env['Aion__Web__MigrationDir'] = args.state / 'a2core-migrate'
     # Dashboard icons and 3D preview (staff-only on a public host), when the export was unpacked.
     if (data / 'wardrobe/wardrobe.json').exists():
         env['Aion__WardrobePath'] = data / 'wardrobe'
@@ -91,6 +94,10 @@ def environment(args, credentials):
     env['Aion__Backups__Directory'] = args.state / 'backups'
     env['Aion__Backups__Tool'] = Path(__file__).resolve().parent / 'postgres_dev.py'
     env['Aion__Backups__PgHome'] = args.state / 'postgres'
+    # Research: one JSON trace per game connection (client requests, server messages, timeline; ClientTrace.cs),
+    # read by tools/feature_gaps.py. The folder is made by deploy/linux/setup-auto-redeploy.sh.
+    if getattr(args, 'trace_directory', None):
+        env['Aion__Native__TraceDirectory'] = args.trace_directory
     if args.geolocation != 'off':
         env['Aion__Platform__GeolocationFile'] = args.state / 'geolocation-response.json'
     if args.proxy:
@@ -125,6 +132,7 @@ def main(argv=None):
     parser.add_argument('--totp-key', help='two-step sign-in encryption key, base64 of 32 bytes (default: a new random one)')
     parser.add_argument('--max-connections', type=int, default=200, help='per native port')
     parser.add_argument('--preload', type=int, nargs='*', default=[1000], help='maps loaded at startup')
+    parser.add_argument('--trace-directory', type=Path, help='write a client message trace per game connection here')
     parser.add_argument('--geolocation', default='59.9139,10.7522,NO', metavar='LAT,LON,CC',
                         help="server location for the region screen ('off' to omit)")
     args = parser.parse_args(argv)

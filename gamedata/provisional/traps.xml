@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Traps: NPC templates that fire their own skill without the NPC AI (GameSession.Traps.cs).
+     trigger "timer": first_ms after it comes into play, then every period_ms; trigger "near": when a player is within near_radius.
+     once="true": it fires one time and dies: end_ms 0x3806, die_ms HP 0 (0x8d00), die_ms + 50 the kill notice (0x8d04 zeros, 0x8d21
+     off), gone_ms the corpse removal (0x3642 act 3), all after its blast (0x3802). combat_ms: 0x8d21 on after it came into play.
+     attack_speed="false": its cast (0x3809) has mask 0 (no attack speed). mark_abnormal: a standing abnormal (uid 2) it gets at
+     combat_ms, removed (reason 19) at its death. untouchable: players' and companions' skills pass it by. The hit area is the skill's
+     SkillEffectFilter area (npc-skill-effects.json); radius only when the skill has none. damage_percent: of the victim's max HP; 0 =
+     the skill's factor on the level's HP curve like any monster hit.
+
+     Drakana Heist (HQ1101050 "Search inside the Brigade Supply Depot", layer World_L_Starter_HQ004, map 100013), OFFICIAL capture
+     capture-13700-20261107-013918 #16010-#19029:
+     - M_L0_Starter_HQ004_Bomb_04 (2290018, the floor bombs of Bomb_Muti_01/02/03_001 and Bomb_05_Mulit_1, 55 spawns): each fires
+       once: 0x8d21 +50, 0x3809 +100 (cast 2000, mask 2), 0x3802 +2100 (cooldown 8000), 0x3806 +2150, HP 0 +2250, 0x8d04 +2300,
+       0x3642 act 3 +3350 after its appear. Skill 1236490: SkillEffect 123649011 Damage "MaxHPRatio 1000" (10% of max HP; official hits
+       on Kobolds 45 and 1000), 123649012 abnormal 15002602 (KnockdownInstant 200) 3 s, area circle 300. NpcData bCanBeAttacked false.
+     - M_L0_Starter_HQ004_Bomb_03 (2290014, Bomb_Muti_up_1, 7 hidden floor traps the warehouse door opens): each fires once when the
+       player comes within its aggro circle (NpcAggroData Circle3_001, 300): 0x3835 (target the player), 0x3809 (cast 500, mask 0),
+       0x8d21; 0x3802 +500 with the hits (198014011 damage 45 on the official player, 198014012 abnormal 16022101
+       KnockdownInstant 300 for 2 s, 0x3816 the throw), 0x3806 +650, HP 0 +750, 0x3835 0 / 0x8d04 / 0x8d21 off / 0x382c +800,
+       0x3642 act 3 +4850. It carries abnormal 12262701 (uid 2) from 50 ms after its appear. untouchable: NpcTargetAble Unable
+       (CANDIDATE: bCanBeAttacked is true, no official sample of a player hitting one).
+     - M_L0_Starter_HQ004_Bomb_02 (2290013, Bomb_Muti_up_2, 7 Draco bombs): a monster (the NPC AI chases and casts 1239040, cast 1000);
+       it blows itself up: 0x3806 400 ms and 0x3835 0 + 0x3642 act 7 500 ms after its 0x3802 (#16550-#16663). The hit time (hit_ms) is
+       CANDIDATE (the official one missed the player).
+     Valley of Hope (HQ1102040, Coastal Cave 210001) stage 6: the rockfall. 12 invisible droppers (NpcData 2700011, spawners
+     S6_Spawn_DropStone_1/2_CoastalCave) fire Rockfall 1500860 (Skill.dat: no cast, NeedCoolTime 4000, projectile 15008601, stun
+     abnormal 16000711 1.5 s). Live 2026-11-08: nothing fell, Luteros waited scared at the rockfall. Radius/damage PROVISIONAL. -->
+<traps>
+	<trap npc="2290018" skill="1236490" cast_ms="2000" period_ms="8000" first_ms="100" combat_ms="50" radius="300" damage_percent="10"
+	      once="true" end_ms="50" die_ms="150" gone_ms="1250" untouchable="true"/>
+	<trap npc="2290014" skill="1980140" cast_ms="500" period_ms="8000" trigger="near" near_radius="300" combat_ms="50" radius="300" damage_percent="0"
+	      once="true" end_ms="150" die_ms="250" gone_ms="4350" attack_speed="false" mark_abnormal="12262701" untouchable="true"/>
+	<trap npc="2700011" skill="1500860" cast_ms="0" period_ms="4000" first_ms="800" radius="250" damage_percent="5"/>
+	<self_destruct npc="2290013" skill="1239040" hit_ms="300" end_ms="400" gone_ms="500"/>
+</traps>

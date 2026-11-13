@@ -12,4 +12,9 @@ public sealed record CharacterProgress(int Level, long Experience, int? MapId,
 
 public sealed record CharacterState(CharacterSummary Summary, int CreationId,
     int Race, int Gender, byte[] Appearance, CharacterProgress Progress, long Revision,
-    int WireId = 0, int VoiceType = 0, int? LobbySlot = null, int Ascension = 1, bool Staff = false);
+    int WireId = 0, int VoiceType = 0, int? LobbySlot = null, int Ascension = 1, bool Staff = false,
+    DateTimeOffset? LastOnline = null, DateTimeOffset? Created = null)
+{
+    /// <summary>The character's world (game.characters.home_server_id, migration 093; four worlds); null: world 1 of its race.</summary>
+    public int? HomeServerId { get; init; }
+}

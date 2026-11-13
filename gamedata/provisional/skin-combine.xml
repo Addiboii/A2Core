@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- PROVISIONAL skin combine and extraction rules (2026-11-06): the client's SkinCombine table is not exported. Combine:
+     exactly "count" skin copies (the live client sent 4) of the same grade are used up for one random skin of the same
+     category, of the next grade with upgrade_chance_pct, else of the same grade (a skin the player does not own when one
+     exists). Grades come from the GetSkin items of the item XML; order below is low to high. Extraction (SkinExtraction_RQ):
+     the gear item is used up; its appearance (ExtractionSkins) joins the wardrobe with the item's ExtractionSkinRate
+     (1/10000), else with fallback_rate when the item has none. -->
+<skins combine_count="4" upgrade_chance_pct="10" grades="Common,Rare,Legend,Unique,Epic" extraction_fallback_rate="2500"/>

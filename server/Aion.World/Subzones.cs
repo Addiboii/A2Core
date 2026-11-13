@@ -87,8 +87,33 @@ public static class Subzones
         OnMap(mapId).Where(a => a.Contains(at)).MaxBy(a => a.Priority)?.Name ?? DefaultOf(mapId)?.Name;
 
     /// <summary>Whether a position lies in a named subzone (EnterSubZone objectives, SubZone conditions): a volume of that
-    /// name contains it, or no volume does and the name is the map's default subzone (CANDIDATE).</summary>
-    public static bool InSubzone(int mapId, string name, Vector3d at) =>
-        OnMap(mapId).Any(a => string.Equals(a.Name, name, StringComparison.OrdinalIgnoreCase) && a.Contains(at))
-        || DefaultOf(mapId) is { Name: { } fallback } && string.Equals(fallback, name, StringComparison.OrdinalIgnoreCase) && Outside(mapId, at);
+    /// name contains it; or no volume does and the name is the map's default subzone (CANDIDATE; the Asmodian layers'
+    /// InstanceLayer_World_D_A_Layer_HQ001_Subzone has no volume); or, for an instance layer, an area of its base map it overlays
+    /// (World_L_A_Layer_District_EP3_5 waits for Verteron's VerteronCitadelRuin_Subzone).</summary>
+    public static bool InSubzone(int mapId, string name, Vector3d at)
+    {
+        static bool Named(SubzoneArea a, string n) => string.Equals(a.Name, n, StringComparison.OrdinalIgnoreCase);
+        var areas = OnMap(mapId);
+        if (areas.Any(a => Named(a, name) && a.Contains(at))) return true;
+        if (DefaultOf(mapId) is { Name: { } fallback } && string.Equals(fallback, name, StringComparison.OrdinalIgnoreCase) && Outside(mapId, at)) return true;
+        return !areas.Any(a => Named(a, name)) && MapEventTables.Embedded.Volume(mapId) is { } layer
+            && OnMap(layer.Base).Any(a => Named(a, name) && a.Contains(at));
+    }
+
+    /// <summary>The map a named subzone is on and a point inside it (its polygon centre), so a quest "move" can lead there; null if
+    /// unknown. Used for EnterSubZone quest objectives whose subzone is on another map (e.g. DreamCrossroad_Subzone on map 200001).</summary>
+    public static (int Map, Vector3d Center)? Locate(string name)
+    {
+        foreach (var (mapKey, areas) in data.Value.Maps)
+            foreach (var a in areas)
+                if (string.Equals(a.Name, name, StringComparison.OrdinalIgnoreCase)
+                    && int.TryParse(mapKey, System.Globalization.CultureInfo.InvariantCulture, out var map))
+                {
+                    double cx = a.Points.Length > 0 ? a.Points.Average(p => p[0]) : 0;
+                    double cy = a.Points.Length > 0 ? a.Points.Average(p => p[1]) : 0;
+                    double cz = a.Z.Length == 2 ? (a.Z[0] + a.Z[1]) / 2 : 0;
+                    return (map, new Vector3d(cx, cy, cz));
+                }
+        return null;
+    }
 }

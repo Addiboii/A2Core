@@ -53,13 +53,24 @@ public sealed record MapEventObjective(
     {
         "KillNpc" or "UseEnvObj" or "KillNpcRelationshipEntity" or "KillNpcSubtype" or "KillNpcCreatureType" or "CollectItem" or "UseUsableItemType"
             => int.TryParse(Value(1), NumberStyles.Integer, CultureInfo.InvariantCulture, out var n) && n > 0 ? n : 1,
+        // The points the step's UnifiedObjectivesList kills must add up to (the client's UnifiedObjectiveScore, the same number).
+        "AchieveUnifiedObjectivesScore" => int.TryParse(Value(0), NumberStyles.Integer, CultureInfo.InvariantCulture, out var score) && score > 0 ? score : 1,
         _ => 1,
     };
     /// <summary>Objectives only the client can finish (a cutscene, a note, a talk, a guide); it reports them with 0x9230.</summary>
     public bool ClientSide => Type is "CompleteCutscene" or "CloseNote" or "CompleteNpcTalk" or "CloseGuide";
-    /// <summary>Objectives the server does not track yet (waves, puzzles, scores, items): finished after a grace period so the event goes on.</summary>
-    public bool Unsupported => Type is "AchieveUnifiedObjectivesScore" or "ClearWave" or "ClearBoardPuzzle" or "GetAbnormal" or "PCSocial"
-        or "UseUsableItemType" or "CollectItem" or "KillNpcCreatureType" or "UpdateEnvObjState";
+    /// <summary>
+    /// Objectives the server does not track yet (puzzles, item uses): finished after a grace period so the event goes on. A score
+    /// without its UnifiedObjectivesList, a wave not in WaveStepData and an object state no play reaches (None) also wait for it
+    /// (MapEventRun.Tracked); CollectItem and GetAbnormal too when the host cannot tell (MapEventRun.HeldKnown).
+    /// </summary>
+    public bool Unsupported => Type is "ClearBoardPuzzle" or "PCSocial" or "UseUsableItemType" or "KillNpcCreatureType";
+
+    /// <summary>Objectives counted from the player's state (the bag's items, the abnormals gained), checked every tick.</summary>
+    public bool Held => Type is "CollectItem" or "GetAbnormal";
+
+    /// <summary>UpdateEnvObjState states play reaches: destroyed (Dead), used (Occupied while used, then Finish).</summary>
+    public static bool TrackedObjectState(string state) => state is "Dead" or "Finish" or "Occupied";
 }
 
 public sealed record MapEventStep(
@@ -68,7 +79,9 @@ public sealed record MapEventStep(
     [property: JsonPropertyName("obj")] MapEventObjective[] Objectives,
     [property: JsonPropertyName("post")] MapEventDirective[] Post,
     [property: JsonPropertyName("fail")] MapEventCondition[][]? Fail = null,
-    [property: JsonPropertyName("faildir")] MapEventDirective[]? FailDirectives = null);
+    [property: JsonPropertyName("faildir")] MapEventDirective[]? FailDirectives = null,
+    [property: JsonPropertyName("uobj")] MapEventObjective[]? Unified = null,
+    [property: JsonPropertyName("score")] int Score = 0);
 
 public sealed record MapEventStage(
     [property: JsonPropertyName("id")] int Id,
@@ -179,7 +192,8 @@ public sealed class MapEventTables
         [property: JsonPropertyName("volumes")] Dictionary<string, LayerVolume> Volumes,
         [property: JsonPropertyName("deferred")] Dictionary<string, string[]> Deferred,
         [property: JsonPropertyName("teleports")] Dictionary<string, TeleportTarget>? Teleports = null,
-        [property: JsonPropertyName("teleport_effects")] Dictionary<string, int>? TeleportEffects = null);
+        [property: JsonPropertyName("teleport_effects")] Dictionary<string, int>? TeleportEffects = null,
+        [property: JsonPropertyName("waves")] Dictionary<string, string[][]>? Waves = null);
 
     readonly File file;
     readonly Dictionary<int, int> dungeonByMap = [];
@@ -246,6 +260,8 @@ public sealed class MapEventTables
     public TeleportTarget? Teleport(string name) => file.Teleports?.GetValueOrDefault(name);
     /// <summary>A PCTeleport effect name's TeleportEffect.dat id (the 0x3621 effect byte), 0 when unknown or empty.</summary>
     public int TeleportEffect(string name) => file.TeleportEffects?.GetValueOrDefault(name) ?? 0;
+    /// <summary>WaveStepData.dat: a wave's spawners by order (StartWave spawns order 1; each next order when the one before is dead).</summary>
+    public string[][]? Wave(string name) => file.Waves?.GetValueOrDefault(name);
     /// <summary>Spawn entries a StartSpawner directive of the map's events starts: not spawned at map load.</summary>
     public IReadOnlySet<string> Deferred(int mapId) => (file.Deferred.GetValueOrDefault(K(mapId)) ?? []).ToHashSet(StringComparer.OrdinalIgnoreCase);
 }
@@ -300,6 +316,21 @@ public interface IMapEventHost
     bool SpawnerExists(string spawner);
     bool PlayerDead { get; }
     double? DistanceTo(string spawner);
+
+    /// <summary>How many of an item (Item.dat internal name) the player holds in the bag; -1 when the host cannot tell (then the
+    /// CollectItem objective waits for the fallback).</summary>
+    long HeldItems(string itemName) => -1;
+    /// <summary>Whether the player has gained the abnormal since <paramref name="sinceMs"/> or carries it now; null when the host cannot tell.</summary>
+    bool? GainedAbnormal(int abnormalId, long sinceMs) => null;
+    /// <summary>
+    /// RemoveFromAggroList: an NPC of the spawner that fought the players has dropped them from its aggro list (it reset, its players
+    /// left or died) while it lives; reported once per drop.
+    /// </summary>
+    bool RemovedFromAggro(string spawner) => false;
+    /// <summary>ChangeBT: the spawner's NPCs switch to a behaviour tree (Def_Companion_NPC_01, Def_Companion_NPC_NoCombat, Def_Citizen_01 ...).</summary>
+    void ChangeBehaviour(string spawner, string behaviour) { }
+    /// <summary>NpcChangePhase: the spawner's NPCs enter a phase (1, 2: the Caras bodies, the Dratona eggs, Beritra).</summary>
+    void NpcPhase(string spawner, int phase) { }
 }
 
 /// <summary>One player's run of a map event: stage, step, objective counters, directive sequences and repeaters.</summary>
@@ -337,6 +368,14 @@ public sealed class MapEventRun
     int stepSerial;
     bool stepObjectivesDone;
     bool stageFailing;
+    /// <summary>
+    /// Kills of this run that no objective counted when they happened (a KillSpawner / KillNpc target killed before its step, by a
+    /// companion, a SetAggroNpc NPC or a KillSpawner directive): a later step's named kill objectives count them when it begins.
+    /// </summary>
+    readonly List<(int NpcId, string SpawnName)> uncountedKills = [];
+    bool replaying;
+    /// <summary>Held objectives (CollectItem, GetAbnormal) whose host can tell: no 30 s fallback, only this long safety net (OURS).</summary>
+    public const int HeldFallbackMs = 300_000;
 
     public MapEventRun(MapEventDefinition definition, int id, IMapEventHost host, long now)
     {
@@ -356,22 +395,32 @@ public sealed class MapEventRun
     public int StepIndex { get; private set; }
     public long StartedMs { get; }
     public int[] Goals { get; private set; }
+    /// <summary>
+    /// The objective counts MapEventJoin_NT carries: the current step's, one per objective, also before the run has begun its first
+    /// step (zeros). OBSERVED: all 18 joins in the recordings at an event's start list the first step's objectives as zeros (HQ001 4,
+    /// HQ003 2, InstanceLayer_2 2, Dungeon_0005 6, the rest 1); an empty list (live 2026-11-11, GarrisonTerritory_H1 with 9 objectives)
+    /// left the client without the step's objectives until the first progress update (CANDIDATE: no objective markers meanwhile).
+    /// </summary>
+    public int[] JoinGoals => Goals.Length > 0 || Finished || Step is not { } step ? Goals : new int[step.Objectives.Length];
     public int[] Variables { get; }
     public bool Finished => Status is Complete or Expired;
     public MapEventStage? Stage => StageIndex < Definition.Stages.Length ? Definition.Stages[StageIndex] : null;
     public MapEventStep? Step => Stage is { } stage && StepIndex < stage.Steps.Length ? stage.Steps[StepIndex] : null;
     public int StageOrder => Stage?.Id ?? 0;
-    public int StepOrder => Step?.Id ?? 0;
     /// <summary>
-    /// The step as 0x922e / 0x922d carry it: its 1-based place within the stage, not the script's step id. OBSERVED
-    /// (capture-13700-20261019-231752, server bodies): Dungeon_L_0016_MapEvent stage 2 (step ids 10, 11, 12) went out as
-    /// steps 1, 2, 3 and stage 3 (id 13) as 1; Dungeon_0005_MapEvent stage 2 (ids 2, 3) as 1, 2. Single-stage events
-    /// (World_L_Starter_HQ001-004) cannot tell the two apart. Ported from A2Core PR #4 (Artezianec).
+    /// The step as the client counts it: its place within the stage (1..), not the script's step id. OBSERVED (capture
+    /// 20261107-014953, the Brigade event): stage 3's steps (ids 3, 4) went out as 1 and 2, stage 4's (id 5) and stage 5's (id 6) as 1.
+    /// With the ids the client tracked the wrong step from stage 2 on: no talk with the injured commander, no escape triggers.
     /// </summary>
-    public int WireStep => Step is null ? 0 : StepIndex + 1;
-    /// <summary>Objectives of the current step still open (for markers and area checks).</summary>
+    public int StepOrder => Step is null ? 0 : StepIndex + 1;
+    /// <summary>The step as 0x922e / 0x922d carry it (the GitHub name of <see cref="StepOrder"/>).</summary>
+    public int WireStep => StepOrder;
+    /// <summary>The script's own id of the current step.</summary>
+    public int StepId => Step?.Id ?? 0;
+    /// <summary>Objectives of the current step still open (for markers and area checks); none once the run is finished (its Goals
+    /// are emptied while the last step stays current: indexing them threw, e.g. HpFloor on a hit after the clear).</summary>
     public IEnumerable<(int Index, MapEventObjective Objective)> Open =>
-        Step is { } step ? step.Objectives.Select((o, i) => (i, o)).Where(x => Goals[x.i] < x.o.Count) : [];
+        !Finished && Step is { } step ? step.Objectives.Select((o, i) => (i, o)).Where(x => x.i < Goals.Length && Goals[x.i] < x.o.Count) : [];
 
     public void Start(long now)
     {
@@ -383,6 +432,7 @@ public sealed class MapEventRun
     {
         var step = Step!;
         Goals = new int[step.Objectives.Length];
+        stepStartedMs = now;
         repeaters.Clear();
         stepObjectivesDone = false;
         stepSerial++;
@@ -390,7 +440,13 @@ public sealed class MapEventRun
         for (var i = 0; i < step.Objectives.Length; i++)
         {
             var o = step.Objectives[i];
-            if ((o.ClientSide || o.Unsupported) && i < fallbackAt.Length) fallbackAt[i] = now + FallbackMs;
+            if ((o.ClientSide || o.Unsupported || !Tracked(o, step)) && i < fallbackAt.Length) fallbackAt[i] = now + FallbackMs;
+            // The bag's items and the gained abnormals count by state (audit 2026-11-13 G10/G15; before: always the 30 s fallback).
+            else if (o.Held && i < fallbackAt.Length) fallbackAt[i] = now + (HeldKnown(o) ? HeldFallbackMs : FallbackMs);
+            // A ClearWave whose wave no StartWave of the event starts (Dungeon_Daily_0001/0002: the wave's first order is the map's own
+            // OrcusGem) runs from the step that waits for it (CANDIDATE: no script starts it, the client data says nothing else).
+            if (o.Type == "ClearWave" && Tracked(o, step) && !waves.ContainsKey(o.Value(0)) && !clearedWaves.Contains(o.Value(0)) && !StartsWave(o.Value(0)))
+                StartWave(o.Value(0));
             // A CloseGuide objective shows its guide (the forced popup) when the step begins: OBSERVED 2026-10-19, ShowGuide (46) for
             // Tutorial_ForcedPopup_Fly_01 at the Subspace's first step and Tutorial_ForcedPopup_L1_ExitDungeon_01 with the Dream
             // Crossroad's join; the client reports CloseGuide (0x9230 kind 2) when the player closes it. Without it the player waited
@@ -400,7 +456,146 @@ public sealed class MapEventRun
         }
         sequences.Add(new Sequence(step.Pre, stepSerial));
         Tick(now);
+        ReplayKills(now);
         CheckStep(now);
+    }
+
+    /// <summary>
+    /// The named kills this run made before the current step (audit 2026-11-13 G2): KillNpc counts each uncounted kill of its NPCs and
+    /// KillSpawner the uncounted kill of its spawner, when that spawn entry has nobody alive now. Before, a target killed early (Dungeon_L_0016's Boss_1 during
+    /// the step-1.2 cutscene, 12 bot reports) left its step waiting for ever. CANDIDATE: the official server may make such targets
+    /// immune until their step instead (no recording of an early kill); KillPending already does that for KillNpc targets of later steps.
+    /// </summary>
+    void ReplayKills(long now)
+    {
+        if (replaying || uncountedKills.Count == 0) return;
+        replaying = true;
+        try
+        {
+            for (var guard = 0; guard < 8 && !Finished && uncountedKills.Count > 0; guard++)
+            {
+                var serial = stepSerial;
+                foreach (var kill in uncountedKills.ToList())
+                {
+                    if (Finished || stepSerial != serial) break;
+                    if (Apply(o => NamedKill(o, kill.NpcId, kill.SpawnName, !Host.SpawnerAlive(kill.SpawnName)), now)) uncountedKills.Remove(kill);
+                }
+                if (stepSerial == serial) break;   // the step stayed: every kill was tried against it
+            }
+        }
+        finally { replaying = false; }
+    }
+
+    /// <summary>
+    /// The kill objectives that name their target (NPC ids, spawn names): the ones an earlier kill may still count for, only while its
+    /// spawn entry has nobody alive (a target that came back, a respawned field monster, is fought again as before).
+    /// </summary>
+    static bool NamedKill(MapEventObjective o, int npcId, string spawnName, bool spawnerDead) => spawnerDead && o.Type switch
+    {
+        "KillNpc" => (o.Npcs ?? []).Contains(npcId) || Names(o, spawnName),
+        "KillSpawner" => Names(o, spawnName),
+        _ => false,
+    };
+
+    /// <summary>The kills kept for later steps (checks).</summary>
+    public int UncountedKills => uncountedKills.Count;
+
+    // ---------- Held objectives (CollectItem, GetAbnormal) ----------
+
+    /// <summary>When the current step began: abnormals gained from then on count for its GetAbnormal objectives.</summary>
+    long stepStartedMs;
+
+    bool HeldKnown(MapEventObjective o) => o.Type switch
+    {
+        "CollectItem" => Host.HeldItems(o.Value(0)) >= 0,
+        "GetAbnormal" => int.TryParse(o.Value(0), NumberStyles.Integer, CultureInfo.InvariantCulture, out var id) && Host.GainedAbnormal(id, stepStartedMs) is not null,
+        _ => false,
+    };
+
+    /// <summary>
+    /// CollectItem follows the count of the named item in the bag (as the quests' collect steps, GameSession.QuestItems.cs; a count once
+    /// reached stays: a Seal key is used on its door right after); GetAbnormal is done once the player gained the abnormal. The Seal
+    /// events' "Quest_UseItem_NoEffect_Key_A_c_01a_b" (Worn Key 534960001, from the Seal_Dungeon_Usable_Env reward objects) waited for
+    /// the 30 s fallback in 12 Seal events (EQ1810011/021/025/057/059, EQ2803014, EQ2810010/011/022/048/052/057).
+    /// </summary>
+    void HeldTick(long now)
+    {
+        if (Finished || Step is not { } step) return;
+        for (var i = 0; i < step.Objectives.Length && i < Goals.Length && ReferenceEquals(Step, step) && !Finished; i++)
+        {
+            var o = step.Objectives[i];
+            if (!o.Held || Goals[i] >= o.Count) continue;
+            var reached = o.Type switch
+            {
+                "CollectItem" => Host.HeldItems(o.Value(0)) is var held and >= 0 ? (int)Math.Min(o.Count, held) : 0,
+                "GetAbnormal" => int.TryParse(o.Value(0), NumberStyles.Integer, CultureInfo.InvariantCulture, out var id) && Host.GainedAbnormal(id, stepStartedMs) == true ? o.Count : 0,
+                _ => 0,
+            };
+            if (reached > Goals[i]) Apply(x => ReferenceEquals(x, o), now, reached - Goals[i]);
+        }
+    }
+
+    /// <summary>Objectives of the types the server tracks only with their data: a score with its UnifiedObjectivesList, a wave of
+    /// WaveStepData, an object state that play reaches. The others finish by the fallback.</summary>
+    static bool Tracked(MapEventObjective o, MapEventStep step) => o.Type switch
+    {
+        "AchieveUnifiedObjectivesScore" => step.Unified is { Length: > 0 },
+        "ClearWave" => MapEventTables.Embedded.Wave(o.Value(0)) is { Length: > 0 },
+        "UpdateEnvObjState" => MapEventObjective.TrackedObjectState(o.Value(1)),
+        _ => true,
+    };
+
+    // ---------- Waves ----------
+    // WaveStepData.dat: a wave is spawner groups in order. StartWave spawns order 1; once no NPC of the current order lives the next
+    // order spawns (CANDIDATE: the client data has the orders, not the rule between them; an order of objects only goes on at once);
+    // after the last order the wave is cleared (ClearWave). EndWave stops it (its NPCs stay; the scripts despawn them themselves).
+
+    readonly Dictionary<string, int> waves = new(StringComparer.OrdinalIgnoreCase);
+    readonly HashSet<string> clearedWaves = new(StringComparer.OrdinalIgnoreCase);
+
+    bool StartsWave(string wave) =>
+        Definition.Stages.SelectMany(st => st.Steps).SelectMany(st => st.Pre.Concat(st.Post).Concat(st.Objectives.SelectMany(o => (o.Pre ?? []).Concat(o.Post ?? []))))
+            .Concat(Definition.Rules?.SelectMany(r => r.Directives) ?? [])
+            .Any(d => d.Type == "StartWave" && string.Equals(d.Value(0), wave, StringComparison.OrdinalIgnoreCase));
+
+    void StartWave(string wave)
+    {
+        if (MapEventTables.Embedded.Wave(wave) is not { Length: > 0 } orders) { Host.Unsupported(this, $"directive StartWave {wave}: not in WaveStepData"); return; }
+        clearedWaves.Remove(wave);
+        waves[wave] = 0;
+        foreach (var spawner in orders[0]) Host.Spawn(spawner, 0);
+    }
+
+    /// <summary>The run's waves stop where they are (a daily dungeon's time is up): no next order spawns.</summary>
+    public void StopWaves() => waves.Clear();
+
+    /// <summary>A spawner of a wave this run started (running or cleared), any order.</summary>
+    public bool WaveNpc(string spawner) =>
+        waves.Keys.Concat(clearedWaves).Any(w => MapEventTables.Embedded.Wave(w)?.Any(order => order.Contains(spawner, StringComparer.OrdinalIgnoreCase)) == true);
+
+    /// <summary>The spawners of every running wave's current order (what the player fights now).</summary>
+    public IEnumerable<string> WaveSpawners() =>
+        waves.SelectMany(w => MapEventTables.Embedded.Wave(w.Key) is { } orders && w.Value < orders.Length ? orders[w.Value] : []);
+
+    /// <summary>The spawners of one wave's current order, if this run is running it.</summary>
+    public IEnumerable<string> WaveSpawners(string wave) =>
+        waves.TryGetValue(wave, out var at) && MapEventTables.Embedded.Wave(wave) is { } orders && at < orders.Length ? orders[at] : [];
+
+    void WaveTick(long now)
+    {
+        foreach (var (wave, order) in waves.ToList())
+        {
+            if (MapEventTables.Embedded.Wave(wave) is not { } orders) { waves.Remove(wave); continue; }
+            var at = order;
+            while (at < orders.Length && !orders[at].Any(Host.SpawnerAlive))
+            {
+                if (++at < orders.Length) foreach (var spawner in orders[at]) Host.Spawn(spawner, 0);
+            }
+            if (at < orders.Length) { waves[wave] = at; continue; }
+            waves.Remove(wave);
+            clearedWaves.Add(wave);
+            Apply(o => o.Type == "ClearWave" && string.Equals(o.Value(0), wave, StringComparison.OrdinalIgnoreCase), now);
+        }
     }
 
     // ---------- Events from the world ----------
@@ -433,27 +628,126 @@ public sealed class MapEventRun
         if (objective.Post is { Length: > 0 } post) sequences.Add(new Sequence(post, stepSerial));
     }
 
+    /// <summary>Whether an NPC is the one an objective names (its NpcData ids, or its spawner name): bots look for their targets with it.</summary>
+    public static bool Targets(MapEventObjective o, int npcId, string spawnName) => (o.Npcs ?? []).Contains(npcId) || Names(o, spawnName);
+
     static bool NameMatches(string name, string spawnName) =>
         string.Equals(name, spawnName, StringComparison.OrdinalIgnoreCase) || spawnName.StartsWith(name + "_", StringComparison.OrdinalIgnoreCase);
 
-    static bool Names(MapEventObjective o, string spawnName) => o.Names.Any(n => NameMatches(n, spawnName));
+    // The fuzzy matches (kind word, synonyms) are for map spawn names only: an EnvObjData template name is the object itself, so a
+    // different template never counts. Live 2026-11-11: in the Ugaros Thieves Campsite (World_L1_GarrisonTerritory_H1, "UseEnvObj
+    // E_L1_Garrison_H1_Box_01 x5" = Supply Chests) the Stronghold Chests E_L1_Garrison_BalaurBox_01 counted as supplies through the
+    // shared word "Garrison" ("Box" is too short to be a kind).
+    static bool Names(MapEventObjective o, string spawnName) => o.Names.Any(n => NameMatches(n, spawnName))
+        || o.Type == "UseEnvObj" && EnvUsages.IdOf(spawnName) == 0 && o.Names.Any(n => n.StartsWith("E_", StringComparison.OrdinalIgnoreCase) && BaseWord(n) is { Length: > 2 } word
+            && string.Equals(word, BaseWord(spawnName), StringComparison.OrdinalIgnoreCase))
+        || o.Type == "UseEnvObj" && EnvUsages.IdOf(spawnName) == 0 && o.Names.Any(n => KindMatches(n, spawnName));
+
+    /// <summary>Words that are not an object's kind (map/dungeon/layer parts of EnvObj and spawn names).</summary>
+    static readonly HashSet<string> NotKinds = new(StringComparer.OrdinalIgnoreCase)
+        { "Layer", "Dungeon", "Env", "EnvObj", "Spawn", "SpawnMulti", "Single", "Multi", "Hit", "Starter", "InstanceLayer", "Common", "All" };
+
+    /// <summary>Same object, other words (EnvObj template vs map spawn): the Coastal Cave's E_CoastalCave_Corpse_001 is S1_Env_Deadbody_CoastalCave.</summary>
+    static readonly Dictionary<string, string[]> KindSynonyms = new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Corpse"] = ["Deadbody", "Body"], ["Deadbody"] = ["Corpse"],
+            // Leda's (the illusion god's) barrier: Valley of Hope step 19 wants E_CoastalCave_Barrier_002, the map has
+            // S6_Env_LedaPortal_CoastalCave in front of the boss room (live 2026-11-08: used 10 times, never counted). Not "Portal"
+            // in general: the cave's exit portal must not count as the barrier.
+            ["Barrier"] = ["LedaPortal"],
+        };
+
+    /// <summary>
+    /// A UseEnvObj template name (E_&lt;map&gt;_&lt;kind...&gt;_NNN) and a spawn share the object's kind word (prefix, either way: StoneWall /
+    /// StoneWall1), or a synonym. Live 2026-11-07: Valley of Hope's corpse (E_CoastalCave_Corpse_001 vs S1_Env_Deadbody_CoastalCave)
+    /// never counted, the player was stuck pressing F on it (27 interactions answered, the map event did not move).
+    /// </summary>
+    internal static bool KindMatches(string template, string spawnName)
+    {
+        static IEnumerable<string> Words(string s) => s.Split('_', StringSplitOptions.RemoveEmptyEntries).Where(w => !w.All(char.IsDigit));
+        var kinds = Words(template).Skip(2).Where(w => w.Length > 3 && !NotKinds.Contains(w)).TakeLast(1).ToList();
+        if (kinds.Count == 0) return false;
+        var all = kinds.Concat(kinds.SelectMany(k => KindSynonyms.GetValueOrDefault(k) ?? [])).ToList();
+        var spawn = Words(spawnName).Where(w => w.Length > 3 && !NotKinds.Contains(w)).ToList();
+        // A longer spawn word may carry the kind inside it (LostOdium for E_CoastalCave_Odium_001: live 2026-11-08 the Odylium in
+        // Valley of Hope played its gathering animation and nothing counted), for kinds of 5+ letters only.
+        return all.Any(k => spawn.Any(w => w.StartsWith(k, StringComparison.OrdinalIgnoreCase) || k.StartsWith(w, StringComparison.OrdinalIgnoreCase) && w.Length >= 5
+            || k.Length >= 5 && w.Contains(k, StringComparison.OrdinalIgnoreCase)));
+    }
+
+    /// <summary>
+    /// The object kind in a name: the last word before the trailing number ("E_L0_Layer_2_Tower_01" and the spawn
+    /// "L_Starter_InstanceLayer_2_EnvObj_Tower_1" are both Tower). A UseEnvObj objective names the EnvObj template (E_...), the
+    /// map knows the spawn name: without this the Brigade towers never counted (live 2026-11-06, HQ1101070 stuck).
+    /// </summary>
+    static string BaseWord(string name) =>
+        name.Split('_', StringSplitOptions.RemoveEmptyEntries).Reverse().FirstOrDefault(p => !p.All(char.IsDigit)) ?? "";
 
     /// <summary>An NPC of this instance died (its NpcData id, spawn entry name); <paramref name="spawnerAlive"/>: others of its spawner still live.</summary>
-    public bool Killed(int npcId, string spawnName, bool hostile, bool spawnerAlive, long now) =>
-        Apply(o => o.Type switch
+    public bool Killed(int npcId, string spawnName, bool hostile, bool spawnerAlive, long now, string subType = "")
+    {
+        bool Counts(MapEventObjective o) => o.Type switch
         {
             "KillNpc" => (o.Npcs ?? []).Contains(npcId) || Names(o, spawnName),
             "KillSpawner" => Names(o, spawnName) && !spawnerAlive,
-            "KillNpcRelationshipEntity" or "KillNpcSubtype" or "KillNpcCreatureType" => hostile,
+            // KillNpcSubtype names the NpcData NpcSubType (DungeonWave_0001: NormalMonster kills fill the gauge, EliteMonster ones the
+            // optional 100); a kill whose subtype is unknown counts as before.
+            "KillNpcSubtype" => hostile && (subType.Length == 0 || o.Value(0).Length == 0 || string.Equals(o.Value(0), subType, StringComparison.OrdinalIgnoreCase)),
+            "KillNpcRelationshipEntity" or "KillNpcCreatureType" => hostile,
             _ => false,
-        }, now);
+        };
+        // "Collect points" (UnifiedObjectives steps): each matching kill of the UnifiedObjectivesList gives its value 1 in points
+        // (Arkanis' Grade1 elites 2, NormalMonster 1); AchieveUnifiedObjectivesScore counts them up to the step's score.
+        var points = !Finished && Step is { Unified: { Length: > 0 } unified } ? unified.Where(Counts).Sum(o => o.Count) : 0;
+        // A kill that counts now also takes the kept kills its objective names with it (the first NPCs of a KillSpawner spawner, which
+        // never counted alone), before the next step can begin and count them again (G2).
+        var running = !Finished && Step is not null;
+        if (running)
+        {
+            var counting = Step!.Objectives.Where((o, i) => i < Goals.Length && Goals[i] < o.Count && Counts(o)).ToList();
+            if (counting.Count > 0) uncountedKills.RemoveAll(k => counting.Any(o => NamedKill(o, k.NpcId, k.SpawnName, true)));
+        }
+        var changed = Apply(Counts, now);
+        if (points > 0) changed |= Apply(o => o.Type == "AchieveUnifiedObjectivesScore", now, points);
+        // Kept for a later step unless it counted (G2).
+        if (running && !changed && uncountedKills.Count < 512) uncountedKills.Add((npcId, spawnName));
+        return changed;
+    }
 
     /// <summary>
     /// The player talked to an NPC (the step talk, 0x8d2b kind 2; <paramref name="index"/> names the objective when the client said
     /// which) or closed its dialog (<paramref name="close"/>: CloseNpc objectives only).
     /// </summary>
+    /// <summary>
+    /// An NPC that a KillNpc objective in a step NOT yet reached will target: immune until then (OURS, user 2026-11-07). The
+    /// Asmodian HQ001 Balaur Watchstone (DraTotemA, 2590052) spawns in stage 1 alongside Elvida but must not be destroyable until
+    /// her cue to destroy it (stage 2 step 9); as a plain monster the player could break it during the earlier brigade fight.
+    /// </summary>
+    public bool KillPending(int npcId, string spawnName)
+    {
+        bool future = false, nowOrDone = false;
+        for (var si = 0; si < Definition.Stages.Length; si++)
+        {
+            var steps = Definition.Stages[si].Steps;
+            for (var ti = 0; ti < steps.Length; ti++)
+                if (steps[ti].Objectives.Any(o => o.Type == "KillNpc" && ((o.Npcs ?? []).Contains(npcId) || Names(o, spawnName))))
+                {
+                    if (si > StageIndex || si == StageIndex && ti > StepIndex) future = true;
+                    else nowOrDone = true;   // its kill is the current step (killable now) or already past
+                }
+        }
+        return future && !nowOrDone;
+    }
+
+    /// <remarks>
+    /// CloseNpc is "come close to the NPC" (NpcData CloseEventRange): the client reports it with the same step talk, no dialog
+    /// open. OBSERVED: official Layer_1_2 step 6 (CloseNpc Hitanie) counted with the 0x8d2c kind 2 reply and no 0xe241 (capture
+    /// 20261107-010735 #237.895); Dungeon_0005's five approach objectives likewise (20261107-012837 #138-144). We counted CloseNpc
+    /// only when a dialog closed: 12 step talks for objectives 3-7 changed nothing in our traces 2026-11-07..10 (they waited for
+    /// the 30 s fallback). A dialog closing next to the NPC still counts it.
+    /// </remarks>
     public bool Talked(int npcId, string spawnName, int? index, bool close, long now) =>
-        Apply(o => o.Type == (close ? "CloseNpc" : "AskNpc") && ((o.Npcs ?? []).Contains(npcId) || Names(o, spawnName))
+        Apply(o => (close ? o.Type == "CloseNpc" : o.Type is "AskNpc" or "CloseNpc") && ((o.Npcs ?? []).Contains(npcId) || Names(o, spawnName))
                    && (index is not { } i || Step!.Objectives.Length <= i || ReferenceEquals(Step.Objectives[i], o)), now);
 
     /// <summary>
@@ -466,12 +760,36 @@ public sealed class MapEventRun
     internal static bool NamesObject(MapEventObjective o, string spawnName, string? envName) => envName is null ? Names(o, spawnName)
         : o.Names.Any(n => string.Equals(n, envName, StringComparison.OrdinalIgnoreCase) || string.Equals(n, spawnName, StringComparison.OrdinalIgnoreCase));
 
-    public bool UsedObject(string spawnName, long now, string? envName = null) =>
-        Apply(o => o.Type == "UseEnvObj" && NamesObject(o, spawnName, envName), now);
+    public bool UsedObject(string spawnName, long now, string? envName = null)
+    {
+        // A used object went through Occupied (while used) to Finish: UpdateEnvObjState objectives on those states count it too.
+        var state = Apply(o => o.Type == "UpdateEnvObjState" && o.Value(1) is "Finish" or "Occupied" && NamesObject(o, spawnName, envName), now);
+        if (!Apply(o => o.Type == "UseEnvObj" && NamesObject(o, spawnName, envName), now)) return state;
+        // The used object opens the note the step waits for (CloseNote): Valley of Hope's corpse (UseEnvObj E_CoastalCave_Corpse_001 +
+        // CloseNote Note_CoastalCave_001, no ShowNote directive in the script; the object's own note is client data we do not have).
+        // Live 2026-11-08: no note opened, the step waited for its timeout (10-20 s) before Luteros moved on.
+        if (!Finished && Step is { } step)
+            for (var i = 0; i < step.Objectives.Length && i < Goals.Length; i++)
+                if (step.Objectives[i] is { Type: "CloseNote" } note && Goals[i] < note.Count && notesShown.Add(note.Value(0)))
+                    Host.ShowNote(note.Value(0));
+        return true;
+    }
+
+    /// <summary>An object the player destroyed (EnvDestroy, bombs): its uses, and UpdateEnvObjState "Dead" (Dungeon_D_0001's stone wall,
+    /// E_Dungeon_D_0001_StoneWall_001 Dead, waited for the 30 s fallback before).</summary>
+    public bool Destroyed(string spawnName, long now)
+    {
+        var dead = Apply(o => o.Type == "UpdateEnvObjState" && string.Equals(o.Value(1), "Dead", StringComparison.OrdinalIgnoreCase) && Names(o, spawnName), now);
+        return UsedObject(spawnName, now) | dead;
+    }
+
+    /// <summary>Notes this run opened for a used object (each once).</summary>
+    readonly HashSet<string> notesShown = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Whether a UseEnvObj objective of the current step still counts this spawner (the object despawns once used: OBSERVED for the phoenix eggs).</summary>
     public bool WantsObject(string spawnName, string? envName = null) =>
-        !Finished && Step is { } step && step.Objectives.Where((o, i) => i < Goals.Length && Goals[i] < o.Count && o.Type == "UseEnvObj" && NamesObject(o, spawnName, envName)).Any();
+        !Finished && Step is { } step && step.Objectives.Where((o, i) => i < Goals.Length && Goals[i] < o.Count
+            && (o.Type == "UseEnvObj" || o.Type == "UpdateEnvObjState" && MapEventObjective.TrackedObjectState(o.Value(1))) && NamesObject(o, spawnName, envName)).Any();
 
     /// <summary>Where the player stands: EnterVolumePC (trigger names) and EnterSubZone objectives.</summary>
     public bool PositionAt(Func<string, bool> insideTrigger, Func<string, bool> insideSubzone, long now) =>
@@ -488,6 +806,37 @@ public sealed class MapEventRun
         Apply(o => o.Type == "HpRemaining" && ((o.Npcs ?? []).Contains(npcId) || Names(o, spawnName))
                    && int.TryParse(o.Value(1), NumberStyles.Integer, CultureInfo.InvariantCulture, out var limit) && percent <= limit, now);
 
+    /// <summary>
+    /// The lowest HP an NPC may drop to while this run needs it (percent of its maximum), or null: an open HpRemaining objective
+    /// on it stops at its threshold (the Asmodian HQ001 "stop Elvida" fight: 70 then 40, she must not die; live 2026-11-07 she
+    /// was killed before the step counted), and an NPC a later step still talks to (AskNpc) never dies (1 HP).
+    /// </summary>
+    public double? HpFloor(int npcId, string spawnName)
+    {
+        double? floor = null;
+        // Only for an NPC the script turns friendly later (ChangeRelationshipEntity to a non-monster: Elvida becomes NPC_Companion
+        // at 40 %); a boss's HP phases (also HpRemaining) still let it die from a big hit.
+        if (TurnsFriendly(spawnName))
+            foreach (var (_, o) in Open)
+                if (o.Type == "HpRemaining" && ((o.Npcs ?? []).Contains(npcId) || Names(o, spawnName))
+                    && int.TryParse(o.Value(1), NumberStyles.Integer, CultureInfo.InvariantCulture, out var limit))
+                    floor = Math.Max(floor ?? 0, limit);   // the next threshold down (70 before 40)
+        if (floor is null && Stage is not null
+            && Definition.Stages.Skip(StageIndex).SelectMany(st => st.Steps).SelectMany(st => st.Objectives)
+                .Any(o => o.Type == "AskNpc" && ((o.Npcs ?? []).Contains(npcId) || Names(o, spawnName))))
+            floor = 0;
+        return floor;
+    }
+
+    bool TurnsFriendly(string spawnName)
+    {
+        IEnumerable<MapEventDirective> All(MapEventStep st) =>
+            st.Pre.Concat(st.Post).Concat(st.Objectives.SelectMany(o => (o.Pre ?? []).Concat(o.Post ?? [])));
+        return Definition.Stages.SelectMany(st => st.Steps).SelectMany(All).Any(d => d.Type == "ChangeRelationshipEntity"
+            && string.Equals(d.Value(0), spawnName, StringComparison.OrdinalIgnoreCase)
+            && d.Value(1) is { } to && !to.StartsWith("Monster", StringComparison.OrdinalIgnoreCase));
+    }
+
     /// <summary>The client finished objective <paramref name="index"/> itself (0x9230 kind 2: cutscene, note, talk, guide).</summary>
     public bool ClientObjective(int index, long now) =>
         Step is { } step && index >= 0 && index < step.Objectives.Length && Apply(o => ReferenceEquals(o, step.Objectives[index]), now, whole: true);
@@ -499,12 +848,18 @@ public sealed class MapEventRun
 
     // ---------- Steps ----------
 
-    void CheckStep(long now)
+    /// <summary>The current step's required objectives (all of them when none is required) reached their counts.</summary>
+    bool StepGoalsMet()
     {
-        if (Finished || stepObjectivesDone || Step is not { } step) return;
+        if (Step is not { } step) return false;
         var required = step.Objectives.Select((o, i) => (o, i)).Where(x => !x.o.Optional).ToList();
         if (required.Count == 0) required = step.Objectives.Select((o, i) => (o, i)).ToList();
-        if (required.Any(x => Goals[x.i] < x.o.Count)) return;
+        return required.All(x => x.i < Goals.Length && Goals[x.i] >= x.o.Count);
+    }
+
+    void CheckStep(long now)
+    {
+        if (Finished || stepObjectivesDone || Step is not { } step || !StepGoalsMet()) return;
         stepObjectivesDone = true;
         if (step.Post.Length > 0) sequences.Add(new Sequence(step.Post, stepSerial));
         Tick(now);
@@ -577,11 +932,15 @@ public sealed class MapEventRun
             }
             if (!progressed) break;
         }
+        if (!Finished && waves.Count > 0) WaveTick(now);
+        if (Finished) return;
+        HeldTick(now);
         if (Finished) return;
         // Client-side and untracked objectives time out as done.
         if (Step is { } step)
-            for (var i = 0; i < step.Objectives.Length && i < fallbackAt.Length; i++)
-                if (fallbackAt[i] != 0 && now >= fallbackAt[i] && Goals[i] < step.Objectives[i].Count)
+            // A timed-out objective can finish the step; the next step's objectives are not this loop's (its Goals are shorter: threw).
+            for (var i = 0; i < step.Objectives.Length && i < fallbackAt.Length && ReferenceEquals(Step, step) && !Finished; i++)
+                if (fallbackAt[i] != 0 && now >= fallbackAt[i] && i < Goals.Length && Goals[i] < step.Objectives[i].Count)
                 {
                     fallbackAt[i] = 0;
                     Host.Unsupported(this, $"objective {step.Objectives[i].Type} {step.Objectives[i].Value(0)} finished by timeout");
@@ -595,7 +954,10 @@ public sealed class MapEventRun
                     sequences.Add(new Sequence(rules[i].Directives, stepSerial));
                 }
         // A stage fails once per spell of its conditions (a death fails it when it happens, not every tick until the revival).
-        if (Stage is { Fail.Length: > 0 } stage)
+        // A step whose objectives are done goes on first: FierceHornCave_Normal's wave stage fails on "Lycan totem out of combat"
+        // and its last step is the totem's kill, so the kill itself failed the stage and the wave began again (OURS: the order of
+        // the two in one tick is not in the client data).
+        if (Stage is { Fail.Length: > 0 } stage && !stepObjectivesDone && !StepGoalsMet())
         {
             var failing = Holds(stage.Fail, now);
             if (failing && !stageFailing) { stageFailing = true; FailStage(stage, now); return; }
@@ -637,7 +999,10 @@ public sealed class MapEventRun
                 return c.Value(1) switch { "Equal" => value == other, "NotEqual" => value != other, "Greater" => value > other, "Less" => value < other, "GreaterEqual" => value >= other, "LessEqual" => value <= other, _ => false };
             }
             case "TOD": case "DayOfWeek": return true;
-            default: return false;   // FailBoardPuzzle, RemoveFromAggroList, HpRemaining: not tracked
+            // The boss room's players left its aggro list (the boss reset: they ran, died or left): the stage fails and its fail
+            // directives reset the room (audit 2026-11-13 G11: 82 uses in served events, all stage fails; never true before).
+            case "RemoveFromAggroList": return Host.RemovedFromAggro(spawner);
+            default: return false;   // FailBoardPuzzle, HpRemaining: not tracked
         }
     }
 
@@ -698,7 +1063,11 @@ public sealed class MapEventRun
             case "StartFocusCamera": Host.FocusCamera(d.Value(0), d.Value(2)); break;
             case "EnvObjChangePhase": Host.EnvObjChangePhase(d.Value(0), d.Int(1)); break;
             case "SetEnvObjCanInteract": Host.SetEnvObjCanInteract(d.Value(0), d.Flag(1)); break;
-            case "CameraShake": case "PlayAct": case "ChangeBT": case "NpcMoveforSeamlessCutscene": case "NpcChangePhase":
+            case "StartWave": StartWave(d.Value(0)); break;
+            case "EndWave": waves.Remove(d.Value(0)); break;
+            case "ChangeBT": foreach (var name in Split(d.Value(0))) Host.ChangeBehaviour(name, d.Value(1)); break;
+            case "NpcChangePhase": foreach (var name in Split(d.Value(0))) Host.NpcPhase(name, d.Int(1)); break;
+            case "CameraShake": case "PlayAct": case "NpcMoveforSeamlessCutscene":
                 break;   // client-side presentation, or NPC details the server does not model; the event goes on
             default: Host.Unsupported(this, $"directive {d.Type} {d.Value(0)}"); break;
         }

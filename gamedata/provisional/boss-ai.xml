@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Boss and monster AI (Stage 6). Read once at start-up by the server (BossAiTable).
+
+     defaults (every monster):
+       opening_min_ms / opening_max_ms: a monster's special skills become ready this long after it joins the fight (a random
+         time in the range), then follow their own cooldowns. OBSERVED 2026-11-07 over all recordings: specials are first used
+         1-8 s into the fight (median), long before one cooldown (15 of 23 skills before half of it); before Stage 6 we held
+         each back for a whole cooldown (the Lake Guardian's roar: 50 s; official: 10 s).
+       gap_close_cm: a monster whose target is out of reach may use a ready leap that lands at the target (Teleport_Caster
+         TargetLocation_*) when the target is within the leap skill's range plus this much. PROVISIONAL (no official sample).
+
+     boss npc="...": per template
+       rotation: the special skills in priority order (the first ready one in reach is used; the basic attack otherwise).
+         Skills not listed keep the template's own order after the listed ones.
+       phase hp_percent / skills: when the boss's HP first falls to hp_percent, these skills are cast once, in order, before
+         anything else, whatever their cooldown or range (a leap to a fixed spot, a roar).
+       berserk_ms: the boss's enrage time after it joins the fight, sent with its combat state (CombatStateUpdate_NT mask 1).
+         OBSERVED once (2980044, capture 20261106-115817): the time sent was the fight start + 365 days + 300 s; berserk_offset_ms
+         reproduces that offset. Nothing is applied at the time (what enrage does is not observed).
+
+     skill: a boss skill that is not in any template's ActiveSkillList (so not in tools/data/world-npcs.json npc_skills), with
+       its client-table numbers (game-catalog-v2 Skill rows: CastingTime, NeedCoolTime, the Damage row's id and ratio). -->
+<boss_ai>
+	<defaults opening_min_ms="1000" opening_max_ms="4000" gap_close_cm="1500"/>
+
+	<!-- 1603852 LakeGuard_01_Skill03: CastingTime 800, NeedCoolTime 30000, Damage 160385011 ratio 9000-11000, Teleport_Caster
+	     MapLocation 9232,-7815,64 (tools/data/npc-teleports.json); range as the other Skill03 leaps (4000). -->
+	<skill id="1603852" range="4000" cooldown_ms="30000" cast_ms="800" effect="160385011" damage_min="9000" damage_max="11000"/>
+
+	<!-- Dungeon_D_0018 Lake Guardian. OBSERVED (capture 20261107-012837): 1603870 at 2.3 s, then at ~34 % HP the leap to the arena
+	     centre 1603852 (MapLocation 9232,-7815,64; not in its ActiveSkillList) and the roar 1603860 (its helpers:
+	     boss-mechanics.xml), then 1603830. Phase threshold PROVISIONAL (one fight). -->
+	<boss npc="2701034" rotation="1603870 1603860 1603830 1603840 1603850 1603851">
+		<phase hp_percent="35" skills="1603852 1603860"/>
+	</boss>
+
+	<boss npc="2980044" berserk_ms="300000" berserk_offset_ms="31536000000"/>
+</boss_ai>

@@ -12,6 +12,8 @@ public sealed class Target
     public int Defense { get; init; }
     public Vector3d Position { get; set; }
     public int NpcId { get; init; }
+    /// <summary>NpcData NpcSubType (NormalMonster, EliteMonster, ...; empty when unknown): KillNpcSubtype objectives.</summary>
+    public string SubType { get; init; } = "";
     public int Level { get; init; } = 1;
     /// <summary>NpcData Grade (1-5; 3 the common one): kill experience follows it.</summary>
     public int Grade { get; init; } = 3;
@@ -19,11 +21,32 @@ public sealed class Target
     public int Relationship { get; set; } = 6;   // ERelationshipEntity (6 Monster); map events change it
     /// <summary>Held by a scripted abnormal (stun, hold, stone): it neither moves nor attacks until released.</summary>
     public bool Held { get; set; }
+    /// <summary>The behaviour tree a map event's ChangeBT gave it (Def_Companion_NPC_01 fights beside the player, Def_Companion_NPC_NoCombat
+    /// and the Def_Citizen ones do not); null: its NpcData behaviour.</summary>
+    public string? Behaviour { get; set; }
+    /// <summary>The phase a map event's NpcChangePhase put it in (0: none yet).</summary>
+    public int Phase { get; set; }
+
+    // Boss stun control (BossControl): the diminishing-stun window, immunity, the stagger gauge and its damage window.
+    public int CcCount { get; set; }
+    public long CcWindowStart { get; set; }
+    public long CcImmuneUntil { get; set; }
+    public double StaggerGauge { get; set; }
+    public long StaggerAt { get; set; }
+    public long StaggerImmuneUntil { get; set; }
+    public long VulnerableUntil { get; set; }
+    /// <summary>Groggy guard (client NpcGroggyType GroggyGuard): energy left (-1 not started), groggy until (BossClient).</summary>
+    public int GroggyEnergy { get; set; } = -1;
+    public long GroggyUntil { get; set; }
+    /// <summary>When its berserk starts (NpcData BossBerserkInvokeTime after the fight began; 0 none).</summary>
+    public long BerserkAt { get; set; }
     /// <summary>Immune through a scripted abnormal: the players' hits land for nothing.</summary>
     public bool Immune { get; set; }
     /// <summary>Its spawn height was put on the ground (navmesh floor or terrain) once the map's geometry was loaded.</summary>
     public bool Snapped { get; set; }
-    public bool Aggressive { get; init; }        // NpcData AggroType Aggro_A
+    public bool Aggressive { get; init; }        // NpcData AggroType Aggro_A / Aggro_A_SearchOnlyPC / Revenge_A (the official appear's aggressive bit)
+    /// <summary>NpcData AggroType (Aggro_A, AggroNormal, Revenge_A...).</summary>
+    public string AggroType { get; init; } = "None";
     public double WalkSpeed { get; init; }       // units per second
     public double RunSpeed { get; init; }
     public int Radius { get; init; }             // CollisionCylinderRadius
@@ -33,6 +56,8 @@ public sealed class Target
     public bool NoRotation { get; init; }
     /// <summary>Combat.DamageScale of its NpcSubType and Grade.</summary>
     public double DamageScale { get; init; } = 1.0;
+    /// <summary>NpcSubType as a fighting rank (NpcTactics: how smart it fights).</summary>
+    public NpcRank Rank { get; init; }
     /// <summary>NpcData ObjectTerrainType Air: appears flying (move state 7 FlyingOnAirStop, substate 2; every official air NPC).</summary>
     public bool Air { get; init; }
     /// <summary>A flying monster: appears with the passive abnormal 10000001 (immunities; every official flying monster, 17 of 17).</summary>
@@ -45,32 +70,79 @@ public sealed class Target
     /// <summary>The looping idle animation (social action) set in the appear, and when it started (Unix ms).</summary>
     public int SocialAction { get; init; }
     public long SocialStart { get; init; }
+    bool? hitGauge, untouchable;
+    /// <summary>
+    /// A hit gauge: each hit takes one point, whatever its damage. NpcData bHitCountBased (tools/data/npc-attack-flags.json, 325
+    /// templates) or a spawn-poses.xml gauge (the totems); by its template unless set.
+    /// </summary>
+    public bool HitGauge { get => hitGauge ?? Combat.IsHitGauge(NpcId); init => hitGauge = value; }
+    /// <summary>
+    /// No player damage reaches it (skills, area hits, delayed casts, damage over time, summons, player traps, gear procs, bombs,
+    /// companions): NpcData bCanBeAttacked false or NpcTargetAble Unable (npc-attack-flags.json), or a traps.xml untouchable trap.
+    /// A map event's ChangeRelationshipEntity to a monster relationship clears it.
+    /// </summary>
+    public bool Untouchable { get => untouchable ?? (NpcAttackFlags.Untouchable(NpcId) || TrapTable.Embedded.Untouchable(NpcId)); set => untouchable = value; }
+    /// <summary>The players' damage can land on it: a monster relationship and not untouchable.</summary>
+    public bool Attackable => Hostile && !Untouchable;
+    /// <summary>A standing abnormal the NPC appears with (spawn-poses.xml: the fallen soldiers' 12000071), 0 for none.</summary>
+    public int SpawnAbnormal { get; init; }
     /// <summary>The waypoint set this NPC walks (a patrol or roamer), or null.</summary>
     public NpcRoute? Route { get; init; }
     /// <summary>Walking its route now (the appear says move_state Walk).</summary>
     public bool Walking { get; set; }
 
-    /// <summary>
-    /// The groggy guard's energy (Stagger.cs) once a player's skill drained it; null while full or after a respawn (OURS). 0 = broken.
-    /// </summary>
-    public int? GroggyEnergy { get; set; }
-    /// <summary>When a broken guard refills (the break + NpcData GroggyTime; Stagger.Refill).</summary>
-    public long GroggyRefillAt { get; set; }
-
-    /// <summary>A Spiritmaster's spirit (GameSession.Spirits.cs): its owner and the fields of its own appear layout; null otherwise.</summary>
-    public SpiritLook? Spirit { get; init; }
 
     public bool Dead => Hp <= 0;
+    /// <summary>Fighting (between its 0x8d21 on and off): its appearance carries combat state 1 (CharState bit 6, official).</summary>
+    public bool InCombat { get; set; }
+
+    /// <summary>A timed change of one of the monster's numbers (skill debuffs: Defense -30%, Attack -10%, MoveSpeed -40%...).</summary>
+    public sealed record StatMod(string Stat, double Percent, long UntilMs, int SkillId);
+    readonly List<StatMod> mods = [];
+    public IReadOnlyList<StatMod> Mods => mods;
+
+    /// <summary>Adds a debuff (the same skill's change of the same stat is refreshed, not stacked).</summary>
+    public void AddMod(string stat, double percent, long untilMs, int skillId)
+    {
+        lock (mods)
+        {
+            mods.RemoveAll(m => m.Stat == stat && m.SkillId == skillId);
+            mods.Add(new StatMod(stat, percent, untilMs, skillId));
+        }
+    }
+
+    /// <summary>The active changes of a stat in percent (expired ones dropped); -30 for Defense -30%.</summary>
+    public double ModPercent(string stat, long now)
+    {
+        lock (mods)
+        {
+            if (mods.Count == 0) return 0;
+            mods.RemoveAll(m => m.UntilMs <= now);
+            return Math.Max(-90, mods.Where(m => m.Stat == stat).Sum(m => m.Percent));
+        }
+    }
+    /// <summary>When a field boss died (Unix ms; 0 otherwise): its corpse goes CorpseMs later although its respawn is far off.</summary>
+    public long DiedAt { get; set; }
     /// <summary>The corpse was removed (0x3642) and the NPC waits for its respawn.</summary>
     public bool CorpseRemoved { get; set; }
 
     /// <summary>Monster-family ERelationshipEntity values.</summary>
-    public bool Hostile => Relationship is 6 or 11 or 16 or 17 or 18 or 19 or 20 or 21;
+    public bool Hostile => IsHostile(Relationship);
+    public static bool IsHostile(int relationship) => relationship is 6 or 11 or 16 or 17 or 18 or 19 or 20 or 21;
+
+    /// <summary>
+    /// Carries the crowd-control immunity 10000001 (stun, hold, knockdown...): every official flying monster (17 of 17) and every
+    /// official boss / hero monster (13 of 13 sightings, byte audit 2026-11-09). USER 2026-11-09: bosses as official (not stunnable);
+    /// our diminishing-stun BossControl no longer applies to them.
+    /// </summary>
+    public bool CcImmune => AirMonster || Rank == NpcRank.Hero;
 
     public NpcAppearance Appearance() => new(Key, NpcId, Position, Direction, Hp, HpMax, Level, Relationship, Aggressive, Dead,
         UniqueKey, SocialAction, SocialStart, Walking && !Dead,
         MoveState: Air ? NpcAppearance.FlyingOnAirStop : (byte)0, MoveSubstate: Air ? (byte)2 : (byte)0,
-        Abnormals: AirMonster ? [new AbnormalWire(1, AirPassiveAbnormal, -1, PermanentExpiry, CasterKey: Key, RangeBase: Position)] : null);
+        Abnormals: CcImmune ? [new AbnormalWire(1, AirPassiveAbnormal, -1, PermanentExpiry, CasterKey: Key, RangeBase: Position)]
+            : SpawnAbnormal != 0 ? [new AbnormalWire(1, SpawnAbnormal, -1, PermanentExpiry, CasterKey: Key, RangeBase: Position)] : null,
+        Monster: Hostile, InCombat: InCombat && !Dead);
 }
 
 public sealed record Hit(int Amount, bool Critical, int EffectId);
@@ -99,12 +171,22 @@ public static class Combat
         return rng.Next(Math.Min(low, high), Math.Max(low, high) + 1);
     }
 
+    /// <summary>
+    /// The hits of a cast on one target. With <paramref name="skillLevel"/> &gt; 0 and the skill in the client tables
+    /// (SkillClient) the Damage rows come at that skill level (SkillEffectLv: 15090000 flat 79 at level 1, 2038 at level 40, OFFICIAL
+    /// client data), only from the hit steps <paramref name="steps"/> lets through (the steps whose area holds the target);
+    /// otherwise the level-1 rows of the class kit (class-skills.json).
+    /// </summary>
     public static IReadOnlyList<Hit> SkillHits(GameData data, int skillId, string? className, int level, int? weaponItem,
-        int targetDefense, Random rng, bool pvp = false)
+        int targetDefense, Random rng, bool pvp = false, WeaponStats? weaponStats = null, int skillLevel = 0, Func<SkillClient.Step, bool>? steps = null,
+        SkillClient.RowContext? rows = null)
     {
+        if (skillLevel > 0 && SkillClient.Embedded.Of(skillId) is { HasDamage: true } client)
+            return ClientHits(data, client, skillLevel, className, level, weaponItem, targetDefense, rng, pvp, weaponStats, steps, rows ?? SkillClient.RowContext.Default);
         var definition = data.Skill(skillId);
         if (definition is null) return [];
-        var weapon = data.WeaponStatsOf(weaponItem);
+        // weaponStats: the caller's weapon with its bonuses (the skin collection's weapon-type damage); else the item's own stats.
+        var weapon = weaponStats ?? data.WeaponStatsOf(weaponItem);
         var fixing = data.BaseStats(className, level).GetValueOrDefault("FixingDamage");
         var criticalChance = Math.Min(CriticalCap, weapon.Critical / 1000.0);
         var hits = new List<Hit>();
@@ -117,6 +199,34 @@ public static class Combat
             if (critical) raw *= CriticalMultiplier;
             var amount = Math.Max(1, (int)Math.Round(raw * DefenseScale / (DefenseScale + Math.Max(0, targetDefense))));
             hits.Add(new Hit(amount, critical, row.EffectId));
+        }
+        return hits;
+    }
+
+    /// <summary>The client-table hits: per allowed step, per Damage row, (flat + attack x ratio / 10000) / split at the skill level.</summary>
+    static IReadOnlyList<Hit> ClientHits(GameData data, SkillClient.Skill skill, int skillLevel, string? className, int level, int? weaponItem,
+        int targetDefense, Random rng, bool pvp, WeaponStats? weaponStats, Func<SkillClient.Step, bool>? steps, SkillClient.RowContext rows)
+    {
+        var weapon = weaponStats ?? data.WeaponStatsOf(weaponItem);
+        var fixing = data.BaseStats(className, level).GetValueOrDefault("FixingDamage");
+        var criticalChance = Math.Min(CriticalCap, weapon.Critical / 1000.0);
+        var table = SkillClient.Embedded;
+        var hits = new List<Hit>();
+        foreach (var step in skill.Steps)
+        {
+            if (steps is not null && !steps(step)) continue;
+            foreach (var effect in step.Effects)
+            {
+                if (effect.Type != "Damage" || !SkillClient.RowApplies(step, effect, rows)) continue;   // its conditions (main target, stacks...)
+                var d = table.DamageAt(effect, skillLevel);
+                var (fMin, fMax, rMin, rMax) = pvp && (d.PvpFlatMax > 0 || d.PvpRatioMax > 0) ? (d.PvpFlatMin, d.PvpFlatMax, d.PvpRatioMin, d.PvpRatioMax)
+                    : (d.FlatMin, d.FlatMax, d.RatioMin, d.RatioMax);
+                var attack = rng.Next(Math.Min(weapon.Min, weapon.Max), Math.Max(weapon.Min, weapon.Max) + 1) + fixing;
+                double raw = (rng.Next(Math.Min(fMin, fMax), Math.Max(fMin, fMax) + 1) + attack * rng.Next(Math.Min(rMin, rMax), Math.Max(rMin, rMax) + 1) / 10000.0) / d.Split;
+                var critical = rng.NextDouble() < criticalChance;
+                if (critical) raw *= CriticalMultiplier;
+                hits.Add(new Hit(Math.Max(1, (int)Math.Round(raw * DefenseScale / (DefenseScale + Math.Max(0, targetDefense)))), critical, effect.Id));
+            }
         }
         return hits;
     }
@@ -153,9 +263,29 @@ public static class Combat
         _ => 1.0,
     };
 
-    /// <summary>A spawn's HP: the level's Grade 3 curve scaled by its rank's unit.</summary>
+    /// <summary>A hit-gauge template: a spawn-poses.xml gauge or NpcData bHitCountBased.</summary>
+    public static bool IsHitGauge(int npcId) => SpawnPoses.Gauge(npcId) is not null || NpcAttackFlags.Hits(npcId) is not null;
+
+    /// <summary>A spawn's HP: a hit gauge's hits (official 7), else the level's Grade 3 curve scaled by its rank's unit.</summary>
     public static int HpFor(NpcSpawn spawn) => spawn.HpMax > 0 ? spawn.HpMax
-        : Math.Max(1, (int)Math.Round(HpForLevel(spawn.Level) * (double)HpUnit(spawn.SubType, spawn.Grade) / HpBaseUnit));
+        : NpcAttackFlags.Hits(spawn.NpcId) is int hits ? hits
+        : FieldHp(spawn.SubType, spawn.Grade, spawn.Level)
+          ?? Math.Max(1, (int)Math.Round(HpForLevel(spawn.Level) * (double)HpUnit(spawn.SubType, spawn.Grade) / HpBaseUnit));
+
+    /// <summary>The official HP of field monsters (gamedata/provisional/npc-hp.xml rows), null when no row matches.</summary>
+    public static int? FieldHp(string? subType, int grade, int level) =>
+        FieldHpRows.Value.FirstOrDefault(r => r.SubType == subType && r.Grade == grade && level >= r.From && level <= r.To)?.Hp;
+
+    sealed record HpRow(string SubType, int Grade, int From, int To, int Hp);
+
+    static readonly Lazy<List<HpRow>> FieldHpRows = new(() =>
+    {
+        using var stream = typeof(Combat).Assembly.GetManifestResourceStream("provisional/npc-hp.xml")
+            ?? throw new InvalidOperationException("Missing embedded game data provisional/npc-hp.xml");
+        static int A(System.Xml.Linq.XElement e, string n) => int.Parse((string?)e.Attribute(n) ?? "0", System.Globalization.CultureInfo.InvariantCulture);
+        return System.Xml.Linq.XDocument.Load(stream).Root!.Elements("row")
+            .Select(e => new HpRow((string)e.Attribute("sub_type")!, A(e, "grade"), A(e, "from"), A(e, "to"), A(e, "hp"))).ToList();
+    });
 
     public static int HpForLevel(int level)
     {
@@ -191,11 +321,12 @@ public static class Combat
             targets[key] = new Target
             {
                 Key = key, Name = spawn.Name, Hp = hp, HpMax = hp, Position = new Vector3d(spawn.Position[0], spawn.Position[1], spawn.Position[2]),
-                NpcId = spawn.NpcId, Level = spawn.Level, Grade = spawn.Grade, Direction = spawn.Yaw, Relationship = spawn.Relationship,
-                Aggressive = spawn.Aggressive, WalkSpeed = spawn.WalkSpeed, RunSpeed = spawn.RunSpeed, Radius = spawn.Radius,
+                NpcId = spawn.NpcId, SubType = spawn.SubType, Level = spawn.Level, Grade = spawn.Grade, Direction = spawn.Yaw, Relationship = spawn.Relationship,
+                Aggressive = spawn.Aggressive, AggroType = spawn.AggroType, WalkSpeed = spawn.WalkSpeed, RunSpeed = spawn.RunSpeed, Radius = spawn.Radius,
                 Function = spawn.Function, Aggro = spawn.Aggro, Skills = spawn.Skills ?? [], NoRotation = spawn.NoRotation,
                 UniqueKey = spawn.UniqueKey, SocialAction = spawn.SocialAction, SocialStart = spawn.SocialAction != 0 ? StartedAt : 0, Route = spawn.Route,
-                Air = spawn.Air, AirMonster = spawn.Air && spawn.SubType.EndsWith("Monster", StringComparison.Ordinal), DamageScale = DamageScale(spawn.SubType, spawn.Grade),
+                SpawnAbnormal = spawn.SpawnAbnormal,
+                Air = spawn.Air, AirMonster = spawn.Air && spawn.SubType.EndsWith("Monster", StringComparison.Ordinal), DamageScale = DamageScale(spawn.SubType, spawn.Grade), Rank = NpcTactics.RankOf(spawn.SubType),
             };
         }
         return targets;

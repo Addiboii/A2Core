@@ -1,0 +1,3133 @@
+{
+  "0x3600": {
+    "samples": 40,
+    "struct": "MapFrame_NT",
+    "offset": "0x0",
+    "varints": [],
+    "mask": null
+  },
+  "0x3603": {
+    "samples": 40,
+    "struct": "Ping_RS",
+    "offset": "0x0",
+    "varints": [],
+    "mask": null
+  },
+  "0x3615": {
+    "samples": 2,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x3616": {
+    "samples": 1,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x361a": {
+    "samples": 1,
+    "struct": "CharCheckName_RS",
+    "offset": "0x0",
+    "varints": [],
+    "mask": null
+  },
+  "0x361c": {
+    "samples": 2,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x3620": {
+    "samples": 8,
+    "struct": "SelectCharacter_RS",
+    "offset": "0x0",
+    "varints": [],
+    "mask": null
+  },
+  "0x3621": {
+    "samples": 40,
+    "struct": "PrepareEnterMap_NT",
+    "offset": "0x0",
+    "varints": [
+      "_teleport_effect_id"
+    ],
+    "mask": null
+  },
+  "0x3623": {
+    "samples": 40,
+    "struct": "LoadComplete_RS",
+    "offset": "0x0",
+    "varints": [],
+    "mask": null
+  },
+  "0x3626": {
+    "samples": 1,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x3631": {
+    "samples": 1,
+    "struct": "Logout_RS",
+    "offset": "0x0",
+    "varints": [],
+    "mask": null
+  },
+  "0x3633": {
+    "samples": 40,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x3634": {
+    "samples": 40,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x3635": {
+    "samples": 40,
+    "struct": "EnvObjDespawn_NT",
+    "offset": "0x0",
+    "varints": [
+      "_despawn_act_id"
+    ],
+    "mask": null
+  },
+  "0x3637": {
+    "samples": 40,
+    "struct": "InteractEnvObj_RS",
+    "offset": "0x0",
+    "varints": [],
+    "mask": {
+      "mask_width": 1,
+      "ambiguous": true,
+      "fields": [
+        [
+          "_result",
+          "mandatory",
+          null
+        ],
+        [
+          "_target_key",
+          "mandatory",
+          null
+        ],
+        [
+          "_item_key",
+          "mandatory",
+          null
+        ],
+        [
+          "_target_id",
+          "optional",
+          "i32"
+        ]
+      ]
+    }
+  },
+  "0x3638": {
+    "samples": 40,
+    "struct": "InteractEnvObjStarted_NT",
+    "offset": "0x0",
+    "varints": [],
+    "mask": null
+  },
+  "0x3639": {
+    "samples": 11,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x363a": {
+    "samples": 40,
+    "struct": "InteractEnvObjCompleted_NT",
+    "offset": "0x0",
+    "varints": [],
+    "mask": null
+  },
+  "0x363b": {
+    "samples": 40,
+    "struct": "InteractEnvObjAvailableState_NT",
+    "offset": "0x0",
+    "varints": [],
+    "mask": null
+  },
+  "0x363e": {
+    "samples": 1,
+    "struct": "InteractEnvObjStop_RS",
+    "offset": "0x0",
+    "varints": [],
+    "mask": null
+  },
+  "0x3641": {
+    "samples": 40,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x3642": {
+    "samples": 40,
+    "struct": "NpcDisappear_NT",
+    "offset": "0x0",
+    "varints": [
+      "_despawn_act_id"
+    ],
+    "mask": null
+  },
+  "0x3645": {
+    "samples": 40,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x3646": {
+    "samples": 13,
+    "struct": "CharBarrierInfo_NT",
+    "offset": "0x0",
+    "varints": [],
+    "mask": null
+  },
+  "0x3647": {
+    "samples": 40,
+    "struct": "CharDisappear_NT",
+    "offset": "0x0",
+    "varints": [
+      "_teleport_effect_id"
+    ],
+    "mask": null
+  },
+  "0x3649": {
+    "samples": 23,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x364a": {
+    "samples": 40,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x364b": {
+    "samples": 40,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x364e": {
+    "samples": 40,
+    "struct": "CharRotate_NT",
+    "offset": "0x0",
+    "varints": [],
+    "mask": null
+  },
+  "0x3650": {
+    "samples": 1,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x3655": {
+    "samples": 13,
+    "struct": "PolymorphUpdate_NT",
+    "offset": "0x0",
+    "varints": [],
+    "mask": null
+  },
+  "0x3656": {
+    "samples": 40,
+    "struct": "CharCombatPowerUpdate_NT",
+    "offset": "0x0",
+    "varints": [],
+    "mask": null
+  },
+  "0x3657": {
+    "samples": 1,
+    "struct": "MentoringRoleUpdate_NT",
+    "offset": "0x0",
+    "varints": [],
+    "mask": null
+  },
+  "0x371a": {
+    "samples": 40,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x371b": {
+    "samples": 40,
+    "struct": "CharMoveUpdateSnapshot_NT",
+    "offset": "0xa2",
+    "varints": [],
+    "mask": {
+      "mask_width": 1,
+      "ambiguous": true,
+      "fields": [
+        [
+          "_is_running",
+          "optional",
+          null
+        ],
+        [
+          "_pos",
+          "mandatory",
+          null
+        ],
+        [
+          "_move_dir",
+          "optional",
+          "i32"
+        ],
+        [
+          "_rotate_dir",
+          "optional",
+          "i32"
+        ],
+        [
+          "_local_coord",
+          "optional",
+          null
+        ],
+        [
+          "_dead_reckoning_on",
+          "mandatory",
+          null
+        ]
+      ]
+    }
+  },
+  "0x371c": {
+    "samples": 40,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x371d": {
+    "samples": 40,
+    "struct": "CharMoveUpdateOffset_NT",
+    "offset": "0xa3",
+    "varints": [],
+    "mask": {
+      "mask_width": 1,
+      "ambiguous": true,
+      "fields": [
+        [
+          "_is_running",
+          "optional",
+          null
+        ],
+        [
+          "_offset_x",
+          "optional",
+          null
+        ],
+        [
+          "_offset_y",
+          "optional",
+          null
+        ],
+        [
+          "_offset_z",
+          "optional",
+          null
+        ],
+        [
+          "_move_dir",
+          "optional",
+          "i32"
+        ],
+        [
+          "_rotate_dir",
+          "optional",
+          "i32"
+        ],
+        [
+          "_local_coord",
+          "optional",
+          null
+        ],
+        [
+          "_dead_reckoning_on",
+          "mandatory",
+          null
+        ]
+      ]
+    }
+  },
+  "0x371e": {
+    "samples": 40,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x371f": {
+    "samples": 40,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x3720": {
+    "samples": 40,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x3721": {
+    "samples": 40,
+    "struct": "CharMoveSprintOff_NT",
+    "offset": "0xa2",
+    "varints": [],
+    "mask": null
+  },
+  "0x3722": {
+    "samples": 40,
+    "struct": "CharMoveSprintOff_NT",
+    "offset": "0xa3",
+    "varints": [],
+    "mask": null
+  },
+  "0x3723": {
+    "samples": 28,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x3724": {
+    "samples": 40,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x3725": {
+    "samples": 40,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x3726": {
+    "samples": 2,
+    "struct": "CharGlideBuoyancyOn_NT",
+    "offset": "0xa3",
+    "varints": [],
+    "mask": {
+      "mask_width": 1,
+      "ambiguous": false,
+      "fields": [
+        [
+          "_buoyance_mode",
+          "optional",
+          null
+        ],
+        [
+          "_springboard_id",
+          "optional",
+          null
+        ],
+        [
+          "_dead_reckoning_on",
+          "optional",
+          null
+        ]
+      ]
+    }
+  },
+  "0x3728": {
+    "samples": 40,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x3729": {
+    "samples": 40,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x372a": {
+    "samples": 40,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x372b": {
+    "samples": 40,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x372d": {
+    "samples": 40,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x372e": {
+    "samples": 40,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x372f": {
+    "samples": 40,
+    "struct": "CharForwardAttackMoveUpdateSnapshot_NT",
+    "offset": "0xa3",
+    "varints": [],
+    "mask": {
+      "mask_width": 1,
+      "ambiguous": false,
+      "fields": [
+        [
+          "_pos",
+          "mandatory",
+          null
+        ],
+        [
+          "_move_velocity_3d",
+          "mandatory",
+          null
+        ],
+        [
+          "_rotate_dir",
+          "mandatory",
+          null
+        ],
+        [
+          "_local_coord",
+          "optional",
+          null
+        ],
+        [
+          "_dead_reckoning_on",
+          "optional",
+          null
+        ],
+        [
+          "_move_end",
+          "optional",
+          null
+        ]
+      ]
+    }
+  },
+  "0x3730": {
+    "samples": 15,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x3732": {
+    "samples": 40,
+    "struct": "CharRollingUpdateOffset_NT",
+    "offset": "0xa3",
+    "varints": [],
+    "mask": {
+      "mask_width": 1,
+      "ambiguous": true,
+      "fields": [
+        [
+          "_offset_x",
+          "optional",
+          null
+        ],
+        [
+          "_offset_y",
+          "optional",
+          null
+        ],
+        [
+          "_offset_z",
+          "optional",
+          null
+        ],
+        [
+          "_move_dir",
+          "mandatory",
+          "i32"
+        ],
+        [
+          "_rotate_dir",
+          "optional",
+          "varint"
+        ],
+        [
+          "_dead_reckoning_on",
+          "optional",
+          null
+        ]
+      ]
+    }
+  },
+  "0x3734": {
+    "samples": 12,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x3736": {
+    "samples": 40,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x3737": {
+    "samples": 40,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x3738": {
+    "samples": 40,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x373c": {
+    "samples": 40,
+    "struct": "CharWarpLeave_NT",
+    "offset": "0xa3",
+    "varints": [],
+    "mask": {
+      "mask_width": 1,
+      "ambiguous": true,
+      "fields": [
+        [
+          "_pos",
+          "mandatory",
+          null
+        ],
+        [
+          "_dir",
+          "mandatory",
+          null
+        ],
+        [
+          "_move_state",
+          "mandatory",
+          null
+        ],
+        [
+          "_move_substate",
+          "mandatory",
+          null
+        ],
+        [
+          "_reason",
+          "mandatory",
+          null
+        ],
+        [
+          "_skill_id",
+          "optional",
+          "i32"
+        ],
+        [
+          "_effect_id",
+          "optional",
+          "i32"
+        ],
+        [
+          "_duration",
+          "mandatory",
+          "varint"
+        ]
+      ]
+    }
+  },
+  "0x3741": {
+    "samples": 13,
+    "struct": "CharMoveSprintOn_RS",
+    "offset": "0xa3",
+    "varints": [],
+    "mask": null
+  },
+  "0x3742": {
+    "samples": 12,
+    "struct": "CharMoveSprintOff_RS",
+    "offset": "0xa3",
+    "varints": [],
+    "mask": null
+  },
+  "0x3743": {
+    "samples": 4,
+    "struct": "CharFlyStart_RS",
+    "offset": "0xa2",
+    "varints": [],
+    "mask": null
+  },
+  "0x3744": {
+    "samples": 3,
+    "struct": "CharFlyStart_RS",
+    "offset": "0xa3",
+    "varints": [],
+    "mask": null
+  },
+  "0x3746": {
+    "samples": 40,
+    "struct": "LastOnGroundPosZ_NT",
+    "offset": "0xa3",
+    "varints": [],
+    "mask": null
+  },
+  "0x3801": {
+    "samples": 40,
+    "struct": "SkillStart_RS",
+    "offset": "0x156",
+    "varints": [],
+    "mask": {
+      "mask_width": 1,
+      "ambiguous": false,
+      "fields": [
+        [
+          "_result",
+          "mandatory",
+          null
+        ],
+        [
+          "_skill_id",
+          "mandatory",
+          "i32"
+        ],
+        [
+          "_change_toggle",
+          "optional",
+          null
+        ],
+        [
+          "_client_skill_action_uid",
+          "optional",
+          null
+        ]
+      ]
+    }
+  },
+  "0x3802": {
+    "samples": 40,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x3803": {
+    "samples": 40,
+    "struct": "SkillFireProjectile_NT",
+    "offset": "0x156",
+    "varints": [],
+    "mask": {
+      "mask_width": 1,
+      "ambiguous": true,
+      "fields": [
+        [
+          "_target_key",
+          "mandatory",
+          null
+        ],
+        [
+          "_skill_id",
+          "mandatory",
+          "i32"
+        ],
+        [
+          "_skill_action_uid",
+          "mandatory",
+          null
+        ],
+        [
+          "_skill_projectile_id",
+          "mandatory",
+          "varint"
+        ],
+        [
+          "_target_pos",
+          "mandatory",
+          null
+        ],
+        [
+          "_parts_id",
+          "mandatory",
+          "varint"
+        ],
+        [
+          "_remain_time_ms",
+          "mandatory",
+          "i32"
+        ],
+        [
+          "_effect_seq",
+          "mandatory",
+          "varint"
+        ],
+        [
+          "_skill_process_uid",
+          "mandatory",
+          "varint"
+        ],
+        [
+          "_start_dir",
+          "optional",
+          null
+        ],
+        [
+          "_start_time",
+          "optional",
+          null
+        ],
+        [
+          "_chain_char_key",
+          "optional",
+          null
+        ],
+        [
+          "_chain_parts_id",
+          "optional",
+          "i32"
+        ],
+        [
+          "_chain_fire_pos",
+          "optional",
+          null
+        ]
+      ]
+    }
+  },
+  "0x3804": {
+    "samples": 40,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x3805": {
+    "samples": 40,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x3806": {
+    "samples": 40,
+    "struct": "SkillEnd_NT",
+    "offset": "0x156",
+    "varints": [],
+    "mask": null
+  },
+  "0x3809": {
+    "samples": 40,
+    "struct": "SkillCastingStart_NT",
+    "offset": "0x156",
+    "varints": [],
+    "mask": {
+      "mask_width": 1,
+      "ambiguous": true,
+      "fields": [
+        [
+          "_skill_id",
+          "mandatory",
+          "i32"
+        ],
+        [
+          "_skill_level",
+          "optional",
+          null
+        ],
+        [
+          "_target_info",
+          "mandatory",
+          null
+        ],
+        [
+          "_casting_time",
+          "mandatory",
+          "varint"
+        ],
+        [
+          "_act_move_type",
+          "mandatory",
+          null
+        ],
+        [
+          "_casting_act_id",
+          "optional",
+          "varint"
+        ],
+        [
+          "_attack_speed",
+          "optional",
+          "i32"
+        ],
+        [
+          "_projectile_targets",
+          "optional",
+          null
+        ]
+      ]
+    }
+  },
+  "0x380c": {
+    "samples": 40,
+    "struct": "SkillCastingStop_NT",
+    "offset": "0x156",
+    "varints": [
+      "_cooltime"
+    ],
+    "mask": null
+  },
+  "0x380e": {
+    "samples": 40,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x380f": {
+    "samples": 17,
+    "struct": "SkillAdd_NT",
+    "offset": "0x156",
+    "varints": [],
+    "mask": {
+      "mask_width": 1,
+      "ambiguous": true,
+      "fields": [
+        [
+          "_skill_id",
+          "mandatory",
+          "i32"
+        ],
+        [
+          "_skill_level",
+          "mandatory",
+          null
+        ],
+        [
+          "_original_skill_level",
+          "mandatory",
+          null
+        ],
+        [
+          "_additional_level",
+          "mandatory",
+          null
+        ],
+        [
+          "_reason",
+          "optional",
+          null
+        ]
+      ]
+    }
+  },
+  "0x3810": {
+    "samples": 1,
+    "struct": "OdEnergyCubeReward_RS",
+    "offset": "0x0",
+    "varints": [],
+    "mask": null
+  },
+  "0x3811": {
+    "samples": 4,
+    "struct": "ItemSoulBindStart_RS",
+    "offset": "0xa3",
+    "varints": [],
+    "mask": {
+      "mask_width": 1,
+      "ambiguous": true,
+      "fields": [
+        [
+          "_result",
+          "optional",
+          null
+        ],
+        [
+          "_uid",
+          "optional",
+          null
+        ],
+        [
+          "_cost_item_uid",
+          "optional",
+          null
+        ],
+        [
+          "_cost_item_id",
+          "optional",
+          "i32"
+        ]
+      ]
+    }
+  },
+  "0x3813": {
+    "samples": 40,
+    "struct": "BeginItemBidding_NT",
+    "offset": "0x0",
+    "varints": [],
+    "mask": {
+      "mask_width": 1,
+      "ambiguous": true,
+      "fields": [
+        [
+          "_bidding_uid",
+          "mandatory",
+          null
+        ],
+        [
+          "_item_id",
+          "optional",
+          "varint"
+        ],
+        [
+          "_item_count",
+          "optional",
+          "i32"
+        ],
+        [
+          "_expire_time",
+          "mandatory",
+          null
+        ]
+      ]
+    }
+  },
+  "0x3814": {
+    "samples": 9,
+    "struct": "Abnormal_Move_Start_NT",
+    "offset": "0x157",
+    "varints": [],
+    "mask": null
+  },
+  "0x3815": {
+    "samples": 9,
+    "struct": "Abnormal_Move_Stop_NT",
+    "offset": "0x157",
+    "varints": [],
+    "mask": null
+  },
+  "0x3816": {
+    "samples": 34,
+    "struct": "Abnormal_Move_Instant_NT",
+    "offset": "0x157",
+    "varints": [],
+    "mask": null
+  },
+  "0x3817": {
+    "samples": 1,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x3818": {
+    "samples": 13,
+    "struct": "BidItem_NT",
+    "offset": "0x0",
+    "varints": [],
+    "mask": null
+  },
+  "0x3819": {
+    "samples": 13,
+    "struct": "ChainSkillDeactiveList_NT",
+    "offset": "0x157",
+    "varints": [],
+    "mask": null
+  },
+  "0x381b": {
+    "samples": 1,
+    "struct": "SkillChargingStart_RS",
+    "offset": "0x157",
+    "varints": [],
+    "mask": null
+  },
+  "0x381c": {
+    "samples": 21,
+    "struct": "SkillChargingStart_NT",
+    "offset": "0x157",
+    "varints": [],
+    "mask": {
+      "mask_width": 1,
+      "ambiguous": true,
+      "fields": [
+        [
+          "_skill_id",
+          "mandatory",
+          "i32"
+        ],
+        [
+          "_skill_level",
+          "mandatory",
+          null
+        ],
+        [
+          "_target_info",
+          "mandatory",
+          null
+        ],
+        [
+          "_charge_rate",
+          "optional",
+          null
+        ],
+        [
+          "_act_move_type",
+          "optional",
+          null
+        ],
+        [
+          "_charging_act_id",
+          "optional",
+          "i32"
+        ]
+      ]
+    }
+  },
+  "0x381e": {
+    "samples": 2,
+    "struct": "RollDice_RS",
+    "offset": "0x0",
+    "varints": [],
+    "mask": {
+      "mask_width": 1,
+      "ambiguous": true,
+      "fields": [
+        [
+          "_result",
+          "mandatory",
+          null
+        ],
+        [
+          "_dice_uid",
+          "mandatory",
+          null
+        ],
+        [
+          "_value",
+          "optional",
+          "i32"
+        ]
+      ]
+    }
+  },
+  "0x3821": {
+    "samples": 3,
+    "struct": "SkillAutoLoadUpdate_NT",
+    "offset": "0x156",
+    "varints": [],
+    "mask": null
+  },
+  "0x3822": {
+    "samples": 4,
+    "struct": "SkillAutoLoadUpdate_NT",
+    "offset": "0x157",
+    "varints": [],
+    "mask": {
+      "mask_width": 1,
+      "ambiguous": true,
+      "fields": [
+        [
+          "_skill_id",
+          "mandatory",
+          "i32"
+        ],
+        [
+          "_autoload_count",
+          "optional",
+          null
+        ],
+        [
+          "_autoload_time",
+          "optional",
+          "varint"
+        ]
+      ]
+    }
+  },
+  "0x382a": {
+    "samples": 40,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x382b": {
+    "samples": 40,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x382c": {
+    "samples": 40,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x382d": {
+    "samples": 40,
+    "struct": "ImmuneAbnormal_NT",
+    "offset": "0x157",
+    "varints": [],
+    "mask": null
+  },
+  "0x3831": {
+    "samples": 40,
+    "struct": "LockOnTarget_RS",
+    "offset": "0x157",
+    "varints": [
+      "_parts_id"
+    ],
+    "mask": null
+  },
+  "0x3832": {
+    "samples": 40,
+    "struct": "LockOnTarget_NT",
+    "offset": "0x157",
+    "varints": [
+      "_parts_id"
+    ],
+    "mask": null
+  },
+  "0x3834": {
+    "samples": 40,
+    "struct": "SetMainTarget_RS",
+    "offset": "0x157",
+    "varints": [
+      "_parts_id"
+    ],
+    "mask": null
+  },
+  "0x3835": {
+    "samples": 40,
+    "struct": "TargetUpdate_NT",
+    "offset": "0x157",
+    "varints": [
+      "_parts_id"
+    ],
+    "mask": null
+  },
+  "0x3836": {
+    "samples": 2,
+    "struct": "TargetReset_NT",
+    "offset": "0x157",
+    "varints": [
+      "_parts_id"
+    ],
+    "mask": null
+  },
+  "0x383b": {
+    "samples": 1,
+    "struct": "CombatStateOn_RS",
+    "offset": "0x157",
+    "varints": [],
+    "mask": null
+  },
+  "0x383d": {
+    "samples": 1,
+    "struct": "CombatStateOff_RS",
+    "offset": "0x157",
+    "varints": [],
+    "mask": null
+  },
+  "0x3840": {
+    "samples": 11,
+    "struct": "SkillLevelUp_RS",
+    "offset": "0x157",
+    "varints": [],
+    "mask": null
+  },
+  "0x3844": {
+    "samples": 1,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x3847": {
+    "samples": 40,
+    "struct": "SkillCooltimeUpdate_NT",
+    "offset": "0x157",
+    "varints": [
+      "_cooltime_list[]._cooltime"
+    ],
+    "mask": null
+  },
+  "0x3848": {
+    "samples": 40,
+    "struct": "SkillRangeNoticeFilterLocation_NT",
+    "offset": "0x157",
+    "varints": [
+      "_effect_seq",
+      "_skill_id"
+    ],
+    "mask": null
+  },
+  "0x384b": {
+    "samples": 1,
+    "struct": "SkillGroundReady_NT",
+    "offset": "0x156",
+    "varints": [],
+    "mask": null
+  },
+  "0x384c": {
+    "samples": 1,
+    "struct": "SkillGroundReady_NT",
+    "offset": "0x157",
+    "varints": [],
+    "mask": null
+  },
+  "0x384e": {
+    "samples": 1,
+    "struct": "SkillGroundStart_RS",
+    "offset": "0x157",
+    "varints": [],
+    "mask": null
+  },
+  "0x3851": {
+    "samples": 1,
+    "struct": "SkillGroundStop_NT",
+    "offset": "0x157",
+    "varints": [],
+    "mask": null
+  },
+  "0x3900": {
+    "samples": 5,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x3902": {
+    "samples": 2,
+    "struct": "AbyssRiftPhaseStart_NT",
+    "offset": "0xa3",
+    "varints": [],
+    "mask": {
+      "mask_width": 2,
+      "ambiguous": false,
+      "fields": [
+        [
+          "_id",
+          "mandatory",
+          "i32"
+        ],
+        [
+          "_phase",
+          "mandatory",
+          "varint"
+        ],
+        [
+          "_start_time",
+          "optional",
+          null
+        ]
+      ]
+    }
+  },
+  "0x3907": {
+    "samples": 14,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x4000": {
+    "samples": 3,
+    "struct": "CharPhaseUpdate_NT",
+    "offset": "0x8ed",
+    "varints": [],
+    "mask": null
+  },
+  "0x4001": {
+    "samples": 27,
+    "struct": "MapEnvState_NT",
+    "offset": "0x8ed",
+    "varints": [],
+    "mask": null
+  },
+  "0x4002": {
+    "samples": 18,
+    "struct": "MapEnvSetting_NT",
+    "offset": "0x8ed",
+    "varints": [],
+    "mask": null
+  },
+  "0x4005": {
+    "samples": 1,
+    "struct": "MapExit_RS",
+    "offset": "0x8ed",
+    "varints": [],
+    "mask": null
+  },
+  "0x4007": {
+    "samples": 2,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x400a": {
+    "samples": 3,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x4301": {
+    "samples": 2,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x5100": {
+    "samples": 8,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x5101": {
+    "samples": 10,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x5105": {
+    "samples": 25,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x5600": {
+    "samples": 5,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x5602": {
+    "samples": 1,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x5611": {
+    "samples": 6,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x5613": {
+    "samples": 10,
+    "struct": "ItemUse_RS",
+    "offset": "0x1ebe",
+    "varints": [],
+    "mask": null
+  },
+  "0x5615": {
+    "samples": 1,
+    "struct": "ItemUseByItemID_RS",
+    "offset": "0x1ebe",
+    "varints": [],
+    "mask": null
+  },
+  "0x5616": {
+    "samples": 13,
+    "struct": "ItemUse_NT",
+    "offset": "0x1ebe",
+    "varints": [],
+    "mask": null
+  },
+  "0x5617": {
+    "samples": 2,
+    "struct": "ItemUseStarted_NT",
+    "offset": "0x1ebe",
+    "varints": [],
+    "mask": null
+  },
+  "0x5619": {
+    "samples": 3,
+    "struct": "ItemUseCompleted_NT",
+    "offset": "0x1ebe",
+    "varints": [],
+    "mask": null
+  },
+  "0x561b": {
+    "samples": 40,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x561c": {
+    "samples": 40,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x561d": {
+    "samples": 37,
+    "struct": "ItemEquipLevelChange_NT",
+    "offset": "0x1ebe",
+    "varints": [],
+    "mask": null
+  },
+  "0x561e": {
+    "samples": 40,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x561f": {
+    "samples": 40,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x5621": {
+    "samples": 13,
+    "struct": "ItemLooting_RS",
+    "offset": "0x1ebe",
+    "varints": [],
+    "mask": null
+  },
+  "0x5623": {
+    "samples": 5,
+    "struct": "ItemEnchant_RS",
+    "offset": "0x1ebe",
+    "varints": [],
+    "mask": null
+  },
+  "0x5626": {
+    "samples": 40,
+    "struct": "BroadcastItemEnchant_NT",
+    "offset": "0x1ebe",
+    "varints": [],
+    "mask": null
+  },
+  "0x562a": {
+    "samples": 1,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x562c": {
+    "samples": 2,
+    "struct": "ItemSoulBindStart_RS",
+    "offset": "0x1ebe",
+    "varints": [],
+    "mask": null
+  },
+  "0x5630": {
+    "samples": 5,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x5633": {
+    "samples": 2,
+    "struct": "GodstoneList_NT",
+    "offset": "0x1ebe",
+    "varints": [],
+    "mask": null
+  },
+  "0x5637": {
+    "samples": 1,
+    "struct": "BroadcastItemEnchantGodstone_NT",
+    "offset": "0x1ebe",
+    "varints": [],
+    "mask": null
+  },
+  "0x563f": {
+    "samples": 1,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x5641": {
+    "samples": 3,
+    "struct": "ItemDecompose_RS",
+    "offset": "0x1ebe",
+    "varints": [],
+    "mask": null
+  },
+  "0x5643": {
+    "samples": 4,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x5647": {
+    "samples": 3,
+    "struct": "OpenRewardBox_RS",
+    "offset": "0x1ebe",
+    "varints": [],
+    "mask": null
+  },
+  "0x5648": {
+    "samples": 2,
+    "struct": "PotionItemAutoUseList_NT",
+    "offset": "0x1ebe",
+    "varints": [],
+    "mask": null
+  },
+  "0x564b": {
+    "samples": 4,
+    "struct": "ItemAutoUseActivatedList_NT",
+    "offset": "0x1ebe",
+    "varints": [],
+    "mask": null
+  },
+  "0x564d": {
+    "samples": 2,
+    "struct": "SetAutoUseItem_RS",
+    "offset": "0x1ebe",
+    "varints": [],
+    "mask": null
+  },
+  "0x5672": {
+    "samples": 4,
+    "struct": "WingList_NT",
+    "offset": "0x1ebe",
+    "varints": [],
+    "mask": null
+  },
+  "0x5673": {
+    "samples": 1,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x5676": {
+    "samples": 2,
+    "struct": "WingChange_NT",
+    "offset": "0x1ebe",
+    "varints": [],
+    "mask": null
+  },
+  "0x5679": {
+    "samples": 5,
+    "struct": "TitleList_NT",
+    "offset": "0x1ebe",
+    "varints": [],
+    "mask": null
+  },
+  "0x567b": {
+    "samples": 2,
+    "struct": "TitleChange_RS",
+    "offset": "0x1ebe",
+    "varints": [],
+    "mask": null
+  },
+  "0x567c": {
+    "samples": 3,
+    "struct": "TitleChange_NT",
+    "offset": "0x1ebe",
+    "varints": [],
+    "mask": null
+  },
+  "0x567d": {
+    "samples": 7,
+    "struct": "TitleAcquire_NT",
+    "offset": "0x1ebe",
+    "varints": [],
+    "mask": null
+  },
+  "0x5680": {
+    "samples": 3,
+    "struct": "TitleEquip_RS",
+    "offset": "0x1ebe",
+    "varints": [],
+    "mask": null
+  },
+  "0x5681": {
+    "samples": 3,
+    "struct": "TitleEquipChange_NT",
+    "offset": "0x1ebe",
+    "varints": [],
+    "mask": null
+  },
+  "0x5682": {
+    "samples": 1,
+    "struct": "PrevSeasonMissionInfo_NT",
+    "offset": "0x1ebe",
+    "varints": [],
+    "mask": {
+      "mask_width": 2,
+      "ambiguous": false,
+      "fields": [
+        [
+          "_complete_achievement_count",
+          "mandatory",
+          "varint"
+        ],
+        [
+          "_total_achievement_count",
+          "mandatory",
+          "varint"
+        ]
+      ]
+    }
+  },
+  "0x5684": {
+    "samples": 40,
+    "struct": "AchievementCountUpdate_NT",
+    "offset": "0x1ebe",
+    "varints": [],
+    "mask": null
+  },
+  "0x5686": {
+    "samples": 4,
+    "struct": "TakeAchievementReward_RS",
+    "offset": "0x1ebe",
+    "varints": [],
+    "mask": null
+  },
+  "0x568a": {
+    "samples": 17,
+    "struct": "TakeAchievementRewardBatch_RS",
+    "offset": "0x1ebe",
+    "varints": [],
+    "mask": null
+  },
+  "0x568e": {
+    "samples": 1,
+    "struct": "NPShopGameMoneyGoodsLimit_RS",
+    "offset": "0x1ebe",
+    "varints": [],
+    "mask": null
+  },
+  "0x5691": {
+    "samples": 7,
+    "struct": "RandomShopInfo_NT",
+    "offset": "0x1ebe",
+    "varints": [],
+    "mask": null
+  },
+  "0x5693": {
+    "samples": 3,
+    "struct": "RandomShopInfo_RS",
+    "offset": "0x1ebe",
+    "varints": [],
+    "mask": null
+  },
+  "0x5695": {
+    "samples": 3,
+    "struct": "RandomShopPurchase_RS",
+    "offset": "0x1ebe",
+    "varints": [],
+    "mask": null
+  },
+  "0x56a0": {
+    "samples": 1,
+    "struct": "CharCustomizingStatusCheck_RS",
+    "offset": "0x1ebe",
+    "varints": [],
+    "mask": null
+  },
+  "0x56a8": {
+    "samples": 1,
+    "struct": "CharCustomizingGetSettlementStatus_RS",
+    "offset": "0x1ebe",
+    "varints": [],
+    "mask": null
+  },
+  "0x56ac": {
+    "samples": 4,
+    "struct": "OpenSubzoneGroupIDs_NT",
+    "offset": "0x1ebe",
+    "varints": [],
+    "mask": null
+  },
+  "0x56ad": {
+    "samples": 6,
+    "struct": "AddSubzoneGroupID_NT",
+    "offset": "0x1ebe",
+    "varints": [],
+    "mask": null
+  },
+  "0x56b6": {
+    "samples": 1,
+    "struct": "AccountContentsInfoList_NT",
+    "offset": "0x1ebe",
+    "varints": [],
+    "mask": null
+  },
+  "0x570f": {
+    "samples": 1,
+    "struct": "DungeonClearKillNpc_NT",
+    "offset": "0x1ebe",
+    "varints": [],
+    "mask": {
+      "mask_width": 2,
+      "ambiguous": false,
+      "fields": [
+        [
+          "_kill_npcs",
+          "mandatory",
+          null
+        ]
+      ]
+    }
+  },
+  "0x5712": {
+    "samples": 1,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x572d": {
+    "samples": 1,
+    "struct": "DrawDebugDirectionalArrows_NT",
+    "offset": "0x1ebe",
+    "varints": [],
+    "mask": {
+      "mask_width": 1,
+      "ambiguous": false,
+      "fields": [
+        [
+          "_style",
+          "optional",
+          null
+        ],
+        [
+          "_arrows",
+          "optional",
+          null
+        ]
+      ]
+    }
+  },
+  "0x6000": {
+    "samples": 3,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x6001": {
+    "samples": 40,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x6008": {
+    "samples": 1,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x6100": {
+    "samples": 39,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x6101": {
+    "samples": 13,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x6103": {
+    "samples": 2,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x6108": {
+    "samples": 1,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x6109": {
+    "samples": 1,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x610b": {
+    "samples": 7,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x610c": {
+    "samples": 7,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x8a10": {
+    "samples": 1,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x8a1d": {
+    "samples": 1,
+    "struct": "MentorDungeonReward_NT",
+    "offset": "0x53c5",
+    "varints": [],
+    "mask": {
+      "mask_width": 2,
+      "ambiguous": false,
+      "fields": [
+        [
+          "_reward_items",
+          "mandatory",
+          null
+        ]
+      ]
+    }
+  },
+  "0x8a33": {
+    "samples": 40,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x8aaf": {
+    "samples": 2,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x8c07": {
+    "samples": 5,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x8c09": {
+    "samples": 5,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x8d00": {
+    "samples": 40,
+    "struct": "CharPointUpdate_NT",
+    "offset": "0x53c5",
+    "varints": [],
+    "mask": null
+  },
+  "0x8d01": {
+    "samples": 3,
+    "struct": "DpStepUpdate_NT",
+    "offset": "0x53c5",
+    "varints": [],
+    "mask": null
+  },
+  "0x8d02": {
+    "samples": 5,
+    "struct": "GlideCooltimeUpdate_NT",
+    "offset": "0x53c5",
+    "varints": [],
+    "mask": null
+  },
+  "0x8d03": {
+    "samples": 13,
+    "struct": "SprintCooltimeUpdate_NT",
+    "offset": "0x53c5",
+    "varints": [],
+    "mask": null
+  },
+  "0x8d04": {
+    "samples": 40,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x8d05": {
+    "samples": 40,
+    "struct": "EnvObjDie_NT",
+    "offset": "0x53c5",
+    "varints": [],
+    "mask": null
+  },
+  "0x8d07": {
+    "samples": 37,
+    "struct": "ExpUpdate_NT",
+    "offset": "0x53c5",
+    "varints": [],
+    "mask": null
+  },
+  "0x8d08": {
+    "samples": 10,
+    "struct": "LevelUpdate_NT",
+    "offset": "0x53c5",
+    "varints": [],
+    "mask": null
+  },
+  "0x8d09": {
+    "samples": 7,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x8d0b": {
+    "samples": 1,
+    "struct": "QuestAccept_RS",
+    "offset": "0x53c5",
+    "varints": [],
+    "mask": null
+  },
+  "0x8d0f": {
+    "samples": 18,
+    "struct": "QuestTakeReward_RS",
+    "offset": "0x53c5",
+    "varints": [],
+    "mask": null
+  },
+  "0x8d10": {
+    "samples": 40,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x8d11": {
+    "samples": 17,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x8d15": {
+    "samples": 40,
+    "struct": "EventFuncAction_NT",
+    "offset": "0x53c5",
+    "varints": [],
+    "mask": {
+      "mask_width": 1,
+      "ambiguous": true,
+      "fields": [
+        [
+          "_func_type",
+          "mandatory",
+          null
+        ],
+        [
+          "_func_value1",
+          "mandatory",
+          null
+        ],
+        [
+          "_volume_name",
+          "mandatory",
+          null
+        ],
+        [
+          "_group_req_key",
+          "mandatory",
+          null
+        ],
+        [
+          "_group_member_count",
+          "mandatory",
+          "i32"
+        ],
+        [
+          "_target_char_key",
+          "mandatory",
+          null
+        ],
+        [
+          "_func_value2",
+          "optional",
+          null
+        ]
+      ]
+    }
+  },
+  "0x8d1b": {
+    "samples": 1,
+    "struct": "DutyMissionQuestJournalStatus_RS",
+    "offset": "0x53c5",
+    "varints": [],
+    "mask": null
+  },
+  "0x8d1c": {
+    "samples": 3,
+    "struct": "DutyMissionQuestJournalStatus_NT",
+    "offset": "0x53c5",
+    "varints": [
+      "_quests_list[]._random_reward_items_with_prob[]._count"
+    ],
+    "mask": null
+  },
+  "0x8d21": {
+    "samples": 40,
+    "struct": "CombatStateUpdate_NT",
+    "offset": "0x53c5",
+    "varints": [],
+    "mask": {
+      "mask_width": 1,
+      "ambiguous": false,
+      "fields": [
+        [
+          "_combat_state",
+          "mandatory",
+          null
+        ],
+        [
+          "_boss_berserk_apply_time",
+          "optional",
+          null
+        ]
+      ]
+    }
+  },
+  "0x8d2c": {
+    "samples": 37,
+    "struct": "QuestStepNpcConversation_RS",
+    "offset": "0x53c5",
+    "varints": [],
+    "mask": null
+  },
+  "0x8d2d": {
+    "samples": 1,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x8d34": {
+    "samples": 30,
+    "struct": "BroadcastGatherSourceResult_NT",
+    "offset": "0x53c5",
+    "varints": [],
+    "mask": null
+  },
+  "0x8d37": {
+    "samples": 2,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x8d41": {
+    "samples": 1,
+    "struct": "UpdateClientOption_RS",
+    "offset": "0x53c5",
+    "varints": [],
+    "mask": null
+  },
+  "0x8d43": {
+    "samples": 1,
+    "struct": "UpdateClientEnvSetting_RS",
+    "offset": "0x53c5",
+    "varints": [],
+    "mask": null
+  },
+  "0x8d44": {
+    "samples": 4,
+    "struct": "ClientEnvSetting_NT",
+    "offset": "0x53c5",
+    "varints": [],
+    "mask": null
+  },
+  "0x8d4b": {
+    "samples": 9,
+    "struct": "SealStoneStatusChange_NT",
+    "offset": "0x53c5",
+    "varints": [],
+    "mask": null
+  },
+  "0x8d4d": {
+    "samples": 7,
+    "struct": "RegisterSealStoneAutoUse_RS",
+    "offset": "0x53c5",
+    "varints": [],
+    "mask": null
+  },
+  "0x8d4e": {
+    "samples": 3,
+    "struct": "BroadcastSealStoneChange_NT",
+    "offset": "0x53c5",
+    "varints": [],
+    "mask": null
+  },
+  "0x8d52": {
+    "samples": 40,
+    "struct": "NpcFirstAggro_NT",
+    "offset": "0x53c5",
+    "varints": [],
+    "mask": null
+  },
+  "0x8d53": {
+    "samples": 1,
+    "struct": "SeasonSchedule_NT",
+    "offset": "0x53c5",
+    "varints": [],
+    "mask": null
+  },
+  "0x8d57": {
+    "samples": 17,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x8d58": {
+    "samples": 1,
+    "struct": "MyPrevSeasonRanking_NT",
+    "offset": "0x53c5",
+    "varints": [],
+    "mask": null
+  },
+  "0x8d5b": {
+    "samples": 4,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x8d5c": {
+    "samples": 3,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x8d69": {
+    "samples": 1,
+    "struct": "SkinDecoInstanceList_RS",
+    "offset": "0x53c5",
+    "varints": [],
+    "mask": null
+  },
+  "0x8d6d": {
+    "samples": 40,
+    "struct": "InteractionEnvObjFinishState_NT",
+    "offset": "0x53c5",
+    "varints": [],
+    "mask": null
+  },
+  "0x8d6f": {
+    "samples": 9,
+    "struct": "CraftStart_RS",
+    "offset": "0x53c5",
+    "varints": [],
+    "mask": null
+  },
+  "0x8d71": {
+    "samples": 1,
+    "struct": "CraftCompleted_NT",
+    "offset": "0x53c5",
+    "varints": [],
+    "mask": null
+  },
+  "0x8d72": {
+    "samples": 20,
+    "struct": "BroadcastCraftStarted_NT",
+    "offset": "0x53c5",
+    "varints": [],
+    "mask": null
+  },
+  "0x8d74": {
+    "samples": 37,
+    "struct": "BroadcastCraftCompleted_NT",
+    "offset": "0x53c5",
+    "varints": [],
+    "mask": null
+  },
+  "0x8d7c": {
+    "samples": 9,
+    "struct": "CraftExpUpdate_NT",
+    "offset": "0x53c5",
+    "varints": [],
+    "mask": null
+  },
+  "0x8d7d": {
+    "samples": 1,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x8d7e": {
+    "samples": 3,
+    "struct": "MyCraftRecipeList_NT",
+    "offset": "0x53c5",
+    "varints": [],
+    "mask": null
+  },
+  "0x8d8c": {
+    "samples": 3,
+    "struct": "MyConversionRecipeList_NT",
+    "offset": "0x53c5",
+    "varints": [],
+    "mask": null
+  },
+  "0x8d91": {
+    "samples": 15,
+    "struct": "BroadcastLevelUpdate_NT",
+    "offset": "0x53c5",
+    "varints": [],
+    "mask": null
+  },
+  "0x8d92": {
+    "samples": 9,
+    "struct": "RelationshipEntityUpdate_NT",
+    "offset": "0x53c5",
+    "varints": [],
+    "mask": null
+  },
+  "0x8d93": {
+    "samples": 18,
+    "struct": "UpdateEnvObjHitCount_NT",
+    "offset": "0x53c5",
+    "varints": [],
+    "mask": null
+  },
+  "0x9000": {
+    "samples": 5,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x9002": {
+    "samples": 6,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x9003": {
+    "samples": 40,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x9005": {
+    "samples": 2,
+    "struct": "BossChallengeDungeonEnter_NT",
+    "offset": "0x54ca",
+    "varints": [
+      "_challenge_level"
+    ],
+    "mask": null
+  },
+  "0x9006": {
+    "samples": 40,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x9009": {
+    "samples": 5,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x900c": {
+    "samples": 2,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x900d": {
+    "samples": 5,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x9011": {
+    "samples": 3,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x9012": {
+    "samples": 1,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x9018": {
+    "samples": 1,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x9101": {
+    "samples": 7,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x910c": {
+    "samples": 1,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x922d": {
+    "samples": 40,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x922e": {
+    "samples": 20,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x922f": {
+    "samples": 17,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x9231": {
+    "samples": 11,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x9232": {
+    "samples": 6,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x9233": {
+    "samples": 4,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x9237": {
+    "samples": 6,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x9330": {
+    "samples": 2,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x9331": {
+    "samples": 1,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x9501": {
+    "samples": 1,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x9507": {
+    "samples": 40,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x9508": {
+    "samples": 40,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x9701": {
+    "samples": 8,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x9702": {
+    "samples": 6,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x970b": {
+    "samples": 2,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x9713": {
+    "samples": 1,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x9715": {
+    "samples": 2,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x9716": {
+    "samples": 3,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x971d": {
+    "samples": 1,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0x972a": {
+    "samples": 1,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0xe002": {
+    "samples": 10,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0xe004": {
+    "samples": 10,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0xe005": {
+    "samples": 40,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0xe200": {
+    "samples": 1,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0xe213": {
+    "samples": 1,
+    "struct": "ForceInfoUpdate_NT",
+    "offset": "0xa761",
+    "varints": [],
+    "mask": null
+  },
+  "0xe215": {
+    "samples": 2,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0xe223": {
+    "samples": 2,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0xe224": {
+    "samples": 1,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0xe225": {
+    "samples": 1,
+    "struct": "DungeonRoomInfo_NT",
+    "offset": "0xa762",
+    "varints": [],
+    "mask": {
+      "mask_width": 1,
+      "ambiguous": false,
+      "fields": [
+        [
+          "_room_info",
+          "optional",
+          null
+        ],
+        [
+          "_reason",
+          "optional",
+          null
+        ]
+      ]
+    }
+  },
+  "0xe226": {
+    "samples": 4,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0xe228": {
+    "samples": 16,
+    "struct": "DungeonRoomCreate_RS",
+    "offset": "0xa763",
+    "varints": [],
+    "mask": null
+  },
+  "0xe22e": {
+    "samples": 19,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0xe22f": {
+    "samples": 6,
+    "struct": "DungeonRoomInvite_RS",
+    "offset": "0xa761",
+    "varints": [],
+    "mask": {
+      "mask_width": 1,
+      "ambiguous": true,
+      "fields": [
+        [
+          "_result",
+          "mandatory",
+          null
+        ],
+        [
+          "_server_id",
+          "mandatory",
+          "varint"
+        ],
+        [
+          "_target_name",
+          "mandatory",
+          null
+        ],
+        [
+          "_target_key",
+          "mandatory",
+          null
+        ],
+        [
+          "_target_pc_id",
+          "optional",
+          "i32"
+        ],
+        [
+          "_expire_time",
+          "optional",
+          null
+        ],
+        [
+          "_result_ticket_id",
+          "optional",
+          "i32"
+        ]
+      ]
+    }
+  },
+  "0xe235": {
+    "samples": 1,
+    "struct": "DungeonRoomInviteResponse_NT",
+    "offset": "0xa763",
+    "varints": [],
+    "mask": {
+      "mask_width": 1,
+      "ambiguous": true,
+      "fields": [
+        [
+          "_applicant_dbid",
+          "mandatory",
+          null
+        ],
+        [
+          "_applicant_server_id",
+          "mandatory",
+          "varint"
+        ],
+        [
+          "_name",
+          "optional",
+          null
+        ],
+        [
+          "_response",
+          "optional",
+          null
+        ]
+      ]
+    }
+  },
+  "0xe236": {
+    "samples": 1,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0xe237": {
+    "samples": 2,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0xe238": {
+    "samples": 1,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0xe241": {
+    "samples": 40,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0xe243": {
+    "samples": 39,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0xe246": {
+    "samples": 1,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0xe248": {
+    "samples": 17,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0xe251": {
+    "samples": 1,
+    "struct": "DungeonRoomMoveMember_NT",
+    "offset": "0xa763",
+    "varints": [],
+    "mask": null
+  },
+  "0xe256": {
+    "samples": 3,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0xe257": {
+    "samples": 6,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0xe258": {
+    "samples": 10,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0xe25a": {
+    "samples": 8,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0xe25c": {
+    "samples": 1,
+    "struct": "KickOutVote_RS",
+    "offset": "0xa763",
+    "varints": [],
+    "mask": {
+      "mask_width": 1,
+      "ambiguous": false,
+      "fields": [
+        [
+          "_result",
+          "optional",
+          null
+        ],
+        [
+          "_reason",
+          "optional",
+          null
+        ],
+        [
+          "_expire_time",
+          "optional",
+          null
+        ]
+      ]
+    }
+  },
+  "0xe261": {
+    "samples": 1,
+    "struct": "StartReplayRecord_RS",
+    "offset": "0xa761",
+    "varints": [],
+    "mask": null
+  },
+  "0xe262": {
+    "samples": 9,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0xe263": {
+    "samples": 2,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0xe265": {
+    "samples": 5,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0xe26e": {
+    "samples": 1,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0xe274": {
+    "samples": 1,
+    "struct": "BlockMessageCard_RS",
+    "offset": "0xa761",
+    "varints": [],
+    "mask": {
+      "mask_width": 2,
+      "ambiguous": false,
+      "fields": [
+        [
+          "_result",
+          "optional",
+          null
+        ],
+        [
+          "_block",
+          "optional",
+          null
+        ]
+      ]
+    }
+  },
+  "0xe28c": {
+    "samples": 8,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0xe28d": {
+    "samples": 17,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0xe290": {
+    "samples": 4,
+    "struct": "DaevanionOpenNode_RS",
+    "offset": "0xa763",
+    "varints": [],
+    "mask": null
+  },
+  "0xe293": {
+    "samples": 1,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0xe294": {
+    "samples": 3,
+    "struct": "DaevanionResetBoard_RS",
+    "offset": "0xa762",
+    "varints": [],
+    "mask": {
+      "mask_width": 1,
+      "ambiguous": true,
+      "fields": [
+        [
+          "_result",
+          "mandatory",
+          null
+        ],
+        [
+          "_board_id",
+          "optional",
+          "i32"
+        ]
+      ]
+    }
+  },
+  "0xe295": {
+    "samples": 1,
+    "struct": "DaevanionPointUpdate_NT",
+    "offset": "0xa762",
+    "varints": [
+      "_used_point_infos[]._point"
+    ],
+    "mask": null
+  },
+  "0xe30b": {
+    "samples": 3,
+    "struct": "MonolithList_NT",
+    "offset": "0xa762",
+    "varints": [],
+    "mask": null
+  },
+  "0xe323": {
+    "samples": 4,
+    "struct": "TakeBattlePassReward_RS",
+    "offset": "0xa762",
+    "varints": [],
+    "mask": null
+  },
+  "0xe324": {
+    "samples": 40,
+    "struct": "BattlePassInfoList_NT",
+    "offset": "0xa762",
+    "varints": [],
+    "mask": null
+  },
+  "0xe32a": {
+    "samples": 1,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0xe32c": {
+    "samples": 1,
+    "struct": "ArenaRecord_RS",
+    "offset": "0xa762",
+    "varints": [
+      "_version"
+    ],
+    "mask": null
+  },
+  "0xe335": {
+    "samples": 16,
+    "struct": "CutsceneComplete_RS",
+    "offset": "0xa762",
+    "varints": [],
+    "mask": null
+  },
+  "0xe33a": {
+    "samples": 7,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0xe33b": {
+    "samples": 3,
+    "struct": "SubscribeList_NT",
+    "offset": "0xa762",
+    "varints": [],
+    "mask": null
+  },
+  "0xe33d": {
+    "samples": 1,
+    "struct": "PersonalExchangeInfo_NT",
+    "offset": "0xa762",
+    "varints": [],
+    "mask": null
+  },
+  "0xe33e": {
+    "samples": 1,
+    "struct": "RankingScoreContents_NT",
+    "offset": "0xa762",
+    "varints": [],
+    "mask": null
+  },
+  "0xe342": {
+    "samples": 2,
+    "struct": "RestorableItemList_NT",
+    "offset": "0xa762",
+    "varints": [],
+    "mask": null
+  },
+  "0xe343": {
+    "samples": 8,
+    "struct": "ItemRestoreStatusList_NT",
+    "offset": "0xa762",
+    "varints": [],
+    "mask": null
+  },
+  "0xe347": {
+    "samples": 3,
+    "struct": "TakePushReward_RS",
+    "offset": "0xa762",
+    "varints": [],
+    "mask": null
+  },
+  "0xe349": {
+    "samples": 5,
+    "struct": "RetrievePushRewardInfo_RS",
+    "offset": "0xa762",
+    "varints": [],
+    "mask": null
+  },
+  "0xe34a": {
+    "samples": 1,
+    "struct": "PushRewardChanged_NT",
+    "offset": "0xa762",
+    "varints": [],
+    "mask": null
+  },
+  "0xe34e": {
+    "samples": 1,
+    "struct": "Attendance_RS",
+    "offset": "0xa762",
+    "varints": [],
+    "mask": null
+  },
+  "0xffa5": {
+    "samples": 8,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0xffa6": {
+    "samples": 21,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0xffa7": {
+    "samples": 8,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0xffab": {
+    "samples": 1,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  },
+  "0xffae": {
+    "samples": 8,
+    "struct": null,
+    "offset": null,
+    "varints": [],
+    "mask": null
+  }
+}

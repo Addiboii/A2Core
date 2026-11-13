@@ -11,7 +11,8 @@ namespace Aion.World;
 // PotionItemAutoUseList_NT 0x5648 (OBSERVED "01 01 b314991f 00000000": group HP, Life Potion, none), SetAutoUsePotionItem
 // 0x5649/0x564a, ItemAutoUseActivatedList_NT 0x564b, SetAutoUseItem 0x564c/0x564d; ItemRestoreStatusList_NT 0xe343
 // (OBSERVED: 3 types, char db id, count 0, a time); PresetInfo_NT 0xe28c (OBSERVED 904 B), PresetEquipUpdate_NT 0xe28d,
-// PresetListSet 0xe291/0xe292. Request layouts are the usmap's (no request sample): CANDIDATE.
+// PresetListSet 0xe291/0xe292, PresetSkillUpdate_NT 0xe293 (OBSERVED rec 20261106-144624 #15911). Request layouts are the usmap's
+// (no request sample): CANDIDATE. The skill presets: GameSession.SkillPresets.cs.
 public sealed partial class GameSession
 {
     public const ushort SocialActionAcquireNt = 0x9500,
@@ -19,12 +20,12 @@ public sealed partial class GameSession
         SealStoneStatusNt = 0x8d4b, SealStoneRegisterRq = 0x8d4c, SealStoneRegisterRs = 0x8d4d, SealStoneBroadcastNt = 0x8d4e,
         PotionAutoUseListNt = 0x5648, PotionAutoUseRq = 0x5649, PotionAutoUseRs = 0x564a,
         ItemAutoUseListNt = 0x564b, ItemAutoUseRq = 0x564c, ItemAutoUseRs = 0x564d,
-        ItemRestoreStatusNt = 0xe343, PresetInfoNt = 0xe28c, PresetEquipUpdateNt = 0xe28d, PresetListSetRq = 0xe291, PresetListSetRs = 0xe292;
+        ItemRestoreStatusNt = 0xe343, PresetInfoNt = 0xe28c, PresetEquipUpdateNt = 0xe28d, PresetListSetRq = 0xe291, PresetListSetRs = 0xe292, PresetSkillUpdateNt = 0xe293;
 
     /// <summary>OURS: auto-potion drinks below this share of HP (the client's HP condition -1 is not decoded).</summary>
     public const int PotionAutoUsePercent = 50;
     /// <summary>EPresetType Equip; the other types (Arcana, Skill, Title, Wing, Skin, ...) only keep their number.</summary>
-    const int PresetEquip = 0, PresetTypes = 8, PresetCount = 3;
+    const int PresetEquip = 0, PresetSkill = 2, PresetTypes = 8, PresetCount = 3;
 
     sealed record SealStoneSetting(bool On, long Item);
     sealed record PresetSetting(Dictionary<int, int> Numbers, Dictionary<int, Dictionary<int, long>> Equip);
@@ -40,6 +41,26 @@ public sealed partial class GameSession
 
     public bool SealStoneOn => sealStoneOn;
     public IReadOnlyList<int> PotionSlots => potionSlots;
+
+    /// <summary>The client's own settings blob (setting "client_option", base64), sent back at character select.</summary>
+    byte[] clientOptions = [];
+    /// <summary>The client's ClientEnvSetting body (UpdateClientEnvSetting_RQ 0x8d42, setting "client_env"), sent as 0x8d44 at select.</summary>
+    byte[] clientEnv = [];
+    const int ClientOptionMax = 64 * 1024;
+
+    async Task<List<byte[]>> SaveClientOptionsAsync(byte[] plain, CancellationToken ct)
+    {
+        byte[] data;
+        try { data = new PacketReader(plain) { Offset = 2 }.Bytes(); }
+        catch (ProtocolException) { return [PacketWriter.Opcode(0x8d41).U16(EResult.ClientOption_DataInvalidLength).ToArray()]; }
+        if (data.Length > ClientOptionMax) return [PacketWriter.Opcode(0x8d41).U16(EResult.ClientOption_DataInvalidLength).ToArray()];
+        clientOptions = data;
+        await SaveSettingAsync("client_option", Convert.ToBase64String(data), ct);
+        return [GamePackets.ClientOptionReply()];
+    }
+
+    /// <summary>The equipped wing and wing skin the player chose (setting "wing"), 0 for none / the default.</summary>
+    int equippedWing, wingSkin;
 
     void LoadSettings(IReadOnlyDictionary<string, JsonElement> settings)
     {
@@ -57,9 +78,22 @@ public sealed partial class GameSession
         autoUseItems.UnionWith(Read<int[]>("item_auto_use") ?? []);
         autoUseSlots.Clear();
         autoUseSlots.UnionWith(Read<int[]>("quick_slot_auto_use") ?? []);
+        skillPointBonus = Math.Max(0, Read<int[]>("skill_point_bonus") is [var bonus] ? bonus : 0);
+        (equippedWing, wingSkin) = Read<int[]>("wing") is [var wing, var wingLook] ? (wing, wingLook) : (0, 0);
+        try { clientOptions = settings.TryGetValue("client_option", out var opt) && opt.ValueKind == JsonValueKind.String ? Convert.FromBase64String(opt.GetString()!) : []; }
+        catch (FormatException) { clientOptions = []; }
+        try { clientEnv = settings.TryGetValue("client_env", out var env) && env.ValueKind == JsonValueKind.String ? Convert.FromBase64String(env.GetString()!) : []; }
+        catch (FormatException) { clientEnv = []; }
+        stigmaPoints = Read<int[]>("stigma_points") is [var shard, var superior] ? [Math.Max(0, shard), Math.Max(0, superior)] : [0, 0];
         presets = Read<PresetSetting>("presets") ?? new([], []);
         LoadLogoutState(settings);   // GameSession.LogoutState.cs
+        LoadSkillPresets(Read<Dictionary<string, int[][]>>("skill_presets"));
         restoreCounts = Read<Dictionary<int, RestoreCount>>("item_restores") ?? [];
+        slotExtends = Read<int[]>("slot_extends") is { Length: 6 } extends ? extends : new int[6];
+        LoadTickets(Read<Dictionary<string, long[]>>("contents_tickets"));
+        LoadDailyRecords(Read<Dictionary<string, int[]>>("daily_dungeon_records"));
+        LoadEnhanceSettings(settings);
+        LoadPantheon(settings);
         bookmarks = Read<List<BookmarkEntry>>("bookmarks") ?? [];
     }
 
@@ -69,16 +103,12 @@ public sealed partial class GameSession
             await Stored(async () => { await store.SaveCharacterSettingAsync(character, name, JsonSerializer.SerializeToElement(value), ct); return []; });
     }
 
-    /// <summary>The world-entry lists these settings drive (after the skill list, as official).</summary>
-    List<byte[]> SettingsAtEntry(long now) =>
-    [
-        GamePackets.SocialActionInfo(GamePackets.DefaultSocialActions.Concat(earnedEmotes).Distinct().Order().ToList()),
-        PotionAutoUseList(),
-        ItemAutoUseList(),
-        PresetInfo(),
-        ItemRestoreStatus(now),
-        .. sealStoneItem != 0 ? [PacketWriter.Opcode(SealStoneRegisterRs).U16(0).I64(sealStoneItem).ToArray()] : Array.Empty<byte[]>(),   // OBSERVED i1146
-    ];
+    /// <summary>
+    /// The emote list at the world entry: PcSocialActionInfo_NT 0x9501 between the skill lists (0x5100, 0x3900) and the bar (0x5600),
+    /// as in every official load burst. PresetInfo_NT goes with the select burst (after AgitDecoList_NT 0x8aaf, OBSERVED in 16
+    /// entries); the auto-use lists and the restore status too (SelectEntryLists).
+    /// </summary>
+    byte[] SocialActionsAtEntry() => GamePackets.SocialActionInfo(GamePackets.DefaultSocialActions.Concat(earnedEmotes).Distinct().Order().ToList());
 
     // ---------- Emotes ----------
 
@@ -108,55 +138,10 @@ public sealed partial class GameSession
     // - registering a stack: 0x8d4e {key, item id}, 0x8d4d {0, uid}, then 0x364a with the stone's stats (69 SealStoneAddDamage,
     //   534 SealStoneAmplifyDamage) (i24886-24888); 0x8d4d with the registered uid in every world entry (i1146);
     // - a toggle to the state it already has: refused 0x1960 kToggle_SetAlready (i27405);
-    // - while on, one shard per landed attack: 0x561b count -1, decrease reason 22 kItemModifiedInCombat (224 in 234912).
-    // CANDIDATE: the stats count while a stack is registered (they were sent on registering, before the toggle); the damage
-    // model (+AddDamage, x(1 + AmplifyDamage / 10000), PvE hits while on); one shard per hit with damage, spent after the
-    // cast's replies (OURS: the store call waits for the cast to finish).
+    // - shards used up and the damage: the Dell version's Power Shards (GameSession.PowerShards.cs, one shard per damaging cast,
+    //   OBSERVED 115817) are kept by the 2026-11-13 merge; GitHub's per-hit model (224 updates in 234912) is not used.
     const int ToggleSetAlready = 0x1960;
-    const byte DecreaseInCombat = 22;
     static SealStoneTables SealStones => SealStoneTables.Embedded;
-    int sealStoneHits;
-
-    /// <summary>The registered stack while it holds shards.</summary>
-    ItemState? SealStoneStack => sealStoneItem != 0 && storedItems.TryGetValue(sealStoneItem, out var row) && row.Location == "bag" && row.Quantity > 0
-        && SealStones.IsStone(row.TemplateId) ? row : null;
-
-    /// <summary>A stat the registered seal stone adds (by EStat name).</summary>
-    int SealStoneStat(string stat) => SealStoneStack is { } stack ? SealStones.Stat(stack.TemplateId, stat) : 0;
-
-    /// <summary>The seal stone stats for the stat sheet: gear, titles and the registered stone (only the non-zero ones).</summary>
-    IEnumerable<(int Type, int Value)> SealStoneSheet() =>
-        new[] { (69, "SealStoneAddDamage"), (534, "SealStoneAmplifyDamage"), (559, "SealStonePvPIgnoreDefense") }
-            .Select(s => (s.Item1, EnchantStat(s.Item2) + TitleStat(s.Item2) + SealStoneStat(s.Item2))).Where(s => s.Item2 != 0);
-
-    /// <summary>A PvE hit with the seal stone on: +AddDamage, then x(1 + AmplifyDamage / 10000) (CANDIDATE); counts one shard.</summary>
-    IReadOnlyList<Hit> WithSealStone(IReadOnlyList<Hit> hits)
-    {
-        if (!sealStoneOn || SealStoneStack is not { } stack) return hits;
-        var add = SealStones.Stat(stack.TemplateId, "SealStoneAddDamage");
-        var amplify = SealStones.Stat(stack.TemplateId, "SealStoneAmplifyDamage");
-        return hits.Select(h => h.Amount <= 0 ? h : h with { Amount = (int)Math.Round((h.Amount + add) * (10_000.0 + amplify) / 10_000) }).ToList();
-    }
-
-    /// <summary>Counts the shards the landed hits used (one per damaging hit while on).</summary>
-    void SealStoneLanded(IReadOnlyList<Hit> hits)
-    {
-        if (sealStoneOn && SealStoneStack is not null) sealStoneHits += hits.Count(h => h.Amount > 0);
-    }
-
-    /// <summary>Spends the shards counted since the last call from the registered stack (0x561b reason 22).</summary>
-    async Task<List<byte[]>> SpendSealStonesAsync(CancellationToken ct)
-    {
-        var count = sealStoneHits;
-        sealStoneHits = 0;
-        if (count <= 0 || Store is not { } store || CharacterId is not { } character || SealStoneStack is not { } stack) return [];
-        var used = await Stored(async () => await store.ConsumeItemAsync(character, stack.InstanceId, stack.Revision, (int)Math.Min(count, stack.Quantity), ct) ? [[]] : []);
-        if (used.Count == 0) return [];
-        var replies = await InventoryChangesAsync(ct, 0, DecreaseInCombat);
-        if (SealStoneStack is null) replies.AddRange(RefreshStats());   // the stack ran out: its stats go
-        return replies;
-    }
-
     /// <summary>
     /// Activate/DeactivateSealStone_RQ (no body): the toggle (EToggleType SealStone = toggle flag 1, which the official
     /// appearance carries) -> RS {u16 0}, SealStoneStatusChange_NT {key, on} to the player and those around.
@@ -192,9 +177,13 @@ public sealed partial class GameSession
 
     // ---------- Auto-potion and auto-use items ----------
 
-    byte[] PotionAutoUseList() => potionSlots is [0, 0]
-        ? PacketWriter.Opcode(PotionAutoUseListNt).Varint(0).ToArray()
-        : PacketWriter.Opcode(PotionAutoUseListNt).Varint(1).U8(1).I32(potionSlots[0]).I32(potionSlots[1]).ToArray();
+    /// <summary>
+    /// 0x5648 at world entry: always the HP group (1) with its two potion slots, as every official sample (2026-11-06: "01 01
+    /// b314991f 00000000" even for a new character). Before, a character without a setting got an empty list (00), and the
+    /// client never offered its auto slots (no SetAutoUsePotionItem request came, live 2026-11-06).
+    /// </summary>
+    byte[] PotionAutoUseList() =>
+        PacketWriter.Opcode(PotionAutoUseListNt).Varint(1).U8(1).I32(potionSlots[0]).I32(potionSlots[1]).ToArray();
 
     byte[] ItemAutoUseList()
     {
@@ -217,7 +206,7 @@ public sealed partial class GameSession
         return [PacketWriter.Opcode(PotionAutoUseRs).U16(ok ? 0 : 1).U8(group).I32(first).I32(second).ToArray()];
     }
 
-    /// <summary>SetAutoUseItem_RQ {item i32, activated bool} -> RS {u16 0, {item, activated}}. Stored and listed; not used automatically yet.</summary>
+    /// <summary>SetAutoUseItem_RQ {item i32, activated bool} -> RS {u16 0, {item, activated}}. Stored and listed; used by AutoUseItemsAsync.</summary>
     async Task<List<byte[]>> SetItemAutoUseAsync(byte[] plain, CancellationToken ct)
     {
         var item = BitConverter.ToInt32(plain, 2);
@@ -245,6 +234,32 @@ public sealed partial class GameSession
         return [];
     }
 
+    /// <summary>OURS: how often the activated auto-use items (food, drinks, scrolls) are looked at.</summary>
+    public const int AutoUseCheckMs = 1000;
+    long autoUseCheckAt;
+
+    /// <summary>
+    /// The activated auto-use items (ItemAutoUseActivatedList: food, drinks, scrolls): an item whose buff is not on (none of its
+    /// skill's abnormal groups active) is used from the bag once its cooldown group is ready, one item per check, as the
+    /// client's own use (the stack goes down by one). Nothing is used while dead, loading or without the item.
+    /// </summary>
+    async Task<List<byte[]>> AutoUseItemsAsync(long now, CancellationToken ct)
+    {
+        if (autoUseItems.Count == 0 || resources is null || dead || reloading || Store is null || now < autoUseCheckAt) return [];
+        autoUseCheckAt = now + AutoUseCheckMs;
+        foreach (var itemId in autoUseItems)
+        {
+            if (Boxes.Use(itemId) is not { Effect: "Skill", Values: [var skillText, ..] } || !int.TryParse(skillText, out var skillId)) continue;
+            var groups = AbnormalIds(Boxes.SkillEffects(skillId)).Select(id => Boxes.Abnormal(id)?.Group ?? id).ToHashSet();
+            if (groups.Count == 0 || buffs.Any(b => groups.Contains(b.Group))) continue;   // its buff is still on
+            var cooldown = Boxes.Cooldown(itemId);
+            if (cooldown.Group != "None" && now < itemCooldowns.GetValueOrDefault(cooldown.Group)) continue;
+            if (storedItems.Values.Where(i => i.TemplateId == itemId && i.Location == "bag").OrderBy(i => i.Quantity).FirstOrDefault() is { } stack)
+                return await UseItemAsync(stack.WireId, now, ct);
+        }
+        return [];
+    }
+
     // ---------- Presets ----------
 
     int PresetNo(int type) => presets.Numbers.GetValueOrDefault(type, 1);
@@ -263,12 +278,15 @@ public sealed partial class GameSession
         var w = PacketWriter.Opcode(PresetInfoNt).U8(PresetNo(PresetEquip));
         WriteEquipPresets(w, equip);
         w.U8(PresetNo(1)).Varint(0);
-        w.U8(PresetNo(2)).Varint(0);
+        WriteSkillPresets(w);
         w.U8(PresetNo(3)).Varint(0);
         w.U8(PresetNo(4)).I32(wingId).Varint(0);
         w.U8(PresetNo(6)).U8(1).Varint(0);
         return w.ToArray();
     }
+
+    /// <summary>The class's default bar of this entry (the presets and the hotbar are built from it).</summary>
+    List<(int Slot, int SkillId)> classBar = [];
 
     static void WriteEquipPresets(PacketWriter w, IReadOnlyDictionary<int, Dictionary<int, long>> equip)
     {
@@ -290,7 +308,9 @@ public sealed partial class GameSession
         if (type >= PresetTypes || no is < 1 or > PresetCount) return [PacketWriter.Opcode(PresetSetRs).U16(1).U8(type).U8(no).Bool(batch).Varint(0).ToArray()];
         var changes = new Dictionary<int, int>();
         foreach (var t in batch ? Enumerable.Range(0, PresetTypes) : new[] { (int)type }) changes[t] = no;
-        var replies = new List<byte[]> { PacketWriter.Opcode(PresetSetRs).U16(0).U8(type).U8(no).Bool(batch).Varint(0).ToArray() };
+        // A skill preset never used starts as a copy of the current one, announced before the reply (OBSERVED #15911-15912).
+        var replies = new List<byte[]>(NewSkillPreset(changes));
+        replies.Add(PacketWriter.Opcode(PresetSetRs).U16(0).U8(type).U8(no).Bool(batch).Varint(0).ToArray());
         replies.AddRange(await ApplyPresetsAsync(changes, ct));
         return replies;
     }
@@ -312,13 +332,15 @@ public sealed partial class GameSession
         catch (ProtocolException) { return []; }
         var reply = PacketWriter.Opcode(PresetListSetRs).U16(0).Varint(changes.Count);
         foreach (var (t, no) in changes) reply.U8(t).U8(no);
-        return [reply.Varint(0).ToArray(), .. await ApplyPresetsAsync(changes, ct)];
+        var created = NewSkillPreset(changes);
+        return [.. created, reply.Varint(0).ToArray(), .. await ApplyPresetsAsync(changes, ct)];
     }
 
     async Task<List<byte[]>> ApplyPresetsAsync(Dictionary<int, int> changes, CancellationToken ct)
     {
         var replies = new List<byte[]>();
         var equipFrom = PresetNo(PresetEquip);
+        var skillFrom = PresetNo(PresetSkill);
         foreach (var (t, no) in changes) presets.Numbers[t] = no;
         if (changes.TryGetValue(PresetEquip, out var equipTo) && equipTo != equipFrom)
         {
@@ -352,6 +374,7 @@ public sealed partial class GameSession
             WriteEquipPresets(update, new SortedDictionary<int, Dictionary<int, long>>(presets.Equip) { [equipTo] = EquippedSlots() });
             replies.Add(update.ToArray());
         }
+        if (changes.TryGetValue(PresetSkill, out var skillTo) && skillTo != skillFrom) replies.AddRange(await SwitchSkillPresetAsync(skillFrom, skillTo, ct));
         await SaveSettingAsync("presets", presets, ct);
         return replies;
     }
@@ -381,14 +404,19 @@ public sealed partial class GameSession
     // ---------- Warp leave ----------
 
     /// <summary>
-    /// CharWarpLeave_NT 0x373c to those around before a teleport: key, pos, dir f32, move state, substate, EWarpReason
-    /// (1 TeleportCasterEffect, 5 Cutscene), skill i32, effect i32, duration i32 (usmap order; no official sample).
+    /// CharWarpLeave_NT 0x373c to those around before a teleport: key varint, u8 presence mask (bit 0 skill, bit 1 effect), pos,
+    /// dir f32, move state u8, substate u8, EWarpReason u8 (1 TeleportCasterEffect, 3 WarpToParent, 5 Cutscene), [skill i32],
+    /// [effect i32], duration varint. OBSERVED (byte audit 2026-11-09, 474 official samples): reason 1 always with mask 3, the
+    /// teleport skill (e.g. 18090340), its effect (1809000011) and duration 91-642; reason 3 with mask 0 and duration 0
+    /// (`3c37 daf002 00 <pos> <dir> 07 02 03 00`). We wrote no mask and three i32 (12 bytes the client read as garbage).
+    /// CANDIDATE: our effect argument is a TeleportEffect.dat id, not the skill effect id the official sends.
     /// </summary>
     void BroadcastWarpLeave(byte effect, bool cutscene)
     {
         if (worldPlayer?.Map is null || position is not { } here) return;
-        var leave = PacketWriter.Opcode(0x373c).Varint(playerKey).Vec3(here).F32(worldPlayer.Heading).U8(0).U8(0).U8(cutscene ? 5 : 1)
-            .I32(0).I32(effect).I32(0).ToArray();
-        worldPlayer.Map.Broadcast(worldPlayer, [leave]);
+        var leave = PacketWriter.Opcode(0x373c).Varint(playerKey).U8(effect != 0 ? 2 : 0).Vec3(here).F32(worldPlayer.Heading).U8(0).U8(0)
+            .U8(cutscene ? 5 : 1);
+        if (effect != 0) leave.I32(effect);
+        worldPlayer.Map.Broadcast(worldPlayer, [leave.Varint(0).ToArray()]);
     }
 }

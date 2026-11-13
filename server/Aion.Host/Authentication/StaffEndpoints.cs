@@ -20,7 +20,7 @@ public static class StaffEndpoints
     sealed record PlayerMessage(string? Text);
     sealed record KickRequest(string? Reason);
     sealed record TeleportRequest(int MapId, double? X = null, double? Y = null, double? Z = null);
-    sealed record RestartRequest(int Minutes, string? Reason);
+    sealed record RestartRequest(int Minutes, string? Reason, bool Shutdown = false);
 
     public static void MapStaffEndpoints(this WebApplication app)
     {
@@ -152,9 +152,10 @@ public static class StaffEndpoints
             if (await StaffAsync(ctx, auth, game, ct, admin: true) is not { } account) return Results.Unauthorized();
             if (services.GetService<ScheduledRestart>() is not { } restart) return Results.NotFound();
             if (input.Minutes is < 0 or > 120 || (input.Reason ?? "").Length > 100) return Results.BadRequest(new { error = "invalid_restart" });
-            var at = restart.Schedule(TimeSpan.FromMinutes(input.Minutes), (input.Reason ?? "").Trim());
-            await game.AdminRecordAsync(account, "staff_restart_scheduled", null, new { input.Minutes, input.Reason, at }, ct);
-            return Results.Ok(new { at });
+            var at = restart.Schedule(TimeSpan.FromMinutes(input.Minutes), (input.Reason ?? "").Trim(), input.Shutdown);
+            await game.AdminRecordAsync(account, input.Shutdown ? "staff_shutdown_scheduled" : "staff_restart_scheduled", null,
+                new { input.Minutes, input.Reason, input.Shutdown, at }, ct);
+            return Results.Ok(new { at, shutdown = input.Shutdown });
         });
         staff.MapDelete("/restart", async (HttpContext ctx, IAccountAuthentication auth, IGameplayStore game, IServiceProvider services, CancellationToken ct) =>
         {
@@ -167,12 +168,15 @@ public static class StaffEndpoints
     }
 
     /// <summary>
-    /// The game's world-map images for the overview (tools/MapImageExport): Aion:MapImagesPath, else research/local/map-images
-    /// above the host. maps.json lists each map's file, size and world-to-pixel transform.
+    /// The game's world-map images for the overview (tools/export_map_images.py): Aion:MapImagesPath, else
+    /// &lt;Aion:DataDir&gt;/data/map-images, else research/local/map-images above the host. maps.json lists each map's file, size
+    /// and world-to-pixel transform.
     /// </summary>
-    static string? MapImagesRoot(IConfiguration config)
+    internal static string? MapImagesRoot(IConfiguration config)
     {
         if (config["Aion:MapImagesPath"] is { Length: > 0 } configured) return Directory.Exists(configured) ? Path.GetFullPath(configured) : null;
+        if (config["Aion:DataDir"] is { Length: > 0 } dataDir && Directory.Exists(Path.Combine(dataDir, "data", "map-images")))
+            return Path.GetFullPath(Path.Combine(dataDir, "data", "map-images"));
         for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
             if (Directory.Exists(Path.Combine(dir.FullName, "research", "local", "map-images"))) return Path.Combine(dir.FullName, "research", "local", "map-images");
         return null;
@@ -270,7 +274,11 @@ public static class StaffEndpoints
     }
 }
 
-/// <summary>One pending restart with countdown notices; the host stops with exit code 75 so systemd starts it again.</summary>
+/// <summary>
+/// One pending restart or shutdown with countdown notices (10, 5, 1 min, 30 s, 10 s); everyone is saved as the sessions
+/// close. A restart stops with exit code 75 so systemd (Restart=on-failure) starts the host again; a shutdown exits 0 and
+/// the host stays stopped until started (systemctl start aion-host, or the Windows control window).
+/// </summary>
 public sealed class ScheduledRestart(IServiceProvider services, IHostApplicationLifetime lifetime, ILogger<ScheduledRestart> logger)
 {
     static readonly TimeSpan[] Warnings = [TimeSpan.FromMinutes(10), TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(1), TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(10)];
@@ -279,8 +287,9 @@ public sealed class ScheduledRestart(IServiceProvider services, IHostApplication
 
     public DateTimeOffset? At { get; private set; }
     public string Reason { get; private set; } = "";
+    public bool Shutdown { get; private set; }
 
-    public DateTimeOffset Schedule(TimeSpan delay, string reason)
+    public DateTimeOffset Schedule(TimeSpan delay, string reason, bool shutdown = false)
     {
         CancellationTokenSource next = new();
         lock (sync)
@@ -289,8 +298,9 @@ public sealed class ScheduledRestart(IServiceProvider services, IHostApplication
             pending = next;
             At = DateTimeOffset.UtcNow + delay;
             Reason = reason;
+            Shutdown = shutdown;
         }
-        _ = RunAsync(At.Value, reason, next.Token);
+        _ = RunAsync(At.Value, reason, shutdown, next.Token);
         return At.Value;
     }
 
@@ -303,11 +313,11 @@ public sealed class ScheduledRestart(IServiceProvider services, IHostApplication
             pending = null;
             At = null;
         }
-        _ = AnnounceAsync("The server restart was cancelled.");
+        _ = AnnounceAsync(Shutdown ? "The server shutdown was cancelled." : "The server restart was cancelled.");
         return true;
     }
 
-    async Task RunAsync(DateTimeOffset at, string reason, CancellationToken ct)
+    async Task RunAsync(DateTimeOffset at, string reason, bool shutdown, CancellationToken ct)
     {
         try
         {
@@ -317,12 +327,12 @@ public sealed class ScheduledRestart(IServiceProvider services, IHostApplication
                 var due = at - warning;
                 if (due < DateTimeOffset.UtcNow) continue;
                 await Task.Delay(due - DateTimeOffset.UtcNow, ct);
-                await AnnounceAsync($"The server restarts in {Spoken(warning)}{suffix}. Find a safe spot.");
+                await AnnounceAsync($"The server {(shutdown ? "shuts down" : "restarts")} in {Spoken(warning)}{suffix}. Find a safe spot.");
             }
             var left = at - DateTimeOffset.UtcNow;
             if (left > TimeSpan.Zero) await Task.Delay(left, ct);
-            logger.LogWarning("Scheduled restart now{Suffix}", suffix);
-            Environment.ExitCode = 75;
+            logger.LogWarning("Scheduled {Kind} now{Suffix}", shutdown ? "shutdown" : "restart", suffix);
+            Environment.ExitCode = shutdown ? 0 : 75;
             lifetime.StopApplication();
         }
         catch (TaskCanceledException) { }

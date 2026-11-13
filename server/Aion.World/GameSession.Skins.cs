@@ -15,7 +15,40 @@ public sealed class SkinTables
         [property: JsonPropertyName("categories")] Dictionary<string, string> Categories);
 
     readonly SkinFile file;
-    SkinTables(SkinFile file) => this.file = file;
+    SkinTables(SkinFile file)
+    {
+        this.file = file;
+        names = new(() => file.Skins.GroupBy(p => p.Value).ToDictionary(g => g.Key, g => g.First().Key));
+        maxPoints = new(() => file.Categories.Keys.Select(k => int.Parse(k, CultureInfo.InvariantCulture))
+            .Where(id => CategoryNames.Contains(Category(id)) && Category(id) != "None" && Closet.Grades.ContainsKey(id))
+            .GroupBy(Category).ToDictionary(g => g.Key, g => g.Sum(Points), StringComparer.OrdinalIgnoreCase));
+    }
+
+    /// <summary>The client's closet data (tools/data/closet.json: Skin.dat grades of the shown skins, the points per grade, SkinCollection).</summary>
+    public sealed record ClosetData(IReadOnlyDictionary<int, string> Grades, IReadOnlyDictionary<string, int> GradePoints,
+        IReadOnlyDictionary<string, IReadOnlyList<(int Point, IReadOnlyList<(string Stat, int Value)> Stats)>> Collection);
+
+    public static ClosetData Closet => closet.Value;
+    static readonly Lazy<ClosetData> closet = new(() =>
+    {
+        using var stream = typeof(SkinTables).Assembly.GetManifestResourceStream("closet.json") ?? throw new InvalidOperationException("Missing embedded game data closet.json");
+        var root = JsonDocument.Parse(stream).RootElement;
+        return new ClosetData(
+            root.GetProperty("grades").EnumerateObject().ToDictionary(p => int.Parse(p.Name, CultureInfo.InvariantCulture), p => p.Value.GetString()!),
+            root.GetProperty("points").EnumerateObject().ToDictionary(p => p.Name, p => p.Value.GetInt32(), StringComparer.OrdinalIgnoreCase),
+            root.GetProperty("collection").EnumerateObject().ToDictionary(p => p.Name,
+                p => (IReadOnlyList<(int, IReadOnlyList<(string, int)>)>)p.Value.EnumerateArray()
+                    .Select(r => (r[0].GetInt32(), (IReadOnlyList<(string, int)>)r[1].EnumerateArray().Select(s => (s[0].GetString()!, s[1].GetInt32())).ToList())).ToList(),
+                StringComparer.OrdinalIgnoreCase));
+    });
+
+    /// <summary>
+    /// The full collection's points per category: every skin the collection window shows (Skin.dat bShow) at its grade's points;
+    /// equal to the official window's maxima (weapons 166, helmet 345, torso 322, cape 319, shoulder 315, earring 194, necklace 191).
+    /// </summary>
+    public IReadOnlyDictionary<string, int> MaxPointsByCategory => maxPoints.Value;
+    public int MaxPoints => maxPoints.Value.Values.Sum();
+    readonly Lazy<Dictionary<string, int>> maxPoints;
 
     static readonly Lazy<SkinTables> embedded = new(() =>
     {
@@ -31,6 +64,38 @@ public sealed class SkinTables
     public bool Known(int skinId) => file.Categories.ContainsKey(skinId.ToString(CultureInfo.InvariantCulture));
     public string Category(int skinId) => file.Categories.GetValueOrDefault(skinId.ToString(CultureInfo.InvariantCulture)) ?? "None";
     public int Count => file.Skins.Count;
+
+    /// <summary>Skin id -> its Skin.dat name (the tier is in it: AR_0001_T04_Torso).</summary>
+    readonly Lazy<Dictionary<int, string>> names;
+    Dictionary<int, string> Names => names.Value;
+    public string? NameOf(int skinId) => Names.GetValueOrDefault(skinId);
+
+    /// <summary>
+    /// The collection points a skin gives its category. PROVISIONAL: Skin.dat's own point column is not in our export, so points
+    /// follow the skin's tier (_T00.._T05), fitted to the official collection of 179 skins (2026-11-06: e.g. Helmet 29, Boots 35;
+    /// within 9 of 270 points). Re-export Skin.dat with the archive key to replace it.
+    /// </summary>
+    public static readonly IReadOnlyDictionary<int, int> PointsByTier = new Dictionary<int, int> { [0] = 2, [1] = 2, [2] = 1, [3] = 1, [4] = 3, [5] = 1 };
+
+    /// <summary>
+    /// Collection points per skin by grade (user rule 2026-11-08: Common 1, Rare 2, then 3, 4, 5 up the grades; EItemGrade order
+    /// Common, Rare, Legend, Unique, Epic). A skin without a known grade (no GetSkin item) falls back to its tier (PointsByTier).
+    /// </summary>
+    public static readonly IReadOnlyDictionary<string, int> PointsByGrade = new Dictionary<string, int>
+        { ["Common"] = 1, ["Rare"] = 2, ["Legend"] = 3, ["Unique"] = 4, ["Epic"] = 5, ["Mythic"] = 5 };
+
+    /// <summary>A skin's collection points: its Skin.dat grade's GlobalSetting skin_collection_getpoint (Special 0); skins the
+    /// window does not show fall back to the GetSkin item grade, then the tier.</summary>
+    public int Points(int skinId) =>
+        Closet.Grades.TryGetValue(skinId, out var grade) ? Closet.GradePoints.GetValueOrDefault(grade)
+        : SkinCombineRules.Embedded.GradeOf.GetValueOrDefault(skinId) is { } g && PointsByGrade.TryGetValue(g, out var byGrade) ? byGrade
+        : NameOf(skinId) is { } n && System.Text.RegularExpressions.Regex.Match(n, @"_T(\d\d)") is { Success: true } m
+            && PointsByTier.TryGetValue(int.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture), out var p) ? p : 1;
+
+    /// <summary>ESkinCategory (usmap): the category byte of the points map.</summary>
+    public static readonly IReadOnlyList<string> CategoryNames =
+        ["None", "Helmet", "Shoulder", "Torso", "Pants", "Gloves", "Boots", "Cape", "Greatsword", "Sword", "Dagger", "Bow", "Magicbook", "Orb",
+         "Mace", "Staff", "Earring", "Necklace", "EyeWear", "MouthWear", "ShoulderWear", "Gauntlet", "HeadWear"];
 }
 
 // Skins (appearance items). The 0x8d run (catalogue index + 0x89d1): SkinInfo_NT 0x8d5b OBSERVED at the official world
@@ -61,22 +126,45 @@ public sealed partial class GameSession
     void LoadSkins(CharacterExtras extras)
     {
         skins.Clear();
+        skinStatsCache = null;   // another character's collection
         foreach (var (id, count) in extras.Skins) skins[id] = count;
         skinEquips.Clear();
         foreach (var (slot, id) in extras.SkinEquips) skinEquips[slot] = id;
     }
 
-    /// <summary>
-    /// 0x8d5b SkinInfo_NT: the collection {skin i32, count i32}, no points, no pure-skin equips, preset 1, no preset or visual
-    /// slot infos. OBSERVED (34 in our recordings): 8 bytes a skin (we wrote 12; the community fork found the client
-    /// misread the collection), counts from 1 to 12 and more; an empty collection is `5b8d 00 00 00 01 00 00` (7 times).
-    /// Not sent yet: the points, pure-skin equips, the presets' equipped skins and the visual slot options of the recorded tails.
-    /// </summary>
-    public byte[] SkinInfo()
+    /// <summary>0x8d5b SkinInfo_NT: the collection {skin i32, {count i32, instances i32}}, no points, no pure-skin equips, preset 1, no preset or visual slot infos.</summary>
+    internal byte[] SkinInfoForChecks() => SkinInfo();
+
+    byte[] SkinInfo()
     {
         var w = PacketWriter.Opcode(SkinInfoNt).Varint(skins.Count);
+        // {skin id i32, count i32}: 8 bytes each, as every official entry (2026-11-06, 179 entries). We wrote an extra i32, so the
+        // client read every second skin as garbage and closet sets kept only pieces 1, 3, 5, 7 (live 2026-11-06).
         foreach (var (id, count) in skins.OrderBy(p => p.Key)) w.I32(id).I32(count);
-        return w.Varint(0).Varint(0).U8(1).Varint(0).Varint(0).ToArray();
+        // The collection points per ESkinCategory (OBSERVED official: `0a 01 1d000000 02 1c000000 ...`, 10 categories); the client
+        // levels the closet's owned effects from them. We sent none: the owned-effect list stayed empty (live 2026-11-08).
+        WritePoints(w, SkinPoints());
+        return w.Varint(0).U8(1).Varint(0).Varint(0).ToArray();
+    }
+
+    /// <summary>The collection points per ESkinCategory byte (each owned skin once, by its tier: SkinTables.Points).</summary>
+    internal SortedDictionary<byte, int> SkinPoints()
+    {
+        var points = new SortedDictionary<byte, int>();
+        foreach (var id in skins.Keys)
+        {
+            var cat = SkinTables.CategoryNames.ToList().IndexOf(Skins.Category(id));
+            if (cat <= 0) continue;
+            points[(byte)cat] = points.GetValueOrDefault((byte)cat) + Skins.Points(id);
+        }
+        return points;
+    }
+
+    static PacketWriter WritePoints(PacketWriter w, IReadOnlyDictionary<byte, int> points)
+    {
+        w.Varint(points.Count);
+        foreach (var (cat, value) in points) w.U8(cat).I32(value);
+        return w;
     }
 
     /// <summary>0x8d5c SkinUpdate_NT: the changed counts {skin i32 -> count i32}, no points.</summary>
@@ -84,21 +172,39 @@ public sealed partial class GameSession
     {
         var w = PacketWriter.Opcode(SkinUpdateNt).Varint(ids.Count);
         foreach (var id in ids) w.I32(id).I32(skins.GetValueOrDefault(id));
-        return w.Varint(0).ToArray();
+        // The changed categories' new point totals (OBSERVED official `... 01 07 20000000`: Cape now 32).
+        var all = SkinPoints();
+        var changed = ids.Select(id => (byte)SkinTables.CategoryNames.ToList().IndexOf(Skins.Category(id))).Where(c => c > 0).ToHashSet();
+        return WritePoints(w, all.Where(p => changed.Contains(p.Key)).ToDictionary(p => p.Key, p => p.Value)).ToArray();
     }
 
     /// <summary>The skin shown in a visual slot (0 none).</summary>
     int SkinIn(int visualSlot) => skinEquips.Where(p => SkinVisualSlot.GetValueOrDefault(p.Key) == visualSlot).Select(p => p.Value).FirstOrDefault();
 
     /// <summary>The visual equips with their skins: the 15 EVisualEquipSlot records (others' appearance) or the worn ones (the own).</summary>
-    IReadOnlyList<EquipBroad> VisualEquips(bool all)
+    IReadOnlyList<EquipBroad> VisualEquips(bool all) => SkinnedEquips(VisualItems(), VisualEnchants(), skinEquips, all, godstones: true, VisualGodstones());
+
+    /// <summary>
+    /// EVisualEquipSlot slots whose skin shows with no item behind it: EyeWear 12, MouthWear 13, ShoulderWear 14 and HeadWear 15 have no
+    /// items at all (skin-only slots, ESkinCategory EyeWear/MouthWear/ShoulderWear/HeadWear), and the accessories Necklace 9, EarringR 10,
+    /// EarringL 11. Before 2026-11-09 a skin showed only over a worn item, so these skins were accepted (SkinEquip_RS 0) but never drawn,
+    /// for the player, for others or in the lobby (live 2026-11-09). CANDIDATE: no official sample of a skin-only slot yet.
+    /// </summary>
+    static readonly HashSet<int> PureSkinVisualSlots = [9, 10, 11, 12, 13, 14, 15];
+
+    /// <summary>Visual equip records from items by visual slot and the equipped skins by ESkinEquipSlot (also used for the lobby).</summary>
+    static List<EquipBroad> SkinnedEquips(IReadOnlyDictionary<int, int> items, IReadOnlyDictionary<int, byte> enchants,
+        IReadOnlyDictionary<int, int> equippedSkins, bool all, bool godstones, IReadOnlyDictionary<int, IReadOnlyList<int>>? sockets = null)
     {
-        var items = VisualItems();
-        var slots = all ? Enumerable.Range(1, 15) : items.Keys.Order();
+        int SkinOf(int visual) => equippedSkins.Where(p => SkinVisualSlot.GetValueOrDefault(p.Key) == visual).Select(p => p.Value).FirstOrDefault();
+        var slots = all ? Enumerable.Range(1, 15)
+            : items.Keys.Concat(PureSkinVisualSlots.Where(v => SkinOf(v) != 0)).Distinct().Order();
         return slots.Select(slot =>
         {
             var item = items.GetValueOrDefault(slot);
-            return new EquipBroad(item, VisualSlot: (byte)slot, SkinId: item == 0 ? 0 : SkinIn(slot), Godstones: item == 0 ? [] : [0, 0, 0]);
+            var skin = item != 0 || PureSkinVisualSlots.Contains(slot) ? SkinOf(slot) : 0;
+            return new EquipBroad(item, item == 0 ? (byte)0 : enchants.GetValueOrDefault(slot), VisualSlot: (byte)slot, SkinId: skin,
+                Godstones: item == 0 || !godstones ? [] : sockets?.GetValueOrDefault(slot) ?? [0, 0, 0]);
         }).ToList();
     }
 
@@ -119,13 +225,69 @@ public sealed partial class GameSession
     /// <summary>A GetSkin [skin name] or GetSkinSet [set name] item: used up, the skins acquired.</summary>
     async Task<List<byte[]>?> UseSkinItemAsync(INativeCharacterStore store, Guid character, ItemState row, ItemUse use, bool reply, CancellationToken ct)
     {
-        var ids = use.Effect == "GetSkinSet" ? Skins.Set(use.Values[0]) : Skins.Of(use.Values[0]) is var one and > 0 ? [one] : [];
+        var ids = SkinsGiven(use.Effect, use.Values);
         if (ids.Count == 0) return null;
         var used = await Stored(async () => await store.ConsumeItemAsync(character, row.InstanceId, row.Revision, 1, ct) ? [[]] : []);
         if (used.Count == 0) return null;
         var replies = Used(row, reply);
         replies.AddRange(await InventoryChangesAsync(ct, 0, DecreaseItemUse));
         replies.AddRange(await AcquireSkinsAsync(ids, ct));
+        return replies;
+    }
+
+    /// <summary>The skins a GetSkin [Skin.dat name] or GetSkinSet [SkinSet.dat name] use gives; empty when unknown.</summary>
+    static IReadOnlyList<int> SkinsGiven(string effect, IReadOnlyList<string> values) =>
+        values is not [{ Length: > 0 } name, ..] ? []
+        : effect == "GetSkinSet" ? Skins.Set(name)
+        : effect == "GetSkin" && Skins.Of(name) is var one and > 0 ? [one] : [];
+
+    /// <summary>
+    /// A skin item that uses itself when gained (Item.dat AutoUseWhenAcquire: 1569 of the 1627 GetSkin/GetSkinSet items, event and
+    /// shop ones alike; the 58 tradeable `_f` / stackable ones stay in the bag for a manual use). OBSERVED official (2026-11-06
+    /// 105448 #26955, #33396, #34077): a looted skin comes as SkinUpdate_NT 0x8d5c, no bag entry. Before 2026-11-10 they sat in
+    /// the bag on our server until used one by one (a granted 100 of each: 600 clicks; USER 2026-11-10 "skins locked behind events").
+    /// </summary>
+    static bool IsAutoSkinItem(int itemId) =>
+        ItemDB.Embedded.Of(itemId) is { AutoUseWhenAcquired: true, Use: { } use } && SkinsGiven(use.Effect, use.Values).Count > 0;
+
+    /// <summary>
+    /// Self-using skin items (IsAutoSkinItem) gained or left in the bag: each used up whole (its stack), every copy's skins added,
+    /// then one inventory update and one SkinUpdate_NT, so a bag of hundreds (staff grants, items kept from before) costs one
+    /// inventory reload instead of one per item. An item whose use is refused by the store stays where it is.
+    /// </summary>
+    async Task<List<byte[]>> AutoUseSkinItemsAsync(IReadOnlyList<ItemState> rows, CancellationToken ct)
+    {
+        if (Store is not { } store || CharacterId is not { } character || rows.Count == 0) return [];
+        var gained = new List<int>();
+        var achieved = new List<byte[]>();
+        foreach (var row in rows)
+        {
+            if (ItemDB.Embedded.Of(row.TemplateId)?.Use is not { } use || SkinsGiven(use.Effect, use.Values) is not { Count: > 0 } ids
+                || row.Quantity is < 1 or > int.MaxValue) continue;
+            var count = (int)row.Quantity;
+            var used = await Stored(async () => await store.ConsumeItemAsync(character, row.InstanceId, row.Revision, count, ct) ? [[]] : []);
+            if (used.Count == 0) continue;
+            for (var n = 0; n < count; n++)
+            {
+                gained.AddRange(ids);
+                achieved.AddRange(AchieveItemUse(row.TemplateId, use.Effect));
+            }
+        }
+        if (gained.Count == 0) return [];
+        var known = gained.Where(Skins.Known).ToList();
+        var added = new List<int>();
+        // GrantSkinsAsync takes at most 64 skins per call; each entry adds one to the account's count.
+        foreach (var chunk in known.Chunk(64))
+        {
+            var saved = await Stored(async () => await store.GrantSkinsAsync(character, chunk, ct) ? [[]] : []);
+            if (saved.Count == 0) continue;
+            foreach (var id in chunk) skins[id] = skins.GetValueOrDefault(id) + 1;
+            added.AddRange(chunk);
+        }
+        // The official order: the skins (0x8d5c), then the item changes.
+        List<byte[]> replies = added.Count > 0 ? [SkinUpdate(added.Distinct().ToList())] : [];
+        replies.AddRange(await InventoryChangesAsync(ct, 0, DecreaseItemUse));
+        replies.AddRange(achieved);
         return replies;
     }
 

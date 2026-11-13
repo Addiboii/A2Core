@@ -49,10 +49,4 @@ public sealed partial class GameSession
         RefreshStats();
     }
 
-    /// <summary>The entry protection abnormal after the world-entry appearance (OBSERVED: 10002 for 5000 ms).</summary>
-    byte[]? EntryProtection(long now)
-    {
-        var added = new List<byte[]>();
-        return AddBuff(EntryProtectionAbnormal, EntryProtectionMs, 0, now, added) is null ? null : added.FirstOrDefault(b => b[0] == 0x2a && b[1] == 0x38);
-    }
 }

@@ -14,6 +14,10 @@ namespace Aion.World;
 // The points message is sent after a purchase only, as recorded: the client knows the total from Exp.dat.
 // Only levels bought here cost points: the class kit raises skills above 1 by itself (sync_character_skills), so a bought
 // level is stored apart (character_skills.purchased_level, migration 039) and costs count from the kit's level up.
+// SkillLevelUpdate_NT carries per skill {shown level = point level + bonus, point level (original), SkillAdditionalLevel
+// {daevanion, abnormal, equip, arcana, fix} u8 each}: the official samples ("03 02 01 00000000") were a character with a +1
+// Daevanion bonus. Bought levels are point levels only (max 10, SkillAcquireData); bonuses never count as bought.
+// Costs: SkillAcquireData Mastery rows (levels 2-4 cost 1, 5-7 cost 2, 8-10 cost 4).
 public sealed partial class GameSession
 {
     public const ushort SkillLevelUpRq = 0x383f, SkillLevelUpRs = 0x3840, SkillLevelUpdateNt = 0x3813, SkillPointUpdateNt = 0x5105;
@@ -53,9 +57,81 @@ public sealed partial class GameSession
         return Enumerable.Range(kit + 1, Math.Max(0, p.Value - kit)).Sum(lvl => data.SkillLevelCost(p.Key, lvl)?.Cost ?? 0);
     });
 
-    public int SkillPointsLeft => Math.Max(0, data.SkillPoints(level) + itemSkillPoints - SpentSkillPoints());   // + Wisdom Stones (GameSession.ItemPoints.cs)
+    public int SkillPointsLeft => Math.Max(0, data.SkillPoints(level) + EffectiveSkillPointBonus - SpentSkillPoints());   // + Wisdom Stones (skill_point_bonus)
 
-    byte[] SkillPointUpdate() => SkillPointUpdate(SkillPointTypePoint, SpentSkillPoints());
+
+    // USER RULE 2026-11-07 (server-rules.xml points): at most skill_cap skill points and stigma_cap stigma points are available at
+    // a time. The saved bonus is never cut: what is over the cap stays saved as a reserve and comes in as points are spent.
+    // (Live: Axel3 had 30110 Wisdom Stone points saved; the client showed -14 in the skill window.)
+    static int SkillPointCap => ServerRules.Embedded.SkillPointCap;
+    static int StigmaPointCap => ServerRules.Embedded.StigmaPointCap;
+
+    /// <summary>The part of the saved bonus in use: so much that the points left reach at most the cap.</summary>
+    int EffectiveSkillPointBonus => Math.Clamp(SkillPointCap - (data.SkillPoints(level) - SpentSkillPoints()), 0, skillPointBonus);
+
+    /// <summary>The stigma points available (saved points up to the cap).</summary>
+    int AvailableStigma(int index) => Math.Clamp(stigmaPoints[index], 0, StigmaPointCap);
+
+    /// <summary>0x3811 with the bonus in use (it changes as points are spent while a reserve is saved).</summary>
+    byte[] PointsBonus() => SkillPointBonusUpdate(EffectiveSkillPointBonus);
+    internal void SetSkillPointBonusForChecks(int bonus) => skillPointBonus = bonus;
+    internal void SetSkillLevelForChecks(int skill, int level) { learned.Add(skill); skillLevels[skill] = level; }
+    List<byte[]> BonusIfAny() => skillPointBonus > 0 ? [PointsBonus()] : [];
+
+    /// <summary>Skill points from Wisdom Stones (GetSkillPoint items), stored in the character setting "skill_point_bonus".</summary>
+    int skillPointBonus;
+    public int SkillPointBonus => skillPointBonus;
+    public const ushort SkillPointBonusNt = 0x3811;
+
+    /// <summary>
+    /// 0x3811 after a Wisdom Stone: {ESkillPointType u8 1 Point, the stones' points in total u16} (OBSERVED 2026-11-06 capture
+    /// 115817: "01 06 00", then 07, 08, 09 as four Wisdom Stones were used, right after the ItemUse_RS). The catalogue names this
+    /// opcode otherwise (the 0x38 run is offset there); the layout is the observed one.
+    /// </summary>
+    public static byte[] SkillPointBonusUpdate(int bonus, byte type = SkillPointTypePoint) =>
+        PacketWriter.Opcode(SkillPointBonusNt).U8(type).U16(Math.Clamp(bonus, 0, ushort.MaxValue)).ToArray();
+
+    // Stigma shards (ESkillPointType 2 StigmaShard, 3 StigmaShardSuperior), stored as [shard, superior] in the character setting
+    // "stigma_points". No official use is recorded: their update is 0x3811 with the type (the Wisdom Stone form, CANDIDATE).
+    public const byte SkillPointTypeStigma = 2, SkillPointTypeStigmaSuperior = 3;
+    int[] stigmaPoints = [0, 0];
+    public IReadOnlyList<int> StigmaPoints => stigmaPoints;
+
+    /// <summary>
+    /// GetStigmaShard / GetStigmaShardSuperior [points] (add points x count) and Fix_StigmaSkillPoint [points] (raise the shard
+    /// points to that): the items used up, the points stored, 0x3811 for the type.
+    /// </summary>
+    async Task<List<byte[]>?> UseStigmaItemsAsync(INativeCharacterStore store, Guid character, ItemState row, ItemUse use, int count, CancellationToken ct)
+    {
+        if (use.Values is not [var text, ..] || !int.TryParse(text, out var points) || points < 1 || count < 1 || count > row.Quantity) return null;
+        var superior = use.Effect == "GetStigmaShardSuperior";
+        var index = superior ? 1 : 0;
+        var used = await Stored(async () => await store.ConsumeItemAsync(character, row.InstanceId, row.Revision, count, ct) ? [[]] : []);
+        if (used.Count == 0) return null;
+        stigmaPoints[index] = use.Effect == "Fix_StigmaSkillPoint"
+            ? Math.Max(stigmaPoints[index], points)
+            : (int)Math.Min(ushort.MaxValue, stigmaPoints[index] + (long)points * count);
+        await SaveSettingAsync("stigma_points", stigmaPoints, ct);
+        return [.. await InventoryChangesAsync(ct, 0, DecreaseItemUse),
+            SkillPointBonusUpdate(AvailableStigma(index), superior ? SkillPointTypeStigmaSuperior : SkillPointTypeStigma)];
+    }
+
+    /// <summary>GetSkillPoint [points] items (Wisdom Stones): used up (count of the stack at once), the points added and stored.</summary>
+    async Task<List<byte[]>?> UseSkillPointItemsAsync(INativeCharacterStore store, Guid character, ItemState row, ItemUse use, int count, CancellationToken ct)
+    {
+        if (use.Values is not [var text, ..] || !int.TryParse(text, out var points) || points < 1 || count < 1 || count > row.Quantity) return null;
+        var used = await Stored(async () => await store.ConsumeItemAsync(character, row.InstanceId, row.Revision, count, ct) ? [[]] : []);
+        if (used.Count == 0) return null;
+        skillPointBonus = (int)Math.Min(ushort.MaxValue, skillPointBonus + (long)points * count);
+        await SaveSettingAsync("skill_point_bonus", new[] { skillPointBonus }, ct);
+        return await InventoryChangesAsync(ct, 0, DecreaseItemUse);
+    }
+
+    /// <summary>0x5105 SkillPointUpdate_NT {count 1, type 1 Point, used points u16} (official layout, see the header).</summary>
+    byte[] SkillPointUpdate() => SkillPointUsed(SpentSkillPoints());
+
+    public static byte[] SkillPointUsed(int used) =>
+        PacketWriter.Opcode(SkillPointUpdateNt).Varint(1).U8(SkillPointTypePoint).U16(Math.Clamp(used, 0, ushort.MaxValue)).ToArray();
 
     /// <summary>0x5105 SkillPointUpdate_NT {count, [type u8, points spent u16]} (OBSERVED, 2026-11-05 #1544/#2001/#2940).</summary>
     static byte[] SkillPointUpdate(byte type, int spent) =>
@@ -69,8 +145,12 @@ public sealed partial class GameSession
         if (StigmaData.IsStigma(skillId)) return await StigmaLevelUpAsync(skillId, ct);   // GameSession.Stigmas.cs
         byte[] Reply(int result) => PacketWriter.Opcode(SkillLevelUpRs).U16(result).I32(skillId).ToArray();
         var next = SkillLevel(skillId) + 1;
-        if (!learned.Contains(skillId) || data.SkillLevelCost(skillId, next) is not { } cost) return [Reply(1)];
-        if (cost.NeedLevel > level || cost.Cost > SkillPointsLeft) return [Reply(2)];
+        if (!learned.Contains(skillId)) return [Reply(EResult.Skill_Acquire_NotFoundData)];
+        // No Mastery row for the next level: the point maximum (10) is reached.
+        if (data.SkillLevelCost(skillId, next) is not { } cost) return [Reply(EResult.Skill_Acquire_InvalidLevel)];
+        if (cost.NeedLevel > level) return [Reply(EResult.Skill_Acquire_NotEnoughCharLevel)];
+        // OBSERVED: SkillPointUpdate_NT follows every SkillLevelUp_RS (39 of 39), a refusal too.
+        if (cost.Cost > SkillPointsLeft) return [Reply(EResult.Skill_Modify_NotEnoughSkillPoint), SkillPointUpdate()];
         if (Store is { } store && CharacterId is { } character)
         {
             var saved = await Stored(async () => await store.SetSkillLevelAsync(character, skillId, next, next, ct) ? [[]] : []);
@@ -78,7 +158,8 @@ public sealed partial class GameSession
         }
         var childBefore = SpecializedChild(skillId);
         skillLevels[skillId] = next;
-        return [.. SpecializedLevelChange(skillId, childBefore, next), Reply(0), SkillLevelUpdate(skillId, next, SkillPointLevelUp), SkillPointUpdate()];
+        return [.. SpecializedLevelChange(skillId, childBefore, next), Reply(0), SkillLevelUpdate(skillId, next, SkillPointLevelUp, DaevanionBonusByte(skillId), EquipBonusByte(skillId)),
+            .. BonusIfAny(), SkillPointUpdate()];
     }
 
     /// <summary>
@@ -96,8 +177,12 @@ public sealed partial class GameSession
             .Select(c => SkillLevelUpdate(c, newLevel, SpecializedChange))];
     }
 
-    static byte[] SkillLevelUpdate(int skillId, int newLevel, byte reason) =>
-        PacketWriter.Opcode(SkillLevelUpdateNt).Varint(1).I32(skillId).U8(1).I32(skillId).U8((byte)newLevel).U8((byte)newLevel).Zeros(5).U8(reason).ToArray();
+    /// <summary>0x3813 for one skill: shown level (point + bonus), the point level, the bonus by source (Daevanion only for now: 0).</summary>
+    /// The bonus bytes are SkillAdditionalLevel {daevanion, abnormal, equip, arcana, fix} (OFFICIAL rec 210132 #1549: "0c 09 02 00 01 00 00"
+    /// = shown 12, point 9, Daevanion 2, equip 1).
+    public static byte[] SkillLevelUpdate(int skillId, int pointLevel, byte reason, byte daevanionBonus = 0, byte equipBonus = 0) =>
+        PacketWriter.Opcode(SkillLevelUpdateNt).Varint(1).I32(skillId).U8(1).I32(skillId).U8((byte)Math.Min(255, pointLevel + daevanionBonus + equipBonus)).U8((byte)pointLevel)
+            .U8(daevanionBonus).U8(0).U8(equipBonus).Zeros(2).U8(reason).ToArray();
 
     /// <summary>
     /// 0x3841 SkillLevelDown_RQ {skill i32}: one bought level back, its points refunded (free, OURS: the official cost
@@ -115,7 +200,8 @@ public sealed partial class GameSession
         if (!await SaveSkillLevelAsync(skillId, next, next > kit ? next : 0, ct)) return [Reply(1)];
         var childBefore = SpecializedChild(skillId);
         if (next <= kit) skillLevels.Remove(skillId); else skillLevels[skillId] = next;
-        return [.. SpecializedLevelChange(skillId, childBefore, next), Reply(0), SkillLevelUpdate(skillId, next, SkillPointLevelDown), SkillPointUpdate()];
+        return [.. SpecializedLevelChange(skillId, childBefore, next), Reply(0), SkillLevelUpdate(skillId, next, SkillPointLevelDown, DaevanionBonusByte(skillId), EquipBonusByte(skillId)),
+            .. BonusIfAny(), SkillPointUpdate()];
     }
 
     /// <summary>
@@ -147,10 +233,10 @@ public sealed partial class GameSession
             var kit = KitSkillLevel(id);
             if (!await SaveSkillLevelAsync(id, kit, 0, ct)) continue;
             skillLevels.Remove(id);
-            updates.Add(SkillLevelUpdate(id, kit, SkillLevelModify));
+            updates.Add(SkillLevelUpdate(id, kit, SkillLevelModify, DaevanionBonusByte(id), EquipBonusByte(id)));
         }
         if (updates.Count == 0) return [Reply(1, [])];
-        return [Reply(0, targets), .. updates, SkillPointUpdate()];
+        return [Reply(0, targets), .. updates, .. BonusIfAny(), SkillPointUpdate()];
     }
 
     async Task<bool> SaveSkillLevelAsync(int skillId, int newLevel, int purchased, CancellationToken ct)

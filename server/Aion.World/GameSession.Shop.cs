@@ -36,6 +36,13 @@ public sealed class ShopTables
         && list.Contains(Key(goodsId)) && file.Goods.TryGetValue(Key(goodsId), out var g) && g.Length >= 8
             ? new GoodsRow((int)g[0], (int)g[1], g[2], (int)g[3], (int)g[4], (int)g[5], (int)g[6], (int)g[7]) : null;
 
+    /// <summary>Every goods row a merchant sells to a race (bots choosing what to buy).</summary>
+    public IEnumerable<(int GoodsId, GoodsRow Row)> AllGoods(int npcId, int race) =>
+        file.Npcs.TryGetValue(Key(npcId), out var shop) && file.Shops.TryGetValue(shop, out var races) && races.TryGetValue(Key(race), out var list)
+            ? list.Select(id => (Id: int.Parse(id, System.Globalization.CultureInfo.InvariantCulture), Row: Goods(npcId, race, int.Parse(id, System.Globalization.CultureInfo.InvariantCulture))))
+                .Where(x => x.Row is not null).Select(x => (x.Id, x.Row!))
+            : [];
+
     /// <summary>The limited goods a merchant sells to a race.</summary>
     public IEnumerable<(int GoodsId, GoodsRow Row)> LimitedGoods(int npcId, int race) =>
         file.Npcs.TryGetValue(Key(npcId), out var shop) && file.Shops.TryGetValue(shop, out var races) && races.TryGetValue(Key(race), out var list)
@@ -84,7 +91,9 @@ public sealed partial class GameSession
     List<(Guid Item, long Revision, int Count)>? CostStacks(int itemId, long count, Guid? except = null)
     {
         var costs = new List<(Guid, long, int)>();
-        foreach (var stack in storedItems.Values.Where(i => i.TemplateId == itemId && i.Location == "bag" && i.InstanceId != except).OrderByDescending(i => i.Quantity))
+        // A Kina cost takes bound Kina first, then non-binding Kina (largest stacks first within each).
+        var order = itemId is KinaItemId or AnyKinaItemId ? new[] { KinaItemId, NonBindingKinaItemId } : [itemId];
+        foreach (var stack in order.SelectMany(id => storedItems.Values.Where(i => i.TemplateId == id && i.Location == "bag" && i.InstanceId != except).OrderByDescending(i => i.Quantity)))
         {
             if (count <= 0) break;
             var n = (int)Math.Min(Math.Min(stack.Quantity, count), int.MaxValue);
@@ -125,7 +134,7 @@ public sealed partial class GameSession
         uint key;
         try { key = new PacketReader(plain) { Offset = 2 }.Varint(); } catch (ProtocolException) { return []; }
         Target? npc = null;
-        var ok = targets?.TryGetValue((int)key, out npc) == true && Shops.IsMerchant(npc!.NpcId);
+        var ok = targets?.TryGetValue((int)key, out npc) == true && Shops.IsMerchant(npc!.NpcId) && !NpcOutOfReach(npc, "shop_open", now);
         openShop = ok ? (int)key : null;
         var bought = new List<(int Goods, int Count)>();
         if (ok && Store is { } store && CharacterId is { } character)
@@ -158,6 +167,7 @@ public sealed partial class GameSession
                     long ReadKey() => varintKeys ? r.Varint() : r.I32();
                     if (withCharKey) ReadKey();
                     var npc = (int)ReadKey();
+                    if (npc < 0) continue;   // no such key, and the reply could not echo it (fuzz 2026-11-09)
                     var count = r.Varint();
                     var entries = new List<(long, long)>();
                     for (var i = 0; i < count && i < 128; i++)
@@ -192,7 +202,8 @@ public sealed partial class GameSession
         if (request is not { } req) return [Reply(BuyGoodsFail, openShop ?? 0)];
         var npcKey = targets?.ContainsKey(req.Npc) == true ? req.Npc : openShop ?? req.Npc;
         if (Store is not { } store || CharacterId is not { } character || targets?.TryGetValue(npcKey, out var npc) != true || entries.Count == 0)
-            return [Reply(BuyGoodsFail, npcKey)];
+            return [Reply(1, npcKey)];
+        if (NpcOutOfReach(npc!, "shop_buy", now)) return [Reply(EResult.Item_Common_Fail_TooFarNpc, npcKey)];
         var rewards = new List<(int, long)>();
         var prices = new Dictionary<int, long>();
         var limits = new List<(int, int, string, int, int)>();
@@ -209,11 +220,13 @@ public sealed partial class GameSession
         foreach (var (currency, price) in prices)
         {
             if (price <= 0) continue;
-            if (CostStacks(currency, price) is not { } stacks) return [Reply(NotEnoughMoney, npcKey)];
+            if (CostStacks(currency, price) is not { } stacks) return [Reply(currency == KinaItemId ? EResult.Item_Common_Fail_NotEnoughCountMoney : EResult.Item_Common_Fail_NotEnoughCountItem, npcKey)];
             costs.AddRange(stacks);
         }
+        if (!BagRoomFor(rewards)) return [Reply(EResult.Item_Common_Fail_NotEnoughSlotCountContainer, npcKey)];   // GameSession.BagRoom.cs
         var done = await Stored(async () => await store.ShopBuyAsync(character, costs, rewards, limits, ct) ? [[]] : []);
-        if (done.Count == 0) return [Reply(limits.Count > 0 ? BuyGoodsFailLimit : BuyGoodsFail, npcKey)];
+        if (done.Count == 0) return [Reply(limits.Count > 0 ? EResult.NpcShop_BuyGoods_Fail_NotEnoughLimitedGoodsCount : EResult.NpcShop_BuyGoods_Fail, npcKey)];
+        // The bag change before the reply (GitHub 28315c6, as the official server).
         return [.. await InventoryChangesAsync(ct, IncreaseShopBuy, DecreaseShopBuy), Reply(BuyGoodsSuccess, npcKey)];
     }
 
@@ -234,7 +247,8 @@ public sealed partial class GameSession
         if (request is not { } req) return [Reply(SellItemFail, openShop ?? 0)];
         var npcKey = targets?.ContainsKey(req.Npc) == true ? req.Npc : openShop ?? req.Npc;
         if (Store is not { } store || CharacterId is not { } character || targets?.TryGetValue(npcKey, out var npc) != true || !Shops.IsMerchant(npc!.NpcId) || entries.Count == 0)
-            return [Reply(SellItemFail, npcKey)];
+            return [Reply(1, npcKey)];
+        if (NpcOutOfReach(npc, "shop_sell", lastNow)) return [Reply(EResult.Item_Common_Fail_TooFarNpc, npcKey)];
         foreach (var (key, count) in entries)
         {
             if (!storedItems.TryGetValue(key, out var row) || row.Location != "bag" || count < 1 || count > row.Quantity || Shops.SellPrice(row.TemplateId) is not { } price)
@@ -268,10 +282,10 @@ public sealed partial class GameSession
             {
                 if (buyback.FirstOrDefault(b => b.WireId == key) is not { } item) { result = 1; break; }
                 var price = SoldValue(item, "sold_for");
-                if ((price > 0 ? CostStacks(KinaItemId, price) : []) is not { } costs) { result = 2; break; }
+                if ((price > 0 ? CostStacks(KinaItemId, price) : []) is not { } costs) { result = EResult.Restore_NotEnoughMoney; break; }
                 var outcome = "failed";
                 await Stored(async () => { outcome = await store.RestoreItemAsync(character, item.InstanceId, costs, ct); return []; });
-                if (outcome != "ok") { result = outcome == "limit" ? 3 : 1; break; }
+                if (outcome != "ok") { result = outcome == "limit" ? EResult.ItemRestore_Fail_NotEnoughRestoreCount : EResult.Restore_InternalError; break; }
                 restored.Add(item);
                 await InventoryChangesAsync(ct, IncreaseItemRestore, DecreaseItemRestore);   // refresh stacks for the next price
             }

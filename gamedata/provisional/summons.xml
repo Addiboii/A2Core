@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Summons of player skills (GameSession.Summons.cs). WHICH skill summons WHICH NPC, how many, how far in front, its level,
+     speed, own skills and spawn act come from the client tables (tools/data/client-combat.json, OFFICIAL client data). Every
+     number here is CANDIDATE until a recording of our own summoner replaces it (a2core-log/record-checklist-2026-11-09.md).
+
+     What the official recordings of 2026-11-06/07 show (other players' summons only, tools: summon lifecycle scan):
+       - the spirits (2920101-2920190) appear with mask 0x101f: move state 7 / substate 2 / reason 1, the owner's key
+         (_parent_key), 3 stats, the owner's level and the spawn act; the anchors and traps with reason 6.
+       - a spirit's first skill comes 50 ms after its appear (16107000 / 16100004 ...), its basic attacks (100011/100015...)
+         0.5-1.0 s apart (median 0.55-1.05 s by spirit): basic_ms.
+       - spirits leave with 0x3642 flag 7 (killed / dismissed / replaced) or 1 (out of sight); anchors and traps flag 3.
+       - Sorcerer 15280xxx anchors (2920011, 2920295, 2920658) live 7.2 s and pulse their +2 skill every 200 ms; the Cleric
+         17150030 anchor (2920640) 10.2-10.3 s, pulsing 17150032 every 250-600 ms.
+       - no move of a summon was recorded (0 x 0x371b/0x371c/0x371d): how a spirit follows is not known.
+
+     Attributes:
+       follow_near / follow_far   a creature summon walks to its owner when farther than follow_far (cm), stops within follow_near.
+       teleport_cm                farther than this it jumps to its owner.
+       basic_ms                   time between two basic attacks of a creature summon.
+       special_gap_ms             at least this long between two of its special skills.
+       default_range              the reach (cm) of a summon skill whose table range is 0.
+       hp_percent                 a creature summon's HP as a share of its owner's max HP (stat override "AllOverrideParent...").
+       elemental_life_ms          a spirit's life (0: until it dies, is dismissed or replaced).
+       anchor_life_ms             a skill-less summon's life when no life row names it.
+       anchor_pulse_ms            between two pulses of an anchor's +2 skill.
+       max_per_owner              summons one player may have at once (the oldest goes).
+       relationship               the relationship byte in the appear (ERelationshipEntity PC_Summon 22).
+       tank_share_percent         a monster hit by a summon adds this share of the damage to its hate of the summon.
+     life npc / ms: the life of one summon NPC (OBSERVED lengths above). -->
+<summons follow_near="200" follow_far="400" teleport_cm="3000" basic_ms="1000" special_gap_ms="1500" default_range="2000"
+         hp_percent="50" elemental_life_ms="0" anchor_life_ms="7200" anchor_pulse_ms="200" max_per_owner="4" relationship="22"
+         tank_share_percent="100">
+	<!-- pulses / pulse_ms: how many +2 pulses an anchor plays before its +3, and how far apart (OBSERVED 2026-11-06/07, anchor
+	     scan of 0x3641/0x3802/0x3642 per anchor key: 15280000 9 x 200 ms over 1.6 s, 15280010 13 over 2.4 s, 15280240 12 over
+	     1.65 s, the Cleric 17150030 anchor 8 over 4.6-4.75 s, Fire Wall 15390010 5 over 2.4 s). Anchors without a row pulse every
+	     their pulse skill's client cooldown until their life ends (CANDIDATE). -->
+	<life npc="2920011" ms="7200" pulses="9" pulse_ms="200"/>
+	<life npc="2920295" ms="7200" pulses="13" pulse_ms="200"/>
+	<life npc="2920658" ms="7200" pulses="12" pulse_ms="150"/>
+	<life npc="2920640" ms="10300" pulses="8" pulse_ms="660"/>
+	<life npc="2920738" pulses="5" pulse_ms="600"/>
+</summons>

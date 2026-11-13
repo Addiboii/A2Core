@@ -25,11 +25,8 @@ public static class CombatPacketChecks
     {
         passed = 0;
         // 0x3801: presence 00, result, skill (every official reply; the dodge reply too).
-        Same("CastResult (20261013-144836 #876)", GamePackets.CastResult(true, 11020000), "0138000000e026a800");
+        Same("CastResult (20261013-144836 #876)", GamePackets.CastResult(11020000), "0138000000e026a800");
         Same("DodgeResult (20261019-230917 #1340)", GamePackets.DodgeResult(11000100), "013800000024d9a700");
-        // 0x3818 / 0x3819 chain prompts.
-        Same("ChainSkillActiveList (20261013-144836 #875)", GamePackets.ChainSkillActiveList(11020000, [11030000]), "1838e026a80001f04da800");
-        Same("ChainSkillDeactiveList (20261013-144836 #957)", GamePackets.ChainSkillDeactiveList([11030000]), "193801f04da800");
         // 0x3803 / 0x380e projectiles (NPC casters in the recordings).
         Same("SkillFireProjectile (20261013-144836 #15131)",
             PlayerPackets.SkillFireProjectile(24539, 64034, 1000210, 1, 10002101, V(0xc6b39072, 0xc6c547ed, 0x46978800), 600, 1),

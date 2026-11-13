@@ -108,20 +108,21 @@ public sealed class AchievementTables
 // race or of all races in the categories Unlock, Achievement and SeasonMissionUnlock (not Onboarding), plus the open
 // attendance boards' achievements, the active battle pass's and the active season missions' (the last two are not
 // modelled yet). The group reward states map is sent empty (CANDIDATE: its bool-array packing is not decoded).
-// Counting (OURS, by EAchievementObjectiveType): PCLevel, ClearQuest/ClearQuestType, KillNpc/KillNpcAll, ClearDungeon/
+// Counting (OURS, by EAchievementObjectiveType): PCLevel, ClearQuest/ClearQuestType/ClearQuestExplorationType, KillNpc/KillNpcAll, ClearDungeon/
 // ClearDungeonType/ClearDungeonGroup/ClearDungeonBySingle, ClearMapEvent, UseEnvObjSpawnerName, UseItem/UseUsableItemType,
 // CraftCategorySuccess, GatherSuccess/GatherCategorySuccess, CraftMasteryLevel/GatherMasteryLevel, EquipItemLevel,
 // DecomposeItem, SoulbindTry, LoginCharacter, Attendance, EngraveTeleportArtifact, JoinParty, GuildJoin, AddFriend,
 // StorageStore, CloseNPC, ClearAchievement. Rewards: TakeAchievementReward 0x5685/0x5686 {id, step}, group rewards
-// 0x5687/0x5688 {group, step}, the batch 0x5689/0x568a; Attendance_RQ/RS 0xe2e6/0xe2e7 (index 1503/1504 + 0xdd07) checks
-// in once a day; CloseNpcAchievement 0xe2c8/0xe2c9, CloseEnvObjAchievement 0xe2ca/0xe2cb. Opcodes in the anchored runs,
+// 0x5687/0x5688 {group, step}, the batch 0x5689/0x568a; Attendance_RQ/RS 0xe34d/0xe34e checks
+// in once a day; CloseNpcAchievement 0xe32f/0xe330, CloseEnvObjAchievement 0xe331/0xe332. Opcodes in the anchored runs,
 // bodies from the usmap: CANDIDATE except the two observed.
 public sealed partial class GameSession
 {
     public const ushort AchievementListNt = 0x5683, AchievementCountUpdateNt = 0x5684, TakeAchievementRewardRq = 0x5685, TakeAchievementRewardRs = 0x5686,
         TakeAchievementGroupRewardRq = 0x5687, TakeAchievementGroupRewardRs = 0x5688, TakeAchievementRewardBatchRq = 0x5689, TakeAchievementRewardBatchRs = 0x568a,
-        // The 0xe3 run (base 0xdd6e): Attendance_RS 0xe34e OBSERVED (`0000` 3-5 s after every world entry, 27 times, community
-        // recordings 2026-11-04 to 06; reports/progression.md 4); the requests and the close reports by position (CANDIDATE).
+        // The 0xe3 block's live offset is +0xa762 (ArenaRanking_NT 0xe32a OBSERVED): Attendance_RQ/RS 0xe34d/0xe34e (official
+        // reply "4ee30000"; the client sends 0xe34d at every login and on the attendance button, and with the old 0xe2e6 it was
+        // never answered, so the attendance window never opened), CloseNpc/CloseEnvObjAchievement 0xe32f-0xe332.
         AttendanceRq = 0xe34d, AttendanceRs = 0xe34e, CloseNpcAchievementRq = 0xe32f, CloseNpcAchievementRs = 0xe330, CloseEnvObjAchievementRq = 0xe331, CloseEnvObjAchievementRs = 0xe332;
     const byte IncreaseAchievementReward = 2;   // EIncreaseReason (OBSERVED 2026-11-04 162844 #1508, next to 0x568a)
     static AchievementTables Achievements => AchievementTables.Embedded;
@@ -141,6 +142,8 @@ public sealed partial class GameSession
     long achievementFlushAt;
 
     public int AchievementCount(int id) => achievements.GetValueOrDefault(id)?.Count ?? 0;
+    /// <summary>Checks only: an achievement's count (progress the checks cannot play through).</summary>
+    public void SetAchievementForChecks(int id, int count) => (achievements.TryGetValue(id, out var st) ? st : achievements[id] = new AchievementState()).Count = count;
     /// <summary>Changed states not yet written (checks).</summary>
     public int PendingAchievementWrites => achievementDirty.Count;
     public long AchievementFlushAt => achievementFlushAt;
@@ -172,27 +175,58 @@ public sealed partial class GameSession
     bool Listed(AchievementTables.Entry entry, long now)
     {
         if (Achievements.GroupOf(entry) is not { } group || (group.Race != 0 && group.Race != profileRace)) return false;
+        // Season groups (SeasonMissionUnlock, SeasonMission): only the current season's (server-rules.xml <season current>). OBSERVED
+        // 2026-11-07 (capture 012837): the official list has every Group_Season_G1_* achievement (Unlock 113, missions 65) and none of
+        // seasons 2-4; ours listed the unlocks of all seasons (279 too many) and no mission.
+        if (group.Category is "SeasonMissionUnlock" or "SeasonMission")
+            return entry.Group.Contains($"_Season_{ServerRules.Embedded.CurrentSeason}_", StringComparison.Ordinal);
         if (ListedCategories.Contains(group.Category)) return true;
         if (group.Category == "BattlePass") return PassOfMission(entry, now) is not null;
         return group.Category == "Attendance" && Achievements.OpenBoards(profileRace, now).Any(b => b.Achievement == entry.Id);
     }
 
-    static PacketWriter WriteState(PacketWriter w, int id, AchievementState? state) =>
-        w.I32(id).I32(state?.Count ?? 0).I64(state?.CompletedMs ?? 0).U8((byte)(state?.RewardedStep ?? 0));
+    // The i64 is the completion time, but for an attendance board the last check-in: OBSERVED (official AchievementList_NT,
+    // 115817): board 520330100 count 11, time 2026-11-06 10:55 (that day's check-in), never completed. With 0 there the client
+    // took today's check-in as not done: the window opened again with red dots after every relog (live 2026-11-07).
+    PacketWriter WriteState(PacketWriter w, int id, AchievementState? state, bool update = false) =>
+        w.I32(id).I32(state?.Count ?? 0).I64(state is { Count: > 0 } && (IsAttendanceBoard(id) || update && state.CompletedMs == 0) ? state.UpdatedMs : state?.CompletedMs ?? 0)
+            .U8((byte)(state?.RewardedStep ?? 0));
 
-    /// <summary>AchievementList_NT at world entry: the listed achievements with their states, no group reward states.</summary>
+    bool IsAttendanceBoard(int id) =>
+        (UnlistedBoards.GetValueOrDefault(profileRace) ?? []).Contains(id)
+        || Achievements.Of(id) is { } entry && Achievements.GroupOf(entry) is { Category: "Attendance" };
+
+    /// <summary>
+    /// AchievementList_NT at world entry: the listed achievements with their states, then the group reward states (usmap map
+    /// group i32 -> {step reward states [bool]}, the bools packed across the groups). OBSERVED (capture 105448 #329): every
+    /// Achievement-category group of the race, one flag per group reward step. Before 2026-11-06 we sent no group: the client
+    /// counted the completed achievements (44/1229) but its Achievements window listed nothing.
+    /// </summary>
     byte[] AchievementList(long now)
     {
         var listed = Achievements.All.Where(e => Listed(e, now)).ToList();
-        var w = PacketWriter.Opcode(AchievementListNt).Varint((uint)listed.Count);
+        var extra = UnlistedBoards.GetValueOrDefault(profileRace) ?? [];
+        var w = PacketWriter.Opcode(AchievementListNt).Varint((uint)(listed.Count + extra.Length));
         foreach (var entry in listed) WriteState(w, entry.Id, achievements.GetValueOrDefault(entry.Id));
-        return w.Varint(0).ToArray();
+        foreach (var id in extra) WriteState(w, id, achievements.GetValueOrDefault(id));
+        var groups = listed.Select(e => Achievements.GroupOf(e)).OfType<AchievementTables.Group>()
+            .Where(g => g.Category == "Achievement" && Achievements.GroupRewards(g.Id).Count > 0).DistinctBy(g => g.Id).OrderBy(g => g.Id).ToList();
+        w.Varint((uint)groups.Count);
+        foreach (var group in groups)
+        {
+            var steps = Achievements.GroupRewards(group.Id).Count;
+            w.I32(group.Id).Varint((uint)steps);
+            for (var step = 1; step <= steps; step++) w.Bool(groupRewardsTaken.Contains((group.Id, step)));
+        }
+        return w.ToArray();
     }
 
     byte[] AchievementUpdate(IReadOnlyList<int> ids)
     {
         var w = PacketWriter.Opcode(AchievementCountUpdateNt).Varint((uint)ids.Count);
-        foreach (var id in ids) WriteState(w, id, achievements.GetValueOrDefault(id));
+        // A count update carries the time of the change also before completion (OBSERVED: every Empyrean Trace pickup's 0x5684 of
+        // 420100700 "Collect Empyrean Trace: Altgard", e.g. count 2 of 5 with that moment's time, rec 105448 #17554; 2026-11-11).
+        foreach (var id in ids) WriteState(w, id, achievements.GetValueOrDefault(id), update: true);
         return w.ToArray();
     }
 
@@ -242,8 +276,12 @@ public sealed partial class GameSession
 
     List<byte[]> AchieveKill(int npcId) => [.. Achieve("KillNpc", 1, e => e.Npcs?.Contains(npcId) == true), .. Achieve("KillNpcAll")];
 
-    List<byte[]> AchieveQuest(string code, string? type) =>
-        [.. Achieve("ClearQuest", 1, e => e.Has(code)), .. Achieve("ClearQuestType", 1, e => e.Values.Length == 0 || (type is not null && e.Has(type)))];
+    /// <summary>A rewarded quest. ClearQuestExplorationType values: [exploration type] or [type, map] (Group_L_Adventure_Garrison
+    /// "OccupationTerritory 1010" counts to 15 = the 15 OccupationTerritory quests with AcquireMapId 1010).</summary>
+    List<byte[]> AchieveQuest(string code, string? type, string? exploration = null, int map = 0) =>
+        [.. Achieve("ClearQuest", 1, e => e.Has(code)), .. Achieve("ClearQuestType", 1, e => e.Values.Length == 0 || (type is not null && e.Has(type))),
+         .. (exploration is null ? new List<byte[]>() : Achieve("ClearQuestExplorationType", 1, e => e.Values.Length > 0 && string.Equals(e.Values[0], exploration, StringComparison.OrdinalIgnoreCase)
+                && (e.Values.Length < 2 || e.Values[1].Length == 0 || e.Values[1] == map.ToString(System.Globalization.CultureInfo.InvariantCulture))))];
 
     /// <summary>A clear with its time and deaths: the limit achievements (ObjValues [dungeon names..., limit]).</summary>
     List<byte[]> AchieveDungeonClearLimits(DungeonInfo room, long elapsedMs, int deaths) =>
@@ -269,8 +307,11 @@ public sealed partial class GameSession
     /// <summary>An enchant reached a level: EnchantLevelItem [level], EnchantLevelEquipCategory [category, level], EnchantLevelItemGrade [level, ..., grade] (category and grade unmatched, OURS).</summary>
     List<byte[]> AchieveEnchant(int level) =>
         [.. Achieve("EnchantLevelItem", 1, e => e.Values.Length >= 1 && int.TryParse(e.Values[0], out var need) && level >= need),
-         .. Achieve("EnchantLevelEquipCategory", 1, e => e.Values.Length >= 2 && int.TryParse(e.Values[1], out var need) && level >= need),
-         .. Achieve("EnchantLevelItemGrade", 1, e => e.Values.Length >= 1 && int.TryParse(e.Values[0], out var need) && level >= need)];
+         // OBSERVED (144631): every successful enchant counts 1 on 443100600 (EnchantLevelEquipCategory, values ["1", "30"],
+         // steps 10..1000 enchants), so these count enchant successes, not a level reached (we required level >= 30: never).
+         // PROVISIONAL: the values (equip category, item level?) are not checked.
+         .. Achieve("EnchantLevelEquipCategory", 1),
+         .. Achieve("EnchantLevelItemGrade", 1)];
 
     /// <summary>Items that arrived in the bag: GetItem/AcquireItem by id (quantities), GetItemEquip for equipment (grade unmatched), GetItemMisc/Usable by the id range (OURS).</summary>
     List<byte[]> AchieveItemsGained(IReadOnlyList<(int ItemId, long Count)> gained)
@@ -348,7 +389,14 @@ public sealed partial class GameSession
         return taken is null ? [Reply(1)] : [Reply(0), .. taken];
     }
 
-    int CompletedInGroup(int groupId) => Achievements.InGroup(groupId).Count(e => (achievements.GetValueOrDefault(e.Id)?.CompletedMs ?? 0) != 0);
+    /// <summary>
+    /// The achievement steps reached in a group: what its reward thresholds count. Group_L_Growth_Accomplish has 10 achievements
+    /// with 67 steps and thresholds 11..68, so finished achievements (at most 10) never reached the first one while the client,
+    /// counting steps, showed the reward as ready (live 2026-11-06: collect-all took nothing). Single-step groups count the same
+    /// either way (the official claim of Group_D_Adventure_Imprint step 1, capture 2026-11-06).
+    /// </summary>
+    int CompletedInGroup(int groupId) => Achievements.InGroup(groupId)
+        .Sum(e => achievements.GetValueOrDefault(e.Id) is { } state ? e.Steps.Count(st => st[1] <= state.Count) : 0);
 
     async Task<List<byte[]>?> TakeGroupStepAsync(int groupId, int step, CancellationToken ct)
     {
@@ -392,24 +440,28 @@ public sealed partial class GameSession
                 if (await TakeGroupStepAsync(gid, step, ct) is { } taken) { replies.AddRange(taken); groupSteps.Add((byte)step); }
             if (steps.Count > 0 || groupSteps.Count > 0) results.Add((gid, groupSteps, steps));
         }
-        return [RewardBatchReply(category, groupId, only, results.Select(r => (r.Group, (IReadOnlyList<byte>)r.GroupSteps, (IReadOnlyList<(int, int)>)r.Steps.Select(s => (s.Key, s.Value)).ToList())).ToList()),
-            .. replies];
+        // OBSERVED (official category-7 claims, captures 20261106-105448 / 20261107-014953): the item change, then 0x568a, and no
+        // AchievementCountUpdate for the claimed achievements; the reply's taken steps are the client's new state. Our extra
+        // 0x5684 (count, complete time 0, rewarded step) after it left the collection button on "collect" (live 2026-11-07).
+        return [.. replies.Where(b => (b[0] | b[1] << 8) == 0x561b), TakeRewardBatchReply(category, groupId, only, results),
+            .. replies.Where(b => (b[0] | b[1] << 8) is not (0x561b or AchievementCountUpdateNt))];
     }
 
     /// <summary>
-    /// 0x568a TakeAchievementRewardBatch_RS: result u16, category u8, group i32, one byte (the two bools packed), count, per
-    /// result {group i32, count + group step u8, count + {achievement i32, step u8}} (OBSERVED 2026-11-04: 162844 #1509,
-    /// 162208 #402, 163050 #8767 parse exactly; the step was an i32 here).
+    /// 0x568a TakeAchievementRewardBatch_RS (usmap): result, category, group, only character, more available (packed bools), then per
+    /// group {group i32, taken group reward steps [u8], taken achievement steps map i32 -> u8}.
     /// </summary>
-    internal static byte[] RewardBatchReply(byte category, int groupId, bool only, IReadOnlyList<(int Group, IReadOnlyList<byte> GroupSteps, IReadOnlyList<(int Id, int Step)> Steps)> results)
+    public static byte[] TakeRewardBatchReply(byte category, int groupId, bool only, IReadOnlyList<(int Group, List<byte> GroupSteps, Dictionary<int, int> Steps)> results)
     {
         var w = PacketWriter.Opcode(TakeAchievementRewardBatchRs).U16(0).U8(category).I32(groupId).Bool(only).Bool(false).Varint((uint)results.Count);
         foreach (var (gid, groupSteps, steps) in results)
         {
             w.I32(gid).Varint((uint)groupSteps.Count);
-            foreach (var s in groupSteps) w.U8(s);
+            foreach (var step in groupSteps) w.U8(step);
+            // _taken_achievement_steps is a map i32 -> u8. We wrote the step as i32 (3 bytes too many per entry): with several
+            // rewards the client misread the rest and crashed (live 2026-11-06, collect-all in the Achievements window).
             w.Varint((uint)steps.Count);
-            foreach (var (id, step) in steps) w.I32(id).U8((byte)step);
+            foreach (var (id, step) in steps) w.I32(id).U8((byte)Math.Clamp(step, 0, 255));
         }
         return w.ToArray();
     }
@@ -422,10 +474,7 @@ public sealed partial class GameSession
 
     // ---------- Attendance and the close reports ----------
 
-    /// <summary>
-    /// 0xe34d Attendance_RQ: today's check-in on every open board (one day per UTC day). Answered `0000` every time (OBSERVED at
-    /// every entry, same-day relogs too).
-    /// </summary>
+    /// <summary>0xe34d Attendance_RQ: today's check-in on every open board (one day per UTC day); always result 0, as official.</summary>
     List<byte[]> Attendance(long now)
     {
         var replies = new List<byte[]>();
@@ -436,8 +485,30 @@ public sealed partial class GameSession
             if (state is { UpdatedMs: > 0 } && state.UpdatedMs >= today && state.Count > 0) continue;
             replies.AddRange(Achieve("Attendance", 1, e => e.Id == board.Achievement, now));
         }
+        // The boards our tables lack (UnlistedBoards): the day counted, marked taken (no known reward), so the client shows no
+        // check-in or reward pending on them.
+        foreach (var id in UnlistedBoards.GetValueOrDefault(profileRace) ?? [])
+        {
+            if (!achievements.TryGetValue(id, out var state)) achievements[id] = state = new AchievementState();
+            if (state.UpdatedMs >= today && state.Count > 0) continue;
+            state.Count++;
+            state.RewardedStep = Math.Min(255, state.Count);
+            state.UpdatedMs = now;
+            achievementDirty.Add(id);
+            replies.Add(AchievementUpdate([id]));
+        }
+        // OBSERVED: all 10 official Attendance_RS are "4ee30000" (result 0), the client's repeat requests (every click on the
+        // attendance button) included. Our result 1 on a repeat (live 2026-11-07, 7 clicks) kept the window from opening.
         return [PacketWriter.Opcode(AttendanceRs).U16(0).ToArray(), .. replies];
     }
+
+    /// <summary>
+    /// Attendance boards the official login lists that our achievement tables lack (OBSERVED: official AchievementList_NT of
+    /// 2026-11-06/07 carries 5x0320100, 5x0330100 (our boards 1022/1023) and 5x0350100, 5x0360100). Without them the client
+    /// showed their check-in as pending: red dots in the attendance window with nothing to collect (live 2026-11-07).
+    /// PROVISIONAL: their days and rewards are unknown; each day is counted and marked taken.
+    /// </summary>
+    static readonly Dictionary<int, int[]> UnlistedBoards = new() { [1] = [510350100, 510360100], [2] = [520350100, 520360100] };
 
     List<byte[]> CloseNpcAchievement(byte[] plain)
     {
@@ -460,6 +531,8 @@ public sealed partial class GameSession
     // ---------- Persistence ----------
 
     /// <summary>The changed states, written in one batch (each tick that has changes, at most every two seconds).</summary>
+    internal Task FlushAchievementsForChecks(long now) => FlushAchievementsAsync(now, default, force: true);
+
     async Task FlushAchievementsAsync(long now, CancellationToken ct, bool force = false)
     {
         if (achievementDirty.Count == 0 || Store is not { } store || CharacterId is not { } character || (!force && now < achievementFlushAt)) return;

@@ -36,7 +36,12 @@ public static class Kibelisks
         maps.Value.GetValueOrDefault(mapId.ToString(System.Globalization.CultureInfo.InvariantCulture)) ?? [];
 
     /// <summary>The map and placement of the Kibelisk that engraves this TeleportArtifact id, or null.</summary>
-    public static (int Map, KibeliskPlacement Placement)? ByArtifact(int artifactId) =>
-        maps.Value.SelectMany(m => m.Value.Select(k => (Map: int.Parse(m.Key, System.Globalization.CultureInfo.InvariantCulture), Placement: k)))
-            .Where(x => x.Placement.ArtifactId == artifactId).Select(x => ((int, KibeliskPlacement)?)x).FirstOrDefault();
+    public static (int MapId, KibeliskPlacement Placement)? ByArtifact(int artifactId)
+    {
+        foreach (var (map, placed) in maps.Value)
+            foreach (var k in placed)
+                if (k.ArtifactId == artifactId && int.TryParse(map, System.Globalization.CultureInfo.InvariantCulture, out var mapId))
+                    return (mapId, k);
+        return null;
+    }
 }

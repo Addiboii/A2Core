@@ -1,0 +1,2686 @@
+{
+ "source": "aion2hub.com/database/nightmare",
+ "fragmentItemId": 930100017,
+ "layers": 4,
+ "levelsPerBoss": 10,
+ "bosses": [
+  {
+   "id": 1,
+   "layer": 1,
+   "name": "Gatekeeper Pinopi",
+   "location": "Root Cellar",
+   "bossLevel": 45,
+   "itemLevelRange": [
+    1000,
+    1600
+   ],
+   "levels": [
+    {
+     "level": 1,
+     "suggestedItemLevel": 1000,
+     "bossLevel": 45,
+     "reward": {
+      "firstClear": 500,
+      "repeat": 155
+     }
+    },
+    {
+     "level": 2,
+     "suggestedItemLevel": 1067,
+     "bossLevel": 45,
+     "reward": {
+      "firstClear": 595,
+      "repeat": 185
+     }
+    },
+    {
+     "level": 3,
+     "suggestedItemLevel": 1133,
+     "bossLevel": 45,
+     "reward": {
+      "firstClear": 690,
+      "repeat": 215
+     }
+    },
+    {
+     "level": 4,
+     "suggestedItemLevel": 1200,
+     "bossLevel": 45,
+     "reward": {
+      "firstClear": 785,
+      "repeat": 245
+     }
+    },
+    {
+     "level": 5,
+     "suggestedItemLevel": 1267,
+     "bossLevel": 45,
+     "reward": {
+      "firstClear": 880,
+      "repeat": 275
+     }
+    },
+    {
+     "level": 6,
+     "suggestedItemLevel": 1333,
+     "bossLevel": 45,
+     "reward": {
+      "firstClear": 975,
+      "repeat": 305
+     }
+    },
+    {
+     "level": 7,
+     "suggestedItemLevel": 1400,
+     "bossLevel": 45,
+     "reward": {
+      "firstClear": 1070,
+      "repeat": 335
+     }
+    },
+    {
+     "level": 8,
+     "suggestedItemLevel": 1467,
+     "bossLevel": 45,
+     "reward": {
+      "firstClear": 1165,
+      "repeat": 365
+     }
+    },
+    {
+     "level": 9,
+     "suggestedItemLevel": 1533,
+     "bossLevel": 45,
+     "reward": {
+      "firstClear": 1260,
+      "repeat": 395
+     }
+    },
+    {
+     "level": 10,
+     "suggestedItemLevel": 1600,
+     "bossLevel": 45,
+     "reward": {
+      "firstClear": 1355,
+      "repeat": 425
+     }
+    }
+   ]
+  },
+  {
+   "id": 2,
+   "layer": 1,
+   "name": "Furious Feruk",
+   "location": "Dranactus Underkeep",
+   "bossLevel": 45,
+   "itemLevelRange": [
+    1000,
+    1600
+   ],
+   "levels": [
+    {
+     "level": 1,
+     "suggestedItemLevel": 1000,
+     "bossLevel": 45,
+     "reward": {
+      "firstClear": 500,
+      "repeat": 155
+     }
+    },
+    {
+     "level": 2,
+     "suggestedItemLevel": 1067,
+     "bossLevel": 45,
+     "reward": {
+      "firstClear": 595,
+      "repeat": 185
+     }
+    },
+    {
+     "level": 3,
+     "suggestedItemLevel": 1133,
+     "bossLevel": 45,
+     "reward": {
+      "firstClear": 690,
+      "repeat": 215
+     }
+    },
+    {
+     "level": 4,
+     "suggestedItemLevel": 1200,
+     "bossLevel": 45,
+     "reward": {
+      "firstClear": 785,
+      "repeat": 245
+     }
+    },
+    {
+     "level": 5,
+     "suggestedItemLevel": 1267,
+     "bossLevel": 45,
+     "reward": {
+      "firstClear": 880,
+      "repeat": 275
+     }
+    },
+    {
+     "level": 6,
+     "suggestedItemLevel": 1333,
+     "bossLevel": 45,
+     "reward": {
+      "firstClear": 975,
+      "repeat": 305
+     }
+    },
+    {
+     "level": 7,
+     "suggestedItemLevel": 1400,
+     "bossLevel": 45,
+     "reward": {
+      "firstClear": 1070,
+      "repeat": 335
+     }
+    },
+    {
+     "level": 8,
+     "suggestedItemLevel": 1467,
+     "bossLevel": 45,
+     "reward": {
+      "firstClear": 1165,
+      "repeat": 365
+     }
+    },
+    {
+     "level": 9,
+     "suggestedItemLevel": 1533,
+     "bossLevel": 45,
+     "reward": {
+      "firstClear": 1260,
+      "repeat": 395
+     }
+    },
+    {
+     "level": 10,
+     "suggestedItemLevel": 1600,
+     "bossLevel": 45,
+     "reward": {
+      "firstClear": 1355,
+      "repeat": 425
+     }
+    }
+   ]
+  },
+  {
+   "id": 3,
+   "layer": 1,
+   "name": "Fafnir's Poison Blood",
+   "location": "Root of the Sacred Tree",
+   "bossLevel": 45,
+   "itemLevelRange": [
+    1000,
+    1600
+   ],
+   "levels": [
+    {
+     "level": 1,
+     "suggestedItemLevel": 1000,
+     "bossLevel": 45,
+     "reward": {
+      "firstClear": 500,
+      "repeat": 155
+     }
+    },
+    {
+     "level": 2,
+     "suggestedItemLevel": 1067,
+     "bossLevel": 45,
+     "reward": {
+      "firstClear": 595,
+      "repeat": 185
+     }
+    },
+    {
+     "level": 3,
+     "suggestedItemLevel": 1133,
+     "bossLevel": 45,
+     "reward": {
+      "firstClear": 690,
+      "repeat": 215
+     }
+    },
+    {
+     "level": 4,
+     "suggestedItemLevel": 1200,
+     "bossLevel": 45,
+     "reward": {
+      "firstClear": 785,
+      "repeat": 245
+     }
+    },
+    {
+     "level": 5,
+     "suggestedItemLevel": 1267,
+     "bossLevel": 45,
+     "reward": {
+      "firstClear": 880,
+      "repeat": 275
+     }
+    },
+    {
+     "level": 6,
+     "suggestedItemLevel": 1333,
+     "bossLevel": 45,
+     "reward": {
+      "firstClear": 975,
+      "repeat": 305
+     }
+    },
+    {
+     "level": 7,
+     "suggestedItemLevel": 1400,
+     "bossLevel": 45,
+     "reward": {
+      "firstClear": 1070,
+      "repeat": 335
+     }
+    },
+    {
+     "level": 8,
+     "suggestedItemLevel": 1467,
+     "bossLevel": 45,
+     "reward": {
+      "firstClear": 1165,
+      "repeat": 365
+     }
+    },
+    {
+     "level": 9,
+     "suggestedItemLevel": 1533,
+     "bossLevel": 45,
+     "reward": {
+      "firstClear": 1260,
+      "repeat": 395
+     }
+    },
+    {
+     "level": 10,
+     "suggestedItemLevel": 1600,
+     "bossLevel": 45,
+     "reward": {
+      "firstClear": 1355,
+      "repeat": 425
+     }
+    }
+   ]
+  },
+  {
+   "id": 4,
+   "layer": 1,
+   "name": "Wraith Giselle",
+   "location": "Crypt",
+   "bossLevel": 45,
+   "itemLevelRange": [
+    1000,
+    1600
+   ],
+   "levels": [
+    {
+     "level": 1,
+     "suggestedItemLevel": 1000,
+     "bossLevel": 45,
+     "reward": {
+      "firstClear": 500,
+      "repeat": 155
+     }
+    },
+    {
+     "level": 2,
+     "suggestedItemLevel": 1067,
+     "bossLevel": 45,
+     "reward": {
+      "firstClear": 595,
+      "repeat": 185
+     }
+    },
+    {
+     "level": 3,
+     "suggestedItemLevel": 1133,
+     "bossLevel": 45,
+     "reward": {
+      "firstClear": 690,
+      "repeat": 215
+     }
+    },
+    {
+     "level": 4,
+     "suggestedItemLevel": 1200,
+     "bossLevel": 45,
+     "reward": {
+      "firstClear": 785,
+      "repeat": 245
+     }
+    },
+    {
+     "level": 5,
+     "suggestedItemLevel": 1267,
+     "bossLevel": 45,
+     "reward": {
+      "firstClear": 880,
+      "repeat": 275
+     }
+    },
+    {
+     "level": 6,
+     "suggestedItemLevel": 1333,
+     "bossLevel": 45,
+     "reward": {
+      "firstClear": 975,
+      "repeat": 305
+     }
+    },
+    {
+     "level": 7,
+     "suggestedItemLevel": 1400,
+     "bossLevel": 45,
+     "reward": {
+      "firstClear": 1070,
+      "repeat": 335
+     }
+    },
+    {
+     "level": 8,
+     "suggestedItemLevel": 1467,
+     "bossLevel": 45,
+     "reward": {
+      "firstClear": 1165,
+      "repeat": 365
+     }
+    },
+    {
+     "level": 9,
+     "suggestedItemLevel": 1533,
+     "bossLevel": 45,
+     "reward": {
+      "firstClear": 1260,
+      "repeat": 395
+     }
+    },
+    {
+     "level": 10,
+     "suggestedItemLevel": 1600,
+     "bossLevel": 45,
+     "reward": {
+      "firstClear": 1355,
+      "repeat": 425
+     }
+    }
+   ]
+  },
+  {
+   "id": 5,
+   "layer": 1,
+   "name": "Fortress Guardian Notun",
+   "location": "Destruction Archon Underground Fortress",
+   "bossLevel": 55,
+   "itemLevelRange": [
+    1700,
+    2300
+   ],
+   "levels": [
+    {
+     "level": 1,
+     "suggestedItemLevel": 1700,
+     "bossLevel": 55,
+     "reward": {
+      "firstClear": 500,
+      "repeat": 155
+     }
+    },
+    {
+     "level": 2,
+     "suggestedItemLevel": 1767,
+     "bossLevel": 55,
+     "reward": {
+      "firstClear": 595,
+      "repeat": 185
+     }
+    },
+    {
+     "level": 3,
+     "suggestedItemLevel": 1833,
+     "bossLevel": 55,
+     "reward": {
+      "firstClear": 690,
+      "repeat": 215
+     }
+    },
+    {
+     "level": 4,
+     "suggestedItemLevel": 1900,
+     "bossLevel": 55,
+     "reward": {
+      "firstClear": 785,
+      "repeat": 245
+     }
+    },
+    {
+     "level": 5,
+     "suggestedItemLevel": 1967,
+     "bossLevel": 55,
+     "reward": {
+      "firstClear": 880,
+      "repeat": 275
+     }
+    },
+    {
+     "level": 6,
+     "suggestedItemLevel": 2033,
+     "bossLevel": 55,
+     "reward": {
+      "firstClear": 975,
+      "repeat": 305
+     }
+    },
+    {
+     "level": 7,
+     "suggestedItemLevel": 2100,
+     "bossLevel": 55,
+     "reward": {
+      "firstClear": 1070,
+      "repeat": 335
+     }
+    },
+    {
+     "level": 8,
+     "suggestedItemLevel": 2167,
+     "bossLevel": 55,
+     "reward": {
+      "firstClear": 1165,
+      "repeat": 365
+     }
+    },
+    {
+     "level": 9,
+     "suggestedItemLevel": 2233,
+     "bossLevel": 55,
+     "reward": {
+      "firstClear": 1260,
+      "repeat": 395
+     }
+    },
+    {
+     "level": 10,
+     "suggestedItemLevel": 2300,
+     "bossLevel": 55,
+     "reward": {
+      "firstClear": 1355,
+      "repeat": 425
+     }
+    }
+   ]
+  },
+  {
+   "id": 6,
+   "layer": 1,
+   "name": "Mutated Gerod",
+   "location": "Blades Hideout",
+   "bossLevel": 55,
+   "itemLevelRange": [
+    1700,
+    2300
+   ],
+   "levels": [
+    {
+     "level": 1,
+     "suggestedItemLevel": 1700,
+     "bossLevel": 55,
+     "reward": {
+      "firstClear": 500,
+      "repeat": 155
+     }
+    },
+    {
+     "level": 2,
+     "suggestedItemLevel": 1767,
+     "bossLevel": 55,
+     "reward": {
+      "firstClear": 595,
+      "repeat": 185
+     }
+    },
+    {
+     "level": 3,
+     "suggestedItemLevel": 1833,
+     "bossLevel": 55,
+     "reward": {
+      "firstClear": 690,
+      "repeat": 215
+     }
+    },
+    {
+     "level": 4,
+     "suggestedItemLevel": 1900,
+     "bossLevel": 55,
+     "reward": {
+      "firstClear": 785,
+      "repeat": 245
+     }
+    },
+    {
+     "level": 5,
+     "suggestedItemLevel": 1967,
+     "bossLevel": 55,
+     "reward": {
+      "firstClear": 880,
+      "repeat": 275
+     }
+    },
+    {
+     "level": 6,
+     "suggestedItemLevel": 2033,
+     "bossLevel": 55,
+     "reward": {
+      "firstClear": 975,
+      "repeat": 305
+     }
+    },
+    {
+     "level": 7,
+     "suggestedItemLevel": 2100,
+     "bossLevel": 55,
+     "reward": {
+      "firstClear": 1070,
+      "repeat": 335
+     }
+    },
+    {
+     "level": 8,
+     "suggestedItemLevel": 2167,
+     "bossLevel": 55,
+     "reward": {
+      "firstClear": 1165,
+      "repeat": 365
+     }
+    },
+    {
+     "level": 9,
+     "suggestedItemLevel": 2233,
+     "bossLevel": 55,
+     "reward": {
+      "firstClear": 1260,
+      "repeat": 395
+     }
+    },
+    {
+     "level": 10,
+     "suggestedItemLevel": 2300,
+     "bossLevel": 55,
+     "reward": {
+      "firstClear": 1355,
+      "repeat": 425
+     }
+    }
+   ]
+  },
+  {
+   "id": 7,
+   "layer": 1,
+   "name": "Zikel's Apparition",
+   "location": "Impetusium",
+   "bossLevel": 65,
+   "itemLevelRange": [
+    2400,
+    3000
+   ],
+   "levels": [
+    {
+     "level": 1,
+     "suggestedItemLevel": 2400,
+     "bossLevel": 65,
+     "reward": {
+      "firstClear": 500,
+      "repeat": 155
+     }
+    },
+    {
+     "level": 2,
+     "suggestedItemLevel": 2467,
+     "bossLevel": 65,
+     "reward": {
+      "firstClear": 595,
+      "repeat": 185
+     }
+    },
+    {
+     "level": 3,
+     "suggestedItemLevel": 2533,
+     "bossLevel": 65,
+     "reward": {
+      "firstClear": 690,
+      "repeat": 215
+     }
+    },
+    {
+     "level": 4,
+     "suggestedItemLevel": 2600,
+     "bossLevel": 65,
+     "reward": {
+      "firstClear": 785,
+      "repeat": 245
+     }
+    },
+    {
+     "level": 5,
+     "suggestedItemLevel": 2667,
+     "bossLevel": 65,
+     "reward": {
+      "firstClear": 880,
+      "repeat": 275
+     }
+    },
+    {
+     "level": 6,
+     "suggestedItemLevel": 2733,
+     "bossLevel": 65,
+     "reward": {
+      "firstClear": 975,
+      "repeat": 305
+     }
+    },
+    {
+     "level": 7,
+     "suggestedItemLevel": 2800,
+     "bossLevel": 65,
+     "reward": {
+      "firstClear": 1070,
+      "repeat": 335
+     }
+    },
+    {
+     "level": 8,
+     "suggestedItemLevel": 2867,
+     "bossLevel": 65,
+     "reward": {
+      "firstClear": 1165,
+      "repeat": 365
+     }
+    },
+    {
+     "level": 9,
+     "suggestedItemLevel": 2933,
+     "bossLevel": 65,
+     "reward": {
+      "firstClear": 1260,
+      "repeat": 395
+     }
+    },
+    {
+     "level": 10,
+     "suggestedItemLevel": 3000,
+     "bossLevel": 65,
+     "reward": {
+      "firstClear": 1355,
+      "repeat": 425
+     }
+    }
+   ]
+  },
+  {
+   "id": 8,
+   "layer": 2,
+   "name": "Mutated Ulgorn",
+   "location": "Blades Hideout",
+   "bossLevel": 57,
+   "itemLevelRange": [
+    2500,
+    2950
+   ],
+   "levels": [
+    {
+     "level": 1,
+     "suggestedItemLevel": 2500,
+     "bossLevel": 57,
+     "reward": {
+      "firstClear": 500,
+      "repeat": 155
+     }
+    },
+    {
+     "level": 2,
+     "suggestedItemLevel": 2550,
+     "bossLevel": 57,
+     "reward": {
+      "firstClear": 595,
+      "repeat": 185
+     }
+    },
+    {
+     "level": 3,
+     "suggestedItemLevel": 2600,
+     "bossLevel": 57,
+     "reward": {
+      "firstClear": 690,
+      "repeat": 215
+     }
+    },
+    {
+     "level": 4,
+     "suggestedItemLevel": 2650,
+     "bossLevel": 57,
+     "reward": {
+      "firstClear": 785,
+      "repeat": 245
+     }
+    },
+    {
+     "level": 5,
+     "suggestedItemLevel": 2700,
+     "bossLevel": 57,
+     "reward": {
+      "firstClear": 880,
+      "repeat": 275
+     }
+    },
+    {
+     "level": 6,
+     "suggestedItemLevel": 2750,
+     "bossLevel": 57,
+     "reward": {
+      "firstClear": 975,
+      "repeat": 305
+     }
+    },
+    {
+     "level": 7,
+     "suggestedItemLevel": 2800,
+     "bossLevel": 57,
+     "reward": {
+      "firstClear": 1070,
+      "repeat": 335
+     }
+    },
+    {
+     "level": 8,
+     "suggestedItemLevel": 2850,
+     "bossLevel": 57,
+     "reward": {
+      "firstClear": 1165,
+      "repeat": 365
+     }
+    },
+    {
+     "level": 9,
+     "suggestedItemLevel": 2900,
+     "bossLevel": 57,
+     "reward": {
+      "firstClear": 1260,
+      "repeat": 395
+     }
+    },
+    {
+     "level": 10,
+     "suggestedItemLevel": 2950,
+     "bossLevel": 57,
+     "reward": {
+      "firstClear": 1355,
+      "repeat": 425
+     }
+    }
+   ]
+  },
+  {
+   "id": 9,
+   "layer": 2,
+   "name": "Soulreaper Rathman",
+   "location": "Collapsed Oracle",
+   "bossLevel": 57,
+   "itemLevelRange": [
+    2500,
+    2950
+   ],
+   "levels": [
+    {
+     "level": 1,
+     "suggestedItemLevel": 2500,
+     "bossLevel": 57,
+     "reward": {
+      "firstClear": 500,
+      "repeat": 155
+     }
+    },
+    {
+     "level": 2,
+     "suggestedItemLevel": 2550,
+     "bossLevel": 57,
+     "reward": {
+      "firstClear": 595,
+      "repeat": 185
+     }
+    },
+    {
+     "level": 3,
+     "suggestedItemLevel": 2600,
+     "bossLevel": 57,
+     "reward": {
+      "firstClear": 690,
+      "repeat": 215
+     }
+    },
+    {
+     "level": 4,
+     "suggestedItemLevel": 2650,
+     "bossLevel": 57,
+     "reward": {
+      "firstClear": 785,
+      "repeat": 245
+     }
+    },
+    {
+     "level": 5,
+     "suggestedItemLevel": 2700,
+     "bossLevel": 57,
+     "reward": {
+      "firstClear": 880,
+      "repeat": 275
+     }
+    },
+    {
+     "level": 6,
+     "suggestedItemLevel": 2750,
+     "bossLevel": 57,
+     "reward": {
+      "firstClear": 975,
+      "repeat": 305
+     }
+    },
+    {
+     "level": 7,
+     "suggestedItemLevel": 2800,
+     "bossLevel": 57,
+     "reward": {
+      "firstClear": 1070,
+      "repeat": 335
+     }
+    },
+    {
+     "level": 8,
+     "suggestedItemLevel": 2850,
+     "bossLevel": 57,
+     "reward": {
+      "firstClear": 1165,
+      "repeat": 365
+     }
+    },
+    {
+     "level": 9,
+     "suggestedItemLevel": 2900,
+     "bossLevel": 57,
+     "reward": {
+      "firstClear": 1260,
+      "repeat": 395
+     }
+    },
+    {
+     "level": 10,
+     "suggestedItemLevel": 2950,
+     "bossLevel": 57,
+     "reward": {
+      "firstClear": 1355,
+      "repeat": 425
+     }
+    }
+   ]
+  },
+  {
+   "id": 10,
+   "layer": 2,
+   "name": "Sharp Aulak",
+   "location": "Aullaeu Altar",
+   "bossLevel": 57,
+   "itemLevelRange": [
+    2500,
+    2950
+   ],
+   "levels": [
+    {
+     "level": 1,
+     "suggestedItemLevel": 2500,
+     "bossLevel": 57,
+     "reward": {
+      "firstClear": 500,
+      "repeat": 155
+     }
+    },
+    {
+     "level": 2,
+     "suggestedItemLevel": 2550,
+     "bossLevel": 57,
+     "reward": {
+      "firstClear": 595,
+      "repeat": 185
+     }
+    },
+    {
+     "level": 3,
+     "suggestedItemLevel": 2600,
+     "bossLevel": 57,
+     "reward": {
+      "firstClear": 690,
+      "repeat": 215
+     }
+    },
+    {
+     "level": 4,
+     "suggestedItemLevel": 2650,
+     "bossLevel": 57,
+     "reward": {
+      "firstClear": 785,
+      "repeat": 245
+     }
+    },
+    {
+     "level": 5,
+     "suggestedItemLevel": 2700,
+     "bossLevel": 57,
+     "reward": {
+      "firstClear": 880,
+      "repeat": 275
+     }
+    },
+    {
+     "level": 6,
+     "suggestedItemLevel": 2750,
+     "bossLevel": 57,
+     "reward": {
+      "firstClear": 975,
+      "repeat": 305
+     }
+    },
+    {
+     "level": 7,
+     "suggestedItemLevel": 2800,
+     "bossLevel": 57,
+     "reward": {
+      "firstClear": 1070,
+      "repeat": 335
+     }
+    },
+    {
+     "level": 8,
+     "suggestedItemLevel": 2850,
+     "bossLevel": 57,
+     "reward": {
+      "firstClear": 1165,
+      "repeat": 365
+     }
+    },
+    {
+     "level": 9,
+     "suggestedItemLevel": 2900,
+     "bossLevel": 57,
+     "reward": {
+      "firstClear": 1260,
+      "repeat": 395
+     }
+    },
+    {
+     "level": 10,
+     "suggestedItemLevel": 2950,
+     "bossLevel": 57,
+     "reward": {
+      "firstClear": 1355,
+      "repeat": 425
+     }
+    }
+   ]
+  },
+  {
+   "id": 11,
+   "layer": 2,
+   "name": "Sealed Sura",
+   "location": "Coastal Cave",
+   "bossLevel": 57,
+   "itemLevelRange": [
+    2500,
+    2950
+   ],
+   "levels": [
+    {
+     "level": 1,
+     "suggestedItemLevel": 2500,
+     "bossLevel": 57,
+     "reward": {
+      "firstClear": 500,
+      "repeat": 155
+     }
+    },
+    {
+     "level": 2,
+     "suggestedItemLevel": 2550,
+     "bossLevel": 57,
+     "reward": {
+      "firstClear": 595,
+      "repeat": 185
+     }
+    },
+    {
+     "level": 3,
+     "suggestedItemLevel": 2600,
+     "bossLevel": 57,
+     "reward": {
+      "firstClear": 690,
+      "repeat": 215
+     }
+    },
+    {
+     "level": 4,
+     "suggestedItemLevel": 2650,
+     "bossLevel": 57,
+     "reward": {
+      "firstClear": 785,
+      "repeat": 245
+     }
+    },
+    {
+     "level": 5,
+     "suggestedItemLevel": 2700,
+     "bossLevel": 57,
+     "reward": {
+      "firstClear": 880,
+      "repeat": 275
+     }
+    },
+    {
+     "level": 6,
+     "suggestedItemLevel": 2750,
+     "bossLevel": 57,
+     "reward": {
+      "firstClear": 975,
+      "repeat": 305
+     }
+    },
+    {
+     "level": 7,
+     "suggestedItemLevel": 2800,
+     "bossLevel": 57,
+     "reward": {
+      "firstClear": 1070,
+      "repeat": 335
+     }
+    },
+    {
+     "level": 8,
+     "suggestedItemLevel": 2850,
+     "bossLevel": 57,
+     "reward": {
+      "firstClear": 1165,
+      "repeat": 365
+     }
+    },
+    {
+     "level": 9,
+     "suggestedItemLevel": 2900,
+     "bossLevel": 57,
+     "reward": {
+      "firstClear": 1260,
+      "repeat": 395
+     }
+    },
+    {
+     "level": 10,
+     "suggestedItemLevel": 2950,
+     "bossLevel": 57,
+     "reward": {
+      "firstClear": 1355,
+      "repeat": 425
+     }
+    }
+   ]
+  },
+  {
+   "id": 12,
+   "layer": 2,
+   "name": "Enraged Reda",
+   "location": "Illusion Hideout",
+   "bossLevel": 63,
+   "itemLevelRange": [
+    3000,
+    3450
+   ],
+   "levels": [
+    {
+     "level": 1,
+     "suggestedItemLevel": 3000,
+     "bossLevel": 63,
+     "reward": {
+      "firstClear": 500,
+      "repeat": 155
+     }
+    },
+    {
+     "level": 2,
+     "suggestedItemLevel": 3050,
+     "bossLevel": 63,
+     "reward": {
+      "firstClear": 595,
+      "repeat": 185
+     }
+    },
+    {
+     "level": 3,
+     "suggestedItemLevel": 3100,
+     "bossLevel": 63,
+     "reward": {
+      "firstClear": 690,
+      "repeat": 215
+     }
+    },
+    {
+     "level": 4,
+     "suggestedItemLevel": 3150,
+     "bossLevel": 63,
+     "reward": {
+      "firstClear": 785,
+      "repeat": 245
+     }
+    },
+    {
+     "level": 5,
+     "suggestedItemLevel": 3200,
+     "bossLevel": 63,
+     "reward": {
+      "firstClear": 880,
+      "repeat": 275
+     }
+    },
+    {
+     "level": 6,
+     "suggestedItemLevel": 3250,
+     "bossLevel": 63,
+     "reward": {
+      "firstClear": 975,
+      "repeat": 305
+     }
+    },
+    {
+     "level": 7,
+     "suggestedItemLevel": 3300,
+     "bossLevel": 63,
+     "reward": {
+      "firstClear": 1070,
+      "repeat": 335
+     }
+    },
+    {
+     "level": 8,
+     "suggestedItemLevel": 3350,
+     "bossLevel": 63,
+     "reward": {
+      "firstClear": 1165,
+      "repeat": 365
+     }
+    },
+    {
+     "level": 9,
+     "suggestedItemLevel": 3400,
+     "bossLevel": 63,
+     "reward": {
+      "firstClear": 1260,
+      "repeat": 395
+     }
+    },
+    {
+     "level": 10,
+     "suggestedItemLevel": 3450,
+     "bossLevel": 63,
+     "reward": {
+      "firstClear": 1355,
+      "repeat": 425
+     }
+    }
+   ]
+  },
+  {
+   "id": 13,
+   "layer": 2,
+   "name": "Warden Santras",
+   "location": "Dranactus Underkeep",
+   "bossLevel": 63,
+   "itemLevelRange": [
+    3000,
+    3450
+   ],
+   "levels": [
+    {
+     "level": 1,
+     "suggestedItemLevel": 3000,
+     "bossLevel": 63,
+     "reward": {
+      "firstClear": 500,
+      "repeat": 155
+     }
+    },
+    {
+     "level": 2,
+     "suggestedItemLevel": 3050,
+     "bossLevel": 63,
+     "reward": {
+      "firstClear": 595,
+      "repeat": 185
+     }
+    },
+    {
+     "level": 3,
+     "suggestedItemLevel": 3100,
+     "bossLevel": 63,
+     "reward": {
+      "firstClear": 690,
+      "repeat": 215
+     }
+    },
+    {
+     "level": 4,
+     "suggestedItemLevel": 3150,
+     "bossLevel": 63,
+     "reward": {
+      "firstClear": 785,
+      "repeat": 245
+     }
+    },
+    {
+     "level": 5,
+     "suggestedItemLevel": 3200,
+     "bossLevel": 63,
+     "reward": {
+      "firstClear": 880,
+      "repeat": 275
+     }
+    },
+    {
+     "level": 6,
+     "suggestedItemLevel": 3250,
+     "bossLevel": 63,
+     "reward": {
+      "firstClear": 975,
+      "repeat": 305
+     }
+    },
+    {
+     "level": 7,
+     "suggestedItemLevel": 3300,
+     "bossLevel": 63,
+     "reward": {
+      "firstClear": 1070,
+      "repeat": 335
+     }
+    },
+    {
+     "level": 8,
+     "suggestedItemLevel": 3350,
+     "bossLevel": 63,
+     "reward": {
+      "firstClear": 1165,
+      "repeat": 365
+     }
+    },
+    {
+     "level": 9,
+     "suggestedItemLevel": 3400,
+     "bossLevel": 63,
+     "reward": {
+      "firstClear": 1260,
+      "repeat": 395
+     }
+    },
+    {
+     "level": 10,
+     "suggestedItemLevel": 3450,
+     "bossLevel": 63,
+     "reward": {
+      "firstClear": 1355,
+      "repeat": 425
+     }
+    }
+   ]
+  },
+  {
+   "id": 14,
+   "layer": 2,
+   "name": "Kaisinel's Illusion",
+   "location": "Ardus Shrine",
+   "bossLevel": 70,
+   "itemLevelRange": [
+    3500,
+    3950
+   ],
+   "levels": [
+    {
+     "level": 1,
+     "suggestedItemLevel": 3500,
+     "bossLevel": 70,
+     "reward": {
+      "firstClear": 500,
+      "repeat": 155
+     }
+    },
+    {
+     "level": 2,
+     "suggestedItemLevel": 3550,
+     "bossLevel": 70,
+     "reward": {
+      "firstClear": 595,
+      "repeat": 185
+     }
+    },
+    {
+     "level": 3,
+     "suggestedItemLevel": 3600,
+     "bossLevel": 70,
+     "reward": {
+      "firstClear": 690,
+      "repeat": 215
+     }
+    },
+    {
+     "level": 4,
+     "suggestedItemLevel": 3650,
+     "bossLevel": 70,
+     "reward": {
+      "firstClear": 785,
+      "repeat": 245
+     }
+    },
+    {
+     "level": 5,
+     "suggestedItemLevel": 3700,
+     "bossLevel": 70,
+     "reward": {
+      "firstClear": 880,
+      "repeat": 275
+     }
+    },
+    {
+     "level": 6,
+     "suggestedItemLevel": 3750,
+     "bossLevel": 70,
+     "reward": {
+      "firstClear": 975,
+      "repeat": 305
+     }
+    },
+    {
+     "level": 7,
+     "suggestedItemLevel": 3800,
+     "bossLevel": 70,
+     "reward": {
+      "firstClear": 1070,
+      "repeat": 335
+     }
+    },
+    {
+     "level": 8,
+     "suggestedItemLevel": 3850,
+     "bossLevel": 70,
+     "reward": {
+      "firstClear": 1165,
+      "repeat": 365
+     }
+    },
+    {
+     "level": 9,
+     "suggestedItemLevel": 3900,
+     "bossLevel": 70,
+     "reward": {
+      "firstClear": 1260,
+      "repeat": 395
+     }
+    },
+    {
+     "level": 10,
+     "suggestedItemLevel": 3950,
+     "bossLevel": 70,
+     "reward": {
+      "firstClear": 1355,
+      "repeat": 425
+     }
+    }
+   ]
+  },
+  {
+   "id": 15,
+   "layer": 3,
+   "name": "Sanctum Guardian Gauss",
+   "location": "Illusion Sanctum",
+   "bossLevel": 63,
+   "itemLevelRange": [
+    3000,
+    3450
+   ],
+   "levels": [
+    {
+     "level": 1,
+     "suggestedItemLevel": 3000,
+     "bossLevel": 63,
+     "reward": {
+      "firstClear": 500,
+      "repeat": 155
+     }
+    },
+    {
+     "level": 2,
+     "suggestedItemLevel": 3050,
+     "bossLevel": 63,
+     "reward": {
+      "firstClear": 595,
+      "repeat": 185
+     }
+    },
+    {
+     "level": 3,
+     "suggestedItemLevel": 3100,
+     "bossLevel": 63,
+     "reward": {
+      "firstClear": 690,
+      "repeat": 215
+     }
+    },
+    {
+     "level": 4,
+     "suggestedItemLevel": 3150,
+     "bossLevel": 63,
+     "reward": {
+      "firstClear": 785,
+      "repeat": 245
+     }
+    },
+    {
+     "level": 5,
+     "suggestedItemLevel": 3200,
+     "bossLevel": 63,
+     "reward": {
+      "firstClear": 880,
+      "repeat": 275
+     }
+    },
+    {
+     "level": 6,
+     "suggestedItemLevel": 3250,
+     "bossLevel": 63,
+     "reward": {
+      "firstClear": 975,
+      "repeat": 305
+     }
+    },
+    {
+     "level": 7,
+     "suggestedItemLevel": 3300,
+     "bossLevel": 63,
+     "reward": {
+      "firstClear": 1070,
+      "repeat": 335
+     }
+    },
+    {
+     "level": 8,
+     "suggestedItemLevel": 3350,
+     "bossLevel": 63,
+     "reward": {
+      "firstClear": 1165,
+      "repeat": 365
+     }
+    },
+    {
+     "level": 9,
+     "suggestedItemLevel": 3400,
+     "bossLevel": 63,
+     "reward": {
+      "firstClear": 1260,
+      "repeat": 395
+     }
+    },
+    {
+     "level": 10,
+     "suggestedItemLevel": 3450,
+     "bossLevel": 63,
+     "reward": {
+      "firstClear": 1355,
+      "repeat": 425
+     }
+    }
+   ]
+  },
+  {
+   "id": 16,
+   "layer": 3,
+   "name": "Ritualist Aulisa",
+   "location": "Aullaeu Altar",
+   "bossLevel": 63,
+   "itemLevelRange": [
+    3000,
+    3450
+   ],
+   "levels": [
+    {
+     "level": 1,
+     "suggestedItemLevel": 3000,
+     "bossLevel": 63,
+     "reward": {
+      "firstClear": 500,
+      "repeat": 155
+     }
+    },
+    {
+     "level": 2,
+     "suggestedItemLevel": 3050,
+     "bossLevel": 63,
+     "reward": {
+      "firstClear": 595,
+      "repeat": 185
+     }
+    },
+    {
+     "level": 3,
+     "suggestedItemLevel": 3100,
+     "bossLevel": 63,
+     "reward": {
+      "firstClear": 690,
+      "repeat": 215
+     }
+    },
+    {
+     "level": 4,
+     "suggestedItemLevel": 3150,
+     "bossLevel": 63,
+     "reward": {
+      "firstClear": 785,
+      "repeat": 245
+     }
+    },
+    {
+     "level": 5,
+     "suggestedItemLevel": 3200,
+     "bossLevel": 63,
+     "reward": {
+      "firstClear": 880,
+      "repeat": 275
+     }
+    },
+    {
+     "level": 6,
+     "suggestedItemLevel": 3250,
+     "bossLevel": 63,
+     "reward": {
+      "firstClear": 975,
+      "repeat": 305
+     }
+    },
+    {
+     "level": 7,
+     "suggestedItemLevel": 3300,
+     "bossLevel": 63,
+     "reward": {
+      "firstClear": 1070,
+      "repeat": 335
+     }
+    },
+    {
+     "level": 8,
+     "suggestedItemLevel": 3350,
+     "bossLevel": 63,
+     "reward": {
+      "firstClear": 1165,
+      "repeat": 365
+     }
+    },
+    {
+     "level": 9,
+     "suggestedItemLevel": 3400,
+     "bossLevel": 63,
+     "reward": {
+      "firstClear": 1260,
+      "repeat": 395
+     }
+    },
+    {
+     "level": 10,
+     "suggestedItemLevel": 3450,
+     "bossLevel": 63,
+     "reward": {
+      "firstClear": 1355,
+      "repeat": 425
+     }
+    }
+   ]
+  },
+  {
+   "id": 17,
+   "layer": 3,
+   "name": "Root Mythical Bird Aultross",
+   "location": "Root Cellar",
+   "bossLevel": 63,
+   "itemLevelRange": [
+    3000,
+    3450
+   ],
+   "levels": [
+    {
+     "level": 1,
+     "suggestedItemLevel": 3000,
+     "bossLevel": 63,
+     "reward": {
+      "firstClear": 500,
+      "repeat": 155
+     }
+    },
+    {
+     "level": 2,
+     "suggestedItemLevel": 3050,
+     "bossLevel": 63,
+     "reward": {
+      "firstClear": 595,
+      "repeat": 185
+     }
+    },
+    {
+     "level": 3,
+     "suggestedItemLevel": 3100,
+     "bossLevel": 63,
+     "reward": {
+      "firstClear": 690,
+      "repeat": 215
+     }
+    },
+    {
+     "level": 4,
+     "suggestedItemLevel": 3150,
+     "bossLevel": 63,
+     "reward": {
+      "firstClear": 785,
+      "repeat": 245
+     }
+    },
+    {
+     "level": 5,
+     "suggestedItemLevel": 3200,
+     "bossLevel": 63,
+     "reward": {
+      "firstClear": 880,
+      "repeat": 275
+     }
+    },
+    {
+     "level": 6,
+     "suggestedItemLevel": 3250,
+     "bossLevel": 63,
+     "reward": {
+      "firstClear": 975,
+      "repeat": 305
+     }
+    },
+    {
+     "level": 7,
+     "suggestedItemLevel": 3300,
+     "bossLevel": 63,
+     "reward": {
+      "firstClear": 1070,
+      "repeat": 335
+     }
+    },
+    {
+     "level": 8,
+     "suggestedItemLevel": 3350,
+     "bossLevel": 63,
+     "reward": {
+      "firstClear": 1165,
+      "repeat": 365
+     }
+    },
+    {
+     "level": 9,
+     "suggestedItemLevel": 3400,
+     "bossLevel": 63,
+     "reward": {
+      "firstClear": 1260,
+      "repeat": 395
+     }
+    },
+    {
+     "level": 10,
+     "suggestedItemLevel": 3450,
+     "bossLevel": 63,
+     "reward": {
+      "firstClear": 1355,
+      "repeat": 425
+     }
+    }
+   ]
+  },
+  {
+   "id": 18,
+   "layer": 3,
+   "name": "Oathbreaker Gartua",
+   "location": "Etheria Rift",
+   "bossLevel": 63,
+   "itemLevelRange": [
+    3000,
+    3450
+   ],
+   "levels": [
+    {
+     "level": 1,
+     "suggestedItemLevel": 3000,
+     "bossLevel": 63,
+     "reward": {
+      "firstClear": 500,
+      "repeat": 155
+     }
+    },
+    {
+     "level": 2,
+     "suggestedItemLevel": 3050,
+     "bossLevel": 63,
+     "reward": {
+      "firstClear": 595,
+      "repeat": 185
+     }
+    },
+    {
+     "level": 3,
+     "suggestedItemLevel": 3100,
+     "bossLevel": 63,
+     "reward": {
+      "firstClear": 690,
+      "repeat": 215
+     }
+    },
+    {
+     "level": 4,
+     "suggestedItemLevel": 3150,
+     "bossLevel": 63,
+     "reward": {
+      "firstClear": 785,
+      "repeat": 245
+     }
+    },
+    {
+     "level": 5,
+     "suggestedItemLevel": 3200,
+     "bossLevel": 63,
+     "reward": {
+      "firstClear": 880,
+      "repeat": 275
+     }
+    },
+    {
+     "level": 6,
+     "suggestedItemLevel": 3250,
+     "bossLevel": 63,
+     "reward": {
+      "firstClear": 975,
+      "repeat": 305
+     }
+    },
+    {
+     "level": 7,
+     "suggestedItemLevel": 3300,
+     "bossLevel": 63,
+     "reward": {
+      "firstClear": 1070,
+      "repeat": 335
+     }
+    },
+    {
+     "level": 8,
+     "suggestedItemLevel": 3350,
+     "bossLevel": 63,
+     "reward": {
+      "firstClear": 1165,
+      "repeat": 365
+     }
+    },
+    {
+     "level": 9,
+     "suggestedItemLevel": 3400,
+     "bossLevel": 63,
+     "reward": {
+      "firstClear": 1260,
+      "repeat": 395
+     }
+    },
+    {
+     "level": 10,
+     "suggestedItemLevel": 3450,
+     "bossLevel": 63,
+     "reward": {
+      "firstClear": 1355,
+      "repeat": 425
+     }
+    }
+   ]
+  },
+  {
+   "id": 19,
+   "layer": 3,
+   "name": "Incarnated Warding Feather",
+   "location": "Zumion Relic Storage",
+   "bossLevel": 70,
+   "itemLevelRange": [
+    3500,
+    3950
+   ],
+   "levels": [
+    {
+     "level": 1,
+     "suggestedItemLevel": 3500,
+     "bossLevel": 70,
+     "reward": {
+      "firstClear": 500,
+      "repeat": 155
+     }
+    },
+    {
+     "level": 2,
+     "suggestedItemLevel": 3550,
+     "bossLevel": 70,
+     "reward": {
+      "firstClear": 595,
+      "repeat": 185
+     }
+    },
+    {
+     "level": 3,
+     "suggestedItemLevel": 3600,
+     "bossLevel": 70,
+     "reward": {
+      "firstClear": 690,
+      "repeat": 215
+     }
+    },
+    {
+     "level": 4,
+     "suggestedItemLevel": 3650,
+     "bossLevel": 70,
+     "reward": {
+      "firstClear": 785,
+      "repeat": 245
+     }
+    },
+    {
+     "level": 5,
+     "suggestedItemLevel": 3700,
+     "bossLevel": 70,
+     "reward": {
+      "firstClear": 880,
+      "repeat": 275
+     }
+    },
+    {
+     "level": 6,
+     "suggestedItemLevel": 3750,
+     "bossLevel": 70,
+     "reward": {
+      "firstClear": 975,
+      "repeat": 305
+     }
+    },
+    {
+     "level": 7,
+     "suggestedItemLevel": 3800,
+     "bossLevel": 70,
+     "reward": {
+      "firstClear": 1070,
+      "repeat": 335
+     }
+    },
+    {
+     "level": 8,
+     "suggestedItemLevel": 3850,
+     "bossLevel": 70,
+     "reward": {
+      "firstClear": 1165,
+      "repeat": 365
+     }
+    },
+    {
+     "level": 9,
+     "suggestedItemLevel": 3900,
+     "bossLevel": 70,
+     "reward": {
+      "firstClear": 1260,
+      "repeat": 395
+     }
+    },
+    {
+     "level": 10,
+     "suggestedItemLevel": 3950,
+     "bossLevel": 70,
+     "reward": {
+      "firstClear": 1355,
+      "repeat": 425
+     }
+    }
+   ]
+  },
+  {
+   "id": 20,
+   "layer": 3,
+   "name": "Modified Bargott",
+   "location": "Nahid Disposal Plant",
+   "bossLevel": 70,
+   "itemLevelRange": [
+    3500,
+    3950
+   ],
+   "levels": [
+    {
+     "level": 1,
+     "suggestedItemLevel": 3500,
+     "bossLevel": 70,
+     "reward": {
+      "firstClear": 500,
+      "repeat": 155
+     }
+    },
+    {
+     "level": 2,
+     "suggestedItemLevel": 3550,
+     "bossLevel": 70,
+     "reward": {
+      "firstClear": 595,
+      "repeat": 185
+     }
+    },
+    {
+     "level": 3,
+     "suggestedItemLevel": 3600,
+     "bossLevel": 70,
+     "reward": {
+      "firstClear": 690,
+      "repeat": 215
+     }
+    },
+    {
+     "level": 4,
+     "suggestedItemLevel": 3650,
+     "bossLevel": 70,
+     "reward": {
+      "firstClear": 785,
+      "repeat": 245
+     }
+    },
+    {
+     "level": 5,
+     "suggestedItemLevel": 3700,
+     "bossLevel": 70,
+     "reward": {
+      "firstClear": 880,
+      "repeat": 275
+     }
+    },
+    {
+     "level": 6,
+     "suggestedItemLevel": 3750,
+     "bossLevel": 70,
+     "reward": {
+      "firstClear": 975,
+      "repeat": 305
+     }
+    },
+    {
+     "level": 7,
+     "suggestedItemLevel": 3800,
+     "bossLevel": 70,
+     "reward": {
+      "firstClear": 1070,
+      "repeat": 335
+     }
+    },
+    {
+     "level": 8,
+     "suggestedItemLevel": 3850,
+     "bossLevel": 70,
+     "reward": {
+      "firstClear": 1165,
+      "repeat": 365
+     }
+    },
+    {
+     "level": 9,
+     "suggestedItemLevel": 3900,
+     "bossLevel": 70,
+     "reward": {
+      "firstClear": 1260,
+      "repeat": 395
+     }
+    },
+    {
+     "level": 10,
+     "suggestedItemLevel": 3950,
+     "bossLevel": 70,
+     "reward": {
+      "firstClear": 1355,
+      "repeat": 425
+     }
+    }
+   ]
+  },
+  {
+   "id": 21,
+   "layer": 3,
+   "name": "Tyrant Tassin",
+   "location": "Zikel's Sanctum",
+   "bossLevel": 77,
+   "itemLevelRange": [
+    4000,
+    4200
+   ],
+   "levels": [
+    {
+     "level": 1,
+     "suggestedItemLevel": 4000,
+     "bossLevel": 77,
+     "reward": {
+      "firstClear": 500,
+      "repeat": 155
+     }
+    },
+    {
+     "level": 2,
+     "suggestedItemLevel": 4022,
+     "bossLevel": 77,
+     "reward": {
+      "firstClear": 595,
+      "repeat": 185
+     }
+    },
+    {
+     "level": 3,
+     "suggestedItemLevel": 4044,
+     "bossLevel": 77,
+     "reward": {
+      "firstClear": 690,
+      "repeat": 215
+     }
+    },
+    {
+     "level": 4,
+     "suggestedItemLevel": 4067,
+     "bossLevel": 77,
+     "reward": {
+      "firstClear": 785,
+      "repeat": 245
+     }
+    },
+    {
+     "level": 5,
+     "suggestedItemLevel": 4089,
+     "bossLevel": 77,
+     "reward": {
+      "firstClear": 880,
+      "repeat": 275
+     }
+    },
+    {
+     "level": 6,
+     "suggestedItemLevel": 4111,
+     "bossLevel": 77,
+     "reward": {
+      "firstClear": 975,
+      "repeat": 305
+     }
+    },
+    {
+     "level": 7,
+     "suggestedItemLevel": 4133,
+     "bossLevel": 77,
+     "reward": {
+      "firstClear": 1070,
+      "repeat": 335
+     }
+    },
+    {
+     "level": 8,
+     "suggestedItemLevel": 4156,
+     "bossLevel": 77,
+     "reward": {
+      "firstClear": 1165,
+      "repeat": 365
+     }
+    },
+    {
+     "level": 9,
+     "suggestedItemLevel": 4178,
+     "bossLevel": 77,
+     "reward": {
+      "firstClear": 1260,
+      "repeat": 395
+     }
+    },
+    {
+     "level": 10,
+     "suggestedItemLevel": 4200,
+     "bossLevel": 77,
+     "reward": {
+      "firstClear": 1355,
+      "repeat": 425
+     }
+    }
+   ]
+  },
+  {
+   "id": 22,
+   "layer": 4,
+   "name": "Lieutenant Hebran",
+   "location": "Light Crash Site",
+   "bossLevel": 70,
+   "itemLevelRange": [
+    3500,
+    3950
+   ],
+   "levels": [
+    {
+     "level": 1,
+     "suggestedItemLevel": 3500,
+     "bossLevel": 70,
+     "reward": {
+      "firstClear": 500,
+      "repeat": 155
+     }
+    },
+    {
+     "level": 2,
+     "suggestedItemLevel": 3550,
+     "bossLevel": 70,
+     "reward": {
+      "firstClear": 595,
+      "repeat": 185
+     }
+    },
+    {
+     "level": 3,
+     "suggestedItemLevel": 3600,
+     "bossLevel": 70,
+     "reward": {
+      "firstClear": 690,
+      "repeat": 215
+     }
+    },
+    {
+     "level": 4,
+     "suggestedItemLevel": 3650,
+     "bossLevel": 70,
+     "reward": {
+      "firstClear": 785,
+      "repeat": 245
+     }
+    },
+    {
+     "level": 5,
+     "suggestedItemLevel": 3700,
+     "bossLevel": 70,
+     "reward": {
+      "firstClear": 880,
+      "repeat": 275
+     }
+    },
+    {
+     "level": 6,
+     "suggestedItemLevel": 3750,
+     "bossLevel": 70,
+     "reward": {
+      "firstClear": 975,
+      "repeat": 305
+     }
+    },
+    {
+     "level": 7,
+     "suggestedItemLevel": 3800,
+     "bossLevel": 70,
+     "reward": {
+      "firstClear": 1070,
+      "repeat": 335
+     }
+    },
+    {
+     "level": 8,
+     "suggestedItemLevel": 3850,
+     "bossLevel": 70,
+     "reward": {
+      "firstClear": 1165,
+      "repeat": 365
+     }
+    },
+    {
+     "level": 9,
+     "suggestedItemLevel": 3900,
+     "bossLevel": 70,
+     "reward": {
+      "firstClear": 1260,
+      "repeat": 395
+     }
+    },
+    {
+     "level": 10,
+     "suggestedItemLevel": 3950,
+     "bossLevel": 70,
+     "reward": {
+      "firstClear": 1355,
+      "repeat": 425
+     }
+    }
+   ]
+  },
+  {
+   "id": 23,
+   "layer": 4,
+   "name": "Kromede's Desire",
+   "location": "Fire Temple",
+   "bossLevel": 70,
+   "itemLevelRange": [
+    3500,
+    3950
+   ],
+   "levels": [
+    {
+     "level": 1,
+     "suggestedItemLevel": 3500,
+     "bossLevel": 70,
+     "reward": {
+      "firstClear": 500,
+      "repeat": 155
+     }
+    },
+    {
+     "level": 2,
+     "suggestedItemLevel": 3550,
+     "bossLevel": 70,
+     "reward": {
+      "firstClear": 595,
+      "repeat": 185
+     }
+    },
+    {
+     "level": 3,
+     "suggestedItemLevel": 3600,
+     "bossLevel": 70,
+     "reward": {
+      "firstClear": 690,
+      "repeat": 215
+     }
+    },
+    {
+     "level": 4,
+     "suggestedItemLevel": 3650,
+     "bossLevel": 70,
+     "reward": {
+      "firstClear": 785,
+      "repeat": 245
+     }
+    },
+    {
+     "level": 5,
+     "suggestedItemLevel": 3700,
+     "bossLevel": 70,
+     "reward": {
+      "firstClear": 880,
+      "repeat": 275
+     }
+    },
+    {
+     "level": 6,
+     "suggestedItemLevel": 3750,
+     "bossLevel": 70,
+     "reward": {
+      "firstClear": 975,
+      "repeat": 305
+     }
+    },
+    {
+     "level": 7,
+     "suggestedItemLevel": 3800,
+     "bossLevel": 70,
+     "reward": {
+      "firstClear": 1070,
+      "repeat": 335
+     }
+    },
+    {
+     "level": 8,
+     "suggestedItemLevel": 3850,
+     "bossLevel": 70,
+     "reward": {
+      "firstClear": 1165,
+      "repeat": 365
+     }
+    },
+    {
+     "level": 9,
+     "suggestedItemLevel": 3900,
+     "bossLevel": 70,
+     "reward": {
+      "firstClear": 1260,
+      "repeat": 395
+     }
+    },
+    {
+     "level": 10,
+     "suggestedItemLevel": 3950,
+     "bossLevel": 70,
+     "reward": {
+      "firstClear": 1355,
+      "repeat": 425
+     }
+    }
+   ]
+  },
+  {
+   "id": 24,
+   "layer": 4,
+   "name": "Culminant Paton",
+   "location": "Lepharist Research Center",
+   "bossLevel": 77,
+   "itemLevelRange": [
+    4000,
+    4450
+   ],
+   "levels": [
+    {
+     "level": 1,
+     "suggestedItemLevel": 4000,
+     "bossLevel": 77,
+     "reward": {
+      "firstClear": 500,
+      "repeat": 155
+     }
+    },
+    {
+     "level": 2,
+     "suggestedItemLevel": 4050,
+     "bossLevel": 77,
+     "reward": {
+      "firstClear": 595,
+      "repeat": 185
+     }
+    },
+    {
+     "level": 3,
+     "suggestedItemLevel": 4100,
+     "bossLevel": 77,
+     "reward": {
+      "firstClear": 690,
+      "repeat": 215
+     }
+    },
+    {
+     "level": 4,
+     "suggestedItemLevel": 4150,
+     "bossLevel": 77,
+     "reward": {
+      "firstClear": 785,
+      "repeat": 245
+     }
+    },
+    {
+     "level": 5,
+     "suggestedItemLevel": 4200,
+     "bossLevel": 77,
+     "reward": {
+      "firstClear": 880,
+      "repeat": 275
+     }
+    },
+    {
+     "level": 6,
+     "suggestedItemLevel": 4250,
+     "bossLevel": 77,
+     "reward": {
+      "firstClear": 975,
+      "repeat": 305
+     }
+    },
+    {
+     "level": 7,
+     "suggestedItemLevel": 4300,
+     "bossLevel": 77,
+     "reward": {
+      "firstClear": 1070,
+      "repeat": 335
+     }
+    },
+    {
+     "level": 8,
+     "suggestedItemLevel": 4350,
+     "bossLevel": 77,
+     "reward": {
+      "firstClear": 1165,
+      "repeat": 365
+     }
+    },
+    {
+     "level": 9,
+     "suggestedItemLevel": 4400,
+     "bossLevel": 77,
+     "reward": {
+      "firstClear": 1260,
+      "repeat": 395
+     }
+    },
+    {
+     "level": 10,
+     "suggestedItemLevel": 4450,
+     "bossLevel": 77,
+     "reward": {
+      "firstClear": 1355,
+      "repeat": 425
+     }
+    }
+   ]
+  },
+  {
+   "id": 25,
+   "layer": 4,
+   "name": "Scout Captain Ked",
+   "location": "Fountain of Life",
+   "bossLevel": 77,
+   "itemLevelRange": [
+    4000,
+    4450
+   ],
+   "levels": [
+    {
+     "level": 1,
+     "suggestedItemLevel": 4000,
+     "bossLevel": 77,
+     "reward": {
+      "firstClear": 500,
+      "repeat": 155
+     }
+    },
+    {
+     "level": 2,
+     "suggestedItemLevel": 4050,
+     "bossLevel": 77,
+     "reward": {
+      "firstClear": 595,
+      "repeat": 185
+     }
+    },
+    {
+     "level": 3,
+     "suggestedItemLevel": 4100,
+     "bossLevel": 77,
+     "reward": {
+      "firstClear": 690,
+      "repeat": 215
+     }
+    },
+    {
+     "level": 4,
+     "suggestedItemLevel": 4150,
+     "bossLevel": 77,
+     "reward": {
+      "firstClear": 785,
+      "repeat": 245
+     }
+    },
+    {
+     "level": 5,
+     "suggestedItemLevel": 4200,
+     "bossLevel": 77,
+     "reward": {
+      "firstClear": 880,
+      "repeat": 275
+     }
+    },
+    {
+     "level": 6,
+     "suggestedItemLevel": 4250,
+     "bossLevel": 77,
+     "reward": {
+      "firstClear": 975,
+      "repeat": 305
+     }
+    },
+    {
+     "level": 7,
+     "suggestedItemLevel": 4300,
+     "bossLevel": 77,
+     "reward": {
+      "firstClear": 1070,
+      "repeat": 335
+     }
+    },
+    {
+     "level": 8,
+     "suggestedItemLevel": 4350,
+     "bossLevel": 77,
+     "reward": {
+      "firstClear": 1165,
+      "repeat": 365
+     }
+    },
+    {
+     "level": 9,
+     "suggestedItemLevel": 4400,
+     "bossLevel": 77,
+     "reward": {
+      "firstClear": 1260,
+      "repeat": 395
+     }
+    },
+    {
+     "level": 10,
+     "suggestedItemLevel": 4450,
+     "bossLevel": 77,
+     "reward": {
+      "firstClear": 1355,
+      "repeat": 425
+     }
+    }
+   ]
+  },
+  {
+   "id": 26,
+   "layer": 4,
+   "name": "Ascended Atheron",
+   "location": "Lepharist Research Center",
+   "bossLevel": 85,
+   "itemLevelRange": [
+    4500,
+    4950
+   ],
+   "levels": [
+    {
+     "level": 1,
+     "suggestedItemLevel": 4500,
+     "bossLevel": 85,
+     "reward": {
+      "firstClear": 500,
+      "repeat": 155
+     }
+    },
+    {
+     "level": 2,
+     "suggestedItemLevel": 4550,
+     "bossLevel": 85,
+     "reward": {
+      "firstClear": 595,
+      "repeat": 185
+     }
+    },
+    {
+     "level": 3,
+     "suggestedItemLevel": 4600,
+     "bossLevel": 85,
+     "reward": {
+      "firstClear": 690,
+      "repeat": 215
+     }
+    },
+    {
+     "level": 4,
+     "suggestedItemLevel": 4650,
+     "bossLevel": 85,
+     "reward": {
+      "firstClear": 785,
+      "repeat": 245
+     }
+    },
+    {
+     "level": 5,
+     "suggestedItemLevel": 4700,
+     "bossLevel": 85,
+     "reward": {
+      "firstClear": 880,
+      "repeat": 275
+     }
+    },
+    {
+     "level": 6,
+     "suggestedItemLevel": 4750,
+     "bossLevel": 85,
+     "reward": {
+      "firstClear": 975,
+      "repeat": 305
+     }
+    },
+    {
+     "level": 7,
+     "suggestedItemLevel": 4800,
+     "bossLevel": 85,
+     "reward": {
+      "firstClear": 1070,
+      "repeat": 335
+     }
+    },
+    {
+     "level": 8,
+     "suggestedItemLevel": 4850,
+     "bossLevel": 85,
+     "reward": {
+      "firstClear": 1165,
+      "repeat": 365
+     }
+    },
+    {
+     "level": 9,
+     "suggestedItemLevel": 4900,
+     "bossLevel": 85,
+     "reward": {
+      "firstClear": 1260,
+      "repeat": 395
+     }
+    },
+    {
+     "level": 10,
+     "suggestedItemLevel": 4950,
+     "bossLevel": 85,
+     "reward": {
+      "firstClear": 1355,
+      "repeat": 425
+     }
+    }
+   ]
+  }
+ ]
+}

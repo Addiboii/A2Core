@@ -135,7 +135,13 @@ def objective(goal, npc_ids, item_ids, env_ids):
     elif kind == 'ClearQuestExplorationType':
         out['target'] = v[0]
         out['count'] = _int(v[2], 1)
-    else:  # KillPC, KillPCAbyssGrade and any type not seen in this build: raw values
+    elif kind == 'KillPC':  # [kill type "LastHit,Contribute", count, map]
+        out['value'] = [x for x in goal.get('Value') or []]
+        out['count'] = _int(v[1], 1)
+    elif kind == 'KillPCAbyssGrade':  # [grade from, grade to, kill type, count, map]
+        out['value'] = [x for x in goal.get('Value') or []]
+        out['count'] = _int(v[3], 1)
+    else:  # any type not seen in this build: raw values
         out['value'] = [x for x in goal.get('Value') or []]
         out['count'] = 1
     map_id = _id(goal.get('MapId'))
@@ -231,6 +237,11 @@ def convert(quests, steps, reward_rows=(), class_rewards=(), strings=(), unlocks
         other = [c for c in conditions if c['type'] != 'ClearQuest']
         if other:
             quest['conditions'] = other
+        # Exploration quests: their kind (Exploration.dat EExplorationType: Seal, OccupationTerritory), counted by the
+        # ClearQuestExplorationType objectives (the Ascension Gauge quests) and achievements.
+        exploration = _none(_enum(q.get('ExplorationType')))
+        if exploration:
+            quest['exploration'] = exploration
         if acquire == 'Npc':
             quest['start_npc_name'] = q['AcquireValue']
             quest['start_npc'] = npc_ids.get(q['AcquireValue'])

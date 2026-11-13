@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Player traps (Ranger Explosion Trap). The trap skill (client table: effect Spawn [distance 200, ..., NPC id, ...]) places
+     its trap NPC in front of the caster; the trap arms itself (arm_skill: Abnormal_True 141700071 for 600 s), and when a monster
+     comes within trigger_cm (centre distance, plus the monster's radius) it explodes (explode_skill: damage + crowd control on
+     the monsters within trigger_cm), follow_skill hits the same monster follow_ms later, and the trap is gone gone_ms after its
+     last action. An untouched trap vanishes after life_ms.
+     OBSERVED (capture 20261107-211036, 4 traps of 14170340 / NPC 2920630): arm 100 ms after the appear, explosion 0.35-5.35 s
+     later at a monster 78-581 cm away, 14170037 3.1 s after the explosion, despawn (0x3642 flag 3) 2.5 s after that.
+     PROVISIONAL: trigger_cm (from those distances), life_ms (no untouched trap recorded), the base skill's row (14170000:
+     NPC 2920620 and explosion 14170001 from the client table; no follow-up skill in its table).
+     2026-11-10: traps without a row here come from the client tables (PlayerTrapTable: every "*_Trap*" Spawn skill, explosion
+     skill + 1, arm skill family + 7); the explosion's area is its client filter (Circle 500, 4 targets) and an untouched trap
+     stands for its arm abnormal's 600 s (client table) instead of life_ms. trigger_cm stays PROVISIONAL (not in the tables). -->
+<player_traps arm_skill="14170007" arm_ms="100" distance="200" trigger_cm="550" follow_ms="3100" gone_ms="2550" life_ms="60000">
+	<trap skill="14170000" npc="2920620" explode_skill="14170001"/>
+	<!-- 14170010's explosion is its own 14170011 (client table, derived like every trap without a row here). -->
+	<trap skill="14170340" npc="2920630" explode_skill="14170341" follow_skill="14170037"/>
+</player_traps>

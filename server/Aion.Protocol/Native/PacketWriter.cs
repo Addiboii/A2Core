@@ -103,8 +103,16 @@ public sealed class PacketReader(ReadOnlyMemory<byte> data)
     public float F32() => BinaryPrimitives.ReadSingleLittleEndian(Take(4));
     public Vector3d Vec3() => new(F32(), F32(), F32());
     public uint Varint() { var value = NativeVarint.Read(data.Span, Offset, out var next); Offset = next; return value; }
-    public string String() => new UTF8Encoding(false, true).GetString(Take(U8()));
-    public byte[] Bytes() => Take(checked((int)Varint())).ToArray();
+    /// <summary>A u8-length UTF-8 string; invalid UTF-8 is a malformed message (ProtocolException, as a short body), not an
+    /// ArgumentException that the request handlers do not expect (fuzz 2026-11-09: guild and rename requests ended the connection).</summary>
+    public string String()
+    {
+        var bytes = Take(U8());
+        try { return new UTF8Encoding(false, true).GetString(bytes); }
+        catch (DecoderFallbackException) { throw new ProtocolException("Invalid UTF-8 string"); }
+    }
+    // A length above 2^31 is a short body too (an OverflowException before; fuzz 2026-11-09: client options ended the connection).
+    public byte[] Bytes() => Take(Varint() is var length and <= int.MaxValue ? (int)length : -1).ToArray();
 
     public bool Bool()
     {

@@ -16,27 +16,79 @@
          tools/class_skills.py, tools/world_npcs.py, tools/map_geometry.py, tools/map_points.py and tools/dev_menu.py; one copy, shared with the Python tools. -->
     <EmbeddedResource Include="../../tools/data/starter-skills.json" LogicalName="starter-skills.json" />
     <EmbeddedResource Include="../../tools/data/class-skills.json" LogicalName="class-skills.json" />
+    <EmbeddedResource Include="../../tools/data/skill-timings.json" LogicalName="skill-timings.json" />
+    <EmbeddedResource Include="../../tools/data/skill-behaviour.json" LogicalName="skill-behaviour.json" />
+    <EmbeddedResource Include="../../tools/data/skill-guide.json" LogicalName="skill-guide.json" />
+    <EmbeddedResource Include="../../tools/data/skill-use.json" LogicalName="skill-use.json" />
+    <EmbeddedResource Include="../../tools/data/npc-teleports.json" LogicalName="npc-teleports.json" />
+    <EmbeddedResource Include="../../tools/data/npc-skill-effects.json" LogicalName="npc-skill-effects.json" />
+    <EmbeddedResource Include="../../tools/data/npc-attack-flags.json" LogicalName="npc-attack-flags.json" />
+    <EmbeddedResource Include="../../tools/data/season-list.hex" LogicalName="season-list.hex" />
+    <EmbeddedResource Include="../../tools/data/contents-tickets.hex" LogicalName="contents-tickets.hex" />
+    <EmbeddedResource Include="../../tools/data/contents-tickets.json" LogicalName="contents-tickets.json" />
+    <EmbeddedResource Include="../../tools/data/coin-shops.json" LogicalName="coin-shops.json" />
+    <EmbeddedResource Include="../../tools/data/systems2.json" LogicalName="systems2.json" />
+    <EmbeddedResource Include="../../tools/data/festival-games.json" LogicalName="festival-games.json" />
+    <EmbeddedResource Include="../../tools/data/systems3.json" LogicalName="systems3.json" />
+    <EmbeddedResource Include="../../tools/data/rank.json" LogicalName="rank.json" />
+    <EmbeddedResource Include="../../tools/data/projectile-timings.json" LogicalName="projectile-timings.json" />
+    <EmbeddedResource Include="../../tools/data/abnormal-observed.json" LogicalName="abnormal-observed.json" />
+    <EmbeddedResource Include="../../tools/data/abnormal-table.json" LogicalName="abnormal-table.json" />
+    <EmbeddedResource Include="../../tools/data/skill-cooltime-effects.json" LogicalName="skill-cooltime-effects.json" />
+    <EmbeddedResource Include="../../tools/data/skill-charges.json" LogicalName="skill-charges.json" />
+    <EmbeddedResource Include="../../tools/data/skills-client.json" LogicalName="skills-client.json" />
+    <EmbeddedResource Include="../../tools/data/stat-ids.json" LogicalName="stat-ids.json" />
+    <EmbeddedResource Include="../../tools/data/client-combat.json" LogicalName="client-combat.json" />
+    <!-- Official-style item data (tools/item_xml.py): validated against items.xsd at start-up by ItemDB. -->
+    <EmbeddedResource Include="../../gamedata/items.xsd" LogicalName="items.xsd" />
+    <EmbeddedResource Include="../../gamedata/items/*.xml" LogicalName="items/%(Filename).xml" />
+    <EmbeddedResource Include="../../gamedata/server-rules.xml" LogicalName="server-rules.xml" />
+    <EmbeddedResource Include="../../gamedata/quest-cutscenes.xml" LogicalName="quest-cutscenes.xml" />
+    <EmbeddedResource Include="../../gamedata/bomb-boxes.xml" LogicalName="bomb-boxes.xml" />
+    <EmbeddedResource Include="../../gamedata/spawn-poses.xml" LogicalName="spawn-poses.xml" />
+    <EmbeddedResource Include="../../gamedata/subscriptions.xml" LogicalName="subscriptions.xml" />
+    <EmbeddedResource Include="../../tools/data/gear-effects.json" LogicalName="gear-effects.json" />
+    <EmbeddedResource Include="../../gamedata/drops/*.xml" LogicalName="drops/%(Filename).xml" />
+    <EmbeddedResource Include="../../gamedata/provisional/*.xml" LogicalName="provisional/%(Filename).xml" />
     <EmbeddedResource Include="../../tools/data/items.json" LogicalName="items.json" />
     <EmbeddedResource Include="../../tools/data/decompose.json" LogicalName="decompose.json" />
     <EmbeddedResource Include="../../tools/data/achievements.json" LogicalName="achievements.json" />
+    <EmbeddedResource Include="../../tools/data/monoliths.json" LogicalName="monoliths.json" />
     <EmbeddedResource Include="../../tools/data/collections.json" LogicalName="collections.json" />
     <EmbeddedResource Include="../../tools/data/bosschallenge.json" LogicalName="bosschallenge.json" />
     <EmbeddedResource Include="../../tools/data/boxes.json" LogicalName="boxes.json" />
+    <EmbeddedResource Include="../../tools/data/box-race.json" LogicalName="box-race.json" />
+    <EmbeddedResource Include="../../tools/data/item-limits.json" LogicalName="item-limits.json" />
     <EmbeddedResource Include="../../tools/data/levels.json" LogicalName="levels.json" />
     <EmbeddedResource Include="../../tools/data/loot.json" LogicalName="loot.json" />
     <EmbeddedResource Include="../../tools/data/shops.json" LogicalName="shops.json" />
+    <EmbeddedResource Include="../../tools/data/bmshop.json" LogicalName="bmshop.json" />
+    <EmbeddedResource Include="../../tools/data/randomshop.json" LogicalName="randomshop.json" />
+    <EmbeddedResource Include="../../tools/data/field-bosses.json" LogicalName="field-bosses.json" />
     <EmbeddedResource Include="../../tools/data/enchant.json" LogicalName="enchant.json" />
+    <EmbeddedResource Include="../../tools/data/enhance.json" LogicalName="enhance.json" />
+    <EmbeddedResource Include="../../tools/data/closet.json" LogicalName="closet.json" />
+    <EmbeddedResource Include="../../tools/data/pantheon.json" LogicalName="pantheon.json" />
     <EmbeddedResource Include="../../tools/data/instances.json" LogicalName="instances.json" />
     <EmbeddedResource Include="../../tools/data/crafts.json" LogicalName="crafts.json" />
+    <EmbeddedResource Include="../../tools/data/craft-extras.json" LogicalName="craft-extras.json" />
+    <EmbeddedResource Include="../../tools/data/gather-tables.json" LogicalName="gather-tables.json" />
     <EmbeddedResource Include="../../tools/data/world-npcs.json" LogicalName="world-npcs.json" />
     <EmbeddedResource Include="../../tools/data/map-bases.json" LogicalName="map-bases.json" />
+    <EmbeddedResource Include="../../tools/data/daevanion.json" LogicalName="daevanion.json" />
     <EmbeddedResource Include="../../tools/data/map-points.json" LogicalName="map-points.json" />
     <EmbeddedResource Include="../../tools/data/dev-menu.json" LogicalName="dev-menu.json" />
     <EmbeddedResource Include="../../tools/data/quests.json" LogicalName="quests.json" />
+    <EmbeddedResource Include="../../tools/data/duty.json" LogicalName="duty.json" />
     <EmbeddedResource Include="../../tools/data/teleport-artifacts.json" LogicalName="teleport-artifacts.json" />
     <EmbeddedResource Include="../../tools/data/subzones.json" LogicalName="subzones.json" />
+    <EmbeddedResource Include="../../tools/data/lobby-zones.json" LogicalName="lobby-zones.json" />
     <EmbeddedResource Include="../../tools/data/world-objects.json" LogicalName="world-objects.json" />
+    <EmbeddedResource Include="../../tools/data/world-pools.json" LogicalName="world-pools.json" />
+    <EmbeddedResource Include="../../tools/data/env-usages.json" LogicalName="env-usages.json" />
     <EmbeddedResource Include="../../tools/data/map-events.json" LogicalName="map-events.json" />
+    <EmbeddedResource Include="../../tools/data/daily-dungeons.json" LogicalName="daily-dungeons.json" />
+    <EmbeddedResource Include="../../tools/data/route-actions.json" LogicalName="route-actions.json" />
     <EmbeddedResource Include="../../tools/data/titles.json" LogicalName="titles.json" />
     <EmbeddedResource Include="../../tools/data/skins.json" LogicalName="skins.json" />
     <EmbeddedResource Include="../../tools/data/abnormal-stack-rules.json" LogicalName="abnormal-stack-rules.json" />

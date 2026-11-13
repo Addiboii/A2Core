@@ -13,6 +13,8 @@ public sealed class ArenaMatch(int roomKey, int matchingId, int contentsId, int 
     public int MapId { get; } = mapId;
     public int Lives { get; } = lives;
     public long PlayTimeMs { get; } = playTimeMs;
+    /// <summary>MatchingContents RespawnTime (5 s arenas, 10 s battlefields).</summary>
+    public long RespawnMs { get; init; } = 5_000;
     public List<WorldPlayer> BlueTeam { get; } = [];
     public List<WorldPlayer> RedTeam { get; } = [];
     public HashSet<int> Accepted { get; } = [];
@@ -44,19 +46,53 @@ public sealed record ArenaQueueEntry(WorldPlayer Player, int MatchingId, long Si
 // (join and win: Abyss Points) → out after 10 s. Ranking points, penalties, schedules and the Strategy modes are not modelled.
 public sealed partial class GameSession
 {
-    public const ushort MatchingStateChangeNt = 0xe2a8, MatchingStartRq = 0xe2a9, MatchingStartRs = 0xe2aa, MatchingStartResponseRq = 0xe2ab, MatchingStartResponseRs = 0xe2ac,
-        MatchingCancelRq = 0xe2ad, MatchingCancelRs = 0xe2ae, MatchingRoomInitNt = 0xe2b2, ArenaDungeonReadyRq = 0xe2b3, ArenaDungeonReadyRs = 0xe2b4, ArenaDungeonReadyNt = 0xe2b5,
-        ArenaDungeonReadyEndNt = 0xe2b6, ArenaDungeonKillNt = 0xe2be, ArenaDungeonScoreUpdateNt = 0xe2bf, ArenaDungeonResultNt = 0xe2c1, ArenaRecordRq = 0xe2c4, ArenaRecordRs = 0xe2c5;
+    // Live 0xe3-block offset +0xa762 (ArenaRanking_NT 0xe32a and ArenaRecord_RS 0xe32c OBSERVED). These were the catalogue index
+    // + 0xdd07 before (0x67 lower), which the real client never used: matching, ready, kills, scores, results, records.
+    public const ushort MatchingStateChangeNt = 0xe30f, MatchingStartRq = 0xe310, MatchingStartRs = 0xe311, MatchingStartResponseRq = 0xe312, MatchingStartResponseRs = 0xe313,
+        MatchingCancelRq = 0xe314, MatchingCancelRs = 0xe315, MatchingRoomInitNt = 0xe319, ArenaDungeonReadyRq = 0xe31a, ArenaDungeonReadyRs = 0xe31b, ArenaDungeonReadyNt = 0xe31c,
+        ArenaDungeonReadyEndNt = 0xe31d, ArenaDungeonKillNt = 0xe325, ArenaDungeonScoreUpdateNt = 0xe326, ArenaDungeonResultNt = 0xe328, ArenaRecordRq = 0xe32b, ArenaRecordRs = 0xe32c;
     const byte MatchingStateMatching = 2, MatchingStatePendingReady = 3, MatchingStateComplete = 4;
     public const long ArenaReadyWaitMs = 30_000, ArenaRespawnMs = 5_000, ArenaExitMs = 10_000, ArenaPlayTimeMs = 600_000;
     public const int AbyssPointItemId = 930100003;
-    static readonly int[] ArenaDungeons = [7, 8];   // MatchingContents 11/22 (Single) and 33/44 (Team): Fire Temple Arena, Impetusium Arena
-    static readonly int[] ArenaMaps = [60, 61];
+    // Table-driven since feature/systems-2 (Systems2Tables): Matching.dat team sizes (Single 1, Team 5, Strategy 10 = the battlefield,
+    // GameSession.Battlefield.cs), its MatchingContents pick by Prob (dungeon, map, play time, lives 0 = unlimited, respawn time),
+    // RewardArena.dat join/win items, MatchingSchedule windows (group 100: the battlefield).
 
-    /// <summary>Matching.dat: team size per matching id (Single 1, Team 5).</summary>
-    static int ArenaTeamSize(int matchingId) => matchingId switch { 1 => 1, 2 => 5, _ => 0 };
-    static int ArenaLives(int matchingId) => matchingId == 1 ? 3 : 1;
-    static (int Join, int Win) ArenaRewards(int matchingId) => (300, 500);   // RewardArena.dat Reward_Join/Win_Single and _Team: Abyss Points
+    /// <summary>Matching.dat: team size per matching id (Single 1, Team 5, Strategy 10); 0 = no such matching (or the hidden party one).</summary>
+    internal static int ArenaTeamSize(int matchingId) => Systems2Tables.Embedded.MatchingOf(matchingId) is { Hidden: false } m ? m.TeamSize : 0;
+
+    /// <summary>Matching.dat ContentsInfos: a MatchingContents row by its Prob weights.</summary>
+    Systems2Tables.MatchingContents? PickArenaContents(int matchingId)
+    {
+        if (Systems2Tables.Embedded.MatchingOf(matchingId) is not { Contents.Count: > 0 } m) return null;
+        var roll = rng.Next(Math.Max(1, m.Contents.Sum(c => c.Prob)));
+        foreach (var c in m.Contents)
+        {
+            if (roll < c.Prob) return Systems2Tables.Embedded.ContentsOf(c.Id);
+            roll -= c.Prob;
+        }
+        return Systems2Tables.Embedded.ContentsOf(m.Contents[^1].Id);
+    }
+
+    /// <summary>RewardArena.dat items of the matching's join (and win) reward, as item ids.</summary>
+    internal static List<(int Item, long Count)> ArenaRewardItems(int matchingId, bool won)
+    {
+        var items = new List<(int, long)>();
+        if (Systems2Tables.Embedded.MatchingOf(matchingId) is not { } m) return items;
+        foreach (var name in won ? new[] { m.RewardJoin, m.RewardWin } : [m.RewardJoin])
+            foreach (var i in Systems2Tables.Embedded.ArenaReward(name))
+                if (Systems2Tables.Embedded.ItemId(i.Item) is var id and > 0) items.Add((id, i.Count));
+        return items;
+    }
+
+    /// <summary>MatchingSchedule.dat: a matching with a schedule group is open only inside its day's windows (UTC, CANDIDATE time zone).</summary>
+    internal static bool MatchingOpen(int matchingId, long now)
+    {
+        if (Systems2Tables.Embedded.MatchingOf(matchingId) is not { ScheduleGroup: > 0 } m) return true;
+        var at = DateTimeOffset.FromUnixTimeMilliseconds(now).UtcDateTime;
+        var ms = (long)at.TimeOfDay.TotalMilliseconds;
+        return Systems2Tables.Embedded.MatchingSchedules.Any(s => s.Group == m.ScheduleGroup && s.Day == at.DayOfWeek.ToString() && s.Windows.Any(w => ms >= w[0] && ms < w[1]));
+    }
 
     ArenaMatch? ArenaOf(WorldPlayer p) => Social?.Arenas.Values.FirstOrDefault(a => a.Has(p));
 
@@ -69,14 +105,20 @@ public sealed partial class GameSession
         var matchingId = BitConverter.ToInt32(plain, 2);
         byte[] Reply(int result) => PacketWriter.Opcode(MatchingStartRs).U16(result).I32(matchingId).ToArray();
         var size = ArenaTeamSize(matchingId);
+        if (size > 0 && !IsAdmin && !MatchingOpen(matchingId, now)) return [Reply(EResult.ContentsBlock_ArenaMatching)];
         if (size == 0 || Social is not { } s || worldPlayer is null || instanceKey != 0 || ArenaOf(worldPlayer) is not null || s.ArenaQueue.Any(q => q.Player == worldPlayer)) return [Reply(1)];
         s.ArenaQueue.Add(new ArenaQueueEntry(worldPlayer, matchingId, now));
         var replies = new List<byte[]> { Reply(0), MatchingState(matchingId, MatchingStateMatching) };
         var waiting = s.ArenaQueue.Where(q => q.MatchingId == matchingId).OrderBy(q => q.SinceMs).Take(size * 2).ToList();
         if (waiting.Count < size * 2) return replies;
         foreach (var entry in waiting) s.ArenaQueue.Remove(entry);
-        var pick = rng.Next(ArenaDungeons.Length);
-        var match = new ArenaMatch((int)s.NextId(), matchingId, (matchingId == 1 ? 11 : 33) * (pick + 1), ArenaDungeons[pick], ArenaMaps[pick], ArenaLives(matchingId), ArenaPlayTimeMs) { NextMs = now + ArenaReadyWaitMs };
+        if (PickArenaContents(matchingId) is not { } contents)
+        {
+            foreach (var entry in waiting) s.ArenaQueue.Add(entry);
+            return replies;
+        }
+        var match = new ArenaMatch((int)s.NextId(), matchingId, contents.Id, contents.Dungeon, contents.Map, contents.Lives, contents.PlayMs > 0 ? contents.PlayMs : ArenaPlayTimeMs)
+            { NextMs = now + ArenaReadyWaitMs, RespawnMs = contents.RespawnMs > 0 ? contents.RespawnMs : ArenaRespawnMs };
         for (var i = 0; i < waiting.Count; i++) (i % 2 == 0 ? match.BlueTeam : match.RedTeam).Add(waiting[i].Player);
         s.Arenas[match.RoomKey] = match;
         foreach (var p in match.Players)
@@ -125,7 +167,7 @@ public sealed partial class GameSession
             foreach (var m in members)
             {
                 var ms = m.Session;
-                w.I64(ms.DbId).I64(ms.DbId).String(ms.StoredName).I32(ms.Profile()?.PcId ?? 1).U8((byte)ms.profileRace).I32(ms.level).I32(0).I32(ServerId).I64(0)
+                w.I64(ms.DbId).I64(ms.DbId).String(ms.StoredName).I32(ms.Profile()?.PcId ?? 1).U8((byte)ms.profileRace).I32(ms.level).I32(0).I32(ms.ServerId).I64(0)
                     .U8((byte)match.MatchingId).I64(0).I32(0).I32(0).I32(0).I32(0).I32(0);
             }
         }
@@ -135,8 +177,10 @@ public sealed partial class GameSession
     (Vector3d Start, Vector3d Respawn)? ArenaPoints(ArenaMatch match, byte team)
     {
         var points = data.MapPoints(match.MapId);
-        var side = team == ArenaMatch.Blue ? "_A_" : "_B_";
-        Vector3d? Find(string suffix) => points.FirstOrDefault(p => p.Key.Contains(side + suffix, StringComparison.OrdinalIgnoreCase)).Value is { Length: >= 3 } v ? new Vector3d(v[0], v[1], v[2]) : null;
+        // Arenas name their sides _A_/_B_ (Fire_Temple_Arena_A_Teleport), battlefields _BLUE_/_RED_ (Battlefield_A_1_BLUE_Teleport).
+        string[] sides = team == ArenaMatch.Blue ? ["_A_", "_BLUE_"] : ["_B_", "_RED_"];
+        Vector3d? Find(string suffix) => points.FirstOrDefault(p => sides.Any(side => p.Key.Contains(side + suffix, StringComparison.OrdinalIgnoreCase))).Value is { Length: >= 3 } v
+            ? new Vector3d(v[0], v[1], v[2]) : null;
         var start = Find("Teleport") ?? Find("Respawn");
         return start is null ? null : (start.Value, Find("Respawn") ?? start.Value);
     }
@@ -195,10 +239,10 @@ public sealed partial class GameSession
         if (victim is null || !match.Enemies(worldPlayer, victim) || victim.Session.resources is not { } theirs || match.RespawnAt.ContainsKey(victim.Key)) return [];
         var replies = new List<byte[]>();
         var seq = 0;
-        foreach (var hit in Combat.SkillHits(data, skill, className, level, equippedWeapon, victim.Session.Defense, rng, pvp: true))
+        foreach (var hit in PvpHits(victim.Session, skill))
         {
             theirs.Hp = Math.Max(1, theirs.Hp - hit.Amount);
-            replies.Add(GamePackets.SkillHit(victim.Key, playerKey, skill, hit.EffectId, hit.Amount, hit.Critical, ++seq));
+            replies.Add(GamePackets.SkillHit(victim.Key, playerKey, skill, hit.EffectId, hit.Amount, hit.Critical, ++seq, AttackSpeed));
         }
         if (replies.Count == 0) return [];
         victim.Send([.. replies, theirs.Update()]);
@@ -214,9 +258,10 @@ public sealed partial class GameSession
         match.Scores[victim.Key] = (v.Kills, v.Deaths + 1, Math.Max(0, v.Life - 1));
         var packets = new List<byte[]> { PacketWriter.Opcode(ArenaDungeonKillNt).I64(killer.Session.DbId).I64(victim.Session.DbId).ToArray(), ArenaScores(match) };
         foreach (var p in match.Players) p.Send(packets);
-        if (match.Scores[victim.Key].Life > 0) match.RespawnAt[victim.Key] = now + ArenaRespawnMs;
-        var blueOut = match.BlueTeam.All(p => match.Scores.GetValueOrDefault(p.Key).Life == 0);
-        var redOut = match.RedTeam.All(p => match.Scores.GetValueOrDefault(p.Key).Life == 0);
+        // Lives 0 (MatchingContents Life 0: the battlefield modes) = unlimited respawns; the time limit ends those matches.
+        if (match.Lives == 0 || match.Scores[victim.Key].Life > 0) match.RespawnAt[victim.Key] = now + match.RespawnMs;
+        var blueOut = match.Lives > 0 && match.BlueTeam.All(p => match.Scores.GetValueOrDefault(p.Key).Life == 0);
+        var redOut = match.Lives > 0 && match.RedTeam.All(p => match.Scores.GetValueOrDefault(p.Key).Life == 0);
         if (blueOut || redOut) EndArena(match, blueOut ? ArenaMatch.Red : ArenaMatch.Blue, now);
     }
 
@@ -233,10 +278,14 @@ public sealed partial class GameSession
         if (match.State == 4) return;
         match.State = 4;
         Social?.Arenas.Remove(match.RoomKey);
-        var (join, win) = ArenaRewards(match.MatchingId);
+        // The ratings before the match (each team's mean, the other side's for the Elo change: GameSession.Ranking.cs).
+        var type = ArenaKind(match.MatchingId).Season;
+        double Mean(IEnumerable<WorldPlayer> team) => team.Select(q => (double)q.Session.ArenaRating(type)).DefaultIfEmpty(ArenaStartRating).Average();
+        var (blueRating, redRating) = (Mean(match.BlueTeam), Mean(match.RedTeam));
         foreach (var p in match.Players)
         {
             var won = match.TeamOf(p) == winner;
+            if (type != 0) p.Session.ArenaRated(match.MatchingId, winner == 0 ? 0.5 : won ? 1 : 0, match.TeamOf(p) == ArenaMatch.Blue ? redRating : blueRating);
             var w = PacketWriter.Opcode(ArenaDungeonResultNt).U8(winner).I32(won ? 10 : 0).Bool(won).Bool(true).Varint((uint)match.Scores.Count);
             foreach (var q in match.Players)
             {
@@ -244,9 +293,12 @@ public sealed partial class GameSession
                 w.I64(q.Session.DbId).Bool(false).Bool(false).U8((byte)kills).U8((byte)deaths).U8(0).U8((byte)life);
             }
             p.Send(w.ToArray());
-            p.Session.pendingRewards.Add([(AbyssPointItemId, join + (won ? win : 0))]);
+            var rewards = ArenaRewardItems(match.MatchingId, won);
+            p.Session.pendingRewards.Add(rewards);
+            // Abyss Points count towards the week's AbyssPointUpdate_NT (GameSession.Abyss.cs).
+            if (rewards.Where(r => r.Item == AbyssPointItemId).Sum(r => r.Count) is var ap and > 0) p.Session.pendingAchievementPackets.AddRange(p.Session.AbyssPointsEarned(ap));
             p.Session.instanceExitAt = now + ArenaExitMs;
-            p.Session.pendingAchievementPackets.AddRange(won ? p.Session.Achieve("ArenaWin", 1, e => e.Values.Length == 0 || e.Has(match.MatchingId == 1 ? "SingleCombat" : "TeamCombat"), now) : []);
+            p.Session.pendingAchievementPackets.AddRange(won ? p.Session.Achieve("ArenaWin", 1, e => e.Values.Length == 0 || e.Has(match.MatchingId switch { 1 => "SingleCombat", 2 => "TeamCombat", _ => Systems2Tables.Embedded.ContentsOf(match.ContentsId)?.Type ?? "" }), now) : []);
         }
     }
 

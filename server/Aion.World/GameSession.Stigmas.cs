@@ -42,7 +42,10 @@ public sealed partial class GameSession
     int stigmaItemShards;
 
     public int StigmaLevel(int skillId) => stigmas.GetValueOrDefault(skillId);
-    public int StigmaShardsTotal => StigmaData.Shards(level) + stigmaItemShards;
+    public int StigmaShardsTotal => StigmaData.Shards(level) + ItemStigmaShards;
+    /// <summary>Shards items gave: the stored ones (migration 072) and the Dell version's stigma shard items (setting stigma_points,
+    /// GetStigmaShard / Fix_StigmaSkillPoint, capped by server-rules; GameSession.SkillLevels.cs). Merge 2026-11-13.</summary>
+    int ItemStigmaShards => stigmaItemShards + AvailableStigma(0);
     public int StigmaShardsSpent => stigmas.Sum(s => StigmaData.Spent(s.Key, s.Value));
     /// <summary>Shards left to spend; negative when the saved stigmas cost more than the character has now.</summary>
     public int StigmaShardsLeft => StigmaShardsTotal - StigmaShardsSpent;

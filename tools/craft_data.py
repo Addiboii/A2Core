@@ -14,6 +14,12 @@ Rebuild with `python tools/craft_data.py`.
 import json
 from pathlib import Path
 
+OBSERVED_EXTRA_CONVERSIONS = {
+    '1': [31050012, 31050013, 31050014, 31050015, 31050016, 31050017, 31116005, 41032003, 43033002, 43033004, 61013011,
+          72046048, 72046049, 72046050, 72046051],
+    '2': [32050012, 32050013, 32050014, 32050015, 32050016, 32050017, 32116005, 42032003, 44033002, 44033004, 62013011,
+          72046052, 72046053, 72046054, 72046055],
+}
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / 'tools/data/crafts.json'
 TABLES = ROOT / 'research/local/craft-legion-20261016/tables'
@@ -69,6 +75,10 @@ def build(tables=TABLES, catalog=CATALOG):
         register = str(row.get('RegisterType', '')).split('::')[-1]
         if race and (register == 'Default' or register.endswith('Mastery') and int(row.get('RegisterValue') or 0) <= 1):
             conversions[str(race)].append(row['ID']['Value'])
+    # OBSERVED 2026-11-07: every official world entry (9 sessions, both races) lists 117 default conversions, 15 more than the
+    # 2026-10-16 tables register by default (a newer client); added as recorded.
+    for race, extra in OBSERVED_EXTRA_CONVERSIONS.items():
+        conversions[race] = sorted(set(conversions[race]) | set(extra))   # by id, as official
     # Mastery levels: the exp a level needs to reach the next (CraftMastery table-000, GatherMastery table-007; 100 each).
     craft_mastery = [int(r.get('CraftMasteryExpNeed') or 0) for r in sorted(_rows(tables / 'table-000.json'), key=lambda r: int(r['CraftMasteryLevel']))]
     gather_mastery = [int(r.get('NeedExp') or 0) for r in sorted(_rows(tables / 'table-007.json'), key=lambda r: int(r['Level']['Value']))]

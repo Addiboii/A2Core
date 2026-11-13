@@ -1,0 +1,10 @@
+[Unit]
+Description=A2Core nightly database backup (base backup + dump, 14 days)
+After=aion-postgres.service
+Requires=aion-postgres.service
+
+[Service]
+Type=oneshot
+User=aion
+Group=aion
+ExecStart=/usr/local/lib/aion/aion-backup.sh

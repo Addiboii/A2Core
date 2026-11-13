@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Monster max HP beyond the starter-area curve. The client's NPC stat table is encrypted and no public database exposes real
+     monster HP (checked 2026-11-08: aion2hub and gamers4.life show a monster's level, rank, drops, skills and quests, but not
+     its HP), so these rows are the official NpcAppear HP observed in the recordings, by NpcData sub type, grade and level range;
+     the first matching row wins. A monster matching none keeps the scaling curve (Combat.HpByLevel x the sub type/grade unit),
+     which is right for normal field monsters at every level (e.g. a level-12 grade-1 NormalMonster ~ 640 HP).
+
+     NOTE 2026-11-08 (user: "monsters have exaggerated health (red cap fungie)"): the earlier flat NormalMonster rows
+     (grade 1 = 45000, grade 4 = 270000 across levels 11-44) made every normal monster in that whole band a damage sponge - a
+     level-12 Red Cap Fungie got 45000 HP (the same as a level-44 one, and 15x the grade-3 curve). A single flat value cannot fit
+     an 11..44 level band, so those two rows are removed and normal monsters scale with the curve again. The Elite/Hero rows
+     (monsters that are meant to be tanky) are kept; if they ever feel wrong at the low end they need the same per-level scaling. -->
+<npc_hp>
+	<row sub_type="EliteMonster" grade="1" from="11" to="44" hp="720000" observed="true"/><!-- 2500030 L16 -->
+	<row sub_type="EliteMonster" grade="2" from="11" to="44" hp="810000" observed="true"/><!-- 2500021 L16 -->
+	<row sub_type="HeroMonster" grade="2" from="11" to="44" hp="810000" observed="true"/><!-- 2500016 L16 -->
+	<row sub_type="HeroMonster" grade="4" from="45" to="99" hp="80000000" observed="true"/><!-- 2400017, 2400140 L45 -->
+	<row sub_type="HeroMonster" grade="5" from="45" to="99" hp="1800000" observed="true"/><!-- 2980044 L45 -->
+</npc_hp>

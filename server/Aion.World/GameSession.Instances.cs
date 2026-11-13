@@ -17,10 +17,15 @@ public sealed class InstanceTables
         [property: JsonPropertyName("arrival")] double[] Arrival,
         [property: JsonPropertyName("exit")] Exit Exit,
         [property: JsonPropertyName("quest")] string? Quest,
-        [property: JsonPropertyName("boss")] int[] Boss)
+        [property: JsonPropertyName("boss")] int[] Boss,
+        [property: JsonPropertyName("final")] FinalMove? Final = null)
     {
         public int MapId { get; set; }
     }
+
+    /// <summary>The script's last move out of the instance as official: the PCTeleport target it replaces, the cutscene first, the landing spot.</summary>
+    public sealed record FinalMove([property: JsonPropertyName("teleport")] string Teleport, [property: JsonPropertyName("cutscene")] string Cutscene,
+        [property: JsonPropertyName("position")] double[] Position);
 
     sealed record InstanceFile([property: JsonPropertyName("instances")] Dictionary<string, Instance> Instances);
 
@@ -96,6 +101,13 @@ public sealed partial class GameSession
         else (map, exit) = (HomeMap, data.MapStart(HomeMap)?.Position ?? GamePackets.SpawnPosition);
         if (to is null && hand is null && volume is { } overlay && overlay.Base == map && string.Equals(mode, "CurrentPosition", StringComparison.OrdinalIgnoreCase) && position is { } here)
             exit = here;
+        var leaving = EndInstance();
+        return [.. InstanceMove(map, exit, now), .. leaving];
+    }
+
+    /// <summary>Out of the instance's state: its map events' 0x922f MapEventLeave (sent after the move out), the copy handed over.</summary>
+    List<byte[]> EndInstance()
+    {
         var leaving = (CopyOwner ?? this).mapEventRuns.Select(r => GamePackets.MapEventLeave(r.Id)).ToList();
         HandOverCopy();
         mapEventRuns.Clear();
@@ -103,10 +115,7 @@ public sealed partial class GameSession
         instanceKey = 0;
         instanceExitAt = null;
         instanceReturn = null;
-        // Back outside: the entry triggers there wait until the player has stepped out of them (a way out that lands in or
-        // next to an entry area pulled the player straight back in; A2Core PR #4, 2026-10-30 HQ003).
-        dungeonTriggerNeedsOutside = true;
-        return [.. InstanceMove(map, exit, now, teleportEffect: teleportEffect), .. leaving];
+        return leaving;
     }
 
     /// <summary>
@@ -136,8 +145,25 @@ public sealed partial class GameSession
     void InstanceKill(Target target, long now)
     {
         if (instanceKey == 0 || Instances.Of(worldMap) is not { } instance || !instance.Boss.Contains(target.NpcId) || instanceExitAt is not null) return;
+        // The instance's own script decides the end when it runs (the Brigade base: after the boss the player still walks to the
+        // cliff, Cutscene 1312 and the move to map 1010; live 2026-11-07 the 10 s boss exit put the player back in Poeta first).
+        if (RunsMapEvents && mapEventRuns.Any(r => string.Equals(r.Name, instance.MapEvent, StringComparison.OrdinalIgnoreCase))) return;
         clearedEvents.Add(instance.MapEvent);
         instanceExitAt = now + InstanceExitDelayMs;
+    }
+
+    /// <summary>The client asked to leave its layer: out, and the layer's entry trigger waits until the player has left it.</summary>
+    List<byte[]> LeaveByClient(long now)
+    {
+        leftByClientDungeon = MapEventData.DungeonIdOfMap(worldMap);
+        // A run the client leaves unfinished is ended for it first: the entry's DungeonState_NT 0x6100 "Process" (2) otherwise stays
+        // with the client after the move out, and it refused to mount ("cannot mount in the current state", live 2026-11-11 Axel3:
+        // pulled into the Ugaros Thieves Campsite at the login, left with 0xe21d, no mount request for the next 30 minutes). The
+        // official run end (complete, rec 20261106-115817 #880578) is 0x6101, 0x6100 Complete (3), 0x6100 End (4), then 0x922f;
+        // a run left early sends End (4) only (CANDIDATE: no early leave of a running dungeon recorded).
+        List<byte[]> ended = copy is { Cleared: false } c && MapEventData.DungeonOfMap(worldMap) is not null
+            ? [DungeonState(c.DungeonId, DungeonStateEnd, now, now)] : [];
+        return [.. ended, .. LeaveInstance(now)];
     }
 
     List<byte[]> InstanceTick(long now) => instanceExitAt is { } due && now >= due && !reloading ? LeaveInstance(now) : [];
@@ -145,7 +171,9 @@ public sealed partial class GameSession
     /// <summary>After an instance map load: MapEnvState_NT {map, u8 0, i64 0, enter 1, no states}, MapEnvSetting_NT {map, no settings, enter 1}.</summary>
     List<byte[]> MapEnvironment(int mapId) =>
     [
-        PacketWriter.Opcode(0x4001).I32(mapId).U8(0).I64(0).U8(1).Varint(0).ToArray(),
+        (instanceKey != 0 && (CopyOwner ?? this).mapEnvState is { } env && env.Map == mapId
+            ? PacketWriter.Opcode(0x4001).I32(mapId).U8((byte)env.State).I64(env.Since).U8(1).Varint(0)
+            : PacketWriter.Opcode(0x4001).I32(mapId).U8(0).I64(0).U8(1).Varint(0)).ToArray(),
         PacketWriter.Opcode(0x4002).I32(mapId).Varint(0).U8(1).ToArray(),
     ];
 }

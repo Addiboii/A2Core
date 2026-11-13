@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Boss mechanics built from the client tables (tools/data/client-combat.json; BossClient, NpcAi.Telegraph, GameSession.BossClient.cs).
+     WHAT comes from the client (OFFICIAL client data): which NPC skills warn their area (Skill WideCastingAlertTime 75 skills,
+     GroundRadius, SkillEffectFilterLocation: 1221085 warns 5 spots as the official 0x3848 samples), which skills call adds
+     (SkillEffect Spawn of NPC skills: NPC, count, distance), which NPCs have a groggy guard (NpcGroggyType GroggyGuard 1,039 NPCs,
+     GroggyTime 5000 ms for most) and which player skills break it (GroggyGuardDecreaseEnergy on 3,316 player skills: 2-100),
+     which bosses go berserk and when (bUseBossBerserk, BossBerserkInvokeTime 300 s for 377 NPCs).
+     Every number below is CANDIDATE (no official sample): no recording has 0x3b04 UpdateGroggyInfo_NT, a boss past its berserk
+     time, or adds being called (a2core-log/record-checklist-2026-11-09.md).
+
+       warn_min_ms              a telegraph is shown at least this long before the hit lands (the official 0x3848 samples: 700-1000 ms).
+       spot_radius              the radius of a warned spot when the client gives none (cm).
+       groggy_energy            the guard's full energy (the player skills take 2-100 each).
+       (a groggy boss takes the stagger damage bonus of server-rules.xml bosses: stagger_damage_percent)
+       groggy_wire              send 0x3b04 UpdateGroggyInfo_NT (usmap layout, never seen live: off until a recording confirms it).
+       berserk_damage_percent   a berserk boss's damage (200 = double).
+       berserk_offset_ms        added to the berserk time sent in 0x8d21 for the client-table bosses (as boss-ai.xml's OBSERVED one).
+       add_radius               where the adds appear round their boss when the client distance is 0 (cm).
+       adds_max                 adds one boss may have at once. -->
+<boss_client warn_min_ms="1000" spot_radius="300" groggy_energy="100" groggy_wire="false"
+             berserk_damage_percent="200" berserk_offset_ms="31536000000" add_radius="400" adds_max="8"/>

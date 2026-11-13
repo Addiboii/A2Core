@@ -1,0 +1,254 @@
+{
+ "source": "official recordings 2026-11-06/07, SkillFireProjectile_NT 0x3803 of the player (tools/projectile_timing.py)",
+ "default_fire_ms": 245,
+ "default_flight_ms": 200,
+ "skills": {
+  "5001": [
+   {
+    "projectile": 50011,
+    "seq": 1,
+    "fire_ms": 450,
+    "flight_ms": 400,
+    "samples": 11
+   }
+  ],
+  "14010242": [
+   {
+    "projectile": 140100203,
+    "seq": 1,
+    "fire_ms": 0,
+    "flight_ms": 50,
+    "samples": 1
+   }
+  ],
+  "14010243": [
+   {
+    "projectile": 140100204,
+    "seq": 1,
+    "fire_ms": 0,
+    "flight_ms": 150,
+    "samples": 10
+   }
+  ],
+  "14020340": [
+   {
+    "projectile": 140200001,
+    "seq": 1,
+    "fire_ms": 100,
+    "flight_ms": 200,
+    "samples": 41
+   }
+  ],
+  "14030340": [
+   {
+    "projectile": 140300001,
+    "seq": 1,
+    "fire_ms": 0,
+    "flight_ms": 200,
+    "samples": 39
+   },
+   {
+    "projectile": 140300002,
+    "seq": 2,
+    "fire_ms": 152,
+    "flight_ms": 200,
+    "samples": 37
+   },
+   {
+    "projectile": 140300003,
+    "seq": 3,
+    "fire_ms": 197,
+    "flight_ms": 200,
+    "samples": 37
+   }
+  ],
+  "14040340": [
+   {
+    "projectile": 140400001,
+    "seq": 1,
+    "fire_ms": 200,
+    "flight_ms": 250,
+    "samples": 29
+   }
+  ],
+  "14050340": [
+   {
+    "projectile": 140500301,
+    "seq": 1,
+    "fire_ms": 245,
+    "flight_ms": 150,
+    "samples": 31
+   }
+  ],
+  "14060020": [
+   {
+    "projectile": 140600001,
+    "seq": 1,
+    "fire_ms": 276,
+    "flight_ms": 150,
+    "samples": 4
+   }
+  ],
+  "14070030": [
+   {
+    "projectile": 140700301,
+    "seq": 1,
+    "fire_ms": 346,
+    "flight_ms": 150,
+    "samples": 5
+   }
+  ],
+  "14080340": [
+   {
+    "projectile": 140800001,
+    "seq": 1,
+    "fire_ms": 350,
+    "flight_ms": 125,
+    "samples": 4
+   }
+  ],
+  "14090240": [
+   {
+    "projectile": 140900001,
+    "seq": 2,
+    "fire_ms": 148,
+    "flight_ms": 375,
+    "samples": 14
+   }
+  ],
+  "14110240": [
+   {
+    "projectile": 141100001,
+    "seq": 1,
+    "fire_ms": 350,
+    "flight_ms": 200,
+    "samples": 8
+   }
+  ],
+  "14130240": [
+   {
+    "projectile": 141300201,
+    "seq": 1,
+    "fire_ms": 251,
+    "flight_ms": 250,
+    "samples": 9
+   }
+  ],
+  "14140240": [
+   {
+    "projectile": 141400201,
+    "seq": 1,
+    "fire_ms": 252,
+    "flight_ms": 200,
+    "samples": 5
+   }
+  ],
+  "14330340": [
+   {
+    "projectile": 143300001,
+    "seq": 1,
+    "fire_ms": 50,
+    "flight_ms": 150,
+    "samples": 45
+   },
+   {
+    "projectile": 143300002,
+    "seq": 2,
+    "fire_ms": 194,
+    "flight_ms": 150,
+    "samples": 23
+   }
+  ],
+  "14340030": [
+   {
+    "projectile": 143400001,
+    "seq": 1,
+    "fire_ms": 52,
+    "flight_ms": 200,
+    "samples": 303
+   }
+  ],
+  "14380007": [
+   {
+    "projectile": 143800071,
+    "seq": 1,
+    "fire_ms": 0,
+    "flight_ms": 200,
+    "samples": 26
+   }
+  ],
+  "15030000": [
+   {
+    "projectile": 150300001,
+    "seq": 1,
+    "fire_ms": 199,
+    "flight_ms": 100,
+    "samples": 39
+   }
+  ],
+  "15040000": [
+   {
+    "projectile": 150400001,
+    "seq": 1,
+    "fire_ms": 399,
+    "flight_ms": 175,
+    "samples": 10
+   },
+   {
+    "projectile": 150400002,
+    "seq": 2,
+    "fire_ms": 448,
+    "flight_ms": 200,
+    "samples": 10
+   },
+   {
+    "projectile": 150400003,
+    "seq": 3,
+    "fire_ms": 498,
+    "flight_ms": 175,
+    "samples": 10
+   },
+   {
+    "projectile": 150400004,
+    "seq": 4,
+    "fire_ms": 549,
+    "flight_ms": 175,
+    "samples": 10
+   },
+   {
+    "projectile": 150400005,
+    "seq": 5,
+    "fire_ms": 599,
+    "flight_ms": 175,
+    "samples": 10
+   }
+  ],
+  "15090000": [
+   {
+    "projectile": 150900001,
+    "seq": 2,
+    "fire_ms": 899,
+    "flight_ms": 500,
+    "samples": 102
+   }
+  ],
+  "15150000": [
+   {
+    "projectile": 151500001,
+    "seq": 2,
+    "fire_ms": 202,
+    "flight_ms": 500,
+    "samples": 7
+   }
+  ],
+  "15210000": [
+   {
+    "projectile": 152100001,
+    "seq": 1,
+    "fire_ms": 250,
+    "flight_ms": 150,
+    "samples": 59
+   }
+  ]
+ }
+}

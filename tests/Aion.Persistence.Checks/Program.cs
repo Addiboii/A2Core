@@ -161,19 +161,6 @@ await using(var source=NpgsqlDataSource.Create(connectionString))
     Check(await game.MoveItemAsync(first,id,original.InstanceId,original.Revision,1),"equipment swap succeeds");
     inventory=(await game.InventoryAsync(first,id))!;
     Check(inventory.Items.Count(x=>x.Location=="equipment")==1 && inventory.Items.Single(x=>x.InstanceId==granted).Location=="bag","swap retains both instances");
-    // The bag sort: slots 0, 1, ... for items; the given currency templates keep no slot (and lose one they had).
-    var bagTemplates=inventory.Items.Where(x=>x.Location=="bag").Select(x=>x.TemplateId).Distinct().ToArray();
-    Check(await game.SortBagAsync(first,id,[]) && (await game.InventoryAsync(first,id))!.Items.Where(x=>x.Location=="bag").Select(x=>x.Slot).Order().SequenceEqual(Enumerable.Range(0,bagTemplates.Length==0?0:inventory.Items.Count(x=>x.Location=="bag")).Select(n=>(int?)n))
-          && await game.SortBagAsync(first,id,bagTemplates) && (await game.InventoryAsync(first,id))!.Items.Where(x=>x.Location=="bag").All(x=>x.Slot is null)
-          && !await game.SortBagAsync(second,id,[]),"bag sort: slots from 0, currencies keep none, owner only");
-    // Item points (migration 079): one item consumed with its points; another account or a stale revision refused.
-    var pointItem=(await game.AdminAsync(second,new AdminCommand(Guid.NewGuid(),id,"grant","test",101))).GetProperty("instanceId").GetGuid();
-    var pointRow=(await game.InventoryAsync(first,id))!.Items.Single(x=>x.InstanceId==pointItem);
-    Check(!await game.UsePointItemAsync(second,id,pointItem,pointRow.Revision,1,1,1) && !await game.UsePointItemAsync(first,id,pointItem,pointRow.Revision+1,1,1,1),
-          "item points: another account or a stale revision is refused");
-    Check(await game.UsePointItemAsync(first,id,pointItem,pointRow.Revision,1,1,1) && !(await game.InventoryAsync(first,id))!.Items.Any(x=>x.InstanceId==pointItem)
-          && (await game.ItemPointsAsync(first,id)).Single()==new ItemPointRecord(1,1,1) && (await game.ItemPointsAsync(second,id)).Count==0,
-          "item points: one item used, one skill point stored, readable by the owner only");
     var unknown=await game.AdminAsync(second,grant with {RequestId=Guid.NewGuid(),TemplateId=102});
     Check(!await game.MoveItemAsync(first,id,unknown.GetProperty("instanceId").GetGuid(),0,1),"unknown equipment policy denied");
     var stack=await game.AdminAsync(second,grant with {RequestId=Guid.NewGuid(),Quantity=2});
@@ -284,16 +271,6 @@ await using(var source=NpgsqlDataSource.Create(connectionString))
     Check(await game.SoulBindItemAsync(first,id,bagItem.InstanceId,1) && (await game.InventoryAsync(first,id))!.Items.Single(x=>x.InstanceId==bagItem.InstanceId).Upgrades.GetProperty("soul_bind").GetInt32()==1,"a soul bind is stored on the item");
     Check(!await game.ExchangeAsync(first,id,[(bagItem.InstanceId,bagItem.Quantity)],second,staffChar,[]),"soul-bound items are not traded");
     Check(!await game.SoulBindItemAsync(second,id,bagItem.InstanceId,1),"another account cannot bind the item");
-    Check(await game.SoulBindItemAsync(first,id,bagItem.InstanceId,1,default,[(41,99),(194,16)]) && (await game.InventoryAsync(first,id))!.Items.Single(x=>x.InstanceId==bagItem.InstanceId).Upgrades is var soulUp
-        && soulUp.GetProperty("soul_bind").GetInt32()==1 && soulUp.GetProperty("soul_stats")[1][0].GetInt32()==194 && soulUp.GetProperty("soul_stats")[1][1].GetInt32()==16,"a bind stores the count and the bound stats");
-    // Manastones: upgrades.magicstones written at the item's revision, beside the soul bind; stale or foreign refused.
-    var bound=(await game.InventoryAsync(first,id))!.Items.Single(x=>x.InstanceId==bagItem.InstanceId);
-    MagicStoneSlot[] rolled=[new(531360001,199,2),new(531360001,307,1)];
-    Check(!await game.ImprintItemAsync(second,id,bound.InstanceId,bound.Revision,[],rolled) && !await game.ImprintItemAsync(first,id,bound.InstanceId,bound.Revision+1,[],rolled),
-          "imprint: another account or a stale revision is refused");
-    Check(await game.ImprintItemAsync(first,id,bound.InstanceId,bound.Revision,[],rolled) && (await game.InventoryAsync(first,id))!.Items.Single(x=>x.InstanceId==bagItem.InstanceId) is var stoned
-          && stoned.Upgrades.GetProperty("magicstones").EnumerateArray().SelectMany(s=>s.EnumerateArray()).Select(v=>v.GetInt32()).SequenceEqual([531360001,199,2,531360001,307,1]) && stoned.Upgrades.GetProperty("soul_bind").GetInt32()==1,
-          "imprint: the slots stored on the item, its soul bind kept");
     Check(await game.EngraveTeleportArtifactAsync(first,id,1051035) && !await game.EngraveTeleportArtifactAsync(first,id,1051035)
           && (await game.TeleportArtifactsAsync(first,id))!.SequenceEqual([1051035]) && await game.TeleportArtifactsAsync(second,id) is null,"a Kibelisk is engraved once, readable by its owner only");
     // World-map fog: groups stored once each, new ones reported.

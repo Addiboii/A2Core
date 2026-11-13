@@ -65,11 +65,15 @@ public sealed partial class GameSession
         return await GainExperienceAsync(experience + share, share, ExpReasonNpc, ct);
     }
 
+    /// <summary>Checks only: experience gained as from kills (level-ups and their quest re-check).</summary>
+    internal Task<List<byte[]>> GainExperienceForChecks(long gained, CancellationToken ct) => GainExperienceAsync(experience + gained, gained, ExpReasonNpc, ct);
+
     /// <summary>
     /// Applies a new experience total (the current level's experience plus the gain): level-ups while it
-    /// reaches NeedExp, stored, and the messages in the official order.
+    /// reaches NeedExp, stored, and the messages in the official order. A level-up re-checks the quests (<paramref name="questRecheck"/>;
+    /// a quest reward re-checks them itself after its 0x8d0f).
     /// </summary>
-    async Task<List<byte[]>> GainExperienceAsync(long total, long gained, byte reason, CancellationToken ct)
+    async Task<List<byte[]>> GainExperienceAsync(long total, long gained, byte reason, CancellationToken ct, bool questRecheck = true)
     {
         var before = level;
         var newLevel = level;
@@ -104,11 +108,19 @@ public sealed partial class GameSession
             var kit = data.LearnedSkills(cls, level);
             learned = kit.Select(k => k.SkillId).ToHashSet();
             var added = kit.Where(k => !skillsBefore.Contains(k.SkillId)).ToList();
-            if (added.Count > 0) replies.Add(GamePackets.AddSkillList(playerKey, added));
+            if (added.Count > 0) replies.Add(GamePackets.AddSkillList(playerKey, added, daevanion: DaevanionSkillBonus, equip: EquipSkillBonus));
             replies.AddRange(PassiveAbnormals());
         }
         worldPlayer?.Map?.Broadcast(worldPlayer, [PlayerPackets.LevelBroadcast(playerKey, level)]);
         replies.AddRange(RefreshStats());
+        if (DaevanionBoards(className, before).Count != DaevanionBoards(className, level).Count) replies.Add(DaevanionBoardInfo());
+        // No HP/MP refill and no own level broadcast at a level-up (GitHub 2d7b790, as recorded).
+        // The new level moves the quests waiting on it (audit 2026-11-13 G1): PCLevel steps (HQ1103010 "reach 45", HQ1103620,
+        // HQ2103010, HQ2103600) and the Auto quests with an UnlockLevel above 1 (34, e.g. the Ascension AQ1602010 at 10) were taken
+        // only at the next quest event or relog. QuestChangesAsync ends with AutoAcquireAsync. CANDIDATE order: after the level-up
+        // messages (no official level-up that moved a quest is recorded).
+        if (questRecheck && questLog is { } quests)
+            replies.AddRange(await Stored(() => QuestChangesAsync(quests.Recheck(level), ct)));
         return replies;
     }
 }

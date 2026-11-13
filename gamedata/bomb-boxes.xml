@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Bomb boxes and the bomb skill (Brigade Base Neutralization HQ1101070, map 100002), from the official recording
+     capture-13700-20261107-014953 (2026-11-07). The server reads this file once at start-up.
+     OBSERVED: using a box (EnvObjData 1400823) gives abnormal 160010 for 3,600,000 ms and SkillAutoLoadUpdate 0x3822 for skill
+     5001 with 3 charges; the box is not used up: 0x363b makes it usable again 10 s later. Aiming (SkillGroundReady) adds abnormal
+     160012 until the throw. Each throw's SkillStart carries the charges left; the third removes 160010 (reason 16). The bomb
+     (projectile 50011) lands after the flight time, hitting monsters with effect 500111 (damage) and 500112 and stunning them
+     (abnormal 160013, 2,000 ms); a tower (EnvObjData 1400824) takes two no-damage effects per hit, its hit count goes out as
+     0x8d93, phase 1 after the first hit, and the second hit destroys it (0x8d6d finish state, the map event's UseEnvObj).
+     PROVISIONAL (not measurable from the recording): blast_radius, damage, flight speed (cm per ms). -->
+<bomb_boxes box_env="1400823" tower_env="1400824" abnormal="160010" duration_ms="3600000" skill="5001" charges="3"
+	box_cooldown_ms="10000" aim_abnormal="160012" projectile="50011" damage_effect="500111" second_effect="500112"
+	stun_abnormal="160013" stun_ms="2000" tower_hits="2" attack_speed="11000" end_ms="600" fire_ms="450"
+	blast_radius="400" damage="651" flight_cm_per_ms="1.5" provisional="blast_radius damage flight_cm_per_ms"/>

@@ -103,6 +103,7 @@ public sealed partial class GameSession
     // EDecreaseReason kPeriodCollectionRegister / EIncreaseReason kPeriodCollectionReward (read from the usmap of client 2.0.6; no recording).
     const byte DecreaseCollectionRegister = 75, IncreaseCollectionReward = 54;
     static CollectionTables Collections => CollectionTables.Embedded;
+    const int PeriodCollectionTabs = 6;
 
     /// <summary>(collection, list) → (registered, rewarded).</summary>
     readonly Dictionary<(int Collection, int List), (int Registered, bool Rewarded)> collectionProgress = [];
@@ -119,9 +120,13 @@ public sealed partial class GameSession
     byte[] PeriodCollectionList(long now)
     {
         var open = Collections.Open(profileRace, now);
-        var w = PacketWriter.Opcode(PeriodCollectionListNt).Varint((uint)open.Count);
-        foreach (var (collection, from, to) in open)
+        // Every tab 1-6 is listed, an empty one as {0, tab, 0, 0, no lists} (OBSERVED: tabs 5 and 6 in every official entry, 1687 bytes).
+        var empty = Enumerable.Range(1, PeriodCollectionTabs).Where(tab => open.All(o => o.Collection.Tab != tab)).ToList();
+        var w = PacketWriter.Opcode(PeriodCollectionListNt).Varint((uint)(open.Count + empty.Count));
+        var entries = open.Select(o => (Tab: o.Collection.Tab, Open: ((CollectionTables.Collection, long, long)?)o)).Concat(empty.Select(t => (Tab: t, Open: ((CollectionTables.Collection, long, long)?)null)));
+        foreach (var (tab, entry) in entries.OrderBy(e => e.Tab))
         {
+            if (entry is not var (collection, from, to)) { w.I32(0).U8((byte)tab).I64(0).I64(0).Varint(0); continue; }
             var lists = Collections.Offered(collection);
             w.I32(collection.Id).U8((byte)collection.Tab).I64(from).I64(to).Varint((uint)lists.Count);
             foreach (var list in lists) WriteDelivery(w, collection.Id, list.Id, collectionProgress.GetValueOrDefault((collection.Id, list.Id)));

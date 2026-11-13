@@ -7,6 +7,7 @@ using Aion.Host.Authentication;
 using Aion.Host.Native;
 using Aion.Host.Platform;
 using Aion.Host.NcGuard;
+using Aion.Host.Ops;
 using Aion.Host;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using System.Net;
@@ -19,6 +20,14 @@ using Microsoft.Extensions.FileProviders;
 var builder = WebApplication.CreateBuilder(args);
 // Optional log files (Aion:Logging:File, off by default); a failure is logged below, never fatal.
 var (logFile, logFileWarning) = Aion.Host.Logging.FileLogging.Add(builder.Logging, builder.Configuration);
+// Server health (Stage G): the last warnings/errors for the staff page, database call times from Npgsql's metrics.
+builder.Logging.AddProvider(new OpsLogProvider(OpsLog.Shared));
+_ = DbMetrics.Shared;
+builder.Services.AddSingleton<OpsMonitor>();
+builder.Services.AddHostedService(provider => provider.GetRequiredService<OpsMonitor>());
+// Windows (Stage 0b, Windows 10 22H2 / 11): run as the "A2Core" Windows Service when started by the service manager (a no-op
+// in a console and on Linux, where systemd runs the host).
+builder.Host.UseWindowsService(service => service.ServiceName = "A2Core");
 // Bind and advertised addresses (loopback unless configured for a public server).
 var network = builder.Configuration.GetSection("Aion:Network").Get<NetworkOptions>() ?? new NetworkOptions();
 network.Validate();
@@ -36,7 +45,6 @@ if (!string.IsNullOrWhiteSpace(connectionString))
     builder.Services.AddSingleton<CharacterPersistenceService>();
     builder.Services.AddSingleton<PostgresGameplayStore>();
     builder.Services.AddSingleton<IGameplayStore>(provider => provider.GetRequiredService<PostgresGameplayStore>());
-    builder.Services.AddSingleton<IEconomyStore>(provider => provider.GetRequiredService<PostgresGameplayStore>());
     builder.Services.AddSingleton<IGameTicketRedeemer, PostgresGameTicketRedeemer>();
 }
 var accountsReady = !string.IsNullOrWhiteSpace(connectionString) && !string.IsNullOrWhiteSpace(authConnectionString);
@@ -119,15 +127,24 @@ if (native.LoginPort is not null || native.GamePort is not null)
     // Multiplayer: one shared world (maps, NPCs, players) for every game connection on this host.
     // Base rates (Aion:Rates:Experience, :Kinah, :Drops; OURS, default 1, 0-100): a bad value stops the host here.
     var rates = (builder.Configuration.GetSection("Aion:Rates").Get<Aion.World.WorldRates>() ?? new Aion.World.WorldRates()).Validate();
+    // With the gateway, players resume with the keys their clients know: this process starts its new keys elsewhere.
     builder.Services.AddSingleton(provider =>
     {
         if (rates != new Aion.World.WorldRates())
             provider.GetRequiredService<ILoggerFactory>().CreateLogger("Aion.World")
                 .LogInformation("Rates: experience x{Experience}, Kinah x{Kinah}, drops x{Drops}", rates.Experience, rates.Kinah, rates.Drops);
-        return new Aion.World.SharedWorld(Aion.World.GameData.Embedded) { Rates = rates };
+        var world = new Aion.World.SharedWorld(Aion.World.GameData.Embedded) { Rates = rates };
+        return native.GatewayPort is null ? world : world.StartKeysAt((int)(DateTimeOffset.UtcNow.ToUnixTimeSeconds() % 4000) * 100);
     });
     // The race of the world each account picks on the login port, for the game port's lobby.
     builder.Services.AddSingleton<Aion.World.WorldChoices>();
+    // Four worlds (Stage H, 2026-11-12): two Light, two Dark; names in Aion:Worlds:Names (Light1,Light2,Dark1,Dark2), worlds flagged
+    // new in Aion:Worlds:New, closed to new characters in Aion:Worlds:Closed (ids), Aion:Worlds:Enabled=false lists the two
+    // worlds of before. A bad setting stops the host at startup (WorldCatalog validates).
+    if (!string.Equals(builder.Configuration["Aion:Worlds:Enabled"], "false", StringComparison.OrdinalIgnoreCase))
+        builder.Services.AddSingleton(Aion.World.WorldCatalog.FromSettings(builder.Configuration["Aion:Worlds:Names"],
+            builder.Configuration["Aion:Worlds:New"], builder.Configuration["Aion:Worlds:Closed"],
+            int.TryParse(builder.Configuration["Aion:Worlds:Capacity"], out var worldCapacity) ? worldCapacity : null));
     builder.Services.AddSingleton(provider =>
     {
         var log = provider.GetRequiredService<ILoggerFactory>().CreateLogger("Aion.Gm");
@@ -201,6 +218,8 @@ if (native.LoginPort is not null || native.GamePort is not null)
     // Dashboard grants reach players in the world at once (needs the game database).
     if (native.GamePort is not null && !string.IsNullOrWhiteSpace(connectionString))
         builder.Services.AddHostedService<InventoryNotifications>();
+        // Bots (server-rules.xml bots/count; 0 = none): headless players on the shared world.
+        builder.Services.AddHostedService<BotService>();
 }
 builder.Services.AddRateLimiter(options =>
 {
@@ -225,6 +244,10 @@ builder.Services.AddRateLimiter(options =>
     options.AddPolicy("admin", context => RateLimitPartition.GetFixedWindowLimiter(
         context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
         _ => new FixedWindowRateLimiterOptions { PermitLimit = 120, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
+    // The staff live map's tiles, names and layers: a zoomed-in map loads a few dozen detail tiles at once.
+    options.AddPolicy("admin-maps", context => RateLimitPartition.GetFixedWindowLimiter(
+        context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = 1200, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
 });
 // Optional platform bootstrap for the dev client (GamePlatform.ini ConfigurationServerUrl).
 var platform = builder.Configuration.GetSection("Aion:Platform").Get<PlatformOptions>() ?? new PlatformOptions();
@@ -245,10 +268,14 @@ var port = builder.Configuration.GetValue<int?>("Aion:LocalPort") ?? 8780;
 var https = builder.Configuration.GetSection("Aion:Https").Get<HttpsOptions>() ?? new HttpsOptions();
 if (!network.LoopbackOnly && https.CertificateFile is null && !https.Proxy)
     throw new InvalidOperationException("A public host needs Aion:Https:CertificateFile and KeyFile for the account port (or Aion:Https:Proxy=true behind a TLS proxy).");
+// A .pfx (PKCS#12, Windows' own export: deploy/windows makes one for a fresh install) or a PEM certificate with its key file.
 var accountCertificate = https.CertificateFile is { } certificateFile
-    ? System.Security.Cryptography.X509Certificates.X509Certificate2.CreateFromPemFile(certificateFile, https.KeyFile) : null;
+    ? certificateFile.EndsWith(".pfx", StringComparison.OrdinalIgnoreCase)
+        ? System.Security.Cryptography.X509Certificates.X509CertificateLoader.LoadPkcs12FromFile(certificateFile, https.PfxPassword)
+        : System.Security.Cryptography.X509Certificates.X509Certificate2.CreateFromPemFile(certificateFile, https.KeyFile)
+    : null;
 // Windows TLS (Schannel) cannot use the ephemeral key of a PEM-loaded certificate; reload it as PKCS#12.
-if (accountCertificate is not null && OperatingSystem.IsWindows())
+if (accountCertificate is not null && OperatingSystem.IsWindows() && https.CertificateFile?.EndsWith(".pfx", StringComparison.OrdinalIgnoreCase) != true)
     accountCertificate = System.Security.Cryptography.X509Certificates.X509CertificateLoader.LoadPkcs12(
         accountCertificate.Export(System.Security.Cryptography.X509Certificates.X509ContentType.Pfx), null);
 builder.WebHost.ConfigureKestrel(options =>
@@ -267,6 +294,13 @@ builder.Services.AddSingleton<WardrobeAccess>();
 var app = builder.Build();
 if (logFileWarning is not null) app.Logger.LogWarning("{Warning}", logFileWarning);
 else if (logFile is not null) app.Logger.LogInformation("Writing log files to {Path}", logFile);
+// Game databases load and validate once at start-up (a broken data file stops the host here, not in play).
+{
+    var started = System.Diagnostics.Stopwatch.StartNew();
+    var items = Aion.World.ItemDB.Embedded;
+    app.Logger.LogInformation("ItemDB: {Count} items from gamedata/items ({Effects} use actions) in {Ms} ms",
+        items.Count, items.Effects.Count(), started.ElapsedMilliseconds);
+}
 // Chat mutes and the chat log go through the staff tools when both exist.
 if (app.Services.GetService<Aion.Host.Authentication.ServerControl>() is { } serverControl && app.Services.GetService<ChatRelay>() is { } chatRelay)
     chatRelay.Moderation = serverControl;
@@ -295,7 +329,7 @@ if (ncGuard.Port is { } ncGuardPort)
 app.Use(async (context, next) =>
 {
     context.Response.Headers.XContentTypeOptions = "nosniff";
-    context.Response.Headers.ContentSecurityPolicy = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob: data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'";
+    context.Response.Headers.ContentSecurityPolicy = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob: data: https://assets.playnccdn.com; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'";
     context.Response.Headers["Referrer-Policy"] = "no-referrer";
     if (context.Request.Path.StartsWithSegments("/api") || context.Request.Path.StartsWithSegments("/internal")) context.Response.Headers.CacheControl = "no-store";
     await next();
@@ -315,7 +349,9 @@ if (chatPort is { } chatOnly && chatOnly != port && chatOnly != platform.Port)
         await next();
     });
 }
-if (platform.Port is { } platformPort) app.UsePlatformBootstrap(platformPort, platformResponses!, platform.RequestLog);
+// Unanswered platform requests (the BM shop's NC store routes are unknown) go to logs/platform-unanswered.jsonl next to the traces.
+if (platform.Port is { } platformPort) app.UsePlatformBootstrap(platformPort, platformResponses!, platform.RequestLog,
+    Path.GetFullPath(Path.Combine(native.TraceDirectory is { Length: > 0 } traceRoot ? traceRoot : AppContext.BaseDirectory, "..", "logs", "platform-unanswered.jsonl")));
 app.UseRateLimiter();
 // /api/admin/* takes staff sessions only (migration 075): a player session's token is refused before any handler.
 app.UseStaffSessions();
@@ -342,6 +378,22 @@ if (builder.Configuration["Aion:Web:StaffPath"] is { Length: > 1 } staffPath && 
 }
 app.UseDefaultFiles();
 app.UseStaticFiles();
+// Item icons for the staff dashboard (downloaded from aion2hub.com/api/icon/items, 2026-11-07); a missing one is a 404.
+// The data folder: Aion:DataDir, else /var/lib/aion on Linux and %ProgramData%\A2Core on Windows (Stage 0b).
+var dataDir = builder.Configuration["Aion:DataDir"] is { Length: > 0 } configuredData ? configuredData
+    : OperatingSystem.IsWindows() ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "A2Core") : "/var/lib/aion";
+// The client's own icons (tools/build_item_database.py, <IconRes>.webp) live in <DataDir>/data/item-icons when present.
+var itemIcons = builder.Configuration["Aion:ItemIconsPath"] is { Length: > 0 } iconPath ? iconPath
+    : Directory.Exists(Path.Combine(dataDir, "data", "item-icons")) ? Path.Combine(dataDir, "data", "item-icons") : Path.Combine(dataDir, "item-icons");
+PlatformBootstrapEndpoints.ApiOverridesDirectory = builder.Configuration["Aion:ApiOverridesPath"] is { Length: > 0 } overridePath
+    ? overridePath : Path.Combine(dataDir, "api-overrides");
+if (Directory.Exists(itemIcons))
+    app.UseStaticFiles(new StaticFileOptions
+    {
+        FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(itemIcons),
+        RequestPath = "/item-icons",
+        ContentTypeProvider = new Microsoft.AspNetCore.StaticFiles.FileExtensionContentTypeProvider { Mappings = { [".webp"] = "image/webp" } },
+    });
 // Optional wardrobe export (meshes, textures, icons, vendored three.js) for the staff dashboard's
 // preview and icons. Extracted game assets: a public host serves them to signed-in staff only
 // (WardrobeAccess cookie); a loopback development host serves them openly unless StaffOnly is set.
@@ -377,6 +429,8 @@ if (accountsReady)
     app.MapGameplayEndpoints();
     Aion.Host.Authentication.StaffEndpoints.MapStaffEndpoints(app);
     Aion.Host.Authentication.StaffToolsEndpoints.MapStaffToolsEndpoints(app);
+    Aion.Host.Authentication.StaffMapEndpoints.MapStaffMapEndpoints(app);
+    Aion.Host.Authentication.StaffItemDatabaseEndpoints.MapStaffItemDatabaseEndpoints(app);
     Aion.Host.Authentication.StaffToolsEndpoints.MapTicketEndpoints(app);
     var bridgeSecret = builder.Configuration["Aion:BridgeSecret"];
     if (bridgeSecret is { Length: >= 64 })
@@ -388,7 +442,33 @@ if (accountsReady)
 
 if (chatPort is { } chatEndpoints) app.MapLimeChat(chatEndpoints, network.PublicAddress);
 
+// Windows server setup (deploy/windows, tools/package_windows.sh): the bundle and setup script at /a2core/ (Aion:Web:WindowsSetupDir),
+// and one-time migration downloads /a2core/migrate/<token>/<file> made by tools/windows_migration_token.sh (Aion:Web:MigrationDir):
+// a token is a folder of 32+ random characters, valid 24 h, only the listed files.
+if (builder.Configuration["Aion:Web:WindowsSetupDir"] is { Length: > 0 } setupDir && Directory.Exists(setupDir))
+    app.UseStaticFiles(new StaticFileOptions
+    {
+        FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(Path.GetFullPath(setupDir)),
+        RequestPath = "/a2core",
+        ServeUnknownFileTypes = true,
+        DefaultContentType = "application/octet-stream",
+    });
+if (builder.Configuration["Aion:Web:MigrationDir"] is { Length: > 0 } migrationDir)
+{
+    string[] migrationFiles = ["manifest.json", "roles.sql", "aion.dump", "aion.env", "cert.pem", "key.pem", "credentials.json"];
+    app.MapGet("/a2core/migrate/{token}/{file}", (string token, string file) =>
+    {
+        if (token.Length < 32 || !token.All(char.IsAsciiLetterOrDigit) || !migrationFiles.Contains(file)) return Results.NotFound();
+        var folder = Path.Combine(migrationDir, token);
+        var manifest = Path.Combine(folder, "manifest.json");
+        if (!File.Exists(manifest) || DateTime.UtcNow - File.GetLastWriteTimeUtc(manifest) > TimeSpan.FromHours(24)) return Results.NotFound();
+        var path = Path.Combine(folder, file);
+        return File.Exists(path) ? Results.File(path, "application/octet-stream", file) : Results.NotFound();
+    });
+}
 app.MapGet("/health/live", () => Results.Ok(new { status = "alive" }));
+// Staff "Server health" page data (/api/admin/health) and the loopback-only /health/ops for deploy\windows\health-check.ps1.
+app.MapOpsEndpoints(staff: accountsReady);
 // Every admin route must have a row in the staff permission table (migration 076); an unlisted one would be refused.
 if (Aion.Host.Authentication.StaffSessions.Unlisted(((IEndpointRouteBuilder)app).DataSources) is { Count: > 0 } unlisted)
     throw new InvalidOperationException("Admin routes missing from StaffPermissions: " + string.Join(", ", unlisted));
@@ -404,5 +484,7 @@ sealed record HttpsOptions
 {
     public string? CertificateFile { get; init; }
     public string? KeyFile { get; init; }
+    /// <summary>The password of a .pfx CertificateFile (Windows setup).</summary>
+    public string? PfxPassword { get; init; }
     public bool Proxy { get; init; }
 }

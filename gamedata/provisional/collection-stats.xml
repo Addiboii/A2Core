@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- PROVISIONAL collection stats (2026-11-06): the client data has no pet-collection or skin-collection stat table (pet items
+     only grant the pet or a soul; skin items only the skin). User rule: collecting pets (each owned pet, more per level as souls
+     level it) and skins give stats. These values are guesses to be replaced by official ones; EStat names, client units.
+     pets: for every owned pet, the stats of its level (the highest level listed at or below it).
+     skins (the client's collection window at max level, USER 2026-11-08; Ratio stats in 0.01% units, so 1 point = 0.1% = 10):
+       all_owned: the "all owned effect" at 100% (PvP damage boost 56%, PvP damage tolerance 14%), scaled by the share of all
+         collection points owned (OURS below 100%: the client's steps are not in our export).
+       The category steps (weapon damage, slot defense, earring/necklace attack and defense per collect point) are the client's
+         SkinCollection.dat now (tools/data/closet.json), with each skin's points from its Skin.dat grade. -->
+<collections>
+	<pets>
+		<level n="1"><stat name="HPMax" value="10"/></level>
+		<level n="5"><stat name="HPMax" value="20"/><stat name="Accuracy" value="2"/></level>
+		<level n="10"><stat name="HPMax" value="35"/><stat name="Accuracy" value="4"/><stat name="Defense" value="4"/></level>
+		<level n="20"><stat name="HPMax" value="60"/><stat name="Accuracy" value="8"/><stat name="Defense" value="8"/><stat name="Critical" value="4"/></level>
+		<level n="30"><stat name="HPMax" value="100"/><stat name="Accuracy" value="12"/><stat name="Defense" value="12"/><stat name="Critical" value="8"/></level>
+	</pets>
+	<skins>
+		<all_owned>
+			<stat name="PvPAmplifyDamage" value="5600"/>
+			<stat name="PvPDecreaseDamage" value="1400"/>
+		</all_owned>
+	</skins>
+</collections>

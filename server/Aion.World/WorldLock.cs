@@ -109,19 +109,35 @@ public sealed class WorldLockStats
 /// </summary>
 public sealed class WorldTurn(SharedWorld world)
 {
-    MapInstance? map;
-    bool exclusive;
-    int outside;
-    long heldSince;
+    // Lock accounting (world freeze 2026-11-09): each Enter creates its own Hold, and a lock is released at most once per
+    // Hold. A storage call that is still outside when the loop leaves (a fire-and-forget call, or one from another thread)
+    // finds its Hold ended and neither releases nor re-takes anything; an Exit during a re-take lets the re-take give the
+    // locks back. Before, Exit released a second time (SemaphoreFullException) and the late re-take was never released.
+    sealed class Hold(MapInstance? map, bool exclusive)
+    {
+        public readonly MapInstance? Map = map;
+        public readonly bool Exclusive = exclusive;
+        public int Outside;
+        public bool Ended, Reacquiring;
+        public long Since = Stopwatch.GetTimestamp();
+    }
+
+    Hold? current;
 
     /// <summary>Whether this connection holds the world now (not while one of its storage calls runs outside).</summary>
-    public bool Held => (exclusive || map is not null) && Volatile.Read(ref outside) == 0;
+    public bool Held
+    {
+        get
+        {
+            if (Volatile.Read(ref current) is not { } hold) return false;
+            lock (hold) return hold.Outside == 0 && !hold.Ended && !hold.Reacquiring;
+        }
+    }
 
     public async Task EnterWorldAsync(CancellationToken ct)
     {
         await world.Lock.EnterExclusiveAsync(ct);
-        exclusive = true;
-        heldSince = Stopwatch.GetTimestamp();
+        Begin(new Hold(null, true));
     }
 
     /// <summary>Shared world, then the map's own lock.</summary>
@@ -129,22 +145,34 @@ public sealed class WorldTurn(SharedWorld world)
     {
         await world.Lock.EnterSharedAsync(ct);
         await on.Lock.WaitAsync(CancellationToken.None);
-        map = on;
-        heldSince = Stopwatch.GetTimestamp();
+        Begin(new Hold(on, false));
     }
 
+    void Begin(Hold hold)
+    {
+        if (Interlocked.CompareExchange(ref current, hold, null) is null) return;
+        // Entered again without leaving: the new locks go back instead of replacing (and later losing) the held ones.
+        ReleaseLocks(hold);
+        throw new InvalidOperationException("World turn entered twice without leaving it.");
+    }
+
+    /// <summary>Leaves the turn: the locks are released if they are held now (once); a second Exit does nothing.</summary>
     public void Exit()
     {
-        Release();
-        map = null;
-        exclusive = false;
+        if (Interlocked.Exchange(ref current, null) is not { } hold) return;
+        bool release;
+        lock (hold)
+        {
+            hold.Ended = true;
+            release = hold.Outside == 0 && !hold.Reacquiring;
+        }
+        if (release) ReleaseLocks(hold);
     }
 
-    void Release()
+    void ReleaseLocks(Hold hold)
     {
-        if (map is null && !exclusive) return;
-        world.Lock.Stats.Held(exclusive, Stopwatch.GetTimestamp() - heldSince);
-        if (map is { } held)
+        world.Lock.Stats.Held(hold.Exclusive, Stopwatch.GetTimestamp() - hold.Since);
+        if (hold.Map is { } held)
         {
             held.Lock.Release();
             world.Lock.ExitShared();
@@ -152,36 +180,54 @@ public sealed class WorldTurn(SharedWorld world)
         else world.Lock.ExitExclusive();
     }
 
-    async Task ReacquireAsync()
-    {
-        // Not cancellable: the connection's loop releases the turn it thinks it holds.
-        if (map is { } held)
-        {
-            await world.Lock.EnterSharedAsync(CancellationToken.None);
-            await held.Lock.WaitAsync(CancellationToken.None);
-        }
-        else await world.Lock.EnterExclusiveAsync(CancellationToken.None);
-        heldSince = Stopwatch.GetTimestamp();
-    }
-
     /// <summary>Runs a storage call with this turn released (when it is held); the turn is held again when it returns.</summary>
     public async Task<T> OutsideAsync<T>(Func<Task<T>> call)
     {
-        if (map is null && !exclusive) return await call();
-        if (Interlocked.Increment(ref outside) == 1)
+        if (Volatile.Read(ref current) is not { } hold) return await call();
+        bool passThrough, release = false;
+        lock (hold)
+        {
+            passThrough = hold.Ended || hold.Reacquiring;
+            if (!passThrough) release = hold.Outside++ == 0;
+        }
+        if (passThrough) return await call();   // the turn is left or being taken again: nothing to release
+        if (release)
         {
             world.Lock.Stats.Outside();
-            Release();
+            ReleaseLocks(hold);
         }
         try { return await call(); }
-        finally
+        finally { await ReturnAsync(hold); }
+    }
+
+    async Task ReturnAsync(Hold hold)
+    {
+        lock (hold)
         {
-            if (Interlocked.Decrement(ref outside) == 0) await ReacquireAsync();
+            if (--hold.Outside > 0 || hold.Ended) return;   // other calls still outside, or the turn was left meanwhile
+            hold.Reacquiring = true;
         }
+        // Not cancellable: the connection's loop releases the turn it thinks it holds.
+        if (hold.Map is { } map)
+        {
+            await world.Lock.EnterSharedAsync(CancellationToken.None);
+            await map.Lock.WaitAsync(CancellationToken.None);
+        }
+        else await world.Lock.EnterExclusiveAsync(CancellationToken.None);
+        bool ended;
+        lock (hold)
+        {
+            hold.Reacquiring = false;
+            hold.Since = Stopwatch.GetTimestamp();
+            ended = hold.Ended;
+        }
+        if (ended) ReleaseLocks(hold);   // the loop left during the re-take: give the locks back
     }
 }
 
-/// <summary>A connection's store whose calls run outside its <see cref="WorldTurn"/> (see <see cref="WorldTurn.OutsideAsync{T}"/>).</summary>
+/// <summary>A connection's store whose calls run outside its <see cref="WorldTurn"/> (see <see cref="WorldTurn.OutsideAsync{T}"/>).
+/// Only the connection's own loop may call it: a background task (Task.Run, fire-and-forget) must use
+/// <see cref="Unwrap"/>, or it releases the turn the loop holds and takes it again behind the loop's back (world freeze 2026-11-09).</summary>
 public class TurnStore : DispatchProxy
 {
     INativeCharacterStore inner = null!;

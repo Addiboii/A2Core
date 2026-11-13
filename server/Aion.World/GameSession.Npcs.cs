@@ -16,7 +16,11 @@ public sealed partial class GameSession
     long npcViewCheckAt;
     public IReadOnlyCollection<int> SeenNpcs => seenNpcs;
 
-    bool StreamsNpcs => targets is { Count: > StreamNpcsAbove };
+    /// <summary>
+    /// Big maps, and story instance layers (an overlay volume of a field map): the official re-entry into the bombed Brigade base sent only the 12 NPCs
+    /// within ~50 m (capture 20261107-014953), not the Drakan groups 130 m+ away that every-NPC entry sent.
+    /// </summary>
+    bool StreamsNpcs => targets is { Count: > StreamNpcsAbove } || instanceKey != 0 && MapEventData.Volume(worldMap) is not null;
 
     /// <summary>World entry: every NPC on a small map, the near ones on a big map.</summary>
     List<byte[]> NpcsAtEntry(Vector3d at)
@@ -27,7 +31,7 @@ public sealed partial class GameSession
         {
             seenNpcs.UnionWith(targets.Keys);
             // A removed corpse stays out of sight until its respawn (0x3641 then).
-            return targets.Values.Where(t => !t.CorpseRemoved).SelectMany(t => Stagger.WithGuard(AppearOf(Grounded(t)), t)).ToList();
+            return targets.Values.Where(t => !t.CorpseRemoved).Select(t => GamePackets.NpcAppear(Grounded(t).Appearance())).ToList();
         }
         return NpcVisibility(at);
     }
@@ -64,7 +68,7 @@ public sealed partial class GameSession
             if (!seen && !t.CorpseRemoved && d2 <= NpcViewRange * NpcViewRange)
             {
                 seenNpcs.Add(t.Key);
-                replies.AddRange(Stagger.WithGuard(AppearOf(Grounded(t)), t));
+                replies.Add(GamePackets.NpcAppear(Grounded(t).Appearance()));
             }
             else if (seen && d2 > NpcForgetRange * NpcForgetRange)
             {

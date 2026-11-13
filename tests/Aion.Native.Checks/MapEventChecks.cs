@@ -82,12 +82,12 @@ static class MapEventChecks
           "0x8d15 caption rebuilds #9702");
         C(GamePackets.Guide("Tutorial_UI_SkillLevelUp").AsSpan(2).SequenceEqual(Convert.FromHexString("002e185475746f7269616c5f55495f536b696c6c4c6576656c55700000000000000000000000000000")),
           "0x8d15 guide (EventFuncAction ShowGuide, member count 0) rebuilds #17352");
-        C(GamePackets.Note("Note_D2_DQ2203030_01").AsSpan(2).SequenceEqual(Convert.FromHexString("000f14" + "4e6f74655f44325f4451323230333033305f3031" + "000000000000000000" + "01000000" + "00"))
+        C(GamePackets.Note("Note_D2_DQ2203030_01").AsSpan(2).SequenceEqual(Convert.FromHexString("000f14" + "4e6f74655f44325f4451323230333033305f3031" + "0000000000000000000000000000"))
           && GamePackets.Message("Str_BlasphemyLab_Notice_1")[3] == 16,
           "0x8d15 ShowNote (15) / ShowMessage (16) take the caption's layout with the note or string key");
-        C(GamePackets.RelationshipUpdate(0x9b9a, 6).SequenceEqual(Convert.FromHexString("928d9ab70206")), "0x8d92 RelationshipEntityUpdate: key varint, relationship byte");
-        C(GamePackets.RelationshipUpdate(0x8674, 0).SequenceEqual(Convert.FromHexString("928df48c0200")) && GamePackets.RelationshipUpdate(0x8674, 13).SequenceEqual(Convert.FromHexString("928df48c020d")),
-            "0x8d92 byte-exact to the recording of 2026-10-19 231752 (key 0x8674, relationship 0 then 13)");
+        C(GamePackets.RelationshipUpdate(0x9b9a, 6).AsSpan(2).SequenceEqual(Convert.FromHexString("9ab70206")), "RelationshipEntityUpdate: key varint, relationship byte");
+        C(GamePackets.RelationshipUpdate(0x6c | 0x60 << 7 | 1 << 14, 13).SequenceEqual(Convert.FromHexString("928dece0010d")),
+          "RelationshipEntityUpdate is 0x8d92 as official (an NPC turning NPC_Companion, capture 2026-11-06/07)");
         C(MapEventTables.Relationship("Monster_AntiCompanion") == 11 && MapEventTables.Relationship("NPC_Companion") == 13 && MapEventTables.Relationship("PC_FriendlyToAll") == 23
           && MapEventTables.Relationship("Nothing") is null, "ERelationshipEntity names resolve to the usmap ordinals");
         C(GamePackets.SocialAction(0x9b9a, 1195, false).AsSpan(2).SequenceEqual(Convert.FromHexString("9ab702ab0400000100000000"))
@@ -156,57 +156,40 @@ static class MapEventChecks
         C(host.Exit == "CurrentPosition" && run.Finished && run.Status == MapEventRun.Complete, "3 s later MapExit to the current position; the event is complete");
         C(!host.Calls.Any(c => c.StartsWith("Unsupported")), "nothing in HQ001 was unsupported");
 
-        // Munihelle's two supply batches (the Dark HQ001): the second firewood (EnvObjData E_D0_FireWood_002) is spawned as
-        // E_D0_FireWood_001_2; it answers to its own name, not to the first batch's (live 2026-10-28: the second never counted).
-        var second = WorldObjects.ObjectsOn(110002).Single(o => o.Name == "E_D0_FireWood_001_2");
-        var hostM = new FakeHost();
-        var munihelle = new MapEventRun(tables.Event("World_D_Starter_HQ001_MapEvent")!, 3, hostM, 0);
-        munihelle.Start(0);
-        for (var i = 0; i < 4; i++) munihelle.Killed(2590123, "M_D_Starter_HQ001_SkurvWar_02", true, i < 3, 1000 + i);
-        C(munihelle.StepOrder == 2 && second.EnvName == "E_D0_FireWood_002" && !munihelle.WantsObject(second.Name, second.EnvName)
-          && munihelle.WantsObject("E_D0_FireWood_001_1"), "Munihelle's first batch: only the first firewood counts");
-        munihelle.UsedObject("E_D0_FireWood_001_1", 2000);
-        for (var i = 0; i < 4; i++) munihelle.Killed(2590013, "M_D_Starter_HQ001_SkurvWar_01", true, i < 3, 3000 + i);
-        C(munihelle.StepOrder == 4 && munihelle.WantsObject(second.Name, second.EnvName), "the second batch: the second firewood counts by its own name");
-        munihelle.UsedObject(second.Name, 4000, second.EnvName);
-        C(munihelle.StepOrder == 5, "using it ends the step");
-        // UseEnvObj goals name an object exactly by its spawn entry or its EnvObjData name (world-objects.json env_names).
-        bool Named(string goal, int map, string spawn) => WorldObjects.ObjectsOn(map).Single(o => o.Name == spawn) is var obj
-            && MapEventRun.NamesObject(new MapEventObjective(1, "UseEnvObj", [goal, "1"]), obj.Name, obj.EnvName);
-        C(Named("E_PD_Bakron_SpiritAltar_01", 600071, "BakronIsland_Easy_SpiritAltar_Wind")
-          && Named("E_PD_ReforgedAbyss_AbyssStone_01_V01_1", 600082, "E_PD_ReforgedAbyss_AbyssStone_01_V01_1")
-          && Named("E_PD_ReforgedAbyss_AbyssStone_01", 600082, "E_PD_ReforgedAbyss_AbyssStone_01_1")
-          && !Named("E_PD_ReforgedAbyss_AbyssStone_01", 600082, "E_PD_ReforgedAbyss_AbyssStone_01_V01_1"),
-          "UseEnvObj by EnvObjData name (Bakron's wind altar) or spawn entry; another row's variant (AbyssStone_01_V01) is not taken");
-        // Its ending (step 6): Elvida at 70% sends Maard away; at 40% she turns companion, the Dredgion comes, the friendly Elvida
-        // follows the player into the Drakan wave (step 7).
-        munihelle.PositionAt(n => n == "World_D_Starter_HQ001_TriggerActor_4", _ => false, 5000);
-        for (var ms = 5000; ms < 12000; ms += 100) munihelle.Tick(ms);
-        munihelle.HpChanged(2590120, "M_D_Starter_HQ001_Elvida_V01_01", 65, 13000);
-        for (var ms = 13000; ms < 20000; ms += 100) munihelle.Tick(ms);
-        C(munihelle.StepOrder == 6 && hostM.Calls.Contains("Relationship M_D_Starter_HQ001_Elvida_V01_01 Monster")
-          && hostM.Calls.Contains("Despawn N_D_Starter_HQ001_Mard_01 5000 False"), "Elvida at 70%: a Monster, Maard walks off and leaves");
-        munihelle.HpChanged(2590120, "M_D_Starter_HQ001_Elvida_V01_01", 35, 21000);
-        for (var ms = 21000; ms < 40000; ms += 100) munihelle.Tick(ms);
-        C(munihelle.StepOrder == 7 && hostM.Calls.Contains("Relationship M_D_Starter_HQ001_Elvida_V01_01 NPC_Companion")
-          && hostM.Calls.Contains("Spawn N_D_Starter_HQ001_Elvida_01 0") && hostM.Calls.Contains("Follow N_D_Starter_HQ001_Elvida_01 True"),
-          "Elvida at 40%: a companion, the friendly Elvida spawns and follows into step 7");
-        // As the official footage: Elvida fights the Balaur (two Drakan waves; her kills count), then the watchstone turns
-        // attackable and they destroy it, then the talk to her ends the event.
-        for (var i = 0; i < 4; i++) munihelle.Killed(2590109, "M_D0_HQ_Drakan_01_Multi_1", true, i < 3, 41_000 + i);
-        C(munihelle.StepOrder == 8 && hostM.Calls.Contains("Spawn M_D0_HQ_Drakan_01_Multi_2 0"), "the first Drakan wave down: the second comes");
-        hostM.Calls.Clear();
-        for (var i = 0; i < 4; i++) munihelle.Killed(2590110, "M_D0_HQ_Drakan_01_Multi_2", true, i < 3, 42_000 + i);
-        for (var ms = 42_000; ms < 45_000; ms += 100) munihelle.Tick(ms);
-        C(munihelle.StepOrder == 9 && hostM.Calls.Contains("Relationship M_D_Starter_HQ001_DraTotemA_01 Monster_AntiCompanion")
-          && hostM.Calls.Contains("AggroNpc N_D_Starter_HQ001_Elvida_01 M_D_Starter_HQ001_DraTotemA_01"), "the second wave down: the watchstone turns attackable and Elvida attacks it");
-        munihelle.Killed(2590052, "M_D_Starter_HQ001_DraTotemA_01", true, false, 46_000);
-        for (var ms = 46_000; ms < 50_000; ms += 100) munihelle.Tick(ms);
-        C(munihelle.StepOrder == 10 && hostM.Calls.Contains("Follow N_D_Starter_HQ001_Elvida_01 False"), "the watchstone destroyed: Elvida stops following, the talk remains");
-        munihelle.Talked(2950867, "N_D_Starter_HQ001_Elvida_01", 0, false, 51_000);
-        for (var ms = 51_000; ms < 56_000; ms += 100) munihelle.Tick(ms);
-        C(munihelle.Finished && munihelle.Status == MapEventRun.Complete && hostM.Exit == "CurrentPosition"
-          && !hostM.Calls.Any(c => c.StartsWith("Unsupported")), "talking to her clears the event and leaves the layer where the player stands");
+        // The Asmodian HQ001 (HQ2101030 step 3, "Investigate Munihelle Forest with Maard"): the whole script. The second firewood is
+        // placed as E_D0_FireWood_001_2 while step 4 names the template E_D0_FireWood_002 (live 2026-11-06: five uses, no progress).
+        // Stage 2's steps go out as 1.. (the client's numbering).
+        var hostDk = new FakeHost();
+        var dark = tables.Event("World_D_Starter_HQ001_MapEvent")!;
+        hostDk.QuestSteps.Add((2101030, 3));
+        var darkRun = new MapEventRun(dark, 3, hostDk, 0);
+        C(darkRun.Holds(dark.Start, 0), "the Asmodian HQ001 starts with HQ2101030 at step 3");
+        darkRun.Start(0);
+        for (var i = 0; i < 4; i++) darkRun.Killed(i % 2 == 0 ? 2590123 : 2590122, "M_D_Starter_HQ001_SkurvWar_02", true, i < 3, 1000 + i);
+        C(darkRun.StepId == 2, "step 1: four kills");
+        darkRun.UsedObject("E_D0_FireWood_001_1", 2000);
+        for (var i = 0; i < 4; i++) darkRun.Killed(i % 2 == 0 ? 2590013 : 2590014, "M_D_Starter_HQ001_SkurvWar_01", true, i < 3, 3000 + i);
+        C(darkRun.StepId == 4, "the first firewood and four more kills: step 4");
+        darkRun.UsedObject("E_D0_FireWood_001_2", 4000);
+        C(darkRun.StepId == 5, "the second firewood (placed as FireWood_001_2) counts for E_D0_FireWood_002");
+        darkRun.PositionAt(n => n == "World_D_Starter_HQ001_TriggerActor_4", _ => false, 5000);
+        // "Stop Elvida": she must not die (live 2026-11-07 Maard killed her before the step counted): her HP stops at the open
+        // threshold, first 70 %, then 40 %; the friendly Elvida a later step talks to never dies (1 HP).
+        C(darkRun.HpFloor(2590120, "M_D_Starter_HQ001_Elvida_V01_01") == 70 && darkRun.HpFloor(2950867, "N_D_Starter_HQ001_Elvida_01") == 0,
+          "stop Elvida: her HP stops at 70 %; the friendly Elvida is kept alive for the talk");
+        darkRun.HpChanged(2590120, "M_D_Starter_HQ001_Elvida_V01_01", 60, 6000);
+        C(darkRun.HpFloor(2590120, "M_D_Starter_HQ001_Elvida_V01_01") == 40, "below 70 %: the next stop is 40 %");
+        darkRun.HpChanged(2590120, "M_D_Starter_HQ001_Elvida_V01_01", 30, 6100);
+        for (var t = 7000; t <= 40_000 && darkRun.StageOrder == 1; t += 500) darkRun.Tick(t);   // the step's scene (delays, camera)
+        C(darkRun.StageOrder == 2 && darkRun.StepId == 7 && darkRun.StepOrder == 1, "Elvida's fight ends stage 1; stage 2's first step goes out as step 1");
+        for (var round = 0; round < 2; round++)
+            for (var i = 0; i < 4; i++) darkRun.Killed(i % 2 == 0 ? 2590109 : 2590110, "M_D0_HQ_Drakan_01_Multi_" + (round + 1), true, i < 3, 41_000 + round * 10 + i);
+        darkRun.Killed(2590052, "M_D_Starter_HQ001_DraTotemA_01_01", true, false, 42_000);
+        for (var t = 42_000; t <= 50_000 && darkRun.StepId < 10; t += 500) darkRun.Tick(t);
+        C(darkRun.StepId == 10 && darkRun.StepOrder == 4, "the Drakan waves and the totem: the talk step (step 4 of stage 2)");
+        darkRun.Talked(2950867, "N_D_Starter_HQ001_Elvida_01", 0, false, 51_000);
+        for (var t = 51_000; t <= 56_000 && !hostDk.Cleared; t += 500) darkRun.Tick(t);
+        C(hostDk.Cleared, "talking to Elvida clears the event (the quest's ClearMapEvent)");
 
         // Client-side and untracked objectives time out instead of stalling (InstanceLayer_2 has a cutscene).
         var layer2 = tables.Event("World_L_Starter_InstanceLayer_2_MapEvent")!;
@@ -247,10 +230,10 @@ static class MapEventChecks
         var hostC = new FakeHost();
         var cave = new MapEventRun(tables.Event("Dungeon_L_0016_MapEvent")!, 16, hostC, 0);
         cave.Start(0);
-        for (var t = 1; t <= 14 && cave.StepOrder < 12; t++) cave.PositionAt(_ => true, _ => false, t * 1000);
-        C(cave.StepOrder == 12 && hostC.Calls.Contains("Teleport Dungeon_L_0016_Teleport_BossRoom") && !hostC.Calls.Contains("Spawn Dungeon_L_0016_Spawn_Boss_1 0"),
+        for (var t = 1; t <= 14 && cave.StepId < 12; t++) cave.PositionAt(_ => true, _ => false, t * 1000);
+        C(cave.StepId == 12 && hostC.Calls.Contains("Teleport Dungeon_L_0016_Teleport_BossRoom") && !hostC.Calls.Contains("Spawn Dungeon_L_0016_Spawn_Boss_1 0"),
           "the cave's triggers lead to the boss-room teleport; the step waits for its cutscene");
-        C(!cave.CutsceneDone("Cutscene_Other", 15_000) && cave.CutsceneDone("Cutscene_L_A_Seq_1290", 15_000) && cave.StepOrder == 13
+        C(!cave.CutsceneDone("Cutscene_Other", 15_000) && cave.CutsceneDone("Cutscene_L_A_Seq_1290", 15_000) && cave.StepId == 13
           && hostC.Calls.Contains("Spawn Dungeon_L_0016_Spawn_Boss_1 0") && hostC.Calls.Contains("Guide Tutorial_ForcedPopup_Groggy_01"),
           "the cutscene's end report finishes the step: the boss spawns and the groggy guide shows");
         var objDirectives = new MapEventDefinition(1, [], [], [new MapEventStage(1, "s", [new MapEventStep(1,
@@ -273,11 +256,11 @@ static class MapEventChecks
             r.Start(0);
             long t = 0;
             var reached = new HashSet<int>();
-            for (var guard = 0; guard < 200 && !r.Finished && r.StepOrder < 17; guard++)
+            for (var guard = 0; guard < 200 && !r.Finished && r.StepId < 17; guard++)
             {
                 t += 1000;
                 r.Tick(t);
-                reached.Add(r.StepOrder);
+                reached.Add(r.StepId);
                 foreach (var (_, o) in r.Open.ToList())
                 {
                     var name = o.Names.FirstOrDefault() ?? "";
@@ -290,7 +273,7 @@ static class MapEventChecks
                     }
                 }
             }
-            C(reached.IsSupersetOf([11, 12, 13, 14, 15, 16]) && r.StepOrder == 17
+            C(reached.IsSupersetOf([11, 12, 13, 14, 15, 16]) && r.StepId == 17
               && h.Calls.Contains("Spawn N_Common_DredgionB_01_001 0") && h.Calls.Contains("FocusCamera C_L0_Starter_HQ002_Camera_01 "),
               "HQ002 runs through the vessel (camera, spawn), both Drakan waves and Nania's talk to step 17");
         }
