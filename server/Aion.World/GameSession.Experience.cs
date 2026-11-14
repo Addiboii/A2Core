@@ -109,6 +109,9 @@ public sealed partial class GameSession
         }
         worldPlayer?.Map?.Broadcast(worldPlayer, [PlayerPackets.LevelBroadcast(playerKey, level)]);
         replies.AddRange(RefreshStats());
+        // Quests that waited for the level: PCLevel steps (HQ1103010 at 45) and Auto quests from their level (34, e.g.
+        // AQ1602000 at 5) move on now, not at the next quest event or relog. CANDIDATE: after the level-up messages.
+        if (questLog is not null) replies.AddRange(await Stored(() => QuestChangesAsync(questLog.Recheck(level), ct)));
         return replies;
     }
 }

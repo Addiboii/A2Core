@@ -2810,6 +2810,19 @@ async Task<GameSession> GladiatorOn(FakeStore store)
     }
     return session;
 }
+// A level-up re-checks the quests: AQ1602000 (Auto from level 5, while HQ1101021 is taken) starts on the level-up itself,
+// not at the next quest event or relog (kill and shared experience never re-checked; a quest reward did).
+var lvqStore = new FakeStore();
+var lvqSession = await GladiatorOn(lvqStore);
+lvqStore.Quests.Add(QuestLog.New("HQ1101021", QuestBook.Embedded.Find("HQ1101021")!) with { Uid = 50 });
+await lvqSession.HandleAsync(new PacketWriter().U16(0x361f).Varint((uint)lvqStore.States[0].WireId << 16).I32(0).Vec3(Vector3d.Zero).ToArray(), Now);
+await lvqSession.HandleAsync(new PacketWriter().U16(0x3622).I32(1).ToArray(), Now);
+var lvqBefore = lvqStore.Quests.Any(q => q.Code == "AQ1602000");
+lvqSession.ShareExperience(Enumerable.Range(1, 4).Sum(l => data.NeedExp(l)));
+var lvqReplies = await lvqSession.TickAsync(Now + 1000);
+Check(!lvqBefore && lvqSession.Level == 5 && lvqStore.Quests.Any(q => q.Code == "AQ1602000")
+      && lvqReplies.FindIndex(b => Op(b) == 0x8d11) > lvqReplies.FindIndex(b => Op(b) == 0x8d08),
+      "a level-up starts the Auto quest that waited for the level (AQ1602000 at 5), after the level-up messages");
 Console.WriteLine($"{await SpecializationChecks.RunAsync(GladiatorOn, Now)} specialisation checks passed (0x3900, equip, unequip, swap, child casts, relog).");
 Console.WriteLine($"{await ImprintChecks.RunAsync(GladiatorOn, Now)} manastone checks passed (0x562a as recorded, costs, refusals, worn item).");
 Console.WriteLine($"{await SealStoneChecks.RunAsync(GladiatorOn, Now)} seal stone checks passed (register, toggle refusal, shards per hit, entry).");
