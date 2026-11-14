@@ -6,7 +6,8 @@ Critical stats, and the class's per-level FixingDamage/Defense/HPMax (PcStatLeve
 How they combine is our choice until the client's formula is found:
 
     attack  = weapon damage roll (min..max) + FixingDamage(level)
-    raw     = flat (min..max) + attack * ratio / 10000        per Damage row
+    raw     = (flat (min..max) + attack * ratio / 10000) / divisor   per Damage row
+              (divisor: the row's value4 when above 1; OBSERVED for 2, CANDIDATE above; see GameData.cs DamageRow)
     crit    = chance Critical / 1000 (capped), damage x CRITICAL_MULTIPLIER
     damage  = raw * DEFENSE_SCALE / (DEFENSE_SCALE + target defense), at least 1
 """
@@ -82,13 +83,19 @@ def skill_hits(skill_id, class_name, level, weapon_item, target_defense=0, rng=r
     for row in definition.get('damage', []):
         values = row['pvp'] if pvp and row.get('pvp') else row
         attack = _roll((weapon['min'], weapon['max']), rng) + fixing
-        raw = _roll(values['flat'], rng) + attack * _roll(values['ratio'], rng) / 10000
+        raw = (_roll(values['flat'], rng) + attack * _roll(values['ratio'], rng) / 10000) / hit_divisor(row)
         critical = rng.random() < critical_chance
         if critical:
             raw *= CRITICAL_MULTIPLIER
         amount = max(1, round(raw * DEFENSE_SCALE / (DEFENSE_SCALE + max(0, target_defense))))
         hits.append({'amount': amount, 'critical': critical, 'effect_id': row['effect_id']})
     return hits
+
+
+def hit_divisor(row):
+    """A Damage row's value4 when it reads as a number above 1 (multi-hit skills split their damage), else 1."""
+    value = str(row.get('value4') or '')
+    return int(value) if value.isdigit() and int(value) > 1 else 1
 
 
 def apply_hits(target, hits):

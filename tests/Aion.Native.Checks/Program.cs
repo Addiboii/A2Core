@@ -2595,6 +2595,11 @@ Check(BitConverter.ToUInt16(wornFail[0], 2) == 0x0342
       $"a failed enchant of an equipped item is shown too: 0x5626 {{key, 42 03, level, level}} (12 recorded failures of other players); got {string.Join(' ', wornFail.Select(Convert.ToHexString))}");
 Check(GameSession.LevelAfterFailure(3, -1) == 3 && GameSession.LevelAfterFailure(3, 1) == 2 && GameSession.LevelAfterFailure(0, 1) == 0,
       "a failed roll loses FailPenalty levels and never gains one (Rune_PvE_Unique's -1 used to raise the item)");
+// Multi-hit skills split their damage by the row's value4 (Rending Blow 11010000: 2 rows, value4 2).
+var rending = data.Skill(11010000)!;
+Check(rending.Damage.Length == 2 && rending.Damage.All(r => r.HitDivisor == 2) && data.Skill(11020000)!.Damage.All(r => r.HitDivisor == 1)
+      && Combat.RowDamage(70, 1000, 7425, 2) == (70 + 742.5) / 2 && Combat.RowDamage(51, 1000, 4300, 1) == 51 + 430,
+      "a multi-hit row's damage is divided by its value4 (recorded Rending Blow / Smashing Blow hits: 0.49-0.50 of a single-row hit)");
 // Kibelisk: binding the Poeta Kibelisk (key 900000) stores it, sends the official order and 0x9233 once.
 var bind = await staffSession.HandleAsync(new PacketWriter().U16(0x3636).Varint(Kibelisks.FirstKey).I64(0).I32(1200081).ToArray(), Now);
 var firstKibelisk = Kibelisks.OnMap(staffSession.MapId!.Value)[0].ArtifactId;

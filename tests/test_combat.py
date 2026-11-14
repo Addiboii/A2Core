@@ -29,6 +29,13 @@ class DamageTests(unittest.TestCase):
         hits = combat.skill_hits(11020000, 'Gladiator', 1, GREATSWORD, rng=FixedRandom())
         self.assertEqual(hits, [{'amount': round(51 + 10 * 4300 / 10000), 'critical': False, 'effect_id': 1102000011}])
 
+    def test_multi_hit_rows_split_their_damage(self):
+        # Rending Blow: two rows of flat 70 + 74.25%, value4 2: each row deals half.
+        hits = combat.skill_hits(11010000, 'Gladiator', 1, GREATSWORD, rng=FixedRandom())
+        self.assertEqual([h['amount'] for h in hits], [round((70 + 10 * 7425 / 10000) / 2)] * 2)
+        self.assertEqual(combat.hit_divisor({'value4': '5'}), 5)
+        self.assertEqual(combat.hit_divisor({'value4': None}), 1)
+
     def test_level_raises_damage_through_fixing_damage(self):
         low = combat.skill_hits(11020000, 'Gladiator', 1, GREATSWORD, rng=FixedRandom())[0]['amount']
         high = combat.skill_hits(11020000, 'Gladiator', 100, GREATSWORD, rng=FixedRandom())[0]['amount']

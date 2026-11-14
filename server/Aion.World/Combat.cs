@@ -77,7 +77,7 @@ public sealed record Hit(int Amount, bool Critical, int EffectId);
 
 /// <summary>
 /// Skill damage. A data-driven CANDIDATE model, not recovered retail formulas (tools/combat.py):
-/// attack = weapon roll + FixingDamage(level); raw = flat + attack * ratio / 10000 per Damage row;
+/// attack = weapon roll + FixingDamage(level); raw = (flat + attack * ratio / 10000) / the row's HitDivisor per Damage row;
 /// crit chance Critical / 1000 (capped at 0.5) for x1.5; damage = raw * 1000 / (1000 + defense), at least 1.
 /// </summary>
 public static class Combat
@@ -112,7 +112,7 @@ public static class Combat
         {
             var (flat, ratio) = pvp && row.Pvp is { } p ? (p.Flat, p.Ratio) : (row.Flat, row.Ratio);
             var attack = rng.Next(Math.Min(weapon.Min, weapon.Max), Math.Max(weapon.Min, weapon.Max) + 1) + fixing;
-            double raw = Roll(flat, rng) + attack * Roll(ratio, rng) / 10000.0;
+            double raw = RowDamage(Roll(flat, rng), attack, Roll(ratio, rng), row.HitDivisor);
             var critical = rng.NextDouble() < criticalChance;
             if (critical) raw *= CriticalMultiplier;
             var amount = Math.Max(1, (int)Math.Round(raw * DefenseScale / (DefenseScale + Math.Max(0, targetDefense))));
@@ -120,6 +120,12 @@ public static class Combat
         }
         return hits;
     }
+
+    /// <summary>
+    /// One Damage row before critical and defense: (flat + attack * ratio / 10000) / divisor (DamageRow.HitDivisor). Dividing the
+    /// flat part too is CANDIDATE (the recorded ratios fit with or without it).
+    /// </summary>
+    public static double RowDamage(int flat, int attack, int ratio, int divisor) => (flat + attack * ratio / 10000.0) / Math.Max(1, divisor);
 
     public const int HpBaseUnit = 133;
 

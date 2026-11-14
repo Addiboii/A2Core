@@ -31,7 +31,18 @@ public sealed record DamageRow(
     [property: JsonPropertyName("pvp")] DamageValues? Pvp,
     [property: JsonPropertyName("effect_id")] int EffectId,
     // Skill.dat SkillEffectTimeDataList ProjectileId of this row's time row (0: none): the 0x3803 projectile (A2Core PR #4).
-    [property: JsonPropertyName("projectile")] int Projectile = 0);
+    [property: JsonPropertyName("projectile")] int Projectile = 0,
+    // Skill.dat Damage EffectValueList[4] (tools/class_skills.py "value4", build 26262663), kept as the table's text.
+    [property: JsonPropertyName("value4")] string? Value4 = null)
+{
+    /// <summary>
+    /// What this row's damage is divided by: EffectValueList[4] when it reads as a number above 1, else 1.
+    /// OBSERVED for 2 (2.0.6 recordings 20261013-144836 and 20261019-231752, own hits on the same NPC: Rending Blow and
+    /// Smashing Blow, 2 rows each, hit 0.49-0.50 of the single-row skills per unit of ratio). CANDIDATE for 3-5 (Mocking Blade,
+    /// 3: 0.37-0.47; Leaping Slam, 2: 0.38; no Sorcerer hits recorded for 5).
+    /// </summary>
+    public int HitDivisor => int.TryParse(Value4, out var n) && n > 1 ? n : 1;
+}
 
 public sealed record DamageValues(
     [property: JsonPropertyName("flat")] int?[] Flat,
