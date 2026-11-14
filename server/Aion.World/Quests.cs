@@ -253,6 +253,10 @@ public sealed class QuestLog(QuestBook book, int race)
         Progress(o => o.Type == "EngraveTeleportArtifact" && o.Target == artifact, level: level);
 
     /// <summary>Collect objectives follow the item count held (set, not added).</summary>
+    /// <summary>The items named by CollectItem objectives of the active quests' current steps.</summary>
+    public IEnumerable<int> CollectedItemIds() => quests.Values.Where(q => q.Status == Incomplete)
+        .SelectMany(r => CurrentStep(r)?.Objectives ?? []).Where(o => o.Type == "CollectItem" && o.Item is > 0).Select(o => o.Item!.Value).Distinct();
+
     public List<QuestRecord> Holding(int itemId, long count, int level)
     {
         var changed = new List<QuestRecord>();

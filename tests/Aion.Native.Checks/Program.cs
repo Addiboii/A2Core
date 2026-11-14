@@ -2823,6 +2823,16 @@ var lvqReplies = await lvqSession.TickAsync(Now + 1000);
 Check(!lvqBefore && lvqSession.Level == 5 && lvqStore.Quests.Any(q => q.Code == "AQ1602000")
       && lvqReplies.FindIndex(b => Op(b) == 0x8d11) > lvqReplies.FindIndex(b => Op(b) == 0x8d08),
       "a level-up starts the Auto quest that waited for the level (AQ1602000 at 5), after the level-up messages");
+// CollectItem counts the bag: HQ1102125 step 3 wants Empyrean Trace 631900001; getting one moves it to step 4.
+var collectQuest = QuestLog.New("HQ1102125", QuestBook.Embedded.Find("HQ1102125")!) with { Step = 3, Uid = 51 };
+lvqStore.Quests.Add(collectQuest);
+await lvqSession.HandleAsync(new PacketWriter().U16(0x361f).Varint((uint)lvqStore.States[0].WireId << 16).I32(0).Vec3(Vector3d.Zero).ToArray(), Now + 2000);
+await lvqSession.HandleAsync(new PacketWriter().U16(0x3622).I32(1).ToArray(), Now + 2000);
+var collectBefore = lvqStore.Quests.Single(q => q.Code == "HQ1102125").Step;
+lvqStore.Items.Add(Stored(631900001, 1, "bag", null, 70));
+var collected = await lvqSession.InventoryChangesAsync(default);
+Check(collectBefore == 3 && lvqStore.Quests.Single(q => q.Code == "HQ1102125").Step == 4 && collected.Any(b => Op(b) == 0x8d10),
+      "a CollectItem goal counts the bag: the Empyrean Trace in the bag moves HQ1102125 from step 3 to 4 (0x8d10)");
 Console.WriteLine($"{await SpecializationChecks.RunAsync(GladiatorOn, Now)} specialisation checks passed (0x3900, equip, unequip, swap, child casts, relog).");
 Console.WriteLine($"{await ImprintChecks.RunAsync(GladiatorOn, Now)} manastone checks passed (0x562a as recorded, costs, refusals, worn item).");
 Console.WriteLine($"{await SealStoneChecks.RunAsync(GladiatorOn, Now)} seal stone checks passed (register, toggle refusal, shards per hit, entry).");

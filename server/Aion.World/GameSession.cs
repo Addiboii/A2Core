@@ -630,6 +630,25 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
     IEnumerable<byte> QuestUnlockTypes() =>
         (questLog?.UnlockedContents() ?? []).Select(name => BuilderCommands.UnlockTypes.ToList().IndexOf(name)).Where(i => i > 0).Select(i => (byte)i);
 
+    /// <summary>
+    /// CollectItem objectives count what the bag holds (16 objectives; QuestLog.Holding was never called, so they stayed at 0).
+    /// In rounds, as a step done can open another collect step. CANDIDATE: bag stacks only, not the warehouse. Run after item
+    /// changes and wherever the quests move on (AutoAcquireAsync).
+    /// </summary>
+    List<QuestRecord> HeldItemProgress()
+    {
+        if (questLog is null) return [];
+        var changed = new Dictionary<string, QuestRecord>();
+        for (var round = 0; round < 4; round++)
+        {
+            var moved = questLog.CollectedItemIds().ToList()
+                .SelectMany(item => questLog.Holding(item, inventory.Values.Where(i => i.ItemId == item && i.Container == InventoryItem.Bag).Sum(i => i.Count), level)).ToList();
+            if (moved.Count == 0) break;
+            foreach (var record in moved) changed[record.Code] = record;
+        }
+        return [.. changed.Values];
+    }
+
     /// <summary>Saves and reports changed quests (0x8d10); quests that complete by themselves pay at once.</summary>
     async Task<List<byte[]>> QuestChangesAsync(IEnumerable<QuestRecord> changed, CancellationToken ct)
     {
@@ -668,6 +687,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             foreach (var code in codes)
                 replies.Add(GamePackets.QuestAdd(Wire(await SaveQuestAsync(QuestLog.New(code, questLog.Book.Find(code)!), ct))));
         }
+        if (HeldItemProgress() is { Count: > 0 } held) replies.AddRange(await QuestChangesAsync(held, ct));
         if (RunsMapEvents && !reloading && mapEventsMap == worldMap) replies.AddRange(StartEligibleEvents(lastNow));
         return replies;
     }
@@ -1569,7 +1589,8 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             changes.Add(new ItemModification(2, gone, Decrease: decrease));
         Remember(items);
         var wallet = TakeWalletChanges();
-        return changes.Count == 0 ? [.. acquired, .. wallet] : [GamePackets.ItemModificationList(changes), .. acquired, .. wallet];
+        var held = HeldItemProgress() is { Count: > 0 } collected ? await QuestChangesAsync(collected, ct) : [];
+        return changes.Count == 0 ? [.. acquired, .. wallet, .. held] : [GamePackets.ItemModificationList(changes), .. acquired, .. wallet, .. held];
     }
 
     List<byte[]> UnlockUpdateOnce()
