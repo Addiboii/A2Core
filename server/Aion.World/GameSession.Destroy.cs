@@ -34,7 +34,7 @@ public sealed partial class GameSession
         var objects = WorldObjects.ObjectsOn(worldMap);
         var definition = data.Skill(skill);
         IEnumerable<int> chosen = request.TargetKey - WorldObjects.FirstKey is var direct && direct >= 0 && direct < objects.Count ? [direct]
-            : request.TargetKey == playerKey ? shownObjects.Where(i => i < objects.Count && objects[i].At.DistanceSquared(request.Location) <= AreaRange * AreaRange).Order()
+            : request.TargetKey == playerKey ? shownObjects.Where(i => i < objects.Count && objects[i].At.DistanceSquared(AreaCentre(definition, KnownPosition, request.Location)) <= AreaRange * AreaRange).Order()
             : [];
         var replies = new List<byte[]>();
         foreach (var index in chosen.ToList())

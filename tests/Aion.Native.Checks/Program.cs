@@ -2769,6 +2769,17 @@ Check(!wrongDismiss.Any(b => Op(b) == 0xe23a) && waterDismiss.Any(b => b.Sequenc
       && (await spiritMaster.TickAsync(Now + 7000 + GameSession.SpiritLeaveMs)).Any(b => b.SequenceEqual(GamePackets.Death(waterKey, 7)))
       && !spiritMaster.Targets.ContainsKey(waterKey) && !spiritMaster.Targets.ContainsKey(fireKey),
       "Dismiss: Fire Spirit leaves the Water spirit; Dismiss: Water Spirit sends it away (0xe23a, 0x3642 flag 7 later)");
+// A self-centred area cast (target = own key) is centred on the client's location only within the skill's reach of the server's
+// position: a location sent next to a far monster hits nothing there.
+var areaFar = spiritMaster.Targets.Values.Where(t => t.Hostile && !t.Dead && t.Spirit is null)
+    .First(t => t.Position.Distance2d(spiritMaster.KnownPosition!.Value) > (data.Skill(16010000)!.UseRange + GameSession.CastRangeTolerance) * 2 + GameSession.AreaRange);
+var areaCast = await spiritMaster.HandleAsync(Cast(16010000, spiritMaster.PlayerKey, areaFar.Position), Now + 120_000);
+Check(areaCast.Any(b => Op(b) == 0x3802) && !areaCast.Any(b => Op(b) == 0x3804 && b.AsSpan(2).StartsWith(NativeVarint.Encode((uint)areaFar.Key))),
+      "a self-centred cast sent at a far monster's spot does not hit it (the centre stays within the skill's reach)");
+Check(GameSession.AreaCentre(data.Skill(16010000), new Vector3d(0, 0, 0), new Vector3d(100, 0, 0)) == new Vector3d(100, 0, 0)
+      && GameSession.AreaCentre(data.Skill(16010000), new Vector3d(0, 0, 0), new Vector3d(100_000, 0, 0)) == new Vector3d(0, 0, 0)
+      && GameSession.AreaCentre(data.Skill(16010000), null, new Vector3d(5, 0, 0)) == new Vector3d(5, 0, 0),
+      "AreaCentre: the client's location when within reach, else the server's position");
 // A session logged in on the store; a Gladiator created when the store has none yet (not selected: the checks enter it).
 async Task<GameSession> GladiatorOn(FakeStore store)
 {

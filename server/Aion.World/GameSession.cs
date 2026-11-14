@@ -229,6 +229,8 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
     public int Checkpoints { get; private set; }
     public IReadOnlyDictionary<int, Target> Targets => targets ?? [];
     public Vector3d? Position => position;
+    /// <summary>Where the server places the character: the last accepted position, else its spawn point (before any move).</summary>
+    public Vector3d? KnownPosition => position ?? spawn?.Position;
     public int Level => level;
     public string? ClassName => className;
     public int? EquippedWeapon => equippedWeapon;
@@ -2117,6 +2119,12 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         return WithinCastRange(definition, caster, at, radius);
     }
 
+    /// <summary>The centre of a self-centred area cast: the client's location while it lies within the skill's UseRange plus
+    /// <see cref="CastRangeTolerance"/> of the server's position (horizontally), else the server's position. OURS: the client's
+    /// location is never trusted further than the skill reaches (a sent location next to a far monster used to hit it).</summary>
+    public static Vector3d AreaCentre(SkillDefinition? definition, Vector3d? server, Vector3d claimed) =>
+        server is { } at && at.Distance2d(claimed) > Math.Max(0, definition?.UseRange ?? 0) + CastRangeTolerance ? at : claimed;
+
     /// <summary>The geometry of <see cref="InCastRange"/>: horizontal distance to the target's edge within UseRange, height difference
     /// within UseHeightRange (when set), each plus <see cref="CastRangeTolerance"/>.</summary>
     public static bool WithinCastRange(SkillDefinition definition, Vector3d caster, Vector3d target, double targetRadius = 0)
@@ -2297,7 +2305,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         if (data.Skill(skill)?.Damage is { Length: > 0 }) replies.AddRange(ObjectHits(skill, request, actionUid));   // GameSession.Destroy.cs
         if (targets is null || targets.Count == 0 || data.Skill(skill)?.Damage is not { Length: > 0 }) return replies;
         IEnumerable<Target> chosen = targets.TryGetValue(request.TargetKey, out var direct) ? [direct]
-            : request.TargetKey == playerKey ? targets.Values.Where(t => t.Position.DistanceSquared(request.Location) <= AreaRange * AreaRange)
+            : request.TargetKey == playerKey ? targets.Values.Where(t => t.Position.DistanceSquared(AreaCentre(data.Skill(skill), KnownPosition, request.Location)) <= AreaRange * AreaRange)
             : [];
         foreach (var target in chosen.Where(t => t.Hostile).ToList())
         {
