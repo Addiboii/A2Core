@@ -2201,7 +2201,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         var normalDodge = dodging && started == combatDodge + 1 && learned.Contains(combatDodge);
         var definition = normalDodge ? data.Skill(combatDodge) is { } dodge ? dodge with { Cost = dodge.Cost with { Sp = NormalDodgeSp } } : null
             : data.Skill(skill);
-        var cooldownKey = normalDodge ? combatDodge : SpecializedCooldownKey(skill);
+        var cooldownKey = normalDodge ? combatDodge : CooldownKey(skill);
         var cost = definition?.Cost ?? new SkillCost(0, 0, 0);
         if (BuffStat("MPUseDecrease") is > 0 and var cheaper) cost = cost with { Mp = cost.Mp * Math.Max(0, 10_000 - cheaper) / 10_000 };
         var weapons = (definition?.Weapons ?? []).Where(w => w != "None").ToList();

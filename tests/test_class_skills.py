@@ -63,6 +63,13 @@ class ClassSkillTests(unittest.TestCase):
                                                         'steps': [[500, 14010001], [1000, 14010002], [1500, 14010003]]})
         self.assertTrue(all(str(s) in data['skills'] for _, s in data['charges']['14010000']['steps']))
 
+    def test_charge_steps_share_the_base_cooldown_group(self):
+        # Skill.dat GroupCoolTimeId: Dead Shot's steps name 14010000; a skill in its own group carries no field.
+        skills = class_skills.data()['skills']
+        self.assertEqual({skills[str(s)].get('cooldown_group') for s in (14010001, 14010002, 14010003)}, {14010000})
+        self.assertNotIn('cooldown_group', skills['14010000'])
+        self.assertEqual(class_skills.cooldown_group({'id': 5, 'raw': {'GroupCoolTimeId': 5}}), {})
+
     def test_levels_clamp_to_recovered_cap(self):
         self.assertEqual((class_skills.clamp_level(0), class_skills.clamp_level(500)), (1, class_skills.data()['max_level']))
 

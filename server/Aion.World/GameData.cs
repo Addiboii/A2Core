@@ -77,7 +77,10 @@ public sealed record SkillDefinition(
     // A Spiritmaster summon (SkillEffect Spawn row ElementalSummon) and the elements a Dismiss/Return skill sends away
     // (Despawn row), tools/class_skills.py; GameSession.Spirits.cs.
     [property: JsonPropertyName("summon")] SpiritSummon? Summon = null,
-    [property: JsonPropertyName("despawn")] int[]? Despawn = null);
+    [property: JsonPropertyName("despawn")] int[]? Despawn = null,
+    // Skill.dat GroupCoolTimeId when it is not the skill's own id (tools/class_skills.py, build 26262663): the cooldown this
+    // skill starts and waits for (charge levels and specialised variants name their base skill). 0: its own.
+    [property: JsonPropertyName("cooldown_group")] int CooldownGroup = 0);
 
 /// <summary>A summon skill's Spawn row: the spirit's level-1 NpcData id, its EElementalSummonGroupType, the abnormal it appears with
 /// (the Lv1 tier), the angle off the caster's look direction.</summary>

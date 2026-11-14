@@ -59,6 +59,9 @@ static class ChargeChecks
               "the release casts the reached step's skill (0x3802 14010002), 0x381e right after it, no 0x3801, MP paid at the release");
         Check((await session.HandleAsync(Start(DeadShot, target.Key, target.Position), now + 1200)).Single().SequenceEqual(GameSession.ChargeStartRs(0x1811, DeadShot)),
               "Dead Shot is on its cooldown after the release: 0x381b kSkill_CoolTime");
+        Check(data.Skill(14010002) is { CooldownGroup: DeadShot } && data.Skill(DeadShot) is { CooldownGroup: 0, CooldownMs: 20_000 }
+              && (await session.HandleAsync(Start(DeadShot, target.Key, target.Position), now + 21_000)).Single().SequenceEqual(GameSession.ChargeStartRs(0x1811, DeadShot)),
+              "the steps share Dead Shot's GroupCoolTimeId: the release's 20 s runs on the base skill's cooldown");
         await session.HandleAsync(Start(DeadShot, target.Key, target.Position), now + 30_000);
         var full = await session.HandleAsync(End(3, 14010003), now + 31_400);
         Check(full.Any(b => b.SequenceEqual(GameSession.ChargeEndRs(0, DeadShot, 3, 14010003))), "a full hold (1.4 s) releases step 3, 14010003");

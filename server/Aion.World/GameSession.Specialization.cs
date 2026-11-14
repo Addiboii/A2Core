@@ -107,6 +107,12 @@ public sealed partial class GameSession
     }
 
     /// <summary>The skill whose cooldown a child shares: its parent (CANDIDATE), else the skill itself.</summary>
+    /// <summary>
+    /// The cooldown a cast starts and waits for: Skill.dat GroupCoolTimeId (all 2,700 specialised children name their parent's
+    /// group there), else the specialisation parent, else the skill itself.
+    /// </summary>
+    int CooldownKey(int skill) => data.Skill(skill)?.CooldownGroup is > 0 and var group ? group : SpecializedCooldownKey(skill);
+
     int SpecializedCooldownKey(int skill) => Specialized.ParentOf(skill) is { } parent && Specialized.HasParts(parent) ? parent : skill;
 
     /// <summary>0x3900 at world entry: the learned mastery skills that have parts (three slots), then the slotted stigmas (five).</summary>

@@ -104,7 +104,7 @@ public sealed partial class GameSession
         var weapons = definition.Weapons.Where(w => w != "None").ToList();
         if (weapons.Count > 0 && !weapons.Contains(data.WeaponType(equippedWeapon) ?? "")) return [ChargeStartRs(SkillNoWeapon, skill)];
         if (resources.Mp < definition.Cost.Mp) return [ChargeStartRs(SkillNoMp, skill)];
-        if (!noCool && now < cooldowns.GetValueOrDefault(skill)) return [ChargeStartRs(SkillCoolTime, skill)];
+        if (!noCool && now < cooldowns.GetValueOrDefault(CooldownKey(skill))) return [ChargeStartRs(SkillCoolTime, skill)];
         if (!InCastRange(definition, request.TargetKey)) return [ChargeStartRs(SkillTooFar, skill)];
         const float rate = 1f;
         charging = new Charging(skill, charge, request, now, rate);
@@ -128,8 +128,10 @@ public sealed partial class GameSession
         finally { chargeRelease = 0; }
         var started = cast.FindIndex(b => Opcode(b) == 0x3802);
         if (started < 0) return [ChargeEndRs(SkillFailed, held.Skill, step, selected)];
-        // The base skill's cooldown is the one the client shows and the next charge checks (CANDIDATE: the steps share it).
-        cooldowns[held.Skill] = cooldowns.GetValueOrDefault(selected);
+        // The base skill's cooldown is the one the client shows and the next charge checks: the steps name the base skill's
+        // GroupCoolTimeId (Skill.dat), so they share one key; a step without one hands its cooldown on (CANDIDATE).
+        var baseKey = CooldownKey(held.Skill);
+        cooldowns[baseKey] = Math.Max(cooldowns.GetValueOrDefault(baseKey), cooldowns.GetValueOrDefault(CooldownKey(selected)));
         cast.RemoveAll(b => Opcode(b) == 0x3801);
         cast.Insert(started + 1, ChargeEndRs(0, held.Skill, step, selected));
         return cast;

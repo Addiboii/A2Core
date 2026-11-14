@@ -133,6 +133,13 @@ def despawn_fields(entry):
     return {}
 
 
+def cooldown_group(entry):
+    """Skill.dat GroupCoolTimeId when it names another skill's group (a charge level or specialised variant shares its base
+    skill's cooldown); left out when it is the skill's own id or 0."""
+    group = int(_value((entry.get('raw') or {}).get('GroupCoolTimeId')) or 0)
+    return {'cooldown_group': group} if group and str(group) != str(entry.get('id')) else {}
+
+
 def cast_row(entry):
     facts = entry.get('facts', {})
     return {
@@ -142,6 +149,7 @@ def cast_row(entry):
         'target': _short(facts.get('TargetProcessType', '')),
         'weapons': [_short(w) for w in facts.get('NeedMainWeaponTypes', [])],
         'cooldown_ms': int(facts.get('NeedCoolTime') or 0),
+        **cooldown_group(entry),
         'casting_ms': int(facts.get('CastingTime') or 0),
         'cost': {k: int(facts.get('NeedCost' + k.title()) or 0) for k in ('mp', 'hp', 'sp')},
         'damage': damage_rows(entry),
