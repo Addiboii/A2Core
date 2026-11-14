@@ -29,7 +29,9 @@ public sealed record QuestStep(
 public sealed record QuestRewards(
     [property: JsonPropertyName("exp")] long Exp = 0,
     [property: JsonPropertyName("kina")] long Kina = 0,
-    [property: JsonPropertyName("items")] long[][]? Items = null);
+    [property: JsonPropertyName("items")] long[][]? Items = null,
+    // QuestClassReward.dat: the item each class gets on top (14 Hero quests, e.g. HQ1102010: Gladiator 110150028).
+    [property: JsonPropertyName("class_items")] Dictionary<string, long[][]>? ClassItems = null);
 
 public sealed record QuestDefinition(
     [property: JsonPropertyName("id")] int Id,

@@ -2833,6 +2833,14 @@ lvqStore.Items.Add(Stored(631900001, 1, "bag", null, 70));
 var collected = await lvqSession.InventoryChangesAsync(default);
 Check(collectBefore == 3 && lvqStore.Quests.Single(q => q.Code == "HQ1102125").Step == 4 && collected.Any(b => Op(b) == 0x8d10),
       "a CollectItem goal counts the bag: the Empyrean Trace in the bag moves HQ1102125 from step 3 to 4 (0x8d10)");
+// QuestClassReward: HQ1102010 also pays the class's item (Gladiator 110150028), besides its common rewards.
+lvqStore.Quests.Add(QuestLog.New("HQ1102010", QuestBook.Embedded.Find("HQ1102010")!) with { Status = QuestLog.Complete, Uid = 52 });
+await lvqSession.HandleAsync(new PacketWriter().U16(0x361f).Varint((uint)lvqStore.States[0].WireId << 16).I32(0).Vec3(Vector3d.Zero).ToArray(), Now + 3000);
+await lvqSession.HandleAsync(new PacketWriter().U16(0x3622).I32(1).ToArray(), Now + 3000);
+var classPaid = await lvqSession.HandleAsync(new PacketWriter().U16(0x8d0e).I32(52).I32(0).ToArray(), Now + 3000);
+Check(classPaid.Any(b => b.SequenceEqual(GamePackets.QuestTakeRewardReply(52))) && lvqStore.RewardItems.Contains((110150028, 1))
+      && !lvqStore.RewardItems.Contains((110250028, 1)),
+      "QuestClassReward: a Gladiator's HQ1102010 reward includes 110150028 (not the Templar's 110250028)");
 Console.WriteLine($"{await SpecializationChecks.RunAsync(GladiatorOn, Now)} specialisation checks passed (0x3900, equip, unequip, swap, child casts, relog).");
 Console.WriteLine($"{await ImprintChecks.RunAsync(GladiatorOn, Now)} manastone checks passed (0x562a as recorded, costs, refusals, worn item).");
 Console.WriteLine($"{await SealStoneChecks.RunAsync(GladiatorOn, Now)} seal stone checks passed (register, toggle refusal, shards per hit, entry).");
@@ -3708,12 +3716,14 @@ sealed partial class FakeStore : INativeCharacterStore
         return Task.FromResult(saved);
     }
     public Task<bool> RemoveQuestAsync(Guid character, string code, CancellationToken ct) => Task.FromResult(Quests.RemoveAll(q => q.Code == code) > 0);
+    public List<(int TemplateId, long Count)> RewardItems { get; } = [];
     public Task<long?> RewardQuestAsync(Guid character, string code, long experience, IReadOnlyList<(int TemplateId, long Count)> items, CancellationToken ct)
     {
         var index = Quests.FindIndex(q => q.Code == code && q.Status == 3);
         if (index < 0) return Task.FromResult<long?>(null);
         Quests[index] = Quests[index] with { Status = 4 };
         Rewards.Add((code, experience, items.Count));
+        RewardItems.AddRange(items);
         return Task.FromResult<long?>(Rewards.Sum(r => r.Exp));
     }
     // Friends (in memory): relations by character, as the store reports them.

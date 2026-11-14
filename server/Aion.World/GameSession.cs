@@ -1162,7 +1162,9 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             // The host's base rates (Aion:Rates, OURS) scale the quest's experience and Kina (the table values at 1).
             var rates = options.World?.Rates ?? new WorldRates();
             rewards = rewards with { Exp = WorldRates.Scale(rewards.Exp, rates.Experience), Kina = WorldRates.Scale(rewards.Kina, rates.Kinah) };
-            var items = (rewards.Items ?? []).Where(i => i.Length == 2).Select(i => ((int)i[0], i[1])).ToList();
+            // The class's own items follow the common ones (CANDIDATE order; QuestClassReward, keyed by our class names).
+            var classItems = className is { } cls && rewards.ClassItems?.GetValueOrDefault(cls) is { } own ? own : [];
+            var items = (rewards.Items ?? []).Concat(classItems).Where(i => i.Length == 2).Select(i => ((int)i[0], i[1])).ToList();
             if (rewards.Kina > 0) items.Insert(0, (KinaItemId, rewards.Kina));
             var replies = new List<byte[]>();
             if (Store is { } store && CharacterId is { } character)
