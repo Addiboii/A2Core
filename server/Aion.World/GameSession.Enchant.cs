@@ -52,7 +52,11 @@ public sealed class EnchantTables
 // 0x561c of the equipped item). The request is read as _equip_uid i64 then the client's cost list, which is not trusted:
 // the costs come from Enchant.dat (Kina and CoinEnchant 930100023 for weapons and armour). The level is upgrades.enchant.
 // Chance: SuccessProb + the failure correction built up (upgrades.enchant_bonus), out of 10000; a failure adds
-// FailCorrectionProb and loses FailPenalty levels (Rune accessories), materials are spent either way.
+// FailCorrectionProb and loses FailPenalty levels, materials are spent either way. A failure on an equipped item is shown to
+// those nearby too: 0x5626 {key, 42 03, level, level} (OBSERVED: 12 failed enchants of other players, community recordings
+// 2026-11-04..06, the level kept). FailPenalty -1 (only Rune_PvE_Unique +1..+9 on build 26262663) is not settled: the
+// community fork reads it as the item destroyed (result 836), none of our recordings shows a rune failure. It keeps the
+// level here (CANDIDATE); it used to raise it (level - -1).
 public sealed partial class GameSession
 {
     public const ushort ItemEnchantRq = 0x5622, ItemEnchantRs = 0x5623, ItemEnchantNt = 0x5626;
@@ -68,6 +72,9 @@ public sealed partial class GameSession
 
     /// <summary>The roll for an attempt: 0..9999 (replaceable in checks).</summary>
     public Func<int> EnchantRoll { get; set; } = () => Random.Shared.Next(10_000);
+
+    /// <summary>The level after a failed roll: FailPenalty levels lost when positive, never raised (see the header).</summary>
+    public static int LevelAfterFailure(int level, int failPenalty) => Math.Max(0, level - Math.Max(0, failPenalty));
 
     async Task<List<byte[]>> EnchantAsync(byte[] plain, CancellationToken ct)
     {
@@ -100,24 +107,24 @@ public sealed partial class GameSession
         if (!Take(KinaItemId, step.Kina) || step.Costs.Any(c => !Take(c.ItemId, c.Count))) return [Reply(3, level, row.TemplateId)];
         var bonus = EnchantOf(row, "enchant_bonus");
         var success = EnchantRoll() < step.Success + bonus;
-        var after = success ? level + 1 : Math.Max(0, level - step.FailPenalty);
+        var after = success ? level + 1 : LevelAfterFailure(level, step.FailPenalty);
         var nextBonus = success ? 0 : bonus + step.FailCorrection;
         var done = await Stored(async () => await store.EnchantItemAsync(character, row.InstanceId, row.Revision, costs, after, nextBonus, ct) ? [[]] : []);
         if (done.Count == 0) return [Reply(1, level, row.TemplateId)];
         var replies = new List<byte[]> { Reply(success ? 0 : after < level ? 5 : 4, after, row.TemplateId) };
         replies.AddRange(await InventoryChangesAsync(ct, 0, success ? DecreaseItemEnchant : DecreaseItemEnchantFail, UpdateEnchant));
         if (success) replies.AddRange(AchieveEnchant(after));
-        if (row.Location == "equipment" && after != level)
+        if (row.Location == "equipment")
         {
-            replies.AddRange(RefreshStats());
+            if (after != level) replies.AddRange(RefreshStats());
             if (inventory.TryGetValue(key, out var worn) && VisualSlot.TryGetValue(worn.Slot, out var visual))
             {
                 EquipBroad Broad(int enchant) => new(row.TemplateId, (byte)enchant, (byte)visual, Godstones: [0, 0, 0]);
-                var notices = new List<byte[]>
-                {
-                    PlayerPackets.ItemEquipChange(playerKey, EquipItemLevel(), [((byte)visual, Broad(level), Broad(after))]),
-                    PacketWriter.Opcode(ItemEnchantNt).Varint(playerKey).U8(0x3c).U8(0x03).U8(level).U8(after).ToArray(),
-                };
+                var notices = new List<byte[]>();
+                if (after != level) notices.Add(PlayerPackets.ItemEquipChange(playerKey, EquipItemLevel(), [((byte)visual, Broad(level), Broad(after))]));
+                // Result: 0x033c success, 0x0342 failed with the level kept (both OBSERVED), 0x0343 a level lost (CANDIDATE).
+                var shown = (ushort)(success ? 0x033c : after < level ? 0x0343 : 0x0342);
+                notices.Add(PacketWriter.Opcode(ItemEnchantNt).Varint(playerKey).U16(shown).U8(level).U8(after).ToArray());
                 worldPlayer?.Map?.Broadcast(worldPlayer, notices);
                 replies.AddRange(notices);
             }

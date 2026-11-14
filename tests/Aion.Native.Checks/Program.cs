@@ -2577,6 +2577,24 @@ await staffSession.InventoryChangesAsync(default);
 var wornEnchant = await staffSession.HandleAsync(new PacketWriter().U16(0x5622).I64(wornWeapon.WireId).Varint(0).ToArray(), Now);
 Check(BitConverter.ToUInt16(wornEnchant[0], 2) == 0x033c && wornEnchant.Any(b => b[0] == 0x26 && b[1] == 0x56) && wornEnchant.Any(b => b[0] == 0x1c && b[1] == 0x56),
       $"the equipped weapon ({wornWeapon.TemplateId}) enchants and is shown (0x561c, 0x5626)");
+// A failure needs a step below 100 %: the worn weapon is a greatsword at +10 (Enchant_Unique_36: 6500) for this check only.
+var enchantRoll = staffSession.EnchantRoll;
+var wornAt = staffStore.Items.IndexOf(staffStore.Items.First(i => i.InstanceId == wornWeapon.InstanceId));
+var wornNow = staffStore.Items[wornAt];
+staffStore.Items[wornAt] = wornNow with { TemplateId = 110130002, Upgrades = JsonSerializer.SerializeToElement(new { enchant = 10 }) };
+staffStore.Items.AddRange([Stored(930100023, 4000, "bag", null, 63), Stored(930100001, 200_000, "bag", null, 64)]);
+await staffSession.InventoryChangesAsync(default);
+staffSession.EnchantRoll = () => 9999;
+var wornFail = await staffSession.HandleAsync(new PacketWriter().U16(0x5622).I64(wornWeapon.WireId).Varint(0).ToArray(), Now);
+staffSession.EnchantRoll = enchantRoll;
+staffStore.Items[wornAt] = staffStore.Items[wornAt] with { TemplateId = wornNow.TemplateId, Upgrades = wornNow.Upgrades };
+await staffSession.InventoryChangesAsync(default);
+var failedAt = wornFail.Count > 0 ? wornFail[0][12] : -1;
+Check(BitConverter.ToUInt16(wornFail[0], 2) == 0x0342
+      && failedAt == 10 && wornFail.Any(b => b.SequenceEqual(new PacketWriter().U16(0x5626).Varint((uint)staffSession.PlayerKey).U16(0x0342).U8(10).U8(10).ToArray())),
+      $"a failed enchant of an equipped item is shown too: 0x5626 {{key, 42 03, level, level}} (12 recorded failures of other players); got {string.Join(' ', wornFail.Select(Convert.ToHexString))}");
+Check(GameSession.LevelAfterFailure(3, -1) == 3 && GameSession.LevelAfterFailure(3, 1) == 2 && GameSession.LevelAfterFailure(0, 1) == 0,
+      "a failed roll loses FailPenalty levels and never gains one (Rune_PvE_Unique's -1 used to raise the item)");
 // Kibelisk: binding the Poeta Kibelisk (key 900000) stores it, sends the official order and 0x9233 once.
 var bind = await staffSession.HandleAsync(new PacketWriter().U16(0x3636).Varint(Kibelisks.FirstKey).I64(0).I32(1200081).ToArray(), Now);
 var firstKibelisk = Kibelisks.OnMap(staffSession.MapId!.Value)[0].ArtifactId;
