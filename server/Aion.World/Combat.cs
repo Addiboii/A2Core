@@ -19,6 +19,10 @@ public sealed class Target
     public int Relationship { get; set; } = 6;   // ERelationshipEntity (6 Monster); map events change it
     /// <summary>Held by a scripted abnormal (stun, hold, stone): it neither moves nor attacks until released.</summary>
     public bool Held { get; set; }
+    /// <summary>NpcData says players cannot hit it (NpcSpawn.Untouchable): area hits, spirits and companions leave it alone.</summary>
+    public bool Untouchable { get; init; }
+    /// <summary>What a player's side picks to hit by itself (spirits, companions): hostile and not untouchable.</summary>
+    public bool Attackable => Hostile && !Untouchable;
     /// <summary>Immune through a scripted abnormal: the players' hits land for nothing.</summary>
     public bool Immune { get; set; }
     /// <summary>Its spawn height was put on the ground (navmesh floor or terrain) once the map's geometry was loaded.</summary>
@@ -202,6 +206,7 @@ public static class Combat
                 Function = spawn.Function, Aggro = spawn.Aggro, Skills = spawn.Skills ?? [], NoRotation = spawn.NoRotation,
                 UniqueKey = spawn.UniqueKey, SocialAction = spawn.SocialAction, SocialStart = spawn.SocialAction != 0 ? StartedAt : 0, Route = spawn.Route,
                 Air = spawn.Air, AirMonster = spawn.Air && spawn.SubType.EndsWith("Monster", StringComparison.Ordinal), DamageScale = DamageScale(spawn.SubType, spawn.Grade),
+                Untouchable = spawn.Untouchable,
             };
         }
         return targets;

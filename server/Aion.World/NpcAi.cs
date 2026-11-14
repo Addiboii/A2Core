@@ -216,7 +216,7 @@ public sealed class NpcAi(Random rng, GameData? data = null)
         var bestDistance = CompanionRange;
         foreach (var other in current.Values)
         {
-            if (other.Key == target.Key || !other.Hostile || other.Dead || other.CorpseRemoved) continue;
+            if (other.Key == target.Key || !other.Attackable || other.Dead || other.CorpseRemoved) continue;
             var d = Distance(target.Position, Flat(other.Position));
             if (d < bestDistance) { bestDistance = d; best = other; }
         }

@@ -2327,8 +2327,12 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         }
         if (data.Skill(skill)?.Damage is { Length: > 0 }) replies.AddRange(ObjectHits(skill, request, actionUid));   // GameSession.Destroy.cs
         if (targets is null || targets.Count == 0 || data.Skill(skill)?.Damage is not { Length: > 0 }) return replies;
+        // An area hit skips the NPCs players cannot hit (Target.Untouchable: invisible event controllers, turrets, trial walls).
+        // A target the client picked itself stays hittable (CANDIDATE: map events need some of them killed, e.g. the
+        // MirrorHeart trial walls, and nothing in the event data says what lets players hit them).
         IEnumerable<Target> chosen = targets.TryGetValue(request.TargetKey, out var direct) ? [direct]
-            : request.TargetKey == playerKey ? targets.Values.Where(t => t.Position.DistanceSquared(AreaCentre(data.Skill(skill), KnownPosition, request.Location)) <= AreaRange * AreaRange)
+            : request.TargetKey == playerKey ? targets.Values.Where(t => !t.Untouchable
+                && t.Position.DistanceSquared(AreaCentre(data.Skill(skill), KnownPosition, request.Location)) <= AreaRange * AreaRange)
             : [];
         foreach (var target in chosen.Where(t => t.Hostile).ToList())
         {

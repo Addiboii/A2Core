@@ -122,6 +122,13 @@ RELATIONSHIP = {'NoRelation': 0, 'NPC_Light': 3, 'NPC_Dark': 4, 'NPC_Neutral': 5
 COMPANION_HP = 999999
 
 
+def untouchable(row):
+    """NpcData bCanBeAttacked false or NpcTargetAble not Able (Unable, Onlypicking): players cannot hit it. OBSERVED: all 20,851
+    player hits in our recordings (2.0.6 and the 2026-11-04..06 community recordings) landed on Able NPCs that can be attacked,
+    none on the others; the invisible battlefield/dungeon controllers, turrets and meteors are of this kind."""
+    return not row.get('bCanBeAttacked') or not str(row.get('NpcTargetAble', '')).endswith('::Able')
+
+
 def companion_hp(row):
     return row['RelationshipEntity'].endswith('::NPC_Companion') and bool(row.get('bCanBeAttacked'))
 
@@ -285,7 +292,8 @@ def build(maps=MAPDATA, npc_table=NPCDATA, aggro_table=AGGRODATA, skill_table=SK
                                    'sub_type': _enum(row.get('NpcSubType', 'ENpcSubType::NormalMonster')),
                                    'grade': int(row.get('Grade') or 3),
                                    **({'air': True} if row.get('ObjectTerrainType', '').endswith('::Air') else {}),
-                                   **({'hp_max': COMPANION_HP} if companion_hp(row) else {})})
+                                   **({'hp_max': COMPANION_HP} if companion_hp(row) else {}),
+                                   **({'untouchable': True} if untouchable(row) else {})})
                 used_skills.update(skills)
                 unique_key = int(record.get('UniqueKey', 0)) & 0xffffffff
                 location = position['Location']
@@ -316,7 +324,8 @@ def build(maps=MAPDATA, npc_table=NPCDATA, aggro_table=AGGRODATA, skill_table=SK
                                   'no_rotation': bool(row.get('bNoRotation', False)), 'rotate_max': row.get('RotateAngleMax', 0),
                                   'sub_type': _enum(row.get('NpcSubType', 'ENpcSubType::NormalMonster')), 'grade': int(row.get('Grade') or 3),
                                   **({'air': True} if row.get('ObjectTerrainType', '').endswith('::Air') else {}),
-                                   **({'hp_max': COMPANION_HP} if companion_hp(row) else {})}
+                                   **({'hp_max': COMPANION_HP} if companion_hp(row) else {}),
+                                   **({'untouchable': True} if untouchable(row) else {})}
         used_skills.update(skills)
     out['templates'] = templates
     out['npc_skills'] = npc_skills(used_skills, skill_table, effect_table)

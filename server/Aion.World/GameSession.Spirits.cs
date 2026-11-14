@@ -104,7 +104,7 @@ public sealed partial class GameSession
         else if (definition.Despawn is { Length: > 0 } elements && spirit is { } out_ && elements.Contains(out_.Element))
             replies.AddRange(DismissSpirit(now));
         else if (definition.Damage.Length > 0 && SpiritTarget() is { } companion && targets!.TryGetValue(request.TargetKey, out var prey)
-                 && prey.Hostile && !prey.Dead && ai.Brains.TryGetValue(companion.Key, out var brain) && brain.Mode == NpcAi.Mode.Follow)
+                 && prey.Attackable && !prey.Dead && ai.Brains.TryGetValue(companion.Key, out var brain) && brain.Mode == NpcAi.Mode.Follow)
             replies.AddRange(ai.ForceAggroNpc(companion, prey, now));   // the owner's target (it follows again afterwards)
         return replies;
     }

@@ -2799,6 +2799,18 @@ var areaFar = spiritMaster.Targets.Values.Where(t => t.Hostile && !t.Dead && t.S
 var areaCast = await spiritMaster.HandleAsync(Cast(16010000, spiritMaster.PlayerKey, areaFar.Position), Now + 120_000);
 Check(areaCast.Any(b => Op(b) == 0x3802) && !areaCast.Any(b => Op(b) == 0x3804 && b.AsSpan(2).StartsWith(NativeVarint.Encode((uint)areaFar.Key))),
       "a self-centred cast sent at a far monster's spot does not hit it (the centre stays within the skill's reach)");
+// Area hits leave the NPCs players cannot hit (NpcData bCanBeAttacked / NpcTargetAble) alone: two monsters at the caster's
+// spot, the untouchable one is skipped. (Test-only: the session's target map is a Dictionary.)
+var here = spiritMaster.KnownPosition!.Value;
+var mapTargets = (Dictionary<int, Target>)spiritMaster.Targets;
+mapTargets[1901] = new Target { Key = 1901, Name = "untouchable", Hp = 100_000, HpMax = 100_000, Position = here, Untouchable = true };
+mapTargets[1902] = new Target { Key = 1902, Name = "touchable", Hp = 100_000, HpMax = 100_000, Position = here };
+var areaHere = await spiritMaster.HandleAsync(Cast(16010000, spiritMaster.PlayerKey, here), Now + 240_000);
+bool HitOn(List<byte[]> replies, int key) => replies.Any(b => Op(b) == 0x3804 && b.AsSpan(2).StartsWith(NativeVarint.Encode((uint)key)));
+Check(data.Spawns(1000).Count(s => s.Untouchable) is var untouchableOnMap && HitOn(areaHere, 1902) && !HitOn(areaHere, 1901) && !mapTargets[1901].Attackable,
+      $"an area cast skips an untouchable monster beside a hittable one (NpcData bCanBeAttacked / NpcTargetAble; {untouchableOnMap} on map 1000)");
+mapTargets.Remove(1901);
+mapTargets.Remove(1902);
 Check(GameSession.AreaCentre(data.Skill(16010000), new Vector3d(0, 0, 0), new Vector3d(100, 0, 0)) == new Vector3d(100, 0, 0)
       && GameSession.AreaCentre(data.Skill(16010000), new Vector3d(0, 0, 0), new Vector3d(100_000, 0, 0)) == new Vector3d(0, 0, 0)
       && GameSession.AreaCentre(data.Skill(16010000), null, new Vector3d(5, 0, 0)) == new Vector3d(5, 0, 0),

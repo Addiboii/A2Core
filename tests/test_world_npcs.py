@@ -55,5 +55,14 @@ class WorldNpcTests(unittest.TestCase):
         self.assertEqual(hits, {'7': [[701, 0, 30], [711, 5, 0]]})   # no damage row: no entry (no guessing)
 
 
+
+class UntouchableTests(unittest.TestCase):
+    def test_npcdata_attack_and_target_flags(self):
+        # NpcData bCanBeAttacked false or NpcTargetAble not Able: players cannot hit it.
+        self.assertFalse(world_npcs.untouchable({'bCanBeAttacked': True, 'NpcTargetAble': 'ENpcTargetAble::Able'}))
+        self.assertTrue(world_npcs.untouchable({'bCanBeAttacked': False, 'NpcTargetAble': 'ENpcTargetAble::Able'}))
+        self.assertTrue(world_npcs.untouchable({'bCanBeAttacked': True, 'NpcTargetAble': 'ENpcTargetAble::Unable'}))
+        self.assertTrue(world_npcs.untouchable({'bCanBeAttacked': True, 'NpcTargetAble': 'ENpcTargetAble::Onlypicking'}))
+
 if __name__ == '__main__':
     unittest.main()
