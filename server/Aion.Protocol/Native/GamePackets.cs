@@ -1371,15 +1371,16 @@ public static class GamePackets
     /// <summary>
     /// 0x371d NPC move delta, every 100 ms between the 1 s full positions (OBSERVED, capture 20261013: 5984 samples). Mask
     /// 0x01 the move type byte (03 run), 0x02/0x04/0x08 dx/dy/dz as signed bytes (game units since the last sent position;
-    /// dz left out when 0), 0x20 the heading pair; a walk ends with 01 as 0x371b/0x371c do. Example walk `2e ff 1f ff 5066 5066 01`
+    /// each left out when 0: OBSERVED masks 0x22/0x24/0x20 and 0x23/0x25, 3,999 of 51,999 NPC deltas in our recordings), 0x20 the heading pair; a walk ends with 01 as 0x371b/0x371c do. Example walk `2e ff 1f ff 5066 5066 01`
     /// (12.6 units = 126/s), run `2f 03 e9 aa fc 51b5 51b5` (Robin at 875/s).
     /// </summary>
     public static byte[] NpcMoveDelta(int key, int dx, int dy, int dz, double heading, bool run)
     {
         var angle = HeadingU16(heading);
-        var w = PacketWriter.Opcode(0x371d).Varint(key).U8((run ? 0x01 : 0) | 0x20 | 0x02 | 0x04 | (dz != 0 ? 0x08 : 0));
+        var w = PacketWriter.Opcode(0x371d).Varint(key).U8((run ? 0x01 : 0) | 0x20 | (dx != 0 ? 0x02 : 0) | (dy != 0 ? 0x04 : 0) | (dz != 0 ? 0x08 : 0));
         if (run) w.U8(3);
-        w.U8((byte)(sbyte)dx).U8((byte)(sbyte)dy);
+        if (dx != 0) w.U8((byte)(sbyte)dx);
+        if (dy != 0) w.U8((byte)(sbyte)dy);
         if (dz != 0) w.U8((byte)(sbyte)dz);
         w.U16(angle).U16(angle);
         if (!run) w.U8(1);
