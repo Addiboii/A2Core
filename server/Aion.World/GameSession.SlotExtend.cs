@@ -56,6 +56,14 @@ public sealed class SlotExtensionTables
 public sealed partial class GameSession
 {
     public const ushort ItemContainerSlotExtendRq = 0x8d4f, ItemContainerSlotExtendRs = 0x8d50, ItemContainerSlotExtendNt = 0x8d51;
+    /// <summary>
+    /// The reply's results, the client's own EResult kItem_Container_Slot_Extend_Success / _Fail / _Fail_OverMaxExtendCount /
+    /// _Fail_InvalidItem (read from the usmap of 2.0.6; CANDIDATE on later builds until a mapping of them is read). No
+    /// official reply is in our recordings; the fork's recordings of 2026-11-05/07 report 0x0220 on success.
+    /// </summary>
+    public const int SlotExtendSuccess = 0x220, SlotExtendFail = 0x221, SlotExtendOverMax = 0x222, SlotExtendInvalidItem = 0x223;
+    /// <summary>The Kina's decrease reason: EDecreaseReason kItemContainerExtendInventory 7 (bag), kItemContainerExtendStorage 8 (warehouses) (usmap 2.0.6).</summary>
+    public const byte DecreaseExtendInventory = 7, DecreaseExtendStorage = 8;
     static SlotExtensionTables SlotTables => SlotExtensionTables.Embedded;
 
     /// <summary>Extensions by EItemContainerType: lines bought with Kina, lines opened with vouchers.</summary>
@@ -97,22 +105,22 @@ public sealed partial class GameSession
         var (byGold, byItem) = slotExtensions.GetValueOrDefault(container);
         byte[] Reply(int result, byte index) => PacketWriter.Opcode(ItemContainerSlotExtendRs).U16(result).I32(npc).U8(container).I64(uid).U8(index)
             .U8(Math.Clamp(slotExtensions.GetValueOrDefault(container).ByItem, 0, 255)).U8(Math.Clamp(slotExtensions.GetValueOrDefault(container).ByGold, 0, 255)).ToArray();
-        if (Economy is not { } economy || SlotTables.Of(container) is not { } table) return [Reply(1, requestedIndex)];
+        if (Economy is not { } economy || SlotTables.Of(container) is not { } table) return [Reply(SlotExtendFail, requestedIndex)];
         var byVoucher = uid != 0;
         List<(Guid Item, long Revision, int Count)>? costs;
         var index = (byte)Math.Clamp(table.TierByLine ? byGold + byItem : byGold, 0, 255);
         if (byVoucher)
         {
             if (!storedItems.TryGetValue(uid, out var row) || row.Location != "bag" || SlotTables.VoucherFor(row.TemplateId) != container || row.Quantity < 1)
-                return [Reply(1, requestedIndex)];
-            if (byGold + byItem >= table.MaxExtensions) return [Reply(StoreResult("max"), requestedIndex)];
+                return [Reply(SlotExtendInvalidItem, requestedIndex)];
+            if (byGold + byItem >= table.MaxExtensions) return [Reply(SlotExtendOverMax, requestedIndex)];
             costs = [(row.InstanceId, row.Revision, 1)];
             index = requestedIndex;
         }
         else
         {
-            if (SlotTables.NextGoldCost(container, byGold, byItem) is not { } kina) return [Reply(StoreResult("max"), index)];
-            if (CostStacks(KinaItemId, kina) is not { } stacks) return [Reply(StoreResult("money"), index)];
+            if (SlotTables.NextGoldCost(container, byGold, byItem) is not { } kina) return [Reply(SlotExtendOverMax, index)];
+            if (CostStacks(KinaItemId, kina) is not { } stacks) return [Reply(SlotExtendFail, index)];   // CANDIDATE: no Kina code of its own
             costs = stacks;
         }
         var outcome = "none";
@@ -120,11 +128,13 @@ public sealed partial class GameSession
         if (outcome != "ok")
         {
             await Stored(async () => { await LoadSlotExtensionsAsync(ct); return []; });
-            return [Reply(StoreResult(outcome), index)];
+            return [Reply(outcome == "max" ? SlotExtendOverMax : SlotExtendFail, index)];
         }
         slotExtensions[container] = byVoucher ? (byGold, byItem + 1) : (byGold + 1, byItem);
         var (gold, item) = slotExtensions[container];
         var nt = PacketWriter.Opcode(ItemContainerSlotExtendNt).U8(container).I64(uid).U8(Math.Min(item, 255)).U8(Math.Min(gold, 255)).ToArray();
-        return [Reply(0, index), .. await InventoryChangesAsync(ct, 0, byVoucher ? DecreaseItemUse : (byte)0), nt];
+        // CANDIDATE order (the fork's recordings; none in ours): the cost's ItemModificationList first, then the reply; our NT last.
+        var reason = byVoucher ? DecreaseItemUse : container == InventoryItem.Bag ? DecreaseExtendInventory : DecreaseExtendStorage;
+        return [.. await InventoryChangesAsync(ct, 0, reason), Reply(SlotExtendSuccess, index), nt];
     }
 }

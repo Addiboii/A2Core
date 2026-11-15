@@ -143,21 +143,26 @@ static class EconomyChecks
               "without extensions 0x5611 ends with the six zero counts as before");
         var kinaBeforeExtend = Kina();
         var extended = await session.HandleAsync(Extend(1, costIndex: 7), now);
-        Check(Is(extended[0], GameSession.ItemContainerSlotExtendRs) && Result(extended[0]) == 0 && extended[0][17] == 0 && extended[0][18] == 0 && extended[0][19] == 1
-              && Kina() == kinaBeforeExtend - 10_000 && store.SlotExtensionRows[1] == (1, 0)
+        byte[] ExtendRs(List<byte[]> replies) => replies.Single(b => Is(b, GameSession.ItemContainerSlotExtendRs));
+        int changesAt = extended.FindIndex(b => Is(b, 0x561b)), rsAt = extended.FindIndex(b => Is(b, GameSession.ItemContainerSlotExtendRs));
+        Check(Result(ExtendRs(extended)) == 0x220 && ExtendRs(extended)[17] == 0 && ExtendRs(extended)[18] == 0 && ExtendRs(extended)[19] == 1
+              && Kina() == kinaBeforeExtend - 10_000 && store.SlotExtensionRows[1] == (1, 0) && changesAt >= 0 && changesAt < rsAt
+              && extended[changesAt][^2] == GameSession.DecreaseExtendInventory
               && extended.Any(b => Is(b, GameSession.ItemContainerSlotExtendNt) && b[11] == 0 && b[12] == 1),
-              "a bag line for Kina: the server's step 0 (10000, InventorySlot), not the client's cost index 7; RS and NT carry the counts");
-        Check(Result((await session.HandleAsync(Extend(1, costIndex: 0), now))[0]) == 0 && Kina() == kinaBeforeExtend - 30_000 && store.SlotExtensionRows[1] == (2, 0),
+              "a bag line for Kina: the server's step 0 (10000, InventorySlot), not the client's cost index 7; the Kina (reason 7) before RS 0x220; RS and NT carry the counts");
+        Check(Result(ExtendRs(await session.HandleAsync(Extend(1, costIndex: 0), now))) == 0x220 && Kina() == kinaBeforeExtend - 30_000 && store.SlotExtensionRows[1] == (2, 0),
               "the next bag line costs the next step (20000)");
-        Check(Result((await session.HandleAsync(Extend(2), now))[0]) == 0 && Kina() == kinaBeforeExtend - 31_000 && store.SlotExtensionRows[2] == (1, 0),
-              "a warehouse line costs the StorageExtensionCost row of line 6 (1000 Kina)");
+        var warehouse = await session.HandleAsync(Extend(2), now);
+        Check(Result(ExtendRs(warehouse)) == 0x220 && Kina() == kinaBeforeExtend - 31_000 && store.SlotExtensionRows[2] == (1, 0)
+              && warehouse.Single(b => Is(b, 0x561b))[^2] == GameSession.DecreaseExtendStorage,
+              "a warehouse line costs the StorageExtensionCost row of line 6 (1000 Kina, reason 8)");
         var voucher = Add(534000001, 1);
         var wrongVoucher = Add(536700001, 1);
         await session.InventoryChangesAsync(default);
-        Check(Result((await session.HandleAsync(Extend(1, wrongVoucher.WireId), now))[0]) == 1 && store.Items.Any(i => i.InstanceId == wrongVoucher.InstanceId),
+        Check(Result((await session.HandleAsync(Extend(1, wrongVoucher.WireId), now))[0]) == 0x223 && store.Items.Any(i => i.InstanceId == wrongVoucher.InstanceId),
               "a warehouse voucher does not extend the bag (refused, kept)");
         var byVoucher = await session.HandleAsync(Extend(1, voucher.WireId), now);
-        Check(Result(byVoucher[0]) == 0 && store.SlotExtensionRows[1] == (2, 1) && store.Items.All(i => i.InstanceId != voucher.InstanceId) && Kina() == kinaBeforeExtend - 31_000,
+        Check(Result(ExtendRs(byVoucher)) == 0x220 && store.SlotExtensionRows[1] == (2, 1) && store.Items.All(i => i.InstanceId != voucher.InstanceId) && Kina() == kinaBeforeExtend - 31_000,
               "a Cube Expansion Voucher opens one bag line and is used up, no Kina taken");
         Check(await store.ExtendSlotsAsync(me, 1, false, 1, 0, 72, [], default) == "none" && store.SlotExtensionRows[1] == (2, 1),
               "the store refuses stale counts (a second request for the same step)");
@@ -166,7 +171,7 @@ static class EconomyChecks
         Check(depotAfter.AsSpan()[^6..].SequenceEqual(new byte[] { 1, 2, 1, 0, 0, 0 }), "0x5611 reports the counts: bag by item 1, by gold 2, storage 1");
         store.SlotExtensionRows[1] = (10, 1);
         await session.HandleAsync([0x10, 0x56], now);
-        Check(Result((await session.HandleAsync(Extend(1), now))[0]) == 9 && store.SlotExtensionRows[1] == (10, 1), "past the bag's ten Kina steps the request is refused");
+        Check(Result((await session.HandleAsync(Extend(1), now))[0]) == 0x222 && store.SlotExtensionRows[1] == (10, 1), "past the bag's ten Kina steps the request is refused (0x222)");
         store.SlotExtensionRows.Clear();
         await session.HandleAsync([0x10, 0x56], now);
 
