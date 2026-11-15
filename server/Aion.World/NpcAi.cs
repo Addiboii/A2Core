@@ -459,6 +459,10 @@ public sealed class NpcAi(Random rng, GameData? data = null)
     /// <summary>The NPC whose hit was applied last (the killer when that hit was fatal).</summary>
     public int LastAttacker { get; private set; }
 
+    /// <summary>The effect seq (1 = the skill's first hit) and the attacker's position of the NPC hit applied last.</summary>
+    public int LastAttackSeq { get; private set; } = 1;
+    public Vector3d LastAttackerAt { get; private set; }
+
     /// <summary>The skill of the NPC hit applied last on a player (CharDie_NT names it).</summary>
     public int LastAttackSkill { get; private set; }
 
@@ -785,6 +789,8 @@ public sealed class NpcAi(Random rng, GameData? data = null)
         var damage = Math.Max(1, (int)Math.Round(Damage(target, hit.Skill) * 1000.0 / (1000 + Math.Max(0, defense))));
         LastAttacker = target.Key;
         LastAttackSkill = hit.SkillId;
+        LastAttackSeq = seq;
+        LastAttackerAt = target.Position;
         return [.. collision, GamePackets.NpcSkillHit(victim, target.Key, hit.SkillId, hit.ActionSeq, effect, damage, effectSeq: seq), .. hitPlayer(damage)];
     }
 

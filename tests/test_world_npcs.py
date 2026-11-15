@@ -64,6 +64,14 @@ class UntouchableTests(unittest.TestCase):
         self.assertTrue(world_npcs.untouchable({'bCanBeAttacked': True, 'NpcTargetAble': 'ENpcTargetAble::Unable'}))
         self.assertTrue(world_npcs.untouchable({'bCanBeAttacked': True, 'NpcTargetAble': 'ENpcTargetAble::Onlypicking'}))
 
+class NpcAbnormalTests(unittest.TestCase):
+    def test_abnormal_rows(self):
+        # SkillEffect Abnormal EffectValueList: [0]/[1] duration, [2] abnormal, [3] level, [4] chance (Tamon 1604680, OBSERVED).
+        self.assertEqual(world_npcs.abnormal_row(['3000', '3000', '12000311', '1', '10000', 'None']), [12000311, 3000, 3000, 1, 10000])
+        self.assertEqual(world_npcs.abnormal_row(['1000', '2000', '7', '2']), [7, 1000, 2000, 2, 10000])
+        self.assertIsNone(world_npcs.abnormal_row(['1000', '1000', 'None']))
+
+
 class HitCountTests(unittest.TestCase):
     def test_hit_count_npcs_have_hits_for_hp(self):
         # NpcData bHitCountBased: 7 hits for a monster, 5 for a summon (OBSERVED); nothing for any other NPC.

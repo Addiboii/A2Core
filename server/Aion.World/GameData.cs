@@ -178,7 +178,10 @@ public sealed record NpcSkill(
     [property: JsonPropertyName("cast")] int Cast,
     [property: JsonPropertyName("effect")] int Effect,
     [property: JsonPropertyName("damage_min")] int DamageMin,
-    [property: JsonPropertyName("damage_max")] int DamageMax);
+    [property: JsonPropertyName("damage_max")] int DamageMax,
+    // SkillEffect Abnormal / Abnormal_True rows: [abnormal id, duration min ms, max ms, level, chance of 10000] (tools/world_npcs.py
+    // abnormal_row, build 26262663); put on the player the skill hits.
+    [property: JsonPropertyName("abnormals")] int[][]? Abnormals = null);
 
 /// <summary>
 /// The tracked summaries in tools/data (embedded): creation profiles, class skill kits that

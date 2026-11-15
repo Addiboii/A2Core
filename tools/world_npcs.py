@@ -209,26 +209,42 @@ def aggro_shape(row):
             'inner': info['InnnerRadius'], 'height': info['Height'], 'z': _enum(row['AggroRangeZAxis'])}
 
 
+def abnormal_row(values):
+    """An Abnormal / Abnormal_True SkillEffect row as [abnormal id, duration min ms, duration max ms, level, chance of 10000], or None.
+    OBSERVED (community recordings 2026-11-04..06): monster skills put [2] on the player for [0]/[1] ms at level [3] (0x382a mask
+    0x13: the NPC as caster, the skill, its position as range base), e.g. Krao Berc 1800160 -> 12000151 for 20 s; [4] read as the
+    chance (10000 in every recorded case, CANDIDATE)."""
+    number = lambda i: int(values[i]) if i < len(values) and str(values[i]).lstrip('-').isdigit() else None
+    if not number(2):
+        return None
+    return [number(2), number(0) or 0, number(1) or number(0) or 0, number(3) or 1, 10000 if number(4) is None else number(4)]
+
+
 def npc_skills(skill_ids, skill_table=SKILLDATA, effect_table=EFFECTDATA):
     """Range/cooldown/cast and the damage effect of each NPC skill (first damage effect group)."""
     wanted = set(skill_ids)
     skills = {row['ID']['Value']: row for row in _rows(skill_table) if row['ID']['Value'] in wanted}
     groups = {g['SkillEffectGroupId']['Value'] for row in skills.values() for g in row.get('SkillEffectTimeDataList', [])}
     damage = {}
+    abnormals = {}
     for effect in _rows(effect_table):
         group = effect['SkillEffectGroupId']['Value']
         if group in groups and _enum(effect['EffectType']) == 'Damage' and group not in damage:
             values = effect.get('EffectValueList', [])
             damage[group] = (effect['ID']['Value'], int(values[2]) if len(values) > 3 else 10000,
                              int(values[3]) if len(values) > 3 else 10000)
+        elif group in groups and _enum(effect['EffectType']) in ('Abnormal', 'Abnormal_True'):
+            if (row := abnormal_row(effect.get('EffectValueList', []))) is not None:
+                abnormals.setdefault(group, []).append(row)
     out = {}
     for skill_id, row in sorted(skills.items()):
         group = next((g['SkillEffectGroupId']['Value'] for g in row.get('SkillEffectTimeDataList', [])
                       if g['SkillEffectGroupId']['Value'] in damage), None)
         effect, low, high = damage.get(group, (0, 0, 0))
+        put = [a for g in row.get('SkillEffectTimeDataList', []) for a in abnormals.get(g['SkillEffectGroupId']['Value'], [])]
         out[str(skill_id)] = {'range': row.get('NeedSkillUseRange', 0.0), 'follow': row.get('NeedSkillFollowRange', 0.0),
                               'cooldown': int(row.get('NeedCoolTime', 0)), 'cast': int(row.get('CastingTime', 0)),
-                              'effect': effect, 'damage_min': low, 'damage_max': high}
+                              'effect': effect, 'damage_min': low, 'damage_max': high, **({'abnormals': put} if put else {})}
     return out
 
 

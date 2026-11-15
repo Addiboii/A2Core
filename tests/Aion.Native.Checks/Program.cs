@@ -1887,6 +1887,22 @@ staffStore.Items.Add(Stored(502760001, 3, "bag", null, 25));
 await staffSession.InventoryChangesAsync(default);
 await staffSession.HandleAsync(new PacketWriter().U16(0x5612).I64(25).ToArray(), Now + 410_000);
 Check(staffSession.CanRebirth && staffStore.Items.Single(i => i.WireId == 25).Quantity == 2, "the spiritstone gives its rebirth buff");
+// A monster skill's abnormal on the player at its first hit (Tamon 1604680 -> 12000311 for 3 s, OBSERVED): 0x382a mask 0x13 with
+// the NPC as caster, the skill and the NPC's position; not again on its second hit; gone (0x382c) after the 3 s.
+Check(data.NpcSkill(1604680)?.Abnormals is [[12000311, 3000, 3000, 1, 10000]], "NPC skill abnormal rows from SkillEffect (Tamon 1604680)");
+var tamonAt = new Vector3d(100, 200, 300);
+var stung = staffSession.NpcHitsPlayer(1, Now + 405_000, killerKey: 2001, killerSkill: 1604680, hitSeq: 1, casterAt: tamonAt);
+var stungAdd = stung.SingleOrDefault(b => Op(b) == 0x382a);
+var stungAgain = staffSession.NpcHitsPlayer(1, Now + 405_100, killerKey: 2001, killerSkill: 1604680, hitSeq: 2, casterAt: tamonAt);
+Check(stungAdd is not null && stungAdd[2 + NativeVarint.Encode((uint)staffSession.PlayerKey).Length + 1] == 0x13
+      && Convert.ToHexString(stungAdd).Contains(Convert.ToHexString(BitConverter.GetBytes(12000311)))
+      && Convert.ToHexString(stungAdd).Contains(Convert.ToHexString(BitConverter.GetBytes(1604680)))
+      && Convert.ToHexString(stungAdd).Contains(Convert.ToHexString(NativeVarint.Encode(2001u)) + "01" + Convert.ToHexString(BitConverter.GetBytes(1604680)))
+      && Convert.ToHexString(stungAdd).EndsWith(Convert.ToHexString(BitConverter.GetBytes(100f)) + Convert.ToHexString(BitConverter.GetBytes(200f)) + Convert.ToHexString(BitConverter.GetBytes(300f)))
+      && staffSession.ActiveBuffs.Contains(12000311) && !stungAgain.Any(b => Op(b) == 0x382a),
+      "a monster skill's abnormal: 0x382a mask 0x13, the NPC as caster with level 1 and the skill, its position as range base; once per cast");
+var unstung = await staffSession.TickAsync(Now + 408_100);
+Check(!staffSession.ActiveBuffs.Contains(12000311) && unstung.Any(b => Op(b) == 0x382c), "the monster's abnormal ends after its 3 s (0x382c)");
 var fellAt = staffSession.Position!.Value;
 staffSession.NpcHitsPlayer(staffSession.Resource.HpMax * 10, Now + 411_000, killerKey: 2001);
 Check(staffSession.Dead && staffSession.CanRebirth, "the rebirth buff survives death");

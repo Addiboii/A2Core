@@ -25,6 +25,8 @@ public sealed partial class GameSession
         public int? Relationship { get; set; }
         public Dictionary<string, int> Stats { get; } = [];
         public List<HealOverTime> Heals { get; } = [];
+        /// <summary>Put on by an NPC's skill: the NPC, the row's level and where the NPC stood (the wire's caster and range base).</summary>
+        public (int Key, byte Level, Vector3d At)? Caster { get; set; }
     }
 
     /// <summary>A heal-over-time row: interval, amount per tick, what is left of the total.</summary>
@@ -54,7 +56,29 @@ public sealed partial class GameSession
     static bool ItemAbnormalsSupported(IReadOnlyList<SkillEffectRow> effects) =>
         AbnormalIds(effects).Any() && AbnormalIds(effects).All(id => Boxes.Abnormal(id) is not null);
 
-    AbnormalWire Wire(Buff b) => new(b.Uid, b.AbnormalId, b.DurationMs, b.ExpireAt, CasterKey: playerKey, Level: 1, SkillId: b.SkillId == 0 ? null : b.SkillId, RangeBase: position ?? Vector3d.Zero);
+    AbnormalWire Wire(Buff b) => new(b.Uid, b.AbnormalId, b.DurationMs, b.ExpireAt, CasterKey: b.Caster?.Key ?? playerKey, Level: b.Caster?.Level ?? 1,
+        SkillId: b.SkillId == 0 ? null : b.SkillId, RangeBase: b.Caster?.At ?? position ?? Vector3d.Zero);
+
+    /// <summary>
+    /// A monster skill's abnormals on the player at its first hit (NpcSkill.Abnormals; each by its chance): 0x382a mask 0x13 with
+    /// the NPC as caster, the row's level, the skill and the NPC's position as range base (OBSERVED, community recordings
+    /// 2026-11-04..06: 60 monster abnormals on the recording player, e.g. Tamon 1604680 -> 12000311 for 3 s). Their effects
+    /// beyond the icon (stun, slow, damage over time) are not modelled yet (CANDIDATE: the client draws them from its tables).
+    /// </summary>
+    List<byte[]> NpcAbnormals(int casterKey, int skillId, Vector3d? casterAt, long now)
+    {
+        if (data.NpcSkill(skillId)?.Abnormals is not { Length: > 0 } rows) return [];
+        var replies = new List<byte[]>();
+        var speedBefore = BuffStat("MoveSpeed");
+        foreach (var row in rows.Where(r => r.Length >= 5))
+        {
+            if (rng.Next(10_000) >= row[4]) continue;
+            var duration = Math.Max(1, rng.Next(Math.Min(row[1], row[2]), Math.Max(row[1], row[2]) + 1));
+            AddBuff(row[0], duration, skillId, now, replies, caster: (casterKey, (byte)Math.Clamp(row[3], 1, 255), casterAt ?? Vector3d.Zero));
+        }
+        replies.AddRange(BuffStatsChanged(speedBefore));
+        return replies;
+    }
 
     /// <summary>Adds an item skill's buffs: 0x382a, the first 0x3805 per heal row, stat and speed updates.</summary>
     List<byte[]> ApplyItemAbnormals(int skillId, IReadOnlyList<SkillEffectRow> effects, long now)
@@ -75,7 +99,8 @@ public sealed partial class GameSession
     /// 0x3805 per heal row, the polymorph and relationship updates. A duration below 0 lasts (the official passive's expire time);
     /// an abnormal the tables do not know only shows its icon. The caller refreshes the stats.
     /// </summary>
-    Buff? AddBuff(int abnormalId, int durationMs, int skillId, long now, List<byte[]> replies, bool scripted = false, int? remainingMs = null)
+    Buff? AddBuff(int abnormalId, int durationMs, int skillId, long now, List<byte[]> replies, bool scripted = false, int? remainingMs = null,
+        (int Key, byte Level, Vector3d At)? caster = null)
     {
         if (resources is null) return null;
         var info = Boxes.Abnormal(abnormalId);
@@ -95,6 +120,7 @@ public sealed partial class GameSession
             existing.ExpireAt = permanent ? PassiveExpireTime
                 : rule.OverlapTime == "Longer" ? Math.Max(existing.ExpireAt, now + durationMs) : now + durationMs;
             existing.DurationMs = permanent ? -1 : existing.ExpireAt - now;
+            existing.Caster = caster ?? existing.Caster;
             var change = PlayerPackets.AbnormalChange(playerKey, Wire(existing));
             worldPlayer?.Map?.Broadcast(worldPlayer, [change]);
             replies.Add(change);
@@ -107,7 +133,7 @@ public sealed partial class GameSession
         var buff = new Buff
         {
             Uid = ++buffUid, AbnormalId = abnormalId, SkillId = skillId, Group = group, DurationMs = permanent ? -1 : durationMs,
-            ExpireAt = permanent ? PassiveExpireTime : now + duration, Scripted = scripted,
+            ExpireAt = permanent ? PassiveExpireTime : now + duration, Scripted = scripted, Caster = caster,
         };
         foreach (var (id, type, values) in info?.Effects ?? [])
         {

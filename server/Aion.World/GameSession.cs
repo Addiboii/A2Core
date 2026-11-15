@@ -2428,7 +2428,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
     /// An NPC hit lands on the player: combat starts, HP drops (official 0x8d00 for the player's key).
     /// At HP 0 the player dies (see Die); invincible HP holds.
     /// </summary>
-    internal List<byte[]> NpcHitsPlayer(int damage, long now, int killerKey = 0, int killerSkill = 0)
+    internal List<byte[]> NpcHitsPlayer(int damage, long now, int killerKey = 0, int killerSkill = 0, int hitSeq = 1, Vector3d? casterAt = null)
     {
         if (resources is null || dead) return [];
         var replies = new List<byte[]>();
@@ -2448,6 +2448,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             replies.Add(GamePackets.InteractEnvObjInterrupted(use.Key, GamePackets.InterruptDamaged, playerKey));
         }
         if (resources.Hp == 0) replies.AddRange(Die(killerKey, now, killerSkill));
+        else if (hitSeq == 1) replies.AddRange(NpcAbnormals(killerKey, killerSkill, casterAt, now));   // GameSession.Buffs.cs
         return replies;
     }
 
@@ -3277,7 +3278,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
                 aiMap.Ai.DefenseOf ??= key => aiMap.Players.TryGetValue(key, out var p) ? p.Session.Defense : 0;
                 aiMap.BroadcastAll(aiMap.Ai.Tick(aiMap.Targets, aiMap.NpcVictims(), now, (key, damage) =>
                 {
-                    if (aiMap.Players.TryGetValue(key, out var victim)) victim.Send(victim.Session.NpcHitsPlayer(damage, now, aiMap.Ai.LastAttacker, aiMap.Ai.LastAttackSkill));
+                    if (aiMap.Players.TryGetValue(key, out var victim)) victim.Send(victim.Session.NpcHitsPlayer(damage, now, aiMap.Ai.LastAttacker, aiMap.Ai.LastAttackSkill, aiMap.Ai.LastAttackSeq, aiMap.Ai.LastAttackerAt));
                     return [];
                 }));
                 var npcKills = NpcKillsByNpcs(aiMap.Ai, now);
@@ -3287,7 +3288,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         }
         else if (targets is not null && (ai.DefenseOf ??= _ => Defense) is not null)
         {
-            replies.AddRange(Visible(ai.Tick(targets, invisible || dead || FriendlyToAll ? null : position, now, damage => NpcHitsPlayer(damage, now, ai.LastAttacker, ai.LastAttackSkill))));
+            replies.AddRange(Visible(ai.Tick(targets, invisible || dead || FriendlyToAll ? null : position, now, damage => NpcHitsPlayer(damage, now, ai.LastAttacker, ai.LastAttackSkill, ai.LastAttackSeq, ai.LastAttackerAt))));
             replies.AddRange(NpcKillsByNpcs(ai, now));
         }
         PartyTick(now);
