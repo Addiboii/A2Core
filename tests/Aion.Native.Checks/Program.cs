@@ -792,6 +792,12 @@ Check(first.Count == 5 && first[0].SequenceEqual(GamePackets.NpcFirstAggro(2001)
       && first[2][0] == 0x1a && first[2][1] == 0x37 && first[3].SequenceEqual(GamePackets.CombatState(2001, true)),
       "aggressive monster engages: 0x8d52, its target 0x3835 (the player), 0x371a, 0x8d21 on (the aggro start as recorded 2026-10-19)");
 Check(first[4][0] == 0x1b && first[4][1] == 0x37, "chase starts with a run (0x371b)");
+// A monster the player hits first: 0x8d21 on without 0x8d52 or 0x3835 (OBSERVED 148 recorded hit-first combat-ons).
+var sheep = new Target { Key = 2003, Name = "sheep", Hp = 100, HpMax = 100, Position = new Vector3d(0, 0, 0), WalkSpeed = 100, RunSpeed = 400, Radius = 50, Aggro = circle };
+var sheepMap = new Dictionary<int, Target> { [sheep.Key] = sheep };
+var struck = new NpcAi(new Random(1)).Engage(sheepMap, sheep, 0);
+Check(struck.Any(b => b.SequenceEqual(GamePackets.CombatState(2003, true))) && !struck.Any(b => (b[0] | b[1] << 8) is 0x8d52 or 0x3835),
+      "a monster hit first: 0x8d21 on, no 0x8d52 first aggro and no 0x3835 target");
 var arrive = ai.Tick(map, new Vector3d(500, 0, 0), 1000);
 Check(arrive.Single()[0] == 0x1a && wolf.Position.X is >= 280 and <= 330, "stops at attack reach beside the player (0x371a)");
 var leash = ai.Tick(map, new Vector3d(5000, 0, 0), 1200);
