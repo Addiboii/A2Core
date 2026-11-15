@@ -38,6 +38,10 @@ and AIon2-Dps-Meter (GPL-3.0) were used only to compare packet layouts; no code 
   claims, kill experience, the level-up and respawn order, used-up objects, map-event cutscene keys, the swim snapshot,
   the Kibelisk teleport, party focus targets, bag sort, item use, HP/MP regeneration, NPC skill casts and projectiles,
   Spiritmaster spirits, and the world entry order.
+- **zaraza87**: pull request #24 (https://github.com/Addiboii/A2Core/pull/24). Reading it found two of our bugs (area
+  casts centred on any client location; a failed Clash Rune enchant raising the level) and pointed to quest level-up
+  rechecks, CollectItem counting the bag, class quest rewards and the multi-hit damage divisor, which were then built
+  from the client's tables and our own recordings (no code or data was copied from the pull request).
 - **The release thread on RaGEZONE**: the reports and questions there (the Asmodian race bug, the Shadow Forest quest,
   the administrator launcher and NCGuard, closed registration, running on Windows) shaped the fixes and the
   documentation.
