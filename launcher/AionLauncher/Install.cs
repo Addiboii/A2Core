@@ -30,8 +30,12 @@ static class Install
 
     public static bool Present => File.Exists(ExePath);
 
-    /// <summary>Copies this exe into place, makes the shortcuts and the Apps &amp; features entry. Returns the installed exe.</summary>
-    public static string Run()
+    /// <summary>
+    /// Copies this exe into place with the server settings in use as launcher.json beside it (a prebuilt launcher's
+    /// launcher.json or command-line values would otherwise be lost), makes the shortcuts and the Apps &amp; features entry.
+    /// Returns the installed exe.
+    /// </summary>
+    public static string Run(Aion.Launcher.LauncherConfig config)
     {
         var source = Environment.ProcessPath ?? throw new LauncherException("The running program's path is unknown.");
         Directory.CreateDirectory(Folder);
@@ -43,6 +47,7 @@ static class Install
             File.Delete(staged);
             throw new LauncherException($"{Name} is already running from {Folder}. Close it and try again.");
         }
+        File.WriteAllText(Path.Combine(Folder, "launcher.json"), config.ToJson());
         try { Shortcut(DesktopShortcut); Shortcut(StartMenuShortcut); }
         catch (COMException error) { throw new LauncherException($"The shortcuts could not be made ({error.Message})."); }
         using var key = Registry.CurrentUser.CreateSubKey(UninstallKey);

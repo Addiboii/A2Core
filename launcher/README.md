@@ -21,6 +21,29 @@ Design and evidence: `research/client-installer.md`.
 - `launcher.json`: the server (account URL, IPv4 address, bootstrap port, private saved-folder suffix).
   Embedded; a `launcher.json` next to the exe overrides it. Optional `certificatePins` (below).
 
+## Settings without rebuilding: launcher.json next to the exe, or arguments
+
+The settings are read in this order, each overriding the one before:
+
+1. the `launcher.json` built into the exe;
+2. a `launcher.json` next to the exe (or the file `--config <path>` names): a prebuilt launcher plus the server's
+   own `launcher.json` needs no rebuild;
+3. command-line arguments, for single values (`--ip=1.2.3.4` or `--ip 1.2.3.4`):
+
+| Argument | Sets |
+|---|---|
+| `--ip` | `serverAddress`; the account URL's host follows it unless `--account-url` is given |
+| `--account-url` | `accountUrl` (https) |
+| `--port` | `bootstrapPort` |
+| `--pin` | `certificatePins` (repeat for several; replaces the file's) |
+| `--name` | `name` |
+| `--saved-suffix` | `savedDirSuffix` |
+| `--config` | another launcher.json to start from |
+
+A server on a bare IP with a self-signed certificate needs two: `--ip=192.168.22.33 --pin=<pin>`. The file stays the
+normal way to hand out a server's settings; arguments are for trying other servers. When the launcher installs itself
+it writes the settings it runs with as `launcher.json` in its program folder, so the installed copy keeps them.
+
 ## Self-signed account certificate: `certificatePins`
 
 The launcher checks the account site's certificate the normal way. A server with a self-signed

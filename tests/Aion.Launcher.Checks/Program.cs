@@ -21,6 +21,34 @@ foreach (var bad in new[] { config with { ServerAddress = "example.com" }, confi
     try { bad.Validate(); Check(false, "invalid config accepted"); } catch (InvalidDataException) { checks++; }
 }
 
+// ---------- Command-line overrides ----------
+{
+    var pin = Convert.ToBase64String(new byte[32]);
+    var lan = config.WithArguments(["--ip=192.168.22.33"]);
+    Check(lan.ServerAddress == "192.168.22.33" && new Uri(lan.AccountUrl).Host == "192.168.22.33" && new Uri(lan.AccountUrl).Port == new Uri(config.AccountUrl).Port
+          && lan.BootstrapPort == config.BootstrapPort && lan.SavedDirSuffix == config.SavedDirSuffix, "--ip sets the server and the account URL's host, the rest from launcher.json");
+    var full = config.WithArguments(["--ip", "10.0.0.5", "--account-url=https://play.example.org:9000", "--port=9087", "--pin=" + pin, "--pin", pin, "--name=Test", "--saved-suffix=TestSrv"]);
+    Check(full.ServerAddress == "10.0.0.5" && full.AccountUrl == "https://play.example.org:9000" && full.BootstrapPort == 9087 && full.CertificatePins!.Length == 2
+          && full.Name == "Test" && full.SavedDirSuffix == "TestSrv", "every value can be given as an argument (--name=value or --name value; --pin repeats)");
+    Check(config.WithArguments([]) == config && config.WithArguments(["--uninstall"]) == config, "no arguments (or the uninstall mode) leave launcher.json as it is");
+    foreach (var bad in new[] { new[] { "--ip=example.com" }, ["--port=abc"], ["--account-url=http://x"], ["--pin=zz"], ["--server=1.2.3.4"], ["--ip"], ["--saved-suffix=Steam"] })
+    {
+        try { config.WithArguments(bad); Check(false, "bad arguments accepted: " + string.Join(" ", bad)); } catch (InvalidDataException) { checks++; }
+    }
+    var dir = Directory.CreateTempSubdirectory("launcher-args-");
+    try
+    {
+        var file = Path.Combine(dir.FullName, "other.json");
+        File.WriteAllText(file, full.ToJson());
+        Check(LauncherConfig.Load(LauncherConfig.ConfigPath(["--config", file], "unused")) is { Name: "Test", BootstrapPort: 9087, AccountUrl: "https://play.example.org:9000" }
+              && LauncherConfig.Load(LauncherConfig.ConfigPath(["--config=" + file], null)) is { ServerAddress: "10.0.0.5", CertificatePins.Length: 2 }
+              && LauncherConfig.ConfigPath([], "fallback.json") == "fallback.json", "--config names another launcher.json; ToJson round-trips");
+        try { LauncherConfig.ConfigPath(["--config=" + Path.Combine(dir.FullName, "missing.json")], null); Check(false, "missing --config accepted"); } catch (InvalidDataException) { checks++; }
+        Check(!config.ToJson().Contains("certificatePins") || config.CertificatePins is not null, "no pins: the written launcher.json leaves them out");
+    }
+    finally { dir.Delete(true); }
+}
+
 // ---------- Certificate pins (SPKI SHA-256) ----------
 {
     using var key = System.Security.Cryptography.ECDsa.Create(System.Security.Cryptography.ECCurve.NamedCurves.nistP256);
