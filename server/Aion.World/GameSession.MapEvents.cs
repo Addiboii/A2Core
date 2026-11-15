@@ -685,14 +685,14 @@ public sealed partial class GameSession : IMapEventHost
     /// What an abnormal's SkillAbnormalEffect rows mean to the server: held (stun, hold, stone, sleep, a blocked move), immune
     /// (an immunity or untargetable), a relationship. Other effects (stat changes, dots, casts) only show the icon.
     /// </summary>
-    static (bool Held, bool Immune, int? Relationship) AbnormalModel(int abnormalId)
+    (bool Held, bool Immune, int? Relationship) AbnormalModel(int abnormalId)
     {
         bool held = false, immune = false;
         int? relationship = null;
-        foreach (var (_, type, values) in Boxes.Abnormal(abnormalId)?.Effects ?? [])
+        foreach (var (_, type, values) in (Boxes.Abnormal(abnormalId) ?? data.SkillAbnormal(abnormalId))?.Effects ?? [])
             switch (type)
             {
-                case "Stun" or "Hold" or "Stone" or "Sleep" or "Aerial" or "Fear" or "Knockdown" or "Root" or "BlockMovePosition": held = true; break;
+                case "Stun" or "Hold" or "Stone" or "Sleep" or "Aerial" or "Fear" or "Knockdown" or "KnockdownInstant" or "Root" or "BlockMovePosition": held = true; break;
                 case "ImmuneSkillEffectGroup" or "ImmuneDecreaseHP" or "BlockTargeting" or "Invincible": immune = true; break;
                 case "ChangeRelationshipEntity" when values.Count >= 2 && MapEventTables.Relationship(values[1]) is { } relation: relationship = relation; break;
             }
@@ -714,10 +714,15 @@ public sealed partial class GameSession : IMapEventHost
         }
     }
 
-    /// <summary>One abnormal per id on an NPC (a new one replaces it, CANDIDATE); caster the NPC itself, level 1, range base its position.</summary>
-    void AddNpcBuff(Target t, int abnormalId, int durationMs)
+    /// <summary>
+    /// One abnormal per id on an NPC (a new one replaces it, CANDIDATE). A script's: caster the NPC itself, level 1, range base its
+    /// position. A player skill's (<paramref name="by"/>): mask 0x13, caster the player with the row's level and the skill, range
+    /// base the player's position (CANDIDATE, as the monsters' on players), the packets into <paramref name="into"/>.
+    /// </summary>
+    void AddNpcBuff(Target t, int abnormalId, int durationMs, (int Key, byte Level, int Skill, Vector3d At)? by = null, List<byte[]>? into = null)
     {
-        RemoveNpcBuffs(t, b => b.AbnormalId == abnormalId, ExpireReplaced);
+        var output = into ?? mapEventOut;
+        RemoveNpcBuffs(t, b => b.AbnormalId == abnormalId, ExpireReplaced, into);
         var (held, immune, relationship) = AbnormalModel(abnormalId);
         var permanent = durationMs < 0;
         var buff = new NpcBuff { Uid = ++npcBuffUid, AbnormalId = abnormalId, ExpireAt = permanent ? long.MaxValue : mapEventNow + durationMs, Held = held, Immune = immune };
@@ -725,16 +730,18 @@ public sealed partial class GameSession : IMapEventHost
         {
             buff.Restore = t.Relationship;
             t.Relationship = shown;
-            mapEventOut.Add(GamePackets.RelationshipUpdate(t.Key, shown));
+            output.Add(GamePackets.RelationshipUpdate(t.Key, shown));
         }
         (npcBuffs.TryGetValue(t.Key, out var list) ? list : npcBuffs[t.Key] = []).Add(buff);
         RefreshNpcFlags(t);
-        mapEventOut.Add(PlayerPackets.AbnormalAdd(t.Key, [new AbnormalWire(buff.Uid, abnormalId, permanent ? -1 : durationMs,
-            permanent ? PassiveExpireTime : mapEventNow + durationMs, CasterKey: t.Key, Level: 1, RangeBase: t.Position)]));
+        output.Add(PlayerPackets.AbnormalAdd(t.Key, [new AbnormalWire(buff.Uid, abnormalId, permanent ? -1 : durationMs,
+            permanent ? PassiveExpireTime : mapEventNow + durationMs, CasterKey: by?.Key ?? t.Key, Level: by?.Level ?? 1, SkillId: by?.Skill,
+            RangeBase: by?.At ?? t.Position)]));
     }
 
-    void RemoveNpcBuffs(Target t, Func<NpcBuff, bool> which, byte reason)
+    void RemoveNpcBuffs(Target t, Func<NpcBuff, bool> which, byte reason, List<byte[]>? into = null)
     {
+        var output = into ?? mapEventOut;
         if (!npcBuffs.TryGetValue(t.Key, out var list)) return;
         var gone = list.Where(which).ToList();
         if (gone.Count == 0) return;
@@ -744,10 +751,10 @@ public sealed partial class GameSession : IMapEventHost
             if (b.Restore is { } back)
             {
                 t.Relationship = back;
-                mapEventOut.Add(GamePackets.RelationshipUpdate(t.Key, back));
+                output.Add(GamePackets.RelationshipUpdate(t.Key, back));
             }
         RefreshNpcFlags(t);
-        mapEventOut.Add(PlayerPackets.AbnormalRemove(t.Key, gone.Select(b => (b.Uid, reason)).ToList()));
+        output.Add(PlayerPackets.AbnormalRemove(t.Key, gone.Select(b => (b.Uid, reason)).ToList()));
     }
 
     void RefreshNpcFlags(Target t)

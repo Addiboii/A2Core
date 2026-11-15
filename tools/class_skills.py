@@ -215,6 +215,53 @@ def _self_filters(table=SKILL_FILTER):
                      if _short(r.get('EffectRangeType', '')) == 'Self')
 
 
+def _npc_only(conditions):
+    """Whether a row's conditions are just ObjectType NPC (true): the row for NPC targets (Ankle Slice: PC 5000, NPC 10000)."""
+    return bool(conditions) and all(_short(c.get('ConditionType', '')) == 'ObjectType' and (c.get('ConditionValues') or [''])[0] == 'NPC'
+                                    and c.get('ConditionalExpression', True) for c in conditions)
+
+
+def _abnormal_rows(entry, keep, npc_target=False):
+    """Abnormal_True / Abnormal_Cc rows of the effect groups keep(filter id) accepts, as [abnormal, duration min, max, level,
+    chance of 10000, effect row id]; rows with conditions (for an NPC target: other than ObjectType NPC) or without a positive
+    duration are left out (OURS)."""
+    value = lambda v: v['Value'] if isinstance(v, dict) else v
+    number = lambda v: int(v) if str(v).lstrip('-').isdigit() else 0
+    out = []
+    for group in entry.get('relationships', {}).get('effects', []):
+        if not keep(value(group.get('reference', {}).get('SkillEffectFilterId', 0))):
+            continue
+        for row in group.get('rows', []):
+            values = row.get('EffectValueList') or []
+            conditions = row.get('SkillEffectConditionList')
+            if _short(row.get('EffectType', '')) not in ('Abnormal_True', 'Abnormal_Cc') or len(values) < 3                     or (conditions and not (npc_target and _npc_only(conditions))):
+                continue
+            low, high = number(values[0]), number(values[1]) if len(values) > 1 else number(values[0])
+            if number(values[2]) <= 0 or low <= 0:
+                continue
+            out.append([number(values[2]), low, max(low, high), number(values[3]) if len(values) > 3 and number(values[3]) > 0 else 1,
+                        number(values[4]) if len(values) > 4 and str(values[4]).isdigit() else 10000, value(row['ID'])])
+    return out
+
+
+def target_abnormals(entry, table=SKILL_FILTER):
+    """target_abnormals: the Abnormal_True / Abnormal_Cc rows of the groups whose SkillEffectFilter is not Self (Single, Circle,
+    Rectangle, ...): put on the NPCs the skill hits."""
+    selves = _self_filters(str(table))
+    known = _filter_ids(str(table))
+    out = _abnormal_rows(entry, lambda f: f in known and f not in selves, npc_target=True)
+    return {'target_abnormals': out} if out else {}
+
+
+@lru_cache(maxsize=None)
+def _filter_ids(table=SKILL_FILTER):
+    path = Path(table)
+    if not path.exists():
+        return frozenset()
+    value = lambda v: v['Value'] if isinstance(v, dict) else v
+    return frozenset(value(r['ID']) for r in json.loads(path.read_text(encoding='utf-8'))['Properties']['Data'])
+
+
 def self_abnormals(entry, table=SKILL_FILTER):
     """self_abnormals: the Abnormal_True rows of the skill's effect groups whose SkillEffectFilter EffectRangeType is Self, as
     [abnormal id, duration min ms, max ms, level, chance of 10000, effect row id]. Rows with conditions or without a positive
@@ -264,6 +311,7 @@ def cast_row(entry):
         **cooldown_group(entry),
         **cooldown_levels(entry),
         **self_abnormals(entry),
+        **target_abnormals(entry),
         **end_fields(entry),
         'casting_ms': int(facts.get('CastingTime') or 0),
         'cost': {k: int(facts.get('NeedCost' + k.title()) or 0) for k in ('mp', 'hp', 'sp')},
@@ -446,13 +494,13 @@ def build(tables=TABLES, catalog=CATALOG):
             'classes': {k: v for k, v in classes.items()}, 'common_unlocks': unlocks.get(COMMON, []),
             'skills': cast, 'levels': levels, 'projectile_speeds': speeds, 'charges': charges,
             'effect_levels': effect_levels({d['level_group'] for c in cast.values() for d in c['damage'] if 'level_group' in d}),
-            'abnormals': skill_abnormals({a[0] for c in cast.values() for a in c.get('self_abnormals', [])}),
+            'abnormals': skill_abnormals({a[0] for c in cast.values() for a in c.get('self_abnormals', []) + c.get('target_abnormals', [])}),
             'evidence': {'acquire': 'SkillAcquireData bAutoLearn rows without costs/prerequisites/ascension',
                          'levels': 'SkillAcquireData Mastery rows of SkillLevel 2+: level, CostSkillPoint, NeedCharacterLevel',
                          'max_level': 'PcStatLevel highest Level',
                          'classes': 'PCCreationInfo Class, then PcData Class rows without a creation row (Fighter)',
                          'damage': 'Damage EffectValueList, candidate reading: flat min/max, weapon ratio min/max (1/10000)',
-                         'abnormals': 'SkillAbnormal GroupId + SkillAbnormalEffect rows of the self_abnormals (SkillEffectFilter EffectRangeType Self) (build 26262663)',
+                         'abnormals': 'SkillAbnormal GroupId + SkillAbnormalEffect rows of the self_abnormals (SkillEffectFilter EffectRangeType Self) and target_abnormals (other filters) (build 26262663)',
                          'effect_levels': 'SkillEffectLv.dat by the SkillEffectLvGroupId of a Damage row (level_group): flat min/max and PvP flat min/max for skill levels 2+ (build 26262663)',
                          'weapon_type': "most frequent NeedMainWeaponTypes of the class's auto-learned skills",
                          'starter_weapons': 'Item.dat equip_wp_<Type>_<L|D>_c_begin_001a_b (L for race 1, D for race 2)',

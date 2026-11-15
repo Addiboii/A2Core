@@ -91,7 +91,9 @@ public sealed record SkillDefinition(
     [property: JsonPropertyName("cooldown_levels")] int[]? CooldownLevels = null,
     // Abnormal_True rows of SkillEffectFilter Self groups: [abnormal, duration min ms, max ms, level, chance of 10000, effect row]
     // (tools/class_skills.py self_abnormals, build 26262663).
-    [property: JsonPropertyName("self_abnormals")] int[][]? SelfAbnormals = null)
+    [property: JsonPropertyName("self_abnormals")] int[][]? SelfAbnormals = null,
+    // Abnormal_True / Abnormal_Cc rows of the other filters' groups (the same columns), put on the NPCs the skill hits.
+    [property: JsonPropertyName("target_abnormals")] int[][]? TargetAbnormals = null)
 {
     /// <summary>The cooldown at a skill level: SkillLv.dat's (OBSERVED from the table; level N uses row N, CANDIDATE), else CooldownMs.</summary>
     public int CooldownAt(int skillLevel) =>

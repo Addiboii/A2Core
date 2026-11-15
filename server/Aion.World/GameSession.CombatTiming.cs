@@ -126,6 +126,7 @@ partial class GameSession
                 : GamePackets.SkillHit(target.Key, playerKey, skill, hit.EffectId, hit.Amount, hit.Critical, seq: seq, actionUid: uid));
         }
         if (!target.Dead) replies.AddRange(DrainGuard(skill, target, uid, now));
+        if (!target.Dead) replies.AddRange(TargetAbnormals(skill, target, now));
         replies.Add(GamePackets.NpcHp(target.Key, target.Hp));
         replies.AddRange(MapEventHp(target, now));
         if (target.Dead)
@@ -144,6 +145,26 @@ partial class GameSession
             replies.AddRange(ai.Killed(target));
         }
         else replies.AddRange(ai.Engage(targets!, target, now, playerKey, hits.Sum(h => h.Amount)));    // a hit monster chases its attacker
+        return replies;
+    }
+
+    /// <summary>
+    /// A player skill's abnormals on an NPC it hit (SkillDefinition.TargetAbnormals, each by its chance; an immune NPC takes none),
+    /// after the hits and before the NPC's HP (OBSERVED order, ours and the community recordings 2026-10..11: 353 player abnormals
+    /// on monsters, mask 0x13 with the player as caster and the skill). Stuns and holds stop the NPC (Target.Held); their end is
+    /// the map-event NPC abnormals' (0x382c reason 1). Stat changes and DoTs on NPCs only show the icon (not modelled yet).
+    /// </summary>
+    internal List<byte[]> TargetAbnormals(int skill, Target target, long now)
+    {
+        if (data.Skill(skill)?.TargetAbnormals is not { Length: > 0 } rows || target.Immune) return [];
+        var replies = new List<byte[]>();
+        mapEventNow = now;
+        foreach (var row in rows.Where(r => r.Length >= 6))
+        {
+            if (rng.Next(10_000) >= row[4]) continue;
+            AddNpcBuff(target, row[0], rng.Next(Math.Min(row[1], row[2]), Math.Max(row[1], row[2]) + 1),
+                (playerKey, (byte)Math.Clamp(row[3], 1, 255), skill, position ?? target.Position), replies);
+        }
         return replies;
     }
 

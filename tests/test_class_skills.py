@@ -110,6 +110,22 @@ class SelfAbnormalTests(unittest.TestCase):
             self.assertEqual(class_skills.self_abnormals(entry, table=path), {'self_abnormals': [[11011, 2000, 2000, 1, 10000, 1]]})
 
 
+class TargetAbnormalTests(unittest.TestCase):
+    def test_npc_rows_of_other_filters(self):
+        import json, tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'filter.json'
+            path.write_text(json.dumps({'Properties': {'Data': [{'ID': {'Value': 10}, 'EffectRangeType': 'ESkillEffectRangeType::Self'},
+                                                                  {'ID': {'Value': 20}, 'EffectRangeType': 'ESkillEffectRangeType::Circle'}]}}), encoding='utf-8')
+            cond = lambda who: [{'ConditionType': 'ESkillEffectConditionType::ObjectType', 'ConditionValues': [who, '0'], 'ConditionalExpression': True}]
+            row = lambda i, chance, c: {'ID': {'Value': i}, 'EffectType': 'ESkillEffectType::Abnormal_Cc', 'EffectValueList': ['3000', '3000', '9', '1', chance], 'SkillEffectConditionList': c}
+            entry = {'relationships': {'effects': [
+                {'reference': {'SkillEffectFilterId': {'Value': 20}}, 'rows': [row(1, '5000', cond('PC')), row(2, '10000', cond('NPC'))]},
+                {'reference': {'SkillEffectFilterId': {'Value': 10}}, 'rows': [row(3, '10000', [])]}]}}
+            self.assertEqual(class_skills.target_abnormals(entry, table=path), {'target_abnormals': [[9, 3000, 3000, 1, 10000, 2]]})
+
+
 class CooldownLevelTests(unittest.TestCase):
     def test_cooldown_per_level_only_when_it_changes(self):
         import json, tempfile

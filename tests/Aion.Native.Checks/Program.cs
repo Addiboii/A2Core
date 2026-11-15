@@ -579,6 +579,17 @@ var dashAdd = dashCast.FindIndex(b => Op(b) == 0x382a && Convert.ToHexString(b).
 Check(dashEffect >= 0 && dashAdd > dashEffect && game.ActiveBuffs.Contains(11011)
       && !(await game.TickAsync(Now + 14_050)).Any(b => Op(b) == 0x382a) && !game.ActiveBuffs.Contains(11011),
       "a self-buff skill: 0x3804 self effect, then its abnormal (0x382a, caster the player); gone after its 2 s");
+// A skill's abnormal on the NPC it hits (Ankle Slice 11200000: Abnormal_Cc Hold 100000201 for 3 s, the NPC row at 10000): 0x382a on
+// the NPC, mask 0x13, caster the player with the skill; it holds the NPC until the 0x382c.
+var heldTarget = game.Targets[Combat.TrainingDummyKey];
+var ankle = game.TargetAbnormals(11200000, heldTarget, Now + 12_100);
+var ankleAdd = ankle.SingleOrDefault(b => Op(b) == 0x382a);
+Check(data.Skill(11200000)?.TargetAbnormals is [[100000201, 3000, 3000, 1, 10000, _]] && ankleAdd is not null
+      && Convert.ToHexString(ankleAdd).StartsWith("2A38" + Convert.ToHexString(NativeVarint.Encode((uint)Combat.TrainingDummyKey)) + "0113")
+      && Convert.ToHexString(ankleAdd).Contains("0101" + Convert.ToHexString(BitConverter.GetBytes(11200000))) && heldTarget.Held,
+      "a skill's abnormal on the NPC it hits: 0x382a mask 0x13, the player as caster with the skill; a Hold stops the NPC");
+var ankleEnd = await game.TickAsync(Now + 15_200);
+Check(!heldTarget.Held && ankleEnd.Any(b => Op(b) == 0x382c), "the NPC's hold ends after its 3 s (0x382c)");
 var dummy = game.Targets[Combat.TrainingDummyKey];
 dummy.Hp = 1;
 game.SetResource('H', 100);
