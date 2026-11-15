@@ -674,6 +674,10 @@ public sealed partial class GameSession : IMapEventHost
         public required int Uid, AbnormalId;
         public required long ExpireAt;
         public bool Held, Immune;
+        /// <summary>A player skill's Dot_NormalCalc rows: the caster, the skill and per row the next tick.</summary>
+        public int CasterKey, SkillId;
+        public List<(int EffectId, int IntervalMs, int FlatMin, int FlatMax, int RatioMin, int RatioMax)> Dots { get; } = [];
+        public List<long> DotNextAt { get; } = [];
         /// <summary>The relationship the NPC had before a ChangeRelationshipEntity effect, restored when the abnormal ends.</summary>
         public int? Restore;
     }
@@ -726,6 +730,18 @@ public sealed partial class GameSession : IMapEventHost
         var (held, immune, relationship) = AbnormalModel(abnormalId);
         var permanent = durationMs < 0;
         var buff = new NpcBuff { Uid = ++npcBuffUid, AbnormalId = abnormalId, ExpireAt = permanent ? long.MaxValue : mapEventNow + durationMs, Held = held, Immune = immune };
+        if (by is { } caster)
+        {
+            buff.CasterKey = caster.Key;
+            buff.SkillId = caster.Skill;
+            foreach (var (id, type, values) in data.SkillAbnormal(abnormalId)?.Effects ?? [])
+            {
+                int V(int i) => i < values.Count && int.TryParse(values[i], out var v) ? v : 0;
+                if (type != "Dot_NormalCalc" || V(0) <= 0) continue;
+                buff.Dots.Add((id, V(0), V(3), V(4), V(5), V(6)));
+                buff.DotNextAt.Add(mapEventNow + V(0));
+            }
+        }
         if (relationship is { } shown && shown != t.Relationship)
         {
             buff.Restore = t.Relationship;
@@ -776,8 +792,41 @@ public sealed partial class GameSession : IMapEventHost
                 if (t is not null) { t.Held = false; t.Immune = false; }
                 continue;
             }
+            NpcDotTicks(t, list, now);
+            if (t.Dead)
+            {
+                npcBuffs.Remove(key);
+                t.Held = false; t.Immune = false;
+                continue;
+            }
             if (list.Any(b => now >= b.ExpireAt)) RemoveNpcBuffs(t, b => now >= b.ExpireAt, ExpireTimeout);
         }
+    }
+
+    /// <summary>
+    /// A player's damage over time on an NPC: per due Dot_NormalCalc row a tick (Combat.DotTick) as 0x3805 mask 0x0a {caster, uid,
+    /// effect, amount, skill} on the NPC (OBSERVED form, 40 such ticks), then its HP; a tick to 0 is the kill (GameSession.CombatTiming.cs).
+    /// </summary>
+    void NpcDotTicks(Target t, List<NpcBuff> list, long now)
+    {
+        foreach (var b in list.Where(b => b.CasterKey == playerKey && b.Dots.Count > 0).ToList())
+            for (var i = 0; i < b.Dots.Count && !t.Dead; i++)
+            {
+                var hurt = false;
+                while (!t.Dead && now >= b.DotNextAt[i] && b.DotNextAt[i] <= b.ExpireAt)
+                {
+                    var (effect, interval, flatMin, flatMax, ratioMin, ratioMax) = b.Dots[i];
+                    b.DotNextAt[i] += interval;
+                    var amount = t.Immune ? 0 : Combat.DotTick(data, className, level, equippedWeapon, t.Defense, rng, flatMin, flatMax, ratioMin, ratioMax);
+                    amount = t.Landed(amount);
+                    t.Hp = Math.Max(0, t.Hp - amount);
+                    mapEventOut.Add(RidePackets.AbnormalDamage(t.Key, playerKey, b.Uid, effect, amount, b.SkillId));
+                    hurt = true;
+                }
+                if (!hurt) continue;
+                mapEventOut.Add(GamePackets.NpcHp(t.Key, t.Hp));
+                if (t.Dead) mapEventOut.AddRange(NpcDied(t, b.SkillId, now));
+            }
     }
 
     /// <summary>

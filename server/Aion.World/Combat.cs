@@ -135,6 +135,19 @@ public static class Combat
     }
 
     /// <summary>
+    /// One Dot_NormalCalc tick of a player's abnormal: its flat and ratio as a Damage row's (SkillAbnormalEffect values [3]/[4]
+    /// flat, [5]/[6] ratio of 10000), no critical, the target's defense. OBSERVED fit (community recordings 2026-11-04..06): the
+    /// Spiritmaster's 1614000011 {148, 15000} ticked 762-804 on monsters.
+    /// </summary>
+    public static int DotTick(GameData data, string? className, int level, int? weaponItem, int targetDefense, Random rng, int flatMin, int flatMax, int ratioMin, int ratioMax)
+    {
+        var weapon = data.WeaponStatsOf(weaponItem);
+        var attack = rng.Next(Math.Min(weapon.Min, weapon.Max), Math.Max(weapon.Min, weapon.Max) + 1) + data.BaseStats(className, level).GetValueOrDefault("FixingDamage");
+        var raw = RowDamage(rng.Next(Math.Min(flatMin, flatMax), Math.Max(flatMin, flatMax) + 1), attack, rng.Next(Math.Min(ratioMin, ratioMax), Math.Max(ratioMin, ratioMax) + 1), 1);
+        return Math.Max(1, (int)Math.Round(raw * DefenseScale / (DefenseScale + Math.Max(0, targetDefense))));
+    }
+
+    /// <summary>
     /// One Damage row before critical and defense: (flat + attack * ratio / 10000) / divisor (DamageRow.HitDivisor). Dividing the
     /// flat part too is CANDIDATE (the recorded ratios fit with or without it).
     /// </summary>

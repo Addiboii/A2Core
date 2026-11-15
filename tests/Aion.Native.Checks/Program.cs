@@ -590,6 +590,18 @@ Check(data.Skill(11200000)?.TargetAbnormals is [[100000201, 3000, 3000, 1, 10000
       "a skill's abnormal on the NPC it hits: 0x382a mask 0x13, the player as caster with the skill; a Hold stops the NPC");
 var ankleEnd = await game.TickAsync(Now + 15_200);
 Check(!heldTarget.Held && ankleEnd.Any(b => Op(b) == 0x382c), "the NPC's hold ends after its 3 s (0x382c)");
+// A player's damage over time on an NPC (Drill Dart 14050000: 140500001, Dot_NormalCalc 1405000012 every 1000 ms for 6 s, flat 43
+// + 45 % of the attack): 0x3805 mask 0x0a on the NPC with the player as caster, its HP down.
+heldTarget.Hp = 5000;
+game.TargetAbnormals(14050000, heldTarget, Now + 15_300);
+var dartEarly = await game.TickAsync(Now + 16_250);
+var dartTick = await game.TickAsync(Now + 16_350);
+var dartDot = dartTick.SingleOrDefault(b => Op(b) == 0x3805);
+Check(!dartEarly.Any(b => Op(b) == 0x3805) && dartDot is not null
+      && Convert.ToHexString(dartDot).StartsWith("0538" + Convert.ToHexString(NativeVarint.Encode((uint)Combat.TrainingDummyKey)) + "0A01")
+      && Convert.ToHexString(dartDot).Contains(Convert.ToHexString(BitConverter.GetBytes(1405000012))) && Convert.ToHexString(dartDot).EndsWith(Convert.ToHexString(BitConverter.GetBytes(14050000)))
+      && heldTarget.Hp < 5000 && dartTick.Any(b => Op(b) == 0x8d00),
+      "a player's damage over time on an NPC: a 0x3805 mask 0x0a tick a second, the player as caster, the NPC's HP down");
 var dummy = game.Targets[Combat.TrainingDummyKey];
 dummy.Hp = 1;
 game.SetResource('H', 100);

@@ -129,7 +129,15 @@ partial class GameSession
         if (!target.Dead) replies.AddRange(TargetAbnormals(skill, target, now));
         replies.Add(GamePackets.NpcHp(target.Key, target.Hp));
         replies.AddRange(MapEventHp(target, now));
-        if (target.Dead)
+        if (target.Dead) replies.AddRange(NpcDied(target, skill, now));
+        else replies.AddRange(ai.Engage(targets!, target, now, playerKey, hits.Sum(h => h.Amount)));    // a hit monster chases its attacker
+        return replies;
+    }
+
+    /// <summary>An NPC this player brought to 0 HP: the respawn, kill credits, loot, then the official order after HP 0.</summary>
+    List<byte[]> NpcDied(Target target, int skill, long now)
+    {
+        var replies = new List<byte[]>();
         {
             respawnAt[target.Key] = now + RespawnMs;  // HP 0 is the kill
             killedNpcs.Add(target.NpcId);
@@ -144,7 +152,6 @@ partial class GameSession
             replies.Add(NpcKilled(target.Key, skill));
             replies.AddRange(ai.Killed(target));
         }
-        else replies.AddRange(ai.Engage(targets!, target, now, playerKey, hits.Sum(h => h.Amount)));    // a hit monster chases its attacker
         return replies;
     }
 
