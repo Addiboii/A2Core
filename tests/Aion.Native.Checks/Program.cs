@@ -2811,6 +2811,15 @@ Check(data.Spawns(1000).Count(s => s.Untouchable) is var untouchableOnMap && Hit
       $"an area cast skips an untouchable monster beside a hittable one (NpcData bCanBeAttacked / NpcTargetAble; {untouchableOnMap} on map 1000)");
 mapTargets.Remove(1901);
 mapTargets.Remove(1902);
+// NpcData bHitCountBased: 7 HP, every hit takes 1 and is not critical (OBSERVED 30 of 30 hits, tools/world_npcs.py hit_count).
+var totemSpawn = data.NpcFromTemplate(2290017, "totem", [here.X, here.Y, here.Z], 0);
+mapTargets[1903] = new Target { Key = 1903, Name = "totem", Hp = Combat.HpFor(totemSpawn!), HpMax = Combat.HpFor(totemSpawn!), Position = here, HitCount = totemSpawn!.HitCount };
+var totemHits = await spiritMaster.HandleAsync(Cast(16010000, spiritMaster.PlayerKey, here), Now + 300_000);
+var totemLanded = mapTargets[1903].Landed([new Hit(5000, true, 1), new Hit(0, false, 1)]);
+Check(totemSpawn.HitCount && mapTargets[1903].HpMax == 7 && HitOn(totemHits, 1903) && mapTargets[1903].Hp == 7 - totemHits.Count(b => Op(b) == 0x3804 && b.AsSpan(2).StartsWith(NativeVarint.Encode(1903u)))
+      && totemLanded.SequenceEqual([new Hit(1, false, 1), new Hit(0, false, 1)]) && mapTargets[1903].Landed(900) == 1,
+      $"a hit-count NPC (2290017) has 7 HP and loses 1 a hit, never critical ({mapTargets[1903].Hp} left)");
+mapTargets.Remove(1903);
 Check(GameSession.AreaCentre(data.Skill(16010000), new Vector3d(0, 0, 0), new Vector3d(100, 0, 0)) == new Vector3d(100, 0, 0)
       && GameSession.AreaCentre(data.Skill(16010000), new Vector3d(0, 0, 0), new Vector3d(100_000, 0, 0)) == new Vector3d(0, 0, 0)
       && GameSession.AreaCentre(data.Skill(16010000), null, new Vector3d(5, 0, 0)) == new Vector3d(5, 0, 0),

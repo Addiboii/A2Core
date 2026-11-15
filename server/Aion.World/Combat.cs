@@ -23,6 +23,12 @@ public sealed class Target
     public bool Untouchable { get; init; }
     /// <summary>What a player's side picks to hit by itself (spirits, companions): hostile and not untouchable.</summary>
     public bool Attackable => Hostile && !Untouchable;
+    /// <summary>NpcData bHitCountBased (NpcSpawn.HitCount): every hit takes 1 HP and none is critical (OBSERVED, tools/world_npcs.py hit_count).</summary>
+    public bool HitCount { get; init; }
+    /// <summary>The hits as they land on this NPC: one HP each, normal, on a hit-count NPC; unchanged on any other.</summary>
+    public IReadOnlyList<Hit> Landed(IReadOnlyList<Hit> hits) => HitCount ? hits.Select(h => h with { Amount = Math.Min(1, h.Amount), Critical = false }).ToList() : hits;
+    /// <summary>One NPC's damage as it lands on this NPC (as <see cref="Landed"/>).</summary>
+    public int Landed(int damage) => HitCount ? Math.Min(1, damage) : damage;
     /// <summary>Immune through a scripted abnormal: the players' hits land for nothing.</summary>
     public bool Immune { get; set; }
     /// <summary>Its spawn height was put on the ground (navmesh floor or terrain) once the map's geometry was loaded.</summary>
@@ -206,7 +212,7 @@ public static class Combat
                 Function = spawn.Function, Aggro = spawn.Aggro, Skills = spawn.Skills ?? [], NoRotation = spawn.NoRotation,
                 UniqueKey = spawn.UniqueKey, SocialAction = spawn.SocialAction, SocialStart = spawn.SocialAction != 0 ? StartedAt : 0, Route = spawn.Route,
                 Air = spawn.Air, AirMonster = spawn.Air && spawn.SubType.EndsWith("Monster", StringComparison.Ordinal), DamageScale = DamageScale(spawn.SubType, spawn.Grade),
-                Untouchable = spawn.Untouchable,
+                Untouchable = spawn.Untouchable, HitCount = spawn.HitCount,
             };
         }
         return targets;

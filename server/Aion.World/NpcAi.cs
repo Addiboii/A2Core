@@ -302,6 +302,7 @@ public sealed class NpcAi(Random rng, GameData? data = null)
         // Drakan and watchstone in one hit each, since NPC damage follows the attacker's level.
         if (!attacker.Hostile && victim.Level < attacker.Level)
             damage = Math.Max(1, (int)Math.Round(damage * (double)Combat.HpForLevel(victim.Level) / Combat.HpForLevel(attacker.Level)));
+        damage = victim.Landed(damage);   // a hit-count NPC takes 1 a hit
         if (!victim.Immune) victim.Hp = Math.Max(0, victim.Hp - damage);
         npcHurt.Add(victim.Key);
         var replies = new List<byte[]> { GamePackets.NpcHp(victim.Key, victim.Hp) };

@@ -76,6 +76,7 @@ public sealed partial class MapInstance
                 NpcId = template.NpcId, Level = template.Level, Grade = template.Grade, Direction = 0, Relationship = template.Relationship, Aggressive = template.Aggressive,
                 WalkSpeed = template.WalkSpeed, RunSpeed = template.RunSpeed, Radius = template.Radius, Function = template.Function,
                 Aggro = template.Aggro, Skills = template.Skills ?? [], NoRotation = template.NoRotation, Air = template.Air, AirMonster = template.Air && template.SubType.EndsWith("Monster", StringComparison.Ordinal), DamageScale = Combat.DamageScale(template.SubType, template.Grade),
+                HitCount = template.HitCount,
             };
             Targets[key] = target;
             keys.Add(key);

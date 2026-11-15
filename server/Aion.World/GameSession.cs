@@ -2340,6 +2340,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             // An immune NPC (a scripted abnormal) takes the hits for nothing; it still turns on its attacker.
             var hits = WithSealStone(Combat.SkillHits(data, skill, className, level, equippedWeapon, target.Defense, rng));   // GameSession.Settings.cs
             if (target.Immune) hits = hits.Select(h => h with { Amount = 0 }).ToList();
+            hits = target.Landed(hits);   // a hit-count NPC takes 1 a hit
             // GameSession.CombatTiming.cs: projectiles (0x3803) and their hits after the flight, the action uid, the kill.
             replies.AddRange(HitOrFire(skill, target, hits, actionUid, now));
         }

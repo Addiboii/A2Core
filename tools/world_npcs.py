@@ -129,6 +129,21 @@ def untouchable(row):
     return not row.get('bCanBeAttacked') or not str(row.get('NpcTargetAble', '')).endswith('::Able')
 
 
+# NpcData bHitCountBased (325 rows): HP counts hits, every hit takes 1 and none is critical. OBSERVED: the four such monsters
+# in the recordings (2100155, 2100158 OwlTotem, 2290017 DraTotem, 2400263 Turret; grades 2-3, levels 4-25; 2026-10-19 2.0.6 and
+# 2026-11-04/05) appear with 7/7 HP, all 30 player hits on them were 1-damage normal hits, the 7th killed; the one summon
+# (2920366 Summon_Tie) appears with 5/5. CANDIDATE: the same for the rows not recorded.
+HIT_COUNT_HP = 7
+HIT_COUNT_SUMMON_HP = 5
+
+
+def hit_count(row):
+    """The template fields of a hit-count NPC (NpcData bHitCountBased): its HP in hits and the flag; {} for any other."""
+    if not row.get('bHitCountBased'):
+        return {}
+    return {'hp_max': HIT_COUNT_SUMMON_HP if str(row.get('NpcType', '')).endswith('::Summon') else HIT_COUNT_HP, 'hit_count': True}
+
+
 def companion_hp(row):
     return row['RelationshipEntity'].endswith('::NPC_Companion') and bool(row.get('bCanBeAttacked'))
 
@@ -293,6 +308,7 @@ def build(maps=MAPDATA, npc_table=NPCDATA, aggro_table=AGGRODATA, skill_table=SK
                                    'grade': int(row.get('Grade') or 3),
                                    **({'air': True} if row.get('ObjectTerrainType', '').endswith('::Air') else {}),
                                    **({'hp_max': COMPANION_HP} if companion_hp(row) else {}),
+                                   **hit_count(row),
                                    **({'untouchable': True} if untouchable(row) else {})})
                 used_skills.update(skills)
                 unique_key = int(record.get('UniqueKey', 0)) & 0xffffffff
@@ -325,6 +341,7 @@ def build(maps=MAPDATA, npc_table=NPCDATA, aggro_table=AGGRODATA, skill_table=SK
                                   'sub_type': _enum(row.get('NpcSubType', 'ENpcSubType::NormalMonster')), 'grade': int(row.get('Grade') or 3),
                                   **({'air': True} if row.get('ObjectTerrainType', '').endswith('::Air') else {}),
                                    **({'hp_max': COMPANION_HP} if companion_hp(row) else {}),
+                                   **hit_count(row),
                                    **({'untouchable': True} if untouchable(row) else {})}
         used_skills.update(skills)
     out['templates'] = templates

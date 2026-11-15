@@ -64,5 +64,12 @@ class UntouchableTests(unittest.TestCase):
         self.assertTrue(world_npcs.untouchable({'bCanBeAttacked': True, 'NpcTargetAble': 'ENpcTargetAble::Unable'}))
         self.assertTrue(world_npcs.untouchable({'bCanBeAttacked': True, 'NpcTargetAble': 'ENpcTargetAble::Onlypicking'}))
 
+class HitCountTests(unittest.TestCase):
+    def test_hit_count_npcs_have_hits_for_hp(self):
+        # NpcData bHitCountBased: 7 hits for a monster, 5 for a summon (OBSERVED); nothing for any other NPC.
+        self.assertEqual(world_npcs.hit_count({'bHitCountBased': True, 'NpcType': 'ENpcType::Monster'}), {'hp_max': 7, 'hit_count': True})
+        self.assertEqual(world_npcs.hit_count({'bHitCountBased': True, 'NpcType': 'ENpcType::Summon'}), {'hp_max': 5, 'hit_count': True})
+        self.assertEqual(world_npcs.hit_count({'bHitCountBased': False, 'NpcType': 'ENpcType::Monster'}), {})
+
 if __name__ == '__main__':
     unittest.main()
