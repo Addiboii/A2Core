@@ -23,6 +23,8 @@ DATA = ROOT / 'tools/data/class-skills.json'
 LOCAL = Path(os.environ.get('AION_RESEARCH_LOCAL', ROOT / 'research/local'))
 TABLES = LOCAL / 'starter-skills-tables'
 CATALOG = LOCAL / 'game-catalog-v2/entries.jsonl'
+# The player-skill acts of build 26262663 (research/local/skill-act-26262663/README.txt): Design acts and their containers.
+ACTS = LOCAL / 'skill-act-26262663'
 COMMON = 'None'
 # Player class skills (Gladiator 11xxxxxx .. Chanter 18xxxxxx); NPC and item skills sit outside.
 PC_SKILL_MIN, PC_SKILL_MAX = 11_000_000, 20_000_000
@@ -140,6 +142,37 @@ def cooldown_group(entry):
     return {'cooldown_group': group} if group and str(group) != str(entry.get('id')) else {}
 
 
+@lru_cache(maxsize=None)
+def act_times(acts=ACTS):
+    """{AnimationName: (EndureEnd s or None, container PlayRate)} from the exported acts; {} when they are missing."""
+    acts = Path(acts)
+    times = {}
+    for path in sorted((acts / 'acts').glob('*_Design.json')):
+        ends = [link.get('ActivationTime', 0.0) for export in json.loads(path.read_text(encoding='utf-8'))
+                for section in (export.get('Properties') or {}).get('Sections', []) for link in section.get('TaskLinks', [])
+                if link.get('bEnabled', True) and "AionActTask_EndureEnd'" in link['TaskBase']['ObjectName']]
+        times[path.name[:-len('_Design.json')]] = max(ends) if ends else None
+    rates = {}
+    for path in sorted((acts / 'containers').glob('*.json')):
+        for export in json.loads(path.read_text(encoding='utf-8')):
+            if export.get('Type') == 'AionActContainer':
+                rates[path.stem] = (export.get('Properties') or {}).get('PlayRate', 1.0)
+    return {name: (end, rates.get(name, 1.0)) for name, end in times.items()}
+
+
+def end_fields(entry, acts=ACTS):
+    """end_ms: the skill's end (0x3806) after its start at attack speed 10000, before the server's 50 ms rounding: Design act
+    EndureEnd / container PlayRate. OBSERVED in the community recordings (2026-11-04..06, build 26262663): natural ends
+    (0x3806 tail 00) at floor(end_ms * 10000 / attack speed / 50) * 50 for 100 of 107 skill/speed pairs (Templar_Skill006:
+    0.7 s / 1.2 at 10000 = 550 ms); skills without an animation end at once (end_ms 0; 69 of 69). Not fitting: Chanter_Skill040
+    (rate 1.2, 17 ends as if 1.0) and four single Ranger samples. Left out (no end sent, CANDIDATE) when the act has no EndureEnd."""
+    name = (entry.get('raw') or {}).get('AnimationName')
+    if name in (None, '', 'None'):
+        return {'end_ms': 0}
+    end, rate = act_times(acts).get(name, (None, 1.0))
+    return {'end_ms': round(end * 1000 / (rate or 1.0), 3)} if end else {}
+
+
 def cast_row(entry):
     facts = entry.get('facts', {})
     return {
@@ -150,6 +183,7 @@ def cast_row(entry):
         'weapons': [_short(w) for w in facts.get('NeedMainWeaponTypes', [])],
         'cooldown_ms': int(facts.get('NeedCoolTime') or 0),
         **cooldown_group(entry),
+        **end_fields(entry),
         'casting_ms': int(facts.get('CastingTime') or 0),
         'cost': {k: int(facts.get('NeedCost' + k.title()) or 0) for k in ('mp', 'hp', 'sp')},
         'damage': damage_rows(entry),

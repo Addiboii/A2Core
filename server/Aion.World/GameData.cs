@@ -80,7 +80,10 @@ public sealed record SkillDefinition(
     [property: JsonPropertyName("despawn")] int[]? Despawn = null,
     // Skill.dat GroupCoolTimeId when it is not the skill's own id (tools/class_skills.py, build 26262663): the cooldown this
     // skill starts and waits for (charge levels and specialised variants name their base skill). 0: its own.
-    [property: JsonPropertyName("cooldown_group")] int CooldownGroup = 0);
+    [property: JsonPropertyName("cooldown_group")] int CooldownGroup = 0,
+    // The skill's end (0x3806) after its start at attack speed 10000, before the 50 ms rounding (Combat.SkillEndMs): Design act
+    // EndureEnd / act container PlayRate, 0 without an animation (tools/class_skills.py end_fields, build 26262663). null: none sent.
+    [property: JsonPropertyName("end_ms")] double? EndMs = null);
 
 /// <summary>A summon skill's Spawn row: the spirit's level-1 NpcData id, its EElementalSummonGroupType, the abnormal it appears with
 /// (the Lv1 tier), the angle off the caster's look direction.</summary>

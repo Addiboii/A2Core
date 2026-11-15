@@ -169,6 +169,13 @@ public static class Combat
         _ => 1.0,
     };
 
+    /// <summary>
+    /// A skill's end after its start: floor(end_ms * 10000 / attack speed / 50) * 50 ms (SkillDefinition.EndMs). OBSERVED for 100 of
+    /// 107 recorded skill/speed pairs (tools/class_skills.py end_fields); the 50 ms steps are the official server's tick (CANDIDATE).
+    /// </summary>
+    public static int SkillEndMs(double endMs, int attackSpeed = 10000) =>
+        (int)Math.Floor(endMs * 10000 / Math.Max(1, attackSpeed) / 50) * 50;
+
     /// <summary>A spawn's HP: the level's Grade 3 curve scaled by its rank's unit.</summary>
     public static int HpFor(NpcSpawn spawn) => spawn.HpMax > 0 ? spawn.HpMax
         : Math.Max(1, (int)Math.Round(HpForLevel(spawn.Level) * (double)HpUnit(spawn.SubType, spawn.Grade) / HpBaseUnit));

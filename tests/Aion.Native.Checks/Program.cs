@@ -549,6 +549,19 @@ var bracket = await game.HandleAsync([0x3a, 0x38], Now);
 Check(bracket.Count == 1 && bracket[0].SequenceEqual(GamePackets.RequestAck(0x383a)), "the 0x383a bracket is only acknowledged (the cast entered combat)");
 Check((await game.TickAsync(Now + 1000)).All(b => !b.SequenceEqual(GamePackets.CombatState(1, false))), "still in combat");
 Check((await game.TickAsync(Now + 4000)).Any(b => b.SequenceEqual(GamePackets.CombatState(1, false))), "combat ends ~3.5 s after the last action");
+// The skill's end (0x3806): Keen Strike's act ends at 0.474 s, 450 ms at attack speed 10000 (OBSERVED: Gladiator_Skill002 450 at
+// 10000 / 350 at 13426, community recordings); a cast before that cuts it with reason 0x0c ahead of its own 0x3802.
+bool EndOf(List<byte[]> replies, int skill, byte reason) => replies.Any(b => Op(b) == 0x3806 && b.AsSpan(2).ToArray() is var body
+    && BitConverter.ToInt32(body, NativeVarint.Encode(1u).Length) == skill && body[^1] == reason);
+var endStart = await game.HandleAsync(Cast(11020000, Combat.TrainingDummyKey, pos), Now + 10_000);
+var endEarly = await game.TickAsync(Now + 10_449);
+var endNatural = await game.TickAsync(Now + 10_450);
+await game.HandleAsync(Cast(11020000, Combat.TrainingDummyKey, pos), Now + 11_000);
+var endCut = await game.HandleAsync(Cast(11020000, Combat.TrainingDummyKey, pos), Now + 11_100);
+Check(Combat.SkillEndMs(data.Skill(11020000)!.EndMs!.Value) == 450 && Combat.SkillEndMs(474, 13426) == 350 && Combat.SkillEndMs(700 / 1.2) == 550
+      && endStart.Any(b => Op(b) == 0x3802) && !endStart.Any(b => Op(b) == 0x3806) && !endEarly.Any(b => Op(b) == 0x3806) && EndOf(endNatural, 11020000, 0)
+      && EndOf(endCut, 11020000, 0x0c) && endCut.FindIndex(b => Op(b) == 0x3806) < endCut.FindIndex(b => Op(b) == 0x3802),
+      "a skill ends (0x3806) after its act's time (Keen Strike 450 ms), and the next cast cuts it first with reason 0x0c");
 var dummy = game.Targets[Combat.TrainingDummyKey];
 dummy.Hp = 1;
 game.SetResource('H', 100);

@@ -1309,8 +1309,15 @@ public static class GamePackets
             .U32((uint)effectId).U32((uint)seq).Varint(10000).U8((byte)seq).U8(0).ToArray();
     }
 
-    /// <summary>0x3806 skill end: key, skill, action uid, u8 0 (OBSERVED 200 ms after every official dodge and sprint dash, before the abnormal's 0x382c).</summary>
-    public static byte[] SkillEnd(int key, int skill, int actionUid) => PacketWriter.Opcode(0x3806).Varint(key).I32(skill).U8((byte)actionUid).U8(0).ToArray();
+    /// <summary>
+    /// 0x3806 skill end: key, skill, action uid, reason u8 (OBSERVED 200 ms after every official dodge and sprint dash, before the
+    /// abnormal's 0x382c). Reason 0 the natural end, 0x0c cut by the player's next cast (OBSERVED, community recordings 2026-11-04..06:
+    /// 1,259 of 1,259 own 0c ends came at the next cast's 0x3802, right after its 0x383b). CANDIDATE: names; 02/03/0f are rarer, unread.
+    /// </summary>
+    public static byte[] SkillEnd(int key, int skill, int actionUid, byte reason = 0) => PacketWriter.Opcode(0x3806).Varint(key).I32(skill).U8((byte)actionUid).U8(reason).ToArray();
+
+    /// <summary>0x3806 reasons: the skill ran its course, or the player's next cast cut it.</summary>
+    public const byte SkillEndNatural = 0, SkillEndByNextCast = 0x0c;
 
     /// <summary>
     /// 0x3809 SkillCastingStart_NT: an NPC's cast bar before a skill with a casting time: key, mask 00, skill, 01, 02, target key,

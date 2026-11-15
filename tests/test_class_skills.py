@@ -82,6 +82,24 @@ class ClassSkillTests(unittest.TestCase):
             build_skill_list([(11020000, 1), (11020000, 2)])
 
 
+class SkillEndTests(unittest.TestCase):
+    def test_end_is_endure_end_over_the_play_rate(self):
+        import json, tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as tmp:
+            acts = Path(tmp)
+            (acts / 'acts').mkdir(); (acts / 'containers').mkdir()
+            link = lambda kind, t: {'bEnabled': True, 'ActivationTime': t, 'TaskBase': {'ObjectName': f"AionActTask_{kind}'X:AionActTask_{kind}_0'"}}
+            design = [{'Type': 'AionAct', 'Properties': {'Sections': [{'SectionName': 'Default', 'TaskLinks': [link('EndureStart', 0.16), link('EndureEnd', 0.7)]}]}}]
+            (acts / 'acts' / 'Templar_Skill006_Design.json').write_text(json.dumps(design), encoding='utf-8')
+            (acts / 'containers' / 'Templar_Skill006.json').write_text(json.dumps([{'Type': 'AionActContainer', 'Properties': {'PlayRate': 1.2}}]), encoding='utf-8')
+            (acts / 'acts' / 'NoEnd_Design.json').write_text(json.dumps([{'Type': 'AionAct', 'Properties': {'Sections': []}}]), encoding='utf-8')
+            end = lambda name: class_skills.end_fields({'raw': {'AnimationName': name}}, acts=str(acts))
+            self.assertEqual(end('Templar_Skill006'), {'end_ms': 583.333})   # 0.7 s / 1.2: 550 ms at speed 10000, as recorded
+            self.assertEqual(end('None'), {'end_ms': 0})                     # no animation: ends at once
+            self.assertEqual(end('NoEnd'), {})                               # no EndureEnd: none sent
+
+
 class SpiritFieldTests(unittest.TestCase):
     @staticmethod
     def entry(effect_type, values):

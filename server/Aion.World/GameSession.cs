@@ -3135,6 +3135,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         || itemCast is { } cast && now >= cast.DueMs
         || instanceExitAt is { } exit && now >= exit
         || PendingHitsDue(now)
+        || SkillEndIsDue(now)
         || Social is { } s && worldPlayer is not null && s.DuelOf(worldPlayer) is { } duel && duel.Challenger == worldPlayer && now >= duel.NextMs
         || Social is { } s2 && worldPlayer is not null && ArenaOf(worldPlayer) is { } arena && arena.Owner == worldPlayer && (now >= arena.NextMs || arena.RespawnAt.Values.Any(r => now >= r));
 
@@ -3219,6 +3220,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         }
         if (dead && now >= reviveAt) replies.AddRange(Revive(now));
         if (itemCast is { } cast && now >= cast.DueMs) replies.AddRange(await CompleteItemCastAsync(now, ct));
+        replies.AddRange(SkillEndDue(now));   // the running skill's natural end (GameSession.CombatTiming.cs)
         if (PendingHitsDue(now))
         {
             // Projectile hits landing now (GameSession.CombatTiming.cs); their kills pay quests and experience as a cast's do.

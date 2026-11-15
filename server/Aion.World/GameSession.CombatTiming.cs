@@ -21,6 +21,30 @@ partial class GameSession
 
     readonly List<PendingHit> pendingHits = [];
 
+    /// <summary>The player's skill still running: its 0x3806 is due at DueMs (natural end) unless the next cast cuts it first.</summary>
+    (int Skill, byte Uid, long DueMs)? castEnd;
+
+    /// <summary>
+    /// The running skill's end before the next cast's 0x3802: reason 0x0c when the cast cuts it, its natural end when that was
+    /// already due (no tick in between); nothing when no skill runs.
+    /// </summary>
+    List<byte[]> CutRunningSkill(long now)
+    {
+        if (castEnd is not { } running) return [];
+        castEnd = null;
+        return [GamePackets.SkillEnd(playerKey, running.Skill, running.Uid, now >= running.DueMs ? GamePackets.SkillEndNatural : GamePackets.SkillEndByNextCast)];
+    }
+
+    /// <summary>The running skill's natural end (reason 0) once due.</summary>
+    List<byte[]> SkillEndDue(long now)
+    {
+        if (castEnd is not { } running || now < running.DueMs) return [];
+        castEnd = null;
+        return [GamePackets.SkillEnd(playerKey, running.Skill, running.Uid)];
+    }
+
+    bool SkillEndIsDue(long now) => castEnd is { } running && now >= running.DueMs;
+
     /// <summary>The official 0x3801 (presence 00, result, skill); the toggle echoed when the request carried one (CANDIDATE).</summary>
     static byte[] CastResultFor(CastRequest request, bool accepted) =>
         GamePackets.CastResult(accepted, request.SkillId, changeToggle: request.HasToggle ? (byte)request.ChangeToggle : null);
@@ -40,16 +64,19 @@ partial class GameSession
     /// <summary>The replies to an accepted (non-dodge) cast, in the official order, then its resources and hits.</summary>
     List<byte[]> AcceptedCastReplies(int skill, SkillDefinition definition, CastRequest request, int cooldown, List<byte[]> dismount, long now)
     {
-        var replies = new List<byte[]>(dismount)   // a cast takes the player off its ride before the skill starts
-        {
-            GamePackets.SkillStart(skill, actionUid, request.Yaw, request.Location, request.TargetKey, actorKey: playerKey, cooldown: cooldown),
-        };
+        var replies = CutRunningSkill(now);   // the skill still running ends first (0x3806 reason 0x0c)
+        replies.AddRange(dismount);   // a cast takes the player off its ride before the skill starts
+        replies.Add(GamePackets.SkillStart(skill, actionUid, request.Yaw, request.Location, request.TargetKey, actorKey: playerKey, cooldown: cooldown));
+        // Its end: at once without an animation, else after the act's time at attack speed 10000 (OURS: we have no attack speed
+        // stat yet; the 0x3802 says 10000). A skill whose act gives no time sends none, as before.
+        if (definition.EndMs is { } endMs) castEnd = ((int)skill, (byte)actionUid, now + Combat.SkillEndMs(endMs));
         replies.AddRange(ChainCastReplies(skill, definition, now));   // GameSession.SkillChains.cs
         replies.Add(CastResultFor(request, true));
         replies.AddRange(EnterCombat(now));
         replies.Add(resources!.Update());
         replies.AddRange(CombatReplies(skill, request, now, (byte)actionUid));
         replies.AddRange(SpiritCast(skill, definition, request, now));   // GameSession.Spirits.cs
+        replies.AddRange(SkillEndDue(now));   // a skill without an animation ends in the same batch (CANDIDATE: its place in it)
         return replies;
     }
 
@@ -182,6 +209,7 @@ partial class GameSession
     {
         pendingHits.Clear();
         activeChains.Clear();
+        castEnd = null;
     }
 
     /// <summary>
