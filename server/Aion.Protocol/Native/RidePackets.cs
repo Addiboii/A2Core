@@ -211,6 +211,17 @@ public static class RidePackets
     public static byte[] AbnormalDamage(int key, int casterKey, int uid, int effectId, int amount, int skillId) =>
         PacketWriter.Opcode(0x3805).Varint(key).U8(0x0a).Varint(casterKey).Varint(uid).I32(effectId).Varint(Math.Max(0, amount)).I32(skillId).ToArray();
 
+    /// <summary>
+    /// 0x3816 Abnormal_Move_Instant_NT (usmap field order): key | caster | effect id i32 | goal Vec3 | EAbnormalMoveType u8 |
+    /// start terrain u8 | end terrain u8. OBSERVED (13 KnockdownInstant on the recording player, ours and community recordings
+    /// 2026-10..11): move type 4 KnockdownInstant, terrains 1 Ground, 50 ms after the abnormal's 0x382a.
+    /// </summary>
+    public static byte[] AbnormalMoveInstant(int key, int casterKey, int effectId, Vector3d goal, byte moveType = KnockdownInstant, byte startTerrain = 1, byte endTerrain = 1) =>
+        PacketWriter.Opcode(0x3816).Varint(key).Varint(casterKey).I32(effectId).Vec3(goal).U8(moveType).U8(startTerrain).U8(endTerrain).ToArray();
+
+    /// <summary>EAbnormalMoveType (usmap): 0 Push, 1 Knockback, 2 Pull, 3 KnockbackInstant, 4 KnockdownInstant.</summary>
+    public const byte KnockdownInstant = 4;
+
     /// <summary>EResult kItem_Use_Success / kItem_Use_Fail (success OBSERVED 2026-11-06 234912 i46566, 11 samples; fail read from the usmap of client 2.0.6).</summary>
     public const int ItemUseSuccess = 0x0304, ItemUseFail = 0x0305;
 

@@ -1901,6 +1901,10 @@ Check(stungAdd is not null && stungAdd[2 + NativeVarint.Encode((uint)staffSessio
       && Convert.ToHexString(stungAdd).EndsWith(Convert.ToHexString(BitConverter.GetBytes(100f)) + Convert.ToHexString(BitConverter.GetBytes(200f)) + Convert.ToHexString(BitConverter.GetBytes(300f)))
       && staffSession.ActiveBuffs.Contains(12000311) && !stungAgain.Any(b => Op(b) == 0x382a),
       "a monster skill's abnormal: 0x382a mask 0x13, the NPC as caster with level 1 and the skill, its position as range base; once per cast");
+var knocked = stung.SingleOrDefault(b => Op(b) == 0x3816);
+Check(knocked is not null && Convert.ToHexString(knocked).StartsWith("1638" + Convert.ToHexString(NativeVarint.Encode((uint)staffSession.PlayerKey)) + Convert.ToHexString(NativeVarint.Encode(2001u)) + Convert.ToHexString(BitConverter.GetBytes(120003111)))
+      && Convert.ToHexString(knocked).EndsWith("040101") && stung.FindIndex(b => Op(b) == 0x382a) < stung.FindIndex(b => Op(b) == 0x3816),
+      "a monster's KnockdownInstant: 0x3816 after the 0x382a, the NPC, the effect, move type 4, ground to ground");
 var unstung = await staffSession.TickAsync(Now + 408_100);
 Check(!staffSession.ActiveBuffs.Contains(12000311) && unstung.Any(b => Op(b) == 0x382c), "the monster's abnormal ends after its 3 s (0x382c)");
 // Drana Fairy 1223050: its hit (20 here) puts 12000111 on, Dot_NormalCalc every 2000 ms for 20 s: 0x3805 mask 0x0a with the NPC

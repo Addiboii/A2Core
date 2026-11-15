@@ -26,6 +26,8 @@ public sealed partial class GameSession
         public Dictionary<string, int> Stats { get; } = [];
         public List<HealOverTime> Heals { get; } = [];
         public List<DamageOverTime> Dots { get; } = [];
+        /// <summary>A KnockdownInstant row's effect id: the player is knocked down where they stand (0x3816).</summary>
+        public int? Knockdown { get; set; }
         /// <summary>Put on by an NPC's skill: the NPC, the row's level and where the NPC stood (the wire's caster and range base).</summary>
         public (int Key, byte Level, Vector3d At)? Caster { get; set; }
     }
@@ -185,6 +187,9 @@ public sealed partial class GameSession
                         PerTick = (int)Math.Max(1, (long)resources.HpMax * rng.Next(Math.Min(V(1), V(2)), Math.Max(V(1), V(2)) + 1) / 10_000),
                     });
                     break;
+                case "KnockdownInstant" when caster is not null:
+                    buff.Knockdown = id;
+                    break;
                 case "ChangeRelationshipEntity" when values.Count >= 2 && MapEventTables.Relationship(values[1]) is { } relation:
                     buff.Relationship = relation;
                     break;
@@ -194,6 +199,9 @@ public sealed partial class GameSession
         var packets = new List<byte[]> { PlayerPackets.AbnormalAdd(playerKey, [Wire(buff)]) };
         if (buff.Polymorph) packets.Add(RidePackets.PolymorphUpdate(playerKey, buff.Uid));
         if (buff.Relationship is { } shown) packets.Add(GamePackets.RelationshipUpdate(playerKey, shown));
+        // The goal is where the player stands (CANDIDATE: the recordings hold no own position to compare; the 13 goals lie
+        // within the casting monster's reach).
+        if (buff.Knockdown is { } knock && caster is { } by) packets.Add(RidePackets.AbnormalMoveInstant(playerKey, by.Key, knock, position ?? Vector3d.Zero));
         worldPlayer?.Map?.Broadcast(worldPlayer, packets);
         replies.Add(packets[0]);
         foreach (var h in buff.Heals) replies.Add(RidePackets.AbnormalEffect(playerKey, playerKey, buff.Uid, h.EffectId, h.Remaining, null, skillId));
