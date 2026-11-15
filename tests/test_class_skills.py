@@ -82,6 +82,18 @@ class ClassSkillTests(unittest.TestCase):
             build_skill_list([(11020000, 1), (11020000, 2)])
 
 
+class EffectLevelTests(unittest.TestCase):
+    def test_flat_values_per_skill_level(self):
+        import json, tempfile
+        from pathlib import Path
+        rows = [{'SkillEffectLvGroupId': 'G', 'SkillEffectLv': lv, 'EffectValueList': [str(f), str(f), '4300', '4300', '1'] + ['0'] * 16 + [str(f - 4), str(f - 4)]}
+                for lv, f in ((2, 70), (3, 90))] + [{'SkillEffectLvGroupId': 'Gap', 'SkillEffectLv': 3, 'EffectValueList': ['1'] * 23}]
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'table.json'
+            path.write_text(json.dumps({'Properties': {'Data': rows}}), encoding='utf-8')
+            self.assertEqual(class_skills.effect_levels({'G', 'Gap'}, table=path), {'G': [[70, 70, 66, 66], [90, 90, 86, 86]]})
+
+
 class SkillEndTests(unittest.TestCase):
     def test_end_is_endure_end_over_the_play_rate(self):
         import json, tempfile

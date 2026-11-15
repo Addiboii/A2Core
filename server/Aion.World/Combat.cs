@@ -109,8 +109,10 @@ public static class Combat
         return rng.Next(Math.Min(low, high), Math.Max(low, high) + 1);
     }
 
+    /// <param name="skillLevel">The caster's level of the skill (its root's, GameSession.CastSkillLevel): the flat damage of that
+    /// level (GameData.LevelFlat).</param>
     public static IReadOnlyList<Hit> SkillHits(GameData data, int skillId, string? className, int level, int? weaponItem,
-        int targetDefense, Random rng, bool pvp = false)
+        int targetDefense, Random rng, bool pvp = false, int skillLevel = 1)
     {
         var definition = data.Skill(skillId);
         if (definition is null) return [];
@@ -120,7 +122,8 @@ public static class Combat
         var hits = new List<Hit>();
         foreach (var row in definition.Damage)
         {
-            var (flat, ratio) = pvp && row.Pvp is { } p ? (p.Flat, p.Ratio) : (row.Flat, row.Ratio);
+            var flat = data.LevelFlat(row, skillLevel, pvp);
+            var ratio = pvp && row.Pvp is { } p ? p.Ratio : row.Ratio;
             var attack = rng.Next(Math.Min(weapon.Min, weapon.Max), Math.Max(weapon.Min, weapon.Max) + 1) + fixing;
             double raw = RowDamage(Roll(flat, rng), attack, Roll(ratio, rng), row.HitDivisor);
             var critical = rng.NextDouble() < criticalChance;

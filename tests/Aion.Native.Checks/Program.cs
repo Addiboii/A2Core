@@ -562,6 +562,11 @@ Check(Combat.SkillEndMs(data.Skill(11020000)!.EndMs!.Value) == 450 && Combat.Ski
       && endStart.Any(b => Op(b) == 0x3802) && !endStart.Any(b => Op(b) == 0x3806) && !endEarly.Any(b => Op(b) == 0x3806) && EndOf(endNatural, 11020000, 0)
       && EndOf(endCut, 11020000, 0x0c) && endCut.FindIndex(b => Op(b) == 0x3806) < endCut.FindIndex(b => Op(b) == 0x3802),
       "a skill ends (0x3806) after its act's time (Keen Strike 450 ms), and the next cast cuts it first with reason 0x0c");
+// Skill levels: SkillEffectLv.dat flat damage per level (Keen Strike: 51 at level 1, 70 at 2, 989 at 40; PvP 66 at 2).
+var keenRow = data.Skill(11020000)!.Damage[0];
+Check(keenRow.LevelGroup == "Gladiator_Skill002_LvUp" && data.LevelFlat(keenRow, 1, false)[0] == 51 && data.LevelFlat(keenRow, 2, false)[0] == 70
+      && data.LevelFlat(keenRow, 40, false)[1] == 989 && data.LevelFlat(keenRow, 2, true)[0] == 66 && data.LevelFlat(keenRow, 99, false)[0] == 989,
+      "a skill's flat damage follows its level (SkillEffectLv.dat; the highest listed level above it)");
 var dummy = game.Targets[Combat.TrainingDummyKey];
 dummy.Hp = 1;
 game.SetResource('H', 100);

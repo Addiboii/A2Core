@@ -43,7 +43,7 @@ public sealed partial class GameSession
             if (!o.Destructible || !o.CountsHit(skill) || !shownObjects.Contains(index) || usedObjects.Contains(index) || brokenObjects.Contains(index)) continue;
             if (index == request.TargetKey - WorldObjects.FirstKey && definition is not null && position is { } caster && !WithinCastRange(definition, caster, o.At)) continue;
             var key = WorldObjects.FirstKey + index;
-            foreach (var hit in Combat.SkillHits(data, skill, className, level, equippedWeapon, 0, rng))
+            foreach (var hit in Combat.SkillHits(data, skill, className, level, equippedWeapon, 0, rng, skillLevel: CastSkillLevel(skill)))
                 replies.Add(GamePackets.SkillEffect(key, playerKey, skill, actionUid, hit.EffectId));   // CANDIDATE: the 02/03 byte is always 02
             var taken = objectHits.GetValueOrDefault(index) + 1;
             objectHits[index] = taken;

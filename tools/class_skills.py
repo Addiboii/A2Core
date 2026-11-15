@@ -23,6 +23,8 @@ DATA = ROOT / 'tools/data/class-skills.json'
 LOCAL = Path(os.environ.get('AION_RESEARCH_LOCAL', ROOT / 'research/local'))
 TABLES = LOCAL / 'starter-skills-tables'
 CATALOG = LOCAL / 'game-catalog-v2/entries.jsonl'
+# SkillEffectLv.dat of build 26262663 (WorldProbe, research/local/skill-level-tables-26262663 table-000).
+EFFECT_LEVELS = LOCAL / 'skill-level-tables-26262663/table-000.json'
 # The player-skill acts of build 26262663 (research/local/skill-act-26262663/README.txt): Design acts and their containers.
 ACTS = LOCAL / 'skill-act-26262663'
 COMMON = 'None'
@@ -52,6 +54,8 @@ def damage_rows(entry):
             damage = {'flat': [number(0), number(1)], 'ratio': [number(2), number(3)], 'value4': values[4] if len(values) > 4 else None,
                       'pvp': {'flat': [number(21), number(22)], 'ratio': [number(23), number(24)]} if len(values) > 24 else None,
                       'effect_id': row['ID']['Value']}
+            if row.get('SkillEffectLvGroupId') not in (None, '', 'None'):
+                damage['level_group'] = row['SkillEffectLvGroupId']
             if index < len(projectiles) and projectiles[index]:
                 damage['projectile'] = projectiles[index]
             rows.append(damage)
@@ -192,6 +196,23 @@ def cast_row(entry):
         **summon_fields(entry),
         **despawn_fields(entry),
     }
+
+
+def effect_levels(groups, table=EFFECT_LEVELS):
+    """{SkillEffectLvGroupId: [[flat min, flat max, pvp flat min, pvp flat max] for skill levels 2, 3, ...]} of the named groups
+    (SkillEffectLv.dat EffectValueList [0], [1], [21], [22]: the only Damage values that change with the level, in all 263
+    groups the player skills name; ratios stay). {} without the export."""
+    path = Path(table)
+    if not path.exists() or not groups:
+        return {}
+    number = lambda values, i: int(values[i]) if i < len(values) and str(values[i]).lstrip('-').isdigit() else 0
+    found = {}
+    for row in json.loads(path.read_text(encoding='utf-8'))['Properties']['Data']:
+        if row['SkillEffectLvGroupId'] in groups:
+            values = row['EffectValueList']
+            found.setdefault(row['SkillEffectLvGroupId'], {})[row['SkillEffectLv']] = [number(values, i) for i in (0, 1, 21, 22)]
+    return {group: [levels[lv] for lv in range(2, max(levels) + 1) if lv in levels] for group, levels in sorted(found.items())
+            if sorted(levels) == list(range(2, max(levels) + 1))}
 
 
 def find_table(name, local=None):
@@ -347,11 +368,13 @@ def build(tables=TABLES, catalog=CATALOG):
             'stats': stats, 'weapon_stats': weapon_stats,
             'classes': {k: v for k, v in classes.items()}, 'common_unlocks': unlocks.get(COMMON, []),
             'skills': cast, 'levels': levels, 'projectile_speeds': speeds, 'charges': charges,
+            'effect_levels': effect_levels({d['level_group'] for c in cast.values() for d in c['damage'] if 'level_group' in d}),
             'evidence': {'acquire': 'SkillAcquireData bAutoLearn rows without costs/prerequisites/ascension',
                          'levels': 'SkillAcquireData Mastery rows of SkillLevel 2+: level, CostSkillPoint, NeedCharacterLevel',
                          'max_level': 'PcStatLevel highest Level',
                          'classes': 'PCCreationInfo Class, then PcData Class rows without a creation row (Fighter)',
                          'damage': 'Damage EffectValueList, candidate reading: flat min/max, weapon ratio min/max (1/10000)',
+                         'effect_levels': 'SkillEffectLv.dat by the SkillEffectLvGroupId of a Damage row (level_group): flat min/max and PvP flat min/max for skill levels 2+ (build 26262663)',
                          'weapon_type': "most frequent NeedMainWeaponTypes of the class's auto-learned skills",
                          'starter_weapons': 'Item.dat equip_wp_<Type>_<L|D>_c_begin_001a_b (L for race 1, D for race 2)',
                          'chains': 'Skill.dat ChainSkillPrevSkillId/AvailableTime/ActivateRate/DeactivateType; chain-only player skills reachable from the auto-learned ones added (A2Core PR #4)',

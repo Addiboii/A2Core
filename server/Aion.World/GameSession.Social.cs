@@ -575,7 +575,7 @@ public sealed partial class GameSession
         var replies = new List<byte[]>();
         var seq = 0;
         // The opponent's defense counts as it does against NPC hits (it was ignored before).
-        foreach (var hit in Combat.SkillHits(data, skill, className, level, equippedWeapon, opponent.Session.Defense, rng, pvp: true))
+        foreach (var hit in Combat.SkillHits(data, skill, className, level, equippedWeapon, opponent.Session.Defense, rng, pvp: true, skillLevel: CastSkillLevel(skill)))
         {
             theirs.Hp = Math.Max(1, theirs.Hp - hit.Amount);
             replies.Add(GamePackets.SkillHit(opponent.Key, playerKey, skill, hit.EffectId, hit.Amount, hit.Critical, ++seq));

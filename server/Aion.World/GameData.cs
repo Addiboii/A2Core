@@ -33,7 +33,10 @@ public sealed record DamageRow(
     // Skill.dat SkillEffectTimeDataList ProjectileId of this row's time row (0: none): the 0x3803 projectile (A2Core PR #4).
     [property: JsonPropertyName("projectile")] int Projectile = 0,
     // Skill.dat Damage EffectValueList[4] (tools/class_skills.py "value4", build 26262663), kept as the table's text.
-    [property: JsonPropertyName("value4")] string? Value4 = null)
+    [property: JsonPropertyName("value4")] string? Value4 = null,
+    // The row's SkillEffectLvGroupId (tools/class_skills.py level_group, build 26262663): its flat values at skill levels 2+
+    // (GameData.LevelFlat). null: the same at every level.
+    [property: JsonPropertyName("level_group")] string? LevelGroup = null)
 {
     /// <summary>
     /// What this row's damage is divided by: EffectValueList[4] when it reads as a number above 1, else 1.
@@ -186,7 +189,8 @@ public sealed class GameData
         [property: JsonPropertyName("common_unlocks")] int[][] CommonUnlocks,
         [property: JsonPropertyName("skills")] Dictionary<string, SkillDefinition> Skills,
         [property: JsonPropertyName("projectile_speeds")] Dictionary<string, int>? ProjectileSpeeds = null,
-        [property: JsonPropertyName("charges")] Dictionary<string, ChargeRow>? Charges = null);
+        [property: JsonPropertyName("charges")] Dictionary<string, ChargeRow>? Charges = null,
+        [property: JsonPropertyName("effect_levels")] Dictionary<string, int[][]>? EffectLevels = null);
 
     /// <summary>An NpcData template of the compact world-npcs.json (every field of a spawn but where it stands).</summary>
     sealed record NpcTemplate(
@@ -338,6 +342,19 @@ public sealed class GameData
 
     /// <summary>Cast data of a class skill (class-skills.json), else of a stigma skill (stigmas.json), else of a specialisation child
     /// (specialized-skills.json); all the same Skill.dat reading.</summary>
+    /// <summary>
+    /// A Damage row's flat damage at a skill level: SkillEffectLv.dat [0]/[1] (PvP [21]/[22]) of its group for levels 2+ (OBSERVED
+    /// from the table, build 26262663; that a skill level N uses row N is CANDIDATE), the row's own values at level 1 or when the
+    /// group or level is missing (the highest listed level above it).
+    /// </summary>
+    public int?[] LevelFlat(DamageRow row, int skillLevel, bool pvp)
+    {
+        var own = pvp && row.Pvp is { } p ? p.Flat : row.Flat;
+        if (skillLevel <= 1 || row.LevelGroup is null || classes.EffectLevels?.GetValueOrDefault(row.LevelGroup) is not { Length: > 0 } levels) return own;
+        var values = levels[Math.Min(skillLevel - 2, levels.Length - 1)];
+        return values.Length < 4 ? own : pvp ? [values[2], values[3]] : [values[0], values[1]];
+    }
+
     public SkillDefinition? Skill(int skillId) => classes.Skills.GetValueOrDefault(skillId.ToString(System.Globalization.CultureInfo.InvariantCulture))
         ?? StigmaTables.Embedded.Skill(skillId) ?? SpecializedSkillTables.Embedded.Skill(skillId);
     /// <summary>The SkillCharge.dat row of a charge id (Skill.dat ChargeId), else null.</summary>

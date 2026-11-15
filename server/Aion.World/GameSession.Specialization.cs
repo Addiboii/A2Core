@@ -71,6 +71,9 @@ public sealed partial class GameSession
         }
     }
 
+    /// <summary>The level a cast uses: the learned level of its root skill (a specialised variant's parent, a chain step's root).</summary>
+    int CastSkillLevel(int skill) => SkillLevel(ChainRoot(Specialized.ParentOf(skill) ?? skill));
+
     /// <summary>The root of a chain step (the learned skill whose parts it follows).</summary>
     int ChainRoot(int skill)
     {
