@@ -2226,7 +2226,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
         }
         var dismount = ForceDismount().Concat(InterruptItemCast()).ToList();
         skillMoveGraceUntil = now + SkillMoveGraceMs;
-        var cooldown = noCool ? 0 : definition!.CooldownMs;
+        var cooldown = noCool ? 0 : definition!.CooldownAt(CastSkillLevel(skill));   // SkillLv.dat per level
         cooldowns[cooldownKey] = now + cooldown;
         // Builder SetInvincible: the flagged resources do not decrease.
         if (!invincible.Mp) resources!.Mp -= cost.Mp;

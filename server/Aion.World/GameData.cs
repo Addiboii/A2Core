@@ -86,7 +86,14 @@ public sealed record SkillDefinition(
     [property: JsonPropertyName("cooldown_group")] int CooldownGroup = 0,
     // The skill's end (0x3806) after its start at attack speed 10000, before the 50 ms rounding (Combat.SkillEndMs): Design act
     // EndureEnd / act container PlayRate, 0 without an animation (tools/class_skills.py end_fields, build 26262663). null: none sent.
-    [property: JsonPropertyName("end_ms")] double? EndMs = null);
+    [property: JsonPropertyName("end_ms")] double? EndMs = null,
+    // SkillLv.dat NeedCoolTime at skill levels 2, 3, ... when it differs from level 1 (tools/class_skills.py cooldown_levels).
+    [property: JsonPropertyName("cooldown_levels")] int[]? CooldownLevels = null)
+{
+    /// <summary>The cooldown at a skill level: SkillLv.dat's (OBSERVED from the table; level N uses row N, CANDIDATE), else CooldownMs.</summary>
+    public int CooldownAt(int skillLevel) =>
+        skillLevel >= 2 && CooldownLevels is { Length: > 0 } levels ? levels[Math.Min(skillLevel - 2, levels.Length - 1)] : CooldownMs;
+}
 
 /// <summary>A summon skill's Spawn row: the spirit's level-1 NpcData id, its EElementalSummonGroupType, the abnormal it appears with
 /// (the Lv1 tier), the angle off the caster's look direction.</summary>

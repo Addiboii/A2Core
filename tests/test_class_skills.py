@@ -94,6 +94,21 @@ class EffectLevelTests(unittest.TestCase):
             self.assertEqual(class_skills.effect_levels({'G', 'Gap'}, table=path), {'G': [[70, 70, 66, 66], [90, 90, 86, 86]]})
 
 
+class CooldownLevelTests(unittest.TestCase):
+    def test_cooldown_per_level_only_when_it_changes(self):
+        import json, tempfile
+        from pathlib import Path
+        rows = [{'SkillLvGroupId': 'G', 'SkillLv': 2, 'NeedCoolTime': 59000.0}, {'SkillLvGroupId': 'G', 'SkillLv': 3, 'NeedCoolTime': 58000.0},
+                {'SkillLvGroupId': 'Same', 'SkillLv': 2, 'NeedCoolTime': 5000.0}]
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'lv.json'
+            path.write_text(json.dumps({'Properties': {'Data': rows}}), encoding='utf-8')
+            entry = lambda group, cool: {'raw': {'SkillLvGroupId': group}, 'facts': {'NeedCoolTime': cool}}
+            self.assertEqual(class_skills.cooldown_levels(entry('G', 60000.0), table=path), {'cooldown_levels': [59000, 58000]})
+            self.assertEqual(class_skills.cooldown_levels(entry('Same', 5000.0), table=path), {})
+            self.assertEqual(class_skills.cooldown_levels(entry('None', 0), table=path), {})
+
+
 class SkillEndTests(unittest.TestCase):
     def test_end_is_endure_end_over_the_play_rate(self):
         import json, tempfile

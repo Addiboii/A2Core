@@ -567,6 +567,9 @@ var keenRow = data.Skill(11020000)!.Damage[0];
 Check(keenRow.LevelGroup == "Gladiator_Skill002_LvUp" && data.LevelFlat(keenRow, 1, false)[0] == 51 && data.LevelFlat(keenRow, 2, false)[0] == 70
       && data.LevelFlat(keenRow, 40, false)[1] == 989 && data.LevelFlat(keenRow, 2, true)[0] == 66 && data.LevelFlat(keenRow, 99, false)[0] == 989,
       "a skill's flat damage follows its level (SkillEffectLv.dat; the highest listed level above it)");
+Check(data.Skill(11260000) is { CooldownMs: 60_000 } defiance && defiance.CooldownAt(1) == 60_000 && defiance.CooldownAt(2) == 59_000 && defiance.CooldownAt(40) == 21_000
+      && data.Skill(11020000)!.CooldownAt(10) == data.Skill(11020000)!.CooldownMs,
+      "SkillLv.dat cooldowns per level: 60 s at level 1, 59 s at 2, 21 s at 40; other skills keep theirs");
 var dummy = game.Targets[Combat.TrainingDummyKey];
 dummy.Hp = 1;
 game.SetResource('H', 100);

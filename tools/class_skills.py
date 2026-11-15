@@ -25,6 +25,8 @@ TABLES = LOCAL / 'starter-skills-tables'
 CATALOG = LOCAL / 'game-catalog-v2/entries.jsonl'
 # SkillEffectLv.dat of build 26262663 (WorldProbe, research/local/skill-level-tables-26262663 table-000).
 EFFECT_LEVELS = LOCAL / 'skill-level-tables-26262663/table-000.json'
+# SkillLv.dat of build 26262663 (same export, table-001): per-level cooldowns and costs by Skill.dat SkillLvGroupId.
+SKILL_LEVELS = LOCAL / 'skill-level-tables-26262663/table-001.json'
 # The player-skill acts of build 26262663 (research/local/skill-act-26262663/README.txt): Design acts and their containers.
 ACTS = LOCAL / 'skill-act-26262663'
 COMMON = 'None'
@@ -177,6 +179,28 @@ def end_fields(entry, acts=ACTS):
     return {'end_ms': round(end * 1000 / (rate or 1.0), 3)} if end else {}
 
 
+@lru_cache(maxsize=None)
+def _skill_level_rows(table=SKILL_LEVELS):
+    path = Path(table)
+    rows = {}
+    if path.exists():
+        for row in json.loads(path.read_text(encoding='utf-8'))['Properties']['Data']:
+            rows.setdefault(row['SkillLvGroupId'], {})[row['SkillLv']] = row
+    return rows
+
+
+def cooldown_levels(entry, table=SKILL_LEVELS):
+    """cooldown_levels: the cooldown (ms) at skill levels 2, 3, ... from SkillLv.dat NeedCoolTime by the skill's SkillLvGroupId,
+    when it differs from level 1 (15 player skills, the Skill026 line: 60 s less 1 s a level). Costs and casting times do not
+    change with the level for any player skill."""
+    group = (entry.get('raw') or {}).get('SkillLvGroupId')
+    levels = _skill_level_rows(str(table)).get(group) if group not in (None, '', 'None') else None
+    if not levels or sorted(levels) != list(range(2, max(levels) + 1)):
+        return {}
+    times = [int(levels[lv]['NeedCoolTime']) for lv in sorted(levels)]
+    return {'cooldown_levels': times} if any(t != int((entry.get('facts') or {}).get('NeedCoolTime') or 0) for t in times) else {}
+
+
 def cast_row(entry):
     facts = entry.get('facts', {})
     return {
@@ -187,6 +211,7 @@ def cast_row(entry):
         'weapons': [_short(w) for w in facts.get('NeedMainWeaponTypes', [])],
         'cooldown_ms': int(facts.get('NeedCoolTime') or 0),
         **cooldown_group(entry),
+        **cooldown_levels(entry),
         **end_fields(entry),
         'casting_ms': int(facts.get('CastingTime') or 0),
         'cost': {k: int(facts.get('NeedCost' + k.title()) or 0) for k in ('mp', 'hp', 'sp')},
