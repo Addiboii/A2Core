@@ -1903,6 +1903,26 @@ Check(stungAdd is not null && stungAdd[2 + NativeVarint.Encode((uint)staffSessio
       "a monster skill's abnormal: 0x382a mask 0x13, the NPC as caster with level 1 and the skill, its position as range base; once per cast");
 var unstung = await staffSession.TickAsync(Now + 408_100);
 Check(!staffSession.ActiveBuffs.Contains(12000311) && unstung.Any(b => Op(b) == 0x382c), "the monster's abnormal ends after its 3 s (0x382c)");
+// Drana Fairy 1223050: its hit (20 here) puts 12000111 on, Dot_NormalCalc every 2000 ms for 20 s: 0x3805 mask 0x0a with the NPC
+// as caster, DotPerHit of the hit, the skill; HP down by it.
+var dotHpBefore = staffSession.Resource.Hp;
+staffSession.NpcHitsPlayer(20, Now + 408_200, killerKey: 2001, killerSkill: 1223050, hitSeq: 1, casterAt: tamonAt);
+var dotEarly = await staffSession.TickAsync(Now + 410_100);
+var dotFirst = await staffSession.TickAsync(Now + 410_250);
+var dotTick = dotFirst.SingleOrDefault(b => Op(b) == 0x3805);
+var dotAmount = (int)Math.Round(20 * GameSession.DotPerHit);
+Check(staffSession.ActiveBuffs.Contains(12000111) && !dotEarly.Any(b => Op(b) == 0x3805) && dotTick is not null
+      && Convert.ToHexString(dotTick).StartsWith("0538" + Convert.ToHexString(NativeVarint.Encode((uint)staffSession.PlayerKey)) + "0A" + Convert.ToHexString(NativeVarint.Encode(2001u)))
+      && Convert.ToHexString(dotTick).EndsWith(Convert.ToHexString(BitConverter.GetBytes(120001111)) + Convert.ToHexString(NativeVarint.Encode((uint)dotAmount)) + Convert.ToHexString(BitConverter.GetBytes(1223050)))
+      && staffSession.Resource.Hp == dotHpBefore - 20 - dotAmount,
+      "a monster's damage over time: a 0x3805 mask 0x0a tick every 2 s from the apply on, the NPC as caster, HP down");
+// Its slow (1217770 -> 12172701, MoveSpeed -3000 for 10 s): 0x364a {205, -3000}, back to 0 at its end.
+var slowed = staffSession.NpcHitsPlayer(1, Now + 410_300, killerKey: 2001, killerSkill: 1217770, hitSeq: 1, casterAt: tamonAt);
+var slowEnd = await staffSession.TickAsync(Now + 420_400);
+var speedStat = (byte[] b) => Convert.ToHexString(b).Contains("CD00" + Convert.ToHexString(BitConverter.GetBytes(-3000)));
+Check(slowed.Any(b => Op(b) == 0x364a && speedStat(b)) && !slowed.Any(b => Op(b) == 0x364b)
+      && slowEnd.Any(b => Op(b) == 0x364a && Convert.ToHexString(b).Contains("CD0000000000")) && !staffSession.ActiveBuffs.Contains(12172701) && !staffSession.Dead,
+      "a monster's slow: 0x364a stat 205 the summed MoveSpeed, back at its end");
 var fellAt = staffSession.Position!.Value;
 staffSession.NpcHitsPlayer(staffSession.Resource.HpMax * 10, Now + 411_000, killerKey: 2001);
 Check(staffSession.Dead && staffSession.CanRebirth, "the rebirth buff survives death");

@@ -2448,7 +2448,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             replies.Add(GamePackets.InteractEnvObjInterrupted(use.Key, GamePackets.InterruptDamaged, playerKey));
         }
         if (resources.Hp == 0) replies.AddRange(Die(killerKey, now, killerSkill));
-        else if (hitSeq == 1) replies.AddRange(NpcAbnormals(killerKey, killerSkill, casterAt, now));   // GameSession.Buffs.cs
+        else if (hitSeq == 1) replies.AddRange(NpcAbnormals(killerKey, killerSkill, casterAt, now, damage));   // GameSession.Buffs.cs
         return replies;
     }
 

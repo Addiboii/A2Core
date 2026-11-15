@@ -105,6 +105,8 @@ TABLES = ROOT / 'research/local/reuse-table-probe'
 AGGRODATA = TABLES / 'table-012.json'
 SKILLDATA = TABLES / 'table-007.json'
 EFFECTDATA = TABLES / 'table-008.json'
+# SkillAbnormal.dat (table-000) and SkillAbnormalEffect.dat (table-001) of build 26262663 (research/local/abnormal-selection.json).
+ABNORMALDATA = ROOT / 'research/local/abnormal-tables-26262663'
 FIRST_KEY = 2000   # entity keys: 1 is the player, 1000 the training dummy
 
 # ERelationshipEntity ordinals (usmap); 6/3/11/13 also observed on the wire.
@@ -218,6 +220,22 @@ def abnormal_row(values):
     if not number(2):
         return None
     return [number(2), number(0) or 0, number(1) or number(0) or 0, number(3) or 1, 10000 if number(4) is None else number(4)]
+
+
+def npc_abnormals(skills, tables=ABNORMALDATA):
+    """The abnormals NPC skills put on players: {id: {group, effects: [[effect id, type, values...]]}} from SkillAbnormal.dat
+    GroupId and SkillAbnormalEffect.dat (the same shape as boxes.json abnormals)."""
+    wanted = {row[0] for skill in skills.values() for row in skill.get('abnormals', [])}
+    tables = Path(tables)
+    if not wanted or not (tables / 'table-001.json').exists():
+        return {}
+    load = lambda i: json.loads((tables / f'table-{i:03}.json').read_text(encoding='utf-8'))['Properties']['Data']
+    value = lambda v: v['Value'] if isinstance(v, dict) else v
+    found = {value(r['ID']): {'group': int(r.get('GroupId') or 0), 'effects': []} for r in load(0) if value(r['ID']) in wanted}
+    for r in load(1):
+        if value(r['AbnormalId']) in found:
+            found[value(r['AbnormalId'])]['effects'].append([value(r['ID']), _enum(r.get('AbnormalEffectType', '')), *[str(v) for v in r.get('Values') or []][:8]])
+    return {str(k): v for k, v in sorted(found.items())}
 
 
 def npc_skills(skill_ids, skill_table=SKILLDATA, effect_table=EFFECTDATA):
@@ -362,6 +380,7 @@ def build(maps=MAPDATA, npc_table=NPCDATA, aggro_table=AGGRODATA, skill_table=SK
         used_skills.update(skills)
     out['templates'] = templates
     out['npc_skills'] = npc_skills(used_skills, skill_table, effect_table)
+    out['npc_abnormals'] = npc_abnormals(out['npc_skills'])
     return out
 
 

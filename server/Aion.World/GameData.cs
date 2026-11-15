@@ -230,7 +230,17 @@ public sealed class GameData
         [property: JsonPropertyName("templates")] Dictionary<string, NpcTemplate> Templates,
         [property: JsonPropertyName("npc_skills")] Dictionary<string, NpcSkill>? Skills = null,
         [property: JsonPropertyName("routes")] Dictionary<string, NpcRoute[]>? Routes = null,
-        [property: JsonPropertyName("skill_hits")] Dictionary<string, int[][]>? SkillHits = null);
+        [property: JsonPropertyName("skill_hits")] Dictionary<string, int[][]>? SkillHits = null,
+        [property: JsonPropertyName("npc_abnormals")] Dictionary<string, NpcAbnormalFile>? Abnormals = null);
+
+    /// <summary>world-npcs.json npc_abnormals: SkillAbnormal GroupId and SkillAbnormalEffect rows [id, type, values...] (build 26262663).</summary>
+    sealed record NpcAbnormalFile([property: JsonPropertyName("group")] int Group, [property: JsonPropertyName("effects")] JsonElement[][] Effects);
+
+    /// <summary>An abnormal an NPC skill puts on players (world-npcs.json npc_abnormals), in the shape of the item buffs' rows.</summary>
+    public AbnormalInfo? NpcAbnormal(int abnormalId) =>
+        npcs.Abnormals?.GetValueOrDefault(abnormalId.ToString(System.Globalization.CultureInfo.InvariantCulture)) is { } a
+            ? new AbnormalInfo(a.Group, a.Effects.Select(e => (e[0].GetInt32(), e[1].GetString()!, (IReadOnlyList<string>)e.Skip(2).Select(v => v.GetString()!).ToList())).ToList())
+            : null;
 
     readonly Dictionary<string, StarterProfile> profiles;
     readonly ClassFile classes;

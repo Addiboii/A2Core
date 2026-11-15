@@ -72,6 +72,19 @@ class NpcAbnormalTests(unittest.TestCase):
         self.assertIsNone(world_npcs.abnormal_row(['1000', '1000', 'None']))
 
 
+class NpcAbnormalEffectTests(unittest.TestCase):
+    def test_effect_rows_for_used_abnormals(self):
+        import json, tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp, 'table-000.json').write_text(json.dumps({'Properties': {'Data': [{'ID': {'Value': 7}, 'GroupId': 70}, {'ID': {'Value': 8}, 'GroupId': 80}]}}), encoding='utf-8')
+            Path(tmp, 'table-001.json').write_text(json.dumps({'Properties': {'Data': [
+                {'ID': {'Value': 71}, 'AbnormalId': {'Value': 7}, 'AbnormalEffectType': 'ESkillAbnormalEffectType::Dot_NormalCalc', 'Values': ['2000', 'TRUE']},
+                {'ID': {'Value': 81}, 'AbnormalId': {'Value': 8}, 'AbnormalEffectType': 'ESkillAbnormalEffectType::Stun', 'Values': []}]}}), encoding='utf-8')
+            skills = {'1': {'abnormals': [[7, 2000, 2000, 1, 10000]]}}
+            self.assertEqual(world_npcs.npc_abnormals(skills, tables=tmp), {'7': {'group': 70, 'effects': [[71, 'Dot_NormalCalc', '2000', 'TRUE']]}})
+
+
 class HitCountTests(unittest.TestCase):
     def test_hit_count_npcs_have_hits_for_hp(self):
         # NpcData bHitCountBased: 7 hits for a monster, 5 for a summon (OBSERVED); nothing for any other NPC.

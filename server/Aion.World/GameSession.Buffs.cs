@@ -25,6 +25,7 @@ public sealed partial class GameSession
         public int? Relationship { get; set; }
         public Dictionary<string, int> Stats { get; } = [];
         public List<HealOverTime> Heals { get; } = [];
+        public List<DamageOverTime> Dots { get; } = [];
         /// <summary>Put on by an NPC's skill: the NPC, the row's level and where the NPC stood (the wire's caster and range base).</summary>
         public (int Key, byte Level, Vector3d At)? Caster { get; set; }
     }
@@ -36,6 +37,19 @@ public sealed partial class GameSession
         public required int Remaining;
         public required long NextAt;
     }
+
+    /// <summary>A damage-over-time row of an NPC's abnormal: interval and amount per tick.</summary>
+    sealed class DamageOverTime
+    {
+        public required int EffectId, IntervalMs, PerTick;
+        public required long NextAt;
+    }
+
+    /// <summary>
+    /// OURS: a Dot_NormalCalc tick as a share of the hit that put it on (one recorded pair: Drana Fairy 1223050 hit 581, its
+    /// 12000111 ticks 241; another skill 3500 / 592). The row's own values (10, 10, 30000, ...) are not understood yet.
+    /// </summary>
+    public const double DotPerHit = 0.41;
 
     readonly List<Buff> buffs = [];
     int buffUid;
@@ -63,9 +77,9 @@ public sealed partial class GameSession
     /// A monster skill's abnormals on the player at its first hit (NpcSkill.Abnormals; each by its chance): 0x382a mask 0x13 with
     /// the NPC as caster, the row's level, the skill and the NPC's position as range base (OBSERVED, community recordings
     /// 2026-11-04..06: 60 monster abnormals on the recording player, e.g. Tamon 1604680 -> 12000311 for 3 s). Their effects
-    /// beyond the icon (stun, slow, damage over time) are not modelled yet (CANDIDATE: the client draws them from its tables).
+    /// beyond the icon: damage over time and stat changes (world-npcs.json npc_abnormals); stuns and knockdowns are the client's.
     /// </summary>
-    List<byte[]> NpcAbnormals(int casterKey, int skillId, Vector3d? casterAt, long now)
+    List<byte[]> NpcAbnormals(int casterKey, int skillId, Vector3d? casterAt, long now, int hitDamage = 0)
     {
         if (data.NpcSkill(skillId)?.Abnormals is not { Length: > 0 } rows) return [];
         var replies = new List<byte[]>();
@@ -74,9 +88,9 @@ public sealed partial class GameSession
         {
             if (rng.Next(10_000) >= row[4]) continue;
             var duration = Math.Max(1, rng.Next(Math.Min(row[1], row[2]), Math.Max(row[1], row[2]) + 1));
-            AddBuff(row[0], duration, skillId, now, replies, caster: (casterKey, (byte)Math.Clamp(row[3], 1, 255), casterAt ?? Vector3d.Zero));
+            AddBuff(row[0], duration, skillId, now, replies, caster: (casterKey, (byte)Math.Clamp(row[3], 1, 255), casterAt ?? Vector3d.Zero), hitDamage: hitDamage);
         }
-        replies.AddRange(BuffStatsChanged(speedBefore));
+        replies.AddRange(BuffStatsChanged(speedBefore, byNpc: true));
         return replies;
     }
 
@@ -100,10 +114,10 @@ public sealed partial class GameSession
     /// an abnormal the tables do not know only shows its icon. The caller refreshes the stats.
     /// </summary>
     Buff? AddBuff(int abnormalId, int durationMs, int skillId, long now, List<byte[]> replies, bool scripted = false, int? remainingMs = null,
-        (int Key, byte Level, Vector3d At)? caster = null)
+        (int Key, byte Level, Vector3d At)? caster = null, int hitDamage = 0)
     {
         if (resources is null) return null;
-        var info = Boxes.Abnormal(abnormalId);
+        var info = Boxes.Abnormal(abnormalId) ?? (caster is null ? null : data.NpcAbnormal(abnormalId));
         // SkillAbnormal.dat GroupId / AbnormalOverlapCount / AbnormalOverlapTimeType (AbnormalStackRules; A2Core PR #4).
         var rule = AbnormalStackRules.For(abnormalId, info?.Group);
         var group = rule.Group;
@@ -158,6 +172,19 @@ public sealed partial class GameSession
                     buff.Heals.Add(Heal(id, V(0), (int)Math.Min(V(3) > 0 ? V(3) : int.MaxValue, (long)resources.HpMax * V(1) / 10_000), duration, now, perTick: false));
                     break;
                 // ChangeRelationshipEntity [flag, relationship, flag]: the player's relationship while the buff lasts (the transformations' PC_FriendlyToAll).
+                // Dot_NormalCalc [interval, ...]: a tick every interval from the apply on (OBSERVED +2003 / +2102 for 2000 ms);
+                // the amount DotPerHit of the hit (OURS).
+                case "Dot_NormalCalc" when caster is not null && V(0) > 0:
+                    buff.Dots.Add(new DamageOverTime { EffectId = id, IntervalMs = V(0), PerTick = Math.Max(1, (int)Math.Round(hitDamage * DotPerHit)), NextAt = now + V(0) });
+                    break;
+                // Dot_TargetMaxHP [interval, ratio min, max (1/10000 of max HP a tick), ...] as the Oxygen Deficiency (CANDIDATE for monsters).
+                case "Dot_TargetMaxHP" when caster is not null && V(0) > 0:
+                    buff.Dots.Add(new DamageOverTime
+                    {
+                        EffectId = id, IntervalMs = V(0), NextAt = now + V(0),
+                        PerTick = (int)Math.Max(1, (long)resources.HpMax * rng.Next(Math.Min(V(1), V(2)), Math.Max(V(1), V(2)) + 1) / 10_000),
+                    });
+                    break;
                 case "ChangeRelationshipEntity" when values.Count >= 2 && MapEventTables.Relationship(values[1]) is { } relation:
                     buff.Relationship = relation;
                     break;
@@ -211,6 +238,7 @@ public sealed partial class GameSession
     {
         if (buffs.Count == 0 || resources is not { } r) return [];
         var replies = new List<byte[]>();
+        (int Key, int Skill)? dotKiller = null;
         foreach (var b in buffs)
         {
             var healed = false;
@@ -224,14 +252,29 @@ public sealed partial class GameSession
                     replies.Add(RidePackets.AbnormalEffect(playerKey, playerKey, b.Uid, h.EffectId, h.Remaining, amount, b.SkillId));
                     healed = true;
                 }
-            if (healed) replies.Add(GamePackets.NpcHp(playerKey, r.Hp));
+            var hurt = false;
+            foreach (var d in b.Dots)
+                while (!dead && now >= d.NextAt && d.NextAt <= b.ExpireAt)
+                {
+                    d.NextAt += d.IntervalMs;
+                    if (!invincible.Hp) r.Hp = Math.Max(0, r.Hp - d.PerTick);
+                    replies.Add(RidePackets.AbnormalDamage(playerKey, b.Caster?.Key ?? playerKey, b.Uid, d.EffectId, d.PerTick, b.SkillId));
+                    hurt = true;
+                    if (r.Hp == 0) { dotKiller ??= (b.Caster?.Key ?? 0, b.SkillId); break; }
+                }
+            if (healed || hurt) replies.Add(GamePackets.NpcHp(playerKey, r.Hp));
+        }
+        if (dotKiller is { } killer)
+        {
+            replies.AddRange(Die(killer.Key, now, killer.Skill));
+            return replies;
         }
         var speedBefore = BuffStat("MoveSpeed");
         var expired = buffs.Where(b => now >= b.ExpireAt).ToList();
         if (expired.Count > 0)
         {
             replies.AddRange(RemoveBuffs(expired, ExpireTimeout));
-            replies.AddRange(BuffStatsChanged(speedBefore));
+            replies.AddRange(BuffStatsChanged(speedBefore, byNpc: expired.Any(b => b.Caster is not null && b.Stats.ContainsKey("MoveSpeed"))));
             // Only buffs that ran out (not replaced, not cleared at death) re-arm a quickbar auto-use item.
             foreach (var b in expired) if (b.SkillId != 0 && !b.Scripted) expiredItemSkills.Add(b.SkillId);
         }
@@ -270,11 +313,14 @@ public sealed partial class GameSession
         && AbnormalIds(Boxes.SkillEffects(skillId)).Any(id => Boxes.Abnormal(id)?.Effects.Any(e => e.Type == "UseRebirth") == true);
 
     /// <summary>The stat sheet with the buffs (when they change stats) and 0x364b when the move speed changed.</summary>
-    List<byte[]> BuffStatsChanged(int speedBefore)
+    List<byte[]> BuffStatsChanged(int speedBefore, bool byNpc = false)
     {
         var replies = RefreshStats();
         var speed = BuffStat("MoveSpeed");
-        if (speed != speedBefore) replies.Add(PlayerPackets.MoveSpeedUpdate(playerKey, [(MoveSpeedStat, speed)]));
+        // A monster's slow and its end: 0x364a {205, the summed MoveSpeed} (OBSERVED, community recordings 2026-11-04..06: 12172701
+        // -3000 on a +1190 sum sent -1810, back to 1190 at its end); item buffs 0x364b (OBSERVED, the speed scroll).
+        if (speed != speedBefore)
+            replies.Add(byNpc ? GamePackets.CharStatsUpdate(playerKey, [(MoveSpeedStat, speed)], 0) : PlayerPackets.MoveSpeedUpdate(playerKey, [(MoveSpeedStat, speed)]));
         return replies;
     }
 

@@ -204,6 +204,13 @@ public static class RidePackets
         return w.I32(skillId).ToArray();
     }
 
+    /// <summary>
+    /// 0x3805 mask 0x0a, a damage-over-time tick: key | 0x0a | caster | abnormal uid | effect id i32 | amount varint | skill i32
+    /// (OBSERVED, community recordings 2026-11-04..06: 11 monster DoT ticks, e.g. Dot_NormalCalc 120001111 of skill 1223050).
+    /// </summary>
+    public static byte[] AbnormalDamage(int key, int casterKey, int uid, int effectId, int amount, int skillId) =>
+        PacketWriter.Opcode(0x3805).Varint(key).U8(0x0a).Varint(casterKey).Varint(uid).I32(effectId).Varint(Math.Max(0, amount)).I32(skillId).ToArray();
+
     /// <summary>EResult kItem_Use_Success / kItem_Use_Fail (success OBSERVED 2026-11-06 234912 i46566, 11 samples; fail read from the usmap of client 2.0.6).</summary>
     public const int ItemUseSuccess = 0x0304, ItemUseFail = 0x0305;
 
