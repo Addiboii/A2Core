@@ -21,6 +21,9 @@ public sealed record TradeListing(long SaleId, Guid Seller, Guid Item, int Templ
 /// <summary>Kina a seller is owed for a sale (taken with TradeDeliveryComplete).</summary>
 public sealed record TradeDelivery(long Id, long Kina, int TemplateId, long Count, DateTimeOffset At);
 
+/// <summary>Slot extensions of one EItemContainerType (game.character_slot_extensions, migration 074): lines bought with Kina, opened with vouchers.</summary>
+public sealed record SlotExtensionRecord(int Container, int ByGold, int ByItem);
+
 /// <summary>A gift-box reward (game.push_rewards) and whether this character took it.</summary>
 public sealed record PushRewardRecord(int Id, int Type, string Sender, string Title, string Body, int TemplateId, long Count, DateTimeOffset Sent, DateTimeOffset Expire, bool Taken);
 
@@ -132,6 +135,16 @@ public interface IEconomyStore
     Task<(IReadOnlyList<TradeListing> Listings, IReadOnlyList<TradeDelivery> Deliveries)> TradeSummaryAsync(VerifiedAccount account, Guid character, CancellationToken ct = default);
     /// <summary>Pays a delivery's Kina into the bag once: the Kina paid, or null.</summary>
     Task<long?> CompleteTradeDeliveryAsync(VerifiedAccount account, Guid character, long deliveryId, CancellationToken ct = default);
+
+    // ---- Bag and warehouse slot extensions (migration 074) ----
+    Task<IReadOnlyList<SlotExtensionRecord>> SlotExtensionsAsync(VerifiedAccount account, Guid character, CancellationToken ct = default);
+    /// <summary>
+    /// Adds one extension of the container (by voucher or by Kina) when the stored counts are still the expected ones and the
+    /// total stays below <paramref name="maxExtensions"/>, paying the costs (the Kina stacks, or the voucher) in the same
+    /// transaction: "ok", "none" (counts changed), "max" or "money".
+    /// </summary>
+    Task<string> ExtendSlotsAsync(VerifiedAccount account, Guid character, int container, bool byItem, int expectedGold, int expectedItem, int maxExtensions,
+        IReadOnlyList<(Guid Item, long Revision, int Count)> costs, CancellationToken ct = default);
 
     // ---- Gift box ----
     Task<IReadOnlyList<PushRewardRecord>> PushRewardsAsync(VerifiedAccount account, Guid character, DateTimeOffset now, CancellationToken ct = default);

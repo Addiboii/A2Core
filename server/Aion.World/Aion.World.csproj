@@ -57,5 +57,6 @@
     <EmbeddedResource Include="../../tools/data/guild.json" LogicalName="guild.json" />
     <!-- tools/wing_data.py (Wing.dat, build 26262663). -->
     <EmbeddedResource Include="../../tools/data/wings.json" LogicalName="wings.json" />
+    <EmbeddedResource Include="../../tools/data/slot-extensions.json" LogicalName="slot-extensions.json" />
   </ItemGroup>
 </Project>

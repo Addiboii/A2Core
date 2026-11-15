@@ -263,6 +263,36 @@ public sealed partial class PostgresGameplayStore : IEconomyStore
         await t.CommitAsync(ct); return "ok";
     }
 
+    // ---------- Bag and warehouse slot extensions (migration 080) ----------
+
+    public async Task<IReadOnlyList<SlotExtensionRecord>> SlotExtensionsAsync(VerifiedAccount account, Guid character, CancellationToken ct = default)
+    {
+        await using var c = await source.OpenConnectionAsync(ct); await using var t = await c.BeginTransactionAsync(ct);
+        if (!await Own(c, t, account.AccountId, character, ct)) return [];
+        var list = (await Rows(c, t, "SELECT container_type,by_gold,by_item FROM game.character_slot_extensions WHERE character_id=$1 ORDER BY container_type", ct, character))
+            .Select(r => new SlotExtensionRecord((short)r[0], (short)r[1], (short)r[2])).ToList();
+        await t.CommitAsync(ct); return list;
+    }
+
+    public async Task<string> ExtendSlotsAsync(VerifiedAccount account, Guid character, int container, bool byItem, int expectedGold, int expectedItem, int maxExtensions,
+        IReadOnlyList<(Guid Item, long Revision, int Count)> costs, CancellationToken ct = default)
+    {
+        await using var c = await source.OpenConnectionAsync(ct); await using var t = await c.BeginTransactionAsync(ct);
+        if (!await Own(c, t, account.AccountId, character, ct)) return "none";
+        if (expectedGold + expectedItem >= maxExtensions) return "max";
+        await Execute(c, t, "INSERT INTO game.character_slot_extensions(character_id,container_type) VALUES($1,$2) ON CONFLICT DO NOTHING", ct, character, (short)container);
+        // The row lock of this update makes a second request wait and then miss the expected counts.
+        if (await ExecuteCount(c, t, """
+                UPDATE game.character_slot_extensions SET by_gold=by_gold+$5,by_item=by_item+$6,updated_at=now()
+                WHERE character_id=$1 AND container_type=$2 AND by_gold=$3 AND by_item=$4 AND by_gold+by_item<$7
+                """, ct, character, (short)container, (short)expectedGold, (short)expectedItem, (short)(byItem ? 0 : 1), (short)(byItem ? 1 : 0), maxExtensions) != 1)
+            return "none";
+        if (!await PayAll(c, t, character, costs, ct)) return "money";
+        await Execute(c, t, "INSERT INTO audit.events(action,character_id,actor_id,details) VALUES('slot_extend',$1,$2,$3)", ct, character, account.AccountId,
+            Json(new { container, by_item = byItem, gold = expectedGold + (byItem ? 0 : 1), item = expectedItem + (byItem ? 1 : 0) }));
+        await t.CommitAsync(ct); return "ok";
+    }
+
     public async Task<bool> SortGuildStorageAsync(VerifiedAccount account, Guid character, long nowMs, long cooldownMs, CancellationToken ct = default)
     {
         await using var c = await source.OpenConnectionAsync(ct); await using var t = await c.BeginTransactionAsync(ct);

@@ -396,6 +396,7 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             case ShopSellRq when plain.Length >= 4: return await SellItemsAsync(plain, ct);
             case ItemRemoveRq when plain.Length >= 4: return await RemoveItemsAsync(plain, ct);
             case ItemSortRq when plain.Length == 7: return await SortBagAsync(plain, ct);
+            case ItemContainerSlotExtendRq when plain.Length == 16: return await ExtendSlotsAsync(plain, ct);
             case QuickSlotSetRq when plain.Length >= 27: return await SetQuickSlotAsync(plain, ct);
             case QuickSlotResetRq when plain.Length == 3: return await ResetQuickSlotAsync(plain[2], ct);
             case QuickSlotContextSkillRq when plain.Length >= 8: return await SetQuickSlotSkillAsync(plain, ct);
@@ -1544,10 +1545,11 @@ public sealed partial class GameSession(GameData data, GameSessionOptions option
             {
                 var items = await LoadInventoryAsync(store, character, ct);
                 Remember(items);
+                await LoadSlotExtensionsAsync(ct);
                 // The weapon in equip slot 1 decides weapon skills (none equipped: no weapon).
                 equippedWeapon = WeaponFromInventory();
                 var level = EquipItemLevel();
-                return [GamePackets.ItemDepotList(items), GamePackets.ItemEquipLevelChange(level, level)];
+                return [GamePackets.ItemDepotList(items, SlotExtensionTail()), GamePackets.ItemEquipLevelChange(level, level)];
             });
         var weapon = data.StarterWeapon(Profile());
         if (weapon is null) return [];

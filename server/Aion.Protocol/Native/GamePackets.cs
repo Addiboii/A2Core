@@ -576,15 +576,17 @@ public static class GamePackets
 
     /// <summary>
     /// 0x5611 ItemDepotList_RS, the reply to the empty 0x5610 request: u16 0x0210 (unexplained,
-    /// both official samples), the items, then six slot-extend counts. Bag items are container 1,
+    /// both official samples), the items, then six slot-extend counts (OBSERVED zeros; usmap order: inventory by item,
+    /// by gold, storage, storage by item, character storage by gold, by item). Bag items are container 1,
     /// equipped items container 11 with slot = equip slot. Replaces the 0x5611 candidate below,
     /// which was one byte off (its packed-bool byte came from a later record of the sample).
     /// </summary>
-    public static byte[] ItemDepotList(IReadOnlyList<InventoryItem> items)
+    public static byte[] ItemDepotList(IReadOnlyList<InventoryItem> items, ReadOnlySpan<byte> extendCounts = default)
     {
+        if (extendCounts.Length is not (0 or 6)) throw new ArgumentException("Six slot-extend counts");
         var w = PacketWriter.Opcode(0x5611).U16(0x0210).Varint(items.Count);
         foreach (var item in items) WriteItem(w, item);
-        return w.Zeros(6).ToArray();
+        return (extendCounts.Length == 0 ? w.Zeros(6) : w.Raw(extendCounts)).ToArray();
     }
 
     /// <summary>0x561b ItemModificationList_NT: per entry type (0 add, 1 update; CANDIDATE), the item, increase/decrease/update reasons.</summary>

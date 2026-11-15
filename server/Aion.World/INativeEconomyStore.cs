@@ -43,5 +43,8 @@ public interface INativeEconomyStore
     Task<(IReadOnlyList<TradeListing> Listings, IReadOnlyList<TradeDelivery> Deliveries)> TradeSummaryAsync(Guid character, CancellationToken ct);
     Task<long?> CompleteTradeDeliveryAsync(Guid character, long deliveryId, CancellationToken ct);
     Task<IReadOnlyList<PushRewardRecord>> PushRewardsAsync(Guid character, DateTimeOffset now, CancellationToken ct);
+    Task<IReadOnlyList<SlotExtensionRecord>> SlotExtensionsAsync(Guid character, CancellationToken ct);
+    Task<string> ExtendSlotsAsync(Guid character, int container, bool byItem, int expectedGold, int expectedItem, int maxExtensions,
+        IReadOnlyList<(Guid Item, long Revision, int Count)> costs, CancellationToken ct);
     Task<PushRewardRecord?> TakePushRewardAsync(Guid character, int id, DateTimeOffset now, CancellationToken ct);
 }

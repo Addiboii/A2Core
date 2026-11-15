@@ -63,6 +63,19 @@ public sealed partial class ServiceNativeCharacterStore : INativeEconomyStore
         return await Economy.ExtendGuildStorageAsync(identity.Account, character, expected, maxExtensions, costs, authorityBit, ct);
     }
 
+    public async Task<IReadOnlyList<SlotExtensionRecord>> SlotExtensionsAsync(Guid character, CancellationToken ct)
+    {
+        await ValidateAsync(ct);
+        return await Economy.SlotExtensionsAsync(identity.Account, character, ct);
+    }
+
+    public async Task<string> ExtendSlotsAsync(Guid character, int container, bool byItem, int expectedGold, int expectedItem, int maxExtensions,
+        IReadOnlyList<(Guid Item, long Revision, int Count)> costs, CancellationToken ct)
+    {
+        await ValidateAsync(ct);
+        return await Economy.ExtendSlotsAsync(identity.Account, character, container, byItem, expectedGold, expectedItem, maxExtensions, costs, ct);
+    }
+
     public async Task<bool> SortGuildStorageAsync(Guid character, long nowMs, long cooldownMs, CancellationToken ct)
     {
         await ValidateAsync(ct);
