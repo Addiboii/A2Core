@@ -25,6 +25,10 @@ TABLES = LOCAL / 'starter-skills-tables'
 CATALOG = LOCAL / 'game-catalog-v2/entries.jsonl'
 # SkillEffectLv.dat of build 26262663 (WorldProbe, research/local/skill-level-tables-26262663 table-000).
 EFFECT_LEVELS = LOCAL / 'skill-level-tables-26262663/table-000.json'
+# SkillEffectFilter.dat of build 26262663 (research/local/skill-filter-selection.json) and the abnormal tables of the same
+# build (SkillAbnormal table-000, SkillAbnormalEffect table-001; research/local/abnormal-selection.json).
+SKILL_FILTER = LOCAL / 'skill-filter-26262663/table-000.json'
+ABNORMAL_TABLES = LOCAL / 'abnormal-tables-26262663'
 # SkillLv.dat of build 26262663 (same export, table-001): per-level cooldowns and costs by Skill.dat SkillLvGroupId.
 SKILL_LEVELS = LOCAL / 'skill-level-tables-26262663/table-001.json'
 # The player-skill acts of build 26262663 (research/local/skill-act-26262663/README.txt): Design acts and their containers.
@@ -201,6 +205,53 @@ def cooldown_levels(entry, table=SKILL_LEVELS):
     return {'cooldown_levels': times} if any(t != int((entry.get('facts') or {}).get('NeedCoolTime') or 0) for t in times) else {}
 
 
+@lru_cache(maxsize=None)
+def _self_filters(table=SKILL_FILTER):
+    path = Path(table)
+    if not path.exists():
+        return frozenset()
+    value = lambda v: v['Value'] if isinstance(v, dict) else v
+    return frozenset(value(r['ID']) for r in json.loads(path.read_text(encoding='utf-8'))['Properties']['Data']
+                     if _short(r.get('EffectRangeType', '')) == 'Self')
+
+
+def self_abnormals(entry, table=SKILL_FILTER):
+    """self_abnormals: the Abnormal_True rows of the skill's effect groups whose SkillEffectFilter EffectRangeType is Self, as
+    [abnormal id, duration min ms, max ms, level, chance of 10000, effect row id]. Rows with conditions or without a positive
+    duration are left out (OURS: their conditions and the -1 'until' durations are not modelled)."""
+    selves = _self_filters(str(table))
+    value = lambda v: v['Value'] if isinstance(v, dict) else v
+    number = lambda v: int(v) if str(v).lstrip('-').isdigit() else 0
+    out = []
+    for group in entry.get('relationships', {}).get('effects', []):
+        if value(group.get('reference', {}).get('SkillEffectFilterId', 0)) not in selves:
+            continue
+        for row in group.get('rows', []):
+            values = row.get('EffectValueList') or []
+            if _short(row.get('EffectType', '')) != 'Abnormal_True' or row.get('SkillEffectConditionList') or len(values) < 3:
+                continue
+            low, high = number(values[0]), number(values[1]) if len(values) > 1 else number(values[0])
+            if number(values[2]) <= 0 or low <= 0:
+                continue
+            out.append([number(values[2]), low, max(low, high), number(values[3]) if len(values) > 3 and number(values[3]) > 0 else 1,
+                        number(values[4]) if len(values) > 4 and str(values[4]).isdigit() else 10000, value(row['ID'])])
+    return {'self_abnormals': out} if out else {}
+
+
+def skill_abnormals(ids, tables=ABNORMAL_TABLES):
+    """The abnormals the skills put on their caster: {id: {group, effects: [[effect id, type, values...]]}} (boxes.json shape)."""
+    tables = Path(tables)
+    if not ids or not (tables / 'table-001.json').exists():
+        return {}
+    load = lambda i: json.loads((tables / f'table-{i:03}.json').read_text(encoding='utf-8'))['Properties']['Data']
+    value = lambda v: v['Value'] if isinstance(v, dict) else v
+    found = {value(r['ID']): {'group': int(r.get('GroupId') or 0), 'effects': []} for r in load(0) if value(r['ID']) in ids}
+    for r in load(1):
+        if value(r['AbnormalId']) in found:
+            found[value(r['AbnormalId'])]['effects'].append([value(r['ID']), _short(r.get('AbnormalEffectType', '')), *[str(v) for v in r.get('Values') or []][:8]])
+    return {str(k): v for k, v in sorted(found.items())}
+
+
 def cast_row(entry):
     facts = entry.get('facts', {})
     return {
@@ -212,6 +263,7 @@ def cast_row(entry):
         'cooldown_ms': int(facts.get('NeedCoolTime') or 0),
         **cooldown_group(entry),
         **cooldown_levels(entry),
+        **self_abnormals(entry),
         **end_fields(entry),
         'casting_ms': int(facts.get('CastingTime') or 0),
         'cost': {k: int(facts.get('NeedCost' + k.title()) or 0) for k in ('mp', 'hp', 'sp')},
@@ -394,11 +446,13 @@ def build(tables=TABLES, catalog=CATALOG):
             'classes': {k: v for k, v in classes.items()}, 'common_unlocks': unlocks.get(COMMON, []),
             'skills': cast, 'levels': levels, 'projectile_speeds': speeds, 'charges': charges,
             'effect_levels': effect_levels({d['level_group'] for c in cast.values() for d in c['damage'] if 'level_group' in d}),
+            'abnormals': skill_abnormals({a[0] for c in cast.values() for a in c.get('self_abnormals', [])}),
             'evidence': {'acquire': 'SkillAcquireData bAutoLearn rows without costs/prerequisites/ascension',
                          'levels': 'SkillAcquireData Mastery rows of SkillLevel 2+: level, CostSkillPoint, NeedCharacterLevel',
                          'max_level': 'PcStatLevel highest Level',
                          'classes': 'PCCreationInfo Class, then PcData Class rows without a creation row (Fighter)',
                          'damage': 'Damage EffectValueList, candidate reading: flat min/max, weapon ratio min/max (1/10000)',
+                         'abnormals': 'SkillAbnormal GroupId + SkillAbnormalEffect rows of the self_abnormals (SkillEffectFilter EffectRangeType Self) (build 26262663)',
                          'effect_levels': 'SkillEffectLv.dat by the SkillEffectLvGroupId of a Damage row (level_group): flat min/max and PvP flat min/max for skill levels 2+ (build 26262663)',
                          'weapon_type': "most frequent NeedMainWeaponTypes of the class's auto-learned skills",
                          'starter_weapons': 'Item.dat equip_wp_<Type>_<L|D>_c_begin_001a_b (L for race 1, D for race 2)',

@@ -76,6 +76,27 @@ public sealed partial class GameSession
         SkillId: b.SkillId == 0 ? null : b.SkillId, RangeBase: b.Caster?.At ?? position ?? Vector3d.Zero);
 
     /// <summary>
+    /// A class skill's buffs on its caster (SkillDefinition.SelfAbnormals, each by its chance): per row the self effect 0x3804
+    /// (switch 00, the row's effect id) and the abnormal's 0x382a mask 0x13 (caster the player, the skill), stats with them.
+    /// OBSERVED (ours and the community recordings 2026-10..11): Dash 1101 -> 0x3804 effect 110111, then 11011 for 2000 ms,
+    /// 0-50 ms after the 0x3802 (30 casts). The 0x3804's attack-speed field read 12310/12810 there; 10000 is sent (CANDIDATE).
+    /// </summary>
+    internal List<byte[]> SelfAbnormals(int skill, SkillDefinition definition, byte actionUid, long now)
+    {
+        if (definition.SelfAbnormals is not { Length: > 0 } rows) return [];
+        var replies = new List<byte[]>();
+        var speedBefore = BuffStat("MoveSpeed");
+        foreach (var row in rows.Where(r => r.Length >= 6))
+        {
+            if (rng.Next(10_000) >= row[4]) continue;
+            replies.Add(GamePackets.SkillEffect(playerKey, playerKey, skill, actionUid, row[5]));
+            AddBuff(row[0], rng.Next(Math.Min(row[1], row[2]), Math.Max(row[1], row[2]) + 1), skill, now, replies);
+        }
+        replies.AddRange(BuffStatsChanged(speedBefore));
+        return replies;
+    }
+
+    /// <summary>
     /// A monster skill's abnormals on the player at its first hit (NpcSkill.Abnormals; each by its chance): 0x382a mask 0x13 with
     /// the NPC as caster, the row's level, the skill and the NPC's position as range base (OBSERVED, community recordings
     /// 2026-11-04..06: 60 monster abnormals on the recording player, e.g. Tamon 1604680 -> 12000311 for 3 s). Their effects
@@ -119,7 +140,7 @@ public sealed partial class GameSession
         (int Key, byte Level, Vector3d At)? caster = null, int hitDamage = 0)
     {
         if (resources is null) return null;
-        var info = Boxes.Abnormal(abnormalId) ?? (caster is null ? null : data.NpcAbnormal(abnormalId));
+        var info = Boxes.Abnormal(abnormalId) ?? (caster is null ? data.SkillAbnormal(abnormalId) : data.NpcAbnormal(abnormalId));
         // SkillAbnormal.dat GroupId / AbnormalOverlapCount / AbnormalOverlapTimeType (AbnormalStackRules; A2Core PR #4).
         var rule = AbnormalStackRules.For(abnormalId, info?.Group);
         var group = rule.Group;

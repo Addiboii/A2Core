@@ -75,6 +75,7 @@ partial class GameSession
         replies.AddRange(EnterCombat(now));
         replies.Add(resources!.Update());
         replies.AddRange(CombatReplies(skill, request, now, (byte)actionUid));
+        replies.AddRange(SelfAbnormals(skill, definition, (byte)actionUid, now));   // GameSession.Buffs.cs
         replies.AddRange(SpiritCast(skill, definition, request, now));   // GameSession.Spirits.cs
         replies.AddRange(SkillEndDue(now));   // a skill without an animation ends in the same batch (CANDIDATE: its place in it)
         return replies;

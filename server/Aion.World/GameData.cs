@@ -88,7 +88,10 @@ public sealed record SkillDefinition(
     // EndureEnd / act container PlayRate, 0 without an animation (tools/class_skills.py end_fields, build 26262663). null: none sent.
     [property: JsonPropertyName("end_ms")] double? EndMs = null,
     // SkillLv.dat NeedCoolTime at skill levels 2, 3, ... when it differs from level 1 (tools/class_skills.py cooldown_levels).
-    [property: JsonPropertyName("cooldown_levels")] int[]? CooldownLevels = null)
+    [property: JsonPropertyName("cooldown_levels")] int[]? CooldownLevels = null,
+    // Abnormal_True rows of SkillEffectFilter Self groups: [abnormal, duration min ms, max ms, level, chance of 10000, effect row]
+    // (tools/class_skills.py self_abnormals, build 26262663).
+    [property: JsonPropertyName("self_abnormals")] int[][]? SelfAbnormals = null)
 {
     /// <summary>The cooldown at a skill level: SkillLv.dat's (OBSERVED from the table; level N uses row N, CANDIDATE), else CooldownMs.</summary>
     public int CooldownAt(int skillLevel) =>
@@ -200,7 +203,8 @@ public sealed class GameData
         [property: JsonPropertyName("skills")] Dictionary<string, SkillDefinition> Skills,
         [property: JsonPropertyName("projectile_speeds")] Dictionary<string, int>? ProjectileSpeeds = null,
         [property: JsonPropertyName("charges")] Dictionary<string, ChargeRow>? Charges = null,
-        [property: JsonPropertyName("effect_levels")] Dictionary<string, int[][]>? EffectLevels = null);
+        [property: JsonPropertyName("effect_levels")] Dictionary<string, int[][]>? EffectLevels = null,
+        [property: JsonPropertyName("abnormals")] Dictionary<string, NpcAbnormalFile>? Abnormals = null);
 
     /// <summary>An NpcData template of the compact world-npcs.json (every field of a spawn but where it stands).</summary>
     sealed record NpcTemplate(
@@ -235,6 +239,12 @@ public sealed class GameData
 
     /// <summary>world-npcs.json npc_abnormals: SkillAbnormal GroupId and SkillAbnormalEffect rows [id, type, values...] (build 26262663).</summary>
     sealed record NpcAbnormalFile([property: JsonPropertyName("group")] int Group, [property: JsonPropertyName("effects")] JsonElement[][] Effects);
+
+    /// <summary>An abnormal a class skill puts on its caster (class-skills.json abnormals, build 26262663).</summary>
+    public AbnormalInfo? SkillAbnormal(int abnormalId) =>
+        classes.Abnormals?.GetValueOrDefault(abnormalId.ToString(System.Globalization.CultureInfo.InvariantCulture)) is { } a
+            ? new AbnormalInfo(a.Group, a.Effects.Select(e => (e[0].GetInt32(), e[1].GetString()!, (IReadOnlyList<string>)e.Skip(2).Select(v => v.GetString()!).ToList())).ToList())
+            : null;
 
     /// <summary>An abnormal an NPC skill puts on players (world-npcs.json npc_abnormals), in the shape of the item buffs' rows.</summary>
     public AbnormalInfo? NpcAbnormal(int abnormalId) =>

@@ -570,6 +570,15 @@ Check(keenRow.LevelGroup == "Gladiator_Skill002_LvUp" && data.LevelFlat(keenRow,
 Check(data.Skill(11260000) is { CooldownMs: 60_000 } defiance && defiance.CooldownAt(1) == 60_000 && defiance.CooldownAt(2) == 59_000 && defiance.CooldownAt(40) == 21_000
       && data.Skill(11020000)!.CooldownAt(10) == data.Skill(11020000)!.CooldownMs,
       "SkillLv.dat cooldowns per level: 60 s at level 1, 59 s at 2, 21 s at 40; other skills keep theirs");
+// A self buff (Dash 1101: SkillEffectFilter Self, Abnormal_True 11011 for 2000 ms, OBSERVED 30 casts): 0x3804 switch 00 with the
+// row's effect 110111, then 0x382a mask 0x13, caster the player, the skill. (Dash unlocks at level 3: its accepted cast's step.)
+var dashCast = game.SelfAbnormals(1101, data.Skill(1101)!, 5, Now + 12_000);
+var dashEffect = dashCast.FindIndex(b => Op(b) == 0x3804 && b[2 + NativeVarint.Encode(1u).Length] == 0 && Convert.ToHexString(b).Contains(Convert.ToHexString(BitConverter.GetBytes(110111))));
+var dashAdd = dashCast.FindIndex(b => Op(b) == 0x382a && Convert.ToHexString(b).Contains(Convert.ToHexString(BitConverter.GetBytes(11011)))
+    && Convert.ToHexString(b).Contains("0101" + Convert.ToHexString(BitConverter.GetBytes(1101))));
+Check(dashEffect >= 0 && dashAdd > dashEffect && game.ActiveBuffs.Contains(11011)
+      && !(await game.TickAsync(Now + 14_050)).Any(b => Op(b) == 0x382a) && !game.ActiveBuffs.Contains(11011),
+      "a self-buff skill: 0x3804 self effect, then its abnormal (0x382a, caster the player); gone after its 2 s");
 var dummy = game.Targets[Combat.TrainingDummyKey];
 dummy.Hp = 1;
 game.SetResource('H', 100);
